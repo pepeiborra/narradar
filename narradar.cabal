@@ -1,0 +1,15 @@
+name:                narradar
+version:             0.2
+build-type:	     Simple
+synopsis:            A termination of Narrowing prover
+description:         A termination of Narrowing prover
+category:            Math
+license:             BSD3
+license-file:        LICENSE
+author:              Pepe Iborra
+maintainer:          pepeiborra@gmail.com
+build-Depends:       base
+
+executable:          narradar
+main-is:             Narradar.hs
+ghc-options:         
