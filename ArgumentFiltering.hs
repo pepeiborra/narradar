@@ -1,5 +1,8 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE PatternSignatures, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE PatternGuards #-}
+
 module ArgumentFiltering where
 
 import Control.Arrow (first)
@@ -8,39 +11,41 @@ import Data.AlaCarte
 import Data.Foldable
 import qualified Data.Map as Map
 import Data.Monoid
-import Types
-import Utils
 import Prelude hiding (lookup, map)
 
-newtype AF sig = AF {fromAF:: Map.Map Identifiers [Int]} deriving (Eq, Ord, Show)
+import Signature
+import Types
+import Utils
 
-singleton :: Identifier a => a -> [Int] -> AF a
-insert :: Identifier a => a -> [Int] -> AF -> AF a
-lookup :: (Identifier a, Monad m) => a -> AF -> m [Int]
-fromList :: Identifier a => [(a,[Int])] -> AF a
-singleton id ii = AF (Map.singleton (wrap id) ii)
-insert id ii (AF map) = AF $ Map.insertWith (++) (wrap id) ii map
-lookup id (AF map)    = Map.lookup (wrap id) map
-fromList = AF . Map.fromListWith (++) . fmap (first wrap)
+newtype AF = AF {fromAF:: Map.Map Identifier [Int]} deriving (Eq, Ord, Show)
+
+singleton :: Identifier -> [Int] -> AF
+insert :: Identifier -> [Int] -> AF -> AF
+lookup :: Monad m => Identifier -> AF -> m [Int]
+fromList :: [(Identifier,[Int])] -> AF
+singleton id ii = AF (Map.singleton id ii)
+insert id ii (AF map) = AF $ Map.insertWith (++) id ii map
+lookup id (AF map)    = Map.lookup id map
+fromList = AF . Map.fromListWith (++)
 toList (AF af) = Map.toList af
 null (AF af) = Map.null af
 
-map :: (Identifiers -> [Int] -> [Int]) -> AF sig -> AF sig
+map :: (Identifier -> [Int] -> [Int]) -> AF -> AF
 map f (AF af) = AF (Map.mapWithKey f af)
 
---invert :: (T IdFunctions :<: f, T IdDPs :<: f, Foldable f) => TRS f -> AF -> AF
+invert :: SignatureC a => a -> AF -> AF
 invert rules (AF af) = AF (Map.mapWithKey (\f ii -> [0..getArity sig f - 1] \\ ii) af)
   where sig = getSignature rules -- :: Signature (IdFunctions :+*: IdDPs)
 
-class ApplyAF t sig where applyAF :: AF sig -> t -> t
-instance (Functor f, ApplyAF a sig) => ApplyAF (f a) sig where applyAF af = fmap (applyAF af)
-instance (Identifier a, T a :<: f, Identifier b, T b :<: b, Functor f) => ApplyAF (Term f) (a :+: b) where
+class ApplyAF t where applyAF :: AF -> t -> t
+instance (Functor f, ApplyAF a) => ApplyAF (f a) where applyAF af = fmap (applyAF af)
+instance (TRSC f) => ApplyAF (Term f) where
     applyAF (AF af) = foldTerm f
-     where   f t | Just (T n tt) <- matchT (proxy::Sig) (In t)
-                 , Just ii       <- Map.lookup n af = term (unwrap n) (select tt ii)
+     where   f t | Just (T (n::Identifier) tt) <- prj t
+                 , Just ii       <- Map.lookup n af = term n (select tt ii)
                  | otherwise = inject t
 
---instance ApplyAF (TRS sig a) where applyAF af (TRS rules) = TRS $ applyAF af rules
+instance ApplyAF (TRS f) where applyAF af (TRS trs) = TRS$ applyAF af trs
 
 instance Monoid AF where
   mempty  = AF Map.empty

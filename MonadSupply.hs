@@ -1,4 +1,6 @@
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module MonadSupply where
 
@@ -16,4 +18,4 @@ instance MonadSupply e (State [e]) where
       return (head elems)
 
 runSupply :: (Num i, Bounded i, Enum i) => Supply i a -> a
-runSupply m = evalState (runSupply_ m) [minBound..]
+runSupply m = evalState (runSupply_ m) [0..]

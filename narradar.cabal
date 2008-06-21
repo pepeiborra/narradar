@@ -8,8 +8,15 @@ license:             BSD3
 license-file:        LICENSE
 author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
-build-Depends:       base
+build-Depends:       base, mtl, pretty, containers, process, directory, bytestring,
+		     xhtml, tagsoup, curl, derive, fgl, cgi,
+		     TRS, alacarte, fetchrules
 
 executable:          narradar
-main-is:             Narradar.hs
-ghc-options:         
+main-is:             Main.hs
+ghc-options:         -O2
+
+
+executable:          narradarCgi
+main-is:             MainWeb.hs
+ghc-options:         -O2

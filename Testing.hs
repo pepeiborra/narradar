@@ -1,14 +1,23 @@
 module Testing where
 
-import Types
+import Control.Applicative
 import Data.AlaCarte
 import TRS.FetchRules
+import TRS
 import System.IO
---import NarrowingProblem
-import ArgumentFiltering
 
-fullpolicy :: IO (TRS (IdFunctions :+*: IdDPs) (T IdFunctions :+: T IdDPs :+: Var))
-fullpolicy = do
+import Types
+import Problem
+import NarrowingProblem
+import ArgumentFiltering
+import DPairs
+
+fullpolicy' :: IO [Rule (T String :+: Var)]
+fullpolicy' = do
   contents  <- readFile  "/Users/pepe/fullpolicy.trs"
   let Right trs = parseFile "fn" contents
-  return $ TRS trs
+  return $ trs
+
+fullpolicy = mkTRS <$> fullpolicy'
+
+problem = (solveProblem afProcessor . cycleProcessor . mkNDPProblem) <$> fullpolicy
