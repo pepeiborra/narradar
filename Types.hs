@@ -5,10 +5,7 @@
 module Types (module TRS, module Types) where
 
 import Data.AlaCarte
-import Data.Foldable
 import Data.List ((\\))
-import Data.Maybe
-import Data.Monoid
 import Data.Traversable
 import TRS
 
