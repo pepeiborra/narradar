@@ -7,6 +7,7 @@ module Types (module TRS, module Types) where
 import Data.AlaCarte
 import Data.List ((\\))
 import Data.Traversable
+import Unsafe.Coerce
 import TRS
 
 import Utils
@@ -23,9 +24,17 @@ fromTRS (TRS trs) = trs
 instance Ppr f => Show (TRS f) where show (TRS trs) = show trs
 
 mkTRS :: [Rule (T String :+: Var) ] -> TRS (T Identifier :+: Var)
-mkTRS rules = TRS (fmap2 (foldTerm f) rules)
-    where f t | Just(Var i) <- prj t = var i
-              | Just(T f tt)<- prj t = term (IdFunction f) tt
+mkTRS rules = TRS (fmap2 (foldTerm f) rules) where
+  f :: (T String :<: tstring, T Identifier :<: tident) => tstring (Term tident) -> Term tident
+  f t
+     | Just(T f tt) <- prj t = term (IdFunction f) tt
+     | otherwise = inject (unsafeCoerce t :: tident(Term tident))
+
+
+{-
+class MkTRS f where mkTRSF :: f(Term g) -> (Term (Subst g (T String) (T Identifier)))
+instance MkTRS Var Var where mkTRSF = inject (unsafeCoerce t :: f(Term )
+-}
 
 markDPSymbol (IdFunction f) = IdDP f
 markDPSymbol f = f
