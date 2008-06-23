@@ -8,7 +8,6 @@ module ArgumentFiltering where
 import Control.Arrow (first)
 import Data.List ((\\))
 import Data.AlaCarte
-import Data.Foldable
 import qualified Data.Map as Map
 import Data.Monoid
 import Prelude hiding (lookup, map)
@@ -18,6 +17,8 @@ import Types
 import Utils
 
 newtype AF = AF {fromAF:: Map.Map Identifier [Int]} deriving (Eq, Ord, Show)
+
+countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
 singleton :: Identifier -> [Int] -> AF
 insert :: Identifier -> [Int] -> AF -> AF

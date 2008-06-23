@@ -6,7 +6,7 @@ import Control.Arrow (first)
 import Control.Monad
 import Data.AlaCarte
 import Data.Foldable (Foldable)
-import Data.List ((\\))
+import Data.List ((\\), sortBy)
 import Data.Monoid
 import Text.XHtml (toHtml, Html)
 import Prelude as P
@@ -22,9 +22,10 @@ mkNDPProblem trs = Problem Narrowing trs (TRS $ getNPairs trs)
 afProcessor :: Problem f -> ProblemProgress Html f
 afProcessor p@(Problem Narrowing trs (TRS dps)) = if null orProblems
                                                   then Fail (AFProc mempty) p (toHtml "Could not find a grounding AF")
-                                                  else Or   (AFProc mempty) p orProblems
+                                                  else Or   (AFProc mempty) p (sortByDefinedness orProblems)
     where afs = snub $ concatMap (findGroundAF p) dps
           orProblems = [And (AFProc af) p [NotDone $ AF.applyAF af (Problem Rewriting trs (TRS dps))] | af <- afs]
+          sortByDefinedness = sortBy (flip compare `on` (AF.countPositionsFiltered . (\(And (AFProc af) p sp)-> af)))
 
 
 findGroundAF :: Problem f -> DP f -> [AF.AF]
