@@ -15,8 +15,9 @@ build-Depends:       base, mtl, pretty, containers, process, directory, bytestri
 executable:          narradar
 main-is:             Main.hs
 ghc-options:         -O2 -threaded
-
+hs-source-dirs:         src
 
 executable:          narradarCgi
 main-is:             MainWeb.hs
 ghc-options:         -O2 -threaded
+hs-source-dirs:         src
