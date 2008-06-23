@@ -10,7 +10,7 @@ author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
 build-Depends:       base, mtl, pretty, containers, process, directory, bytestring,
 		     xhtml, tagsoup, curl, derive, fgl, cgi,
-		     TRS, alacarte, fetchrules
+		     TRS, alacarte, fetchrules, fetchrules-trs
 
 executable:          narradar
 main-is:             Main.hs

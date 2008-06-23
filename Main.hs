@@ -7,6 +7,7 @@ import Text.Printf
 import Text.XHtml
 
 import TRS.FetchRules
+import TRS.FetchRules.TRS
 import Types
 import Solver
 
@@ -16,7 +17,7 @@ main = do
   case args of
     [file] -> do
               contents <- readFile file
-              case parseFile file contents of
+              case parseFile trsParser file contents of
                 Left error -> print error >> exitWith (ExitFailure 1)
                 Right trs_ -> do
                   sol <- solveNarrowing $ mkTRS trs_
