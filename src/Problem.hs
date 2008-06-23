@@ -88,7 +88,8 @@ class Monad m => SolveProblemM m where
   solveProblemM :: (Problem a -> m (ProblemProgress s a)) -> ProblemProgress s a -> m (ProblemProgress s a)
   solveProblemM = concatMapM
 
-instance SolveProblemM IO
+instance SolveProblemM IO where
+  solveProblemM f = concatMapM (unsafeInterleaveIO . f)
 
 
 simplify p@(Or pi pb aa) | success p = listToMaybe [p | p <- aa, success p]
