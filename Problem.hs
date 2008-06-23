@@ -12,6 +12,7 @@ import Data.Derive.Traversable
 import Data.Foldable as T
 import Data.HashTable (hashString)
 import Data.Maybe
+import qualified Data.Map as Map
 import Data.Traversable as T
 import Terms
 import Text.PrettyPrint
@@ -165,7 +166,7 @@ instance TRS.Ppr a => Ppr (ProblemProgress String a) where
 instance HTML a => HTMLTABLE a where cell = cell . toHtml
 
 instance HTML AF.AF where
-    toHtml (AF.AF af) = toHtml $ show $ toList af
+    toHtml (AF.AF af) = toHtml $ show $ Map.toList af
 
 instance HTML Doc where toHtml = toHtml . show
 
