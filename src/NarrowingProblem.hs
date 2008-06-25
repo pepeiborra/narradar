@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternSignatures, PatternGuards #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module NarrowingProblem where
 
