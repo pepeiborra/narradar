@@ -71,6 +71,7 @@ instance Monad (Progress_ f s) where
             join (Or  pi pr pp) = Or  pi pr (map join pp)
             join p              = unsafeCoerce p
 
+success :: ProblemProgress s f -> Bool
 success NotDone{} = False
 success Success{} = True
 success Fail{}    = False
@@ -88,9 +89,9 @@ class Monad m => SolveProblemM m where
 instance SolveProblemM IO where
   solveProblemM f = concatMapM (unsafeInterleaveIO . f)
 
-
-simplify p@(Or pi pb aa) | success p = listToMaybe [p | p <- aa, success p]
-simplify p = Nothing
+simplify :: ProblemProgress s f -> Maybe (ProblemProgress s f)
+simplify p@(Or _ _ aa) | success p = listToMaybe [p | p <- aa, success p]
+simplify _ = Nothing
 
 logLegacy proc prob Nothing = Fail proc prob "Failed"
 logLegacy proc prob (Just msg) = Success proc prob msg
@@ -131,6 +132,7 @@ instance TRS.Ppr a => Ppr (Problem a) where
 
 
 instance TRS.Ppr a => Ppr (ProblemProgress String a) where
+    ppr Empty = Text.PrettyPrint.empty
     ppr (NotDone prob) = ppr prob $$
                          text ("RESULT: Not solved yet")
     ppr (Success proc prob res) = ppr prob $$
@@ -190,6 +192,7 @@ instance TRS.Ppr f => HTML (Problem f) where
                  aboves dps)
 
 instance TRS.Ppr f => HTML (ProblemProgress Html f) where
+    toHtml Empty = noHtml
     toHtml (NotDone prob) = p << prob
     toHtml (Success proc prob res) =
         p
