@@ -1,0 +1,19 @@
+(VAR src dst x y port s)
+(RULES
+
+filter(pckt(src,dst,established)) -> accept
+filter(pckt(eth0,dst,new)) -> accept
+
+filter(pckt(address(ip(194,179,1,x),port),dst,new)) -> filter(pckt(secure,dst,new)) 
+filter(pckt(address(ip(158,42,x,y),port),dst,new)) -> filter(pckt(secure,dst,new)) 
+
+filter(pckt(secure,address(dst,80),new)) -> accept
+filter(pckt(secure,address(dst,other),new)) -> drop
+filter(pckt(ppp0,dst,new)) -> drop
+filter(pckt(address(ip(123,123,1,1),port),dst,new)) -> accept
+pckt(address(ip(10,1,1,1),port),ppp0,s) -> pckt(address(ip(123,23,1,1),port),ppp0,s) 
+pckt(address(ip(10,1,1,2),port),ppp0,s) -> pckt(address(ip(123,23,1,1),port),ppp0,s) 
+pckt(src,address(ip(123,123,1,1),port),new) ->  natroute(pckt(src,address(ip( 10,1,1,1),port),established), pckt(src,address(ip(10,1,1,2),port),established))
+natroute (x,y) -> x
+natroute (x,y) -> y
+)
