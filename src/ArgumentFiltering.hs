@@ -21,11 +21,11 @@ newtype AF = AF {fromAF:: Map.Map Identifier [Int]} deriving (Eq, Ord, Show)
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
 singleton :: Identifier -> [Int] -> AF
-insert :: Identifier -> [Int] -> AF -> AF
+cut :: Identifier -> [Int] -> AF -> AF
 lookup :: Monad m => Identifier -> AF -> m [Int]
 fromList :: [(Identifier,[Int])] -> AF
 singleton id ii = AF (Map.singleton id ii)
-insert id ii (AF map) = AF $ Map.insertWith (++) id ii map
+cut id ii (AF map) = AF $ Map.insertWith (flip(\\)) id ii map
 lookup id (AF map)    = Map.lookup id map
 fromList = AF . Map.fromListWith (++)
 toList (AF af) = Map.toList af

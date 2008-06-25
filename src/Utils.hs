@@ -7,8 +7,9 @@ import Data.Traversable
 
 import Prelude hiding (mapM)
 
-fmap2 :: (Functor f, Functor g) => (a -> b) -> f(g a) -> f (g b)
+fmap2, (<$$>) :: (Functor f, Functor g) => (a -> b) -> f(g a) -> f (g b)
 fmap2 = fmap.fmap
+(<$$>) = fmap2
 
 concatMapM :: (Monad t, Monad m, Traversable t) => (a -> m (t a)) -> t a -> m (t a)
 concatMapM f = liftM join . mapM f

@@ -8,5 +8,5 @@ import Types
 
 import Text.XHtml
 
-solveNarrowing :: Types.Ppr f => TRS f -> IO (ProblemProgress Html f)
+solveNarrowing :: (AnnotateWithPos f f, Types.Ppr f) => TRS f -> IO (ProblemProgress Html f)
 solveNarrowing trs@TRS{}= solveProblemM aproveWebProc . solveProblem afProcessor . cycleProcessor . mkNDPProblem $ trs

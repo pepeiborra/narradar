@@ -2,9 +2,11 @@
 {-# LANGUAGE TypeOperators, PatternSignatures #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE PatternGuards, GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
 module Types (module TRS, module Types) where
 
 import Data.AlaCarte
+import Data.Foldable (Foldable)
 import Data.List ((\\))
 import Data.Traversable
 import Unsafe.Coerce
@@ -61,5 +63,6 @@ instance Show Identifier where
 isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
 
-hasExtraVars :: TRS f -> Bool
-hasExtraVars (TRS trs) = not $ P.all null [vars r \\ vars l | l :-> r <- trs]
+class (Var :<: f) => ExtraVars t f | t -> f where extraVars :: t -> [Var (Term f)]
+instance (Var :<: f) => ExtraVars (TRS f) f where extraVars (TRS trs) = concat [vars r \\ vars l | l :-> r <- trs]
+instance (Var :<: f, Foldable f) => ExtraVars (Rule f) f where extraVars (l:->r) = vars r \\ vars l
