@@ -3,10 +3,8 @@
 module Problem where
 
 import Control.Applicative
-import Control.Monad (join)
 import Data.AlaCarte
 import Data.DeriveTH
-import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable as T
@@ -14,7 +12,6 @@ import Data.HashTable (hashString)
 import Data.Maybe
 import qualified Data.Map as Map
 import Data.Traversable as T
-import Terms
 import Text.PrettyPrint
 import Text.Printf
 import qualified Text.XHtml as H
