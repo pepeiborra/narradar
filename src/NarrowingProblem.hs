@@ -41,6 +41,7 @@ findGroundAF p@(Problem _ trs@(TRS rules) _) (l:->r) =
                    | isGround t   = mempty
                    | isVar t      = [AF.singleton f [i]]
                    | Just (T (f'::Identifier) tt) <- match t
-                   = AF.singleton f [i] : ((map AF.fromList . concat) . sequence . inhabiteds . fmap2 AF.toList $ [go f' it | it <- zip [0..] tt])
+                   = {- AF.singleton f [i] : -}
+                     ((map AF.fromList . concat) . sequence . inhabiteds . fmap2 AF.toList $ [go f' it | it <- zip [0..] tt])
         invariant af = AF.fromList [ (IdFunction f, pp) | (IdDP f, pp) <- AF.toList af] `mappend` af
         extraVars af = hasExtraVars (AF.applyAF af trs)
