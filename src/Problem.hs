@@ -105,7 +105,7 @@ pprSkelt (Or _ _ pp)  = parens $ cat $ punctuate (text " | ") $ map pprSkelt pp
 
 pprTPDB :: TRS.Ppr f => Problem f -> String
 pprTPDB (Problem _ (TRS rules) (TRS dps)) =
-  unlines [ printf "(VARS %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules))
+  unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules))
           , printf "(PAIRS\n %s)" (unlines (map (show . unmarkDPRule) dps))
           , printf "(RULES\n %s)" (unlines (map show rules))]
 
