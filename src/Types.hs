@@ -18,7 +18,7 @@ import Prelude as P
 class (T Identifier :<: f, Var :<: f, Traversable f) => TRSC f
 instance (T Identifier :<: f, Var :<: f, Traversable f) => TRSC f
 
-data TRS f = (TRSC f, MatchShapeable f, Unifyable f) => TRS [Rule f]
+data TRS f = (TRSC f, MatchShapeable f, Unifyable f, Eq (f(Expr f))) => TRS [Rule f]
 type  DP a = Rule a
 
 fromTRS (TRS trs) = trs
@@ -37,6 +37,10 @@ mkTRS rules = TRS (fmap2 (foldTerm f) rules) where
 class MkTRS f where mkTRSF :: f(Term g) -> (Term (Subst g (T String) (T Identifier)))
 instance MkTRS Var Var where mkTRSF = inject (unsafeCoerce t :: f(Term )
 -}
+
+rootSymbol :: (T Identifier :<: f) => Term f -> Maybe Identifier
+rootSymbol t | Just (T root _) <- match t = Just root
+             | otherwise = Nothing
 
 markDPSymbol (IdFunction f) = IdDP f
 markDPSymbol f = f

@@ -21,11 +21,13 @@ newtype AF = AF {fromAF:: Map.Map Identifier [Int]} deriving (Eq, Ord, Show)
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
 singleton :: Identifier -> [Int] -> AF
-cut :: Identifier -> [Int] -> AF -> AF
+cut    :: Identifier -> [Int] -> AF -> AF
+cutAll :: [(Identifier, [Int])] -> AF -> AF
 lookup :: Monad m => Identifier -> AF -> m [Int]
 fromList :: [(Identifier,[Int])] -> AF
 singleton id ii = AF (Map.singleton id ii)
 cut id ii (AF map) = AF $ Map.insertWith (flip(\\)) id ii map
+cutAll xx af = foldr (uncurry cut) af xx
 lookup id (AF map)    = Map.lookup id map
 fromList = AF . Map.fromListWith (++)
 toList (AF af) = Map.toList af
@@ -51,3 +53,5 @@ instance ApplyAF (TRS f) where applyAF af (TRS trs) = TRS$ applyAF af trs
 instance Monoid AF where
   mempty  = AF Map.empty
   mappend (AF m1) (AF m2) = AF$ Map.unionWith (++) m1 m2
+
+initAF t | sig <- getSignature t = fromList [ (d, [0.. getArity sig d -1]) | d <- definedSymbols sig ++ constructorSymbols sig]
