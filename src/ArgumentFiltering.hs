@@ -12,7 +12,6 @@ import qualified Data.Map as Map
 import Data.Monoid
 import Prelude hiding (lookup, map)
 
-import Signature
 import Types
 import Utils
 
@@ -48,7 +47,7 @@ instance (TRSC f) => ApplyAF (Term f) where
                  , Just ii       <- Map.lookup n af = term n (select tt ii)
                  | otherwise = inject t
 
-instance ApplyAF (TRS f) where applyAF af (TRS trs) = TRS$ applyAF af trs
+instance ApplyAF (TRS f) where applyAF af trs@TRS{} = tRS$ applyAF af (rules trs)
 
 instance Monoid AF where
   mempty  = AF Map.empty

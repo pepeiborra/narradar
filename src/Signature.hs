@@ -22,13 +22,15 @@ instance Monoid Signature where
     mappend (Sig c1 s1 a1) (Sig c2 s2 a2) = Sig (mappend c1 c2) (mappend s1 s2) (mappend a1 a2)
 
 class SignatureC a where getSignature :: a -> Signature
-instance SignatureC (TRS f) where
-  getSignature (TRS rules) =
+instance SignatureC [Rule f] where
+  getSignature rules =
       Sig{arity= Map.fromList [(f,length tt) | l :-> r <- rules, t <- [l,r]
                                              , Just (T (f::Identifier) tt) <- map match (subterms t)]
          , definedSymbols     = dd
          , constructorSymbols = snub [ root | l :-> r <- rules, t <- subterms r ++ properSubterms l, Just root <- [rootSymbol t]] \\ dd}
     where dd = snub [ root | l :-> _ <- rules, let Just root = rootSymbol l]
+
+instance SignatureC (TRS f) where getSignature TRS{..} = getSignature rules
 
 instance SignatureC (Problem f) where getSignature (Problem _ (TRS rules) (TRS dps)) = getSignature (TRS $ rules ++ dps)
 

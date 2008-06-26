@@ -28,14 +28,6 @@ import qualified ArgumentFiltering as AF
 
 import Prelude as P hiding (log, mapM, foldr, concatMap)
 
-data Problem_ a = Problem  ProblemType a a
-     deriving (Eq,Show)
-
-type Problem f = Problem_ (TRS f)
-
-data ProblemType = Rewriting | Narrowing
-     deriving (Eq, Show)
-
 data Progress_ f s a =   NotDone    a
                        | And        {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
                        | Or         {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
@@ -104,10 +96,10 @@ pprSkelt (And _ _ pp) = parens $ cat $ punctuate (text " & ") $ map pprSkelt pp
 pprSkelt (Or _ _ pp)  = parens $ cat $ punctuate (text " | ") $ map pprSkelt pp
 
 pprTPDB :: TRS.Ppr f => Problem f -> String
-pprTPDB (Problem _ (TRS rules) (TRS dps)) =
-  unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules))
-          , printf "(PAIRS\n %s)" (unlines (map (show . unmarkDPRule) dps))
-          , printf "(RULES\n %s)" (unlines (map show rules))]
+pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
+  unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs))
+          , printf "(PAIRS\n %s)" (unlines (map (show . unmarkDPRule) (rules dps)))
+          , printf "(RULES\n %s)" (unlines (map show (rules trs)))]
 
 -------------------
 -- Ppr
@@ -118,7 +110,7 @@ class Ppr a where ppr :: a -> Doc
 instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . vcat . punctuate comma . toList . fmap ppr
 instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
 instance Show (Term a) => Ppr (Rule a) where ppr = text . show
-instance TRS.Ppr f => Ppr (TRS f) where ppr (TRS trs) = ppr trs
+instance TRS.Ppr f => Ppr (TRS f) where ppr trs@TRS{} = ppr $ rules trs
 
 instance Ppr ProblemType where
     ppr Narrowing = text "NDP"
@@ -178,18 +170,18 @@ instance HTML ProcInfo where
     toHtml (External e)    = "PROCESSOR: " +++ "External - " +++ show e
 
 instance TRS.Ppr f => HTML (Problem f) where
-    toHtml (Problem typ (TRS rr) (TRS [])) =
+    toHtml (Problem typ  trs@TRS{} dps) | null $ rules dps =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
-            H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves rr </>
+            H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves (rules trs) </>
                  "Dependency Pairs: none")
-    toHtml (Problem typ (TRS rr) (TRS dps)) =
+    toHtml (Problem typ trs@TRS{} dps@TRS{}) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Rules" </>
-                 aboves rr </>
+                 aboves (rules trs) </>
             H.td ! [H.theclass "DPS" ] << "Dependency Pairs" </>
-                 aboves dps)
+                 aboves (rules dps))
 
 instance TRS.Ppr f => HTML (ProblemProgress Html f) where
     toHtml Empty = noHtml

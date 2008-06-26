@@ -1,13 +1,16 @@
 {-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
 {-# LANGUAGE TypeOperators, PatternSignatures #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE PatternGuards, GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
+{-# LANGUAGE PatternGuards, RecordWildCards #-}
+{-# LANGUAGE GADTs, MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
 module Types (module TRS, module Types) where
 
 import Data.AlaCarte
 import Data.Foldable (Foldable)
 import Data.List ((\\))
+import qualified Data.Map as Map
+import Data.Maybe
+import Data.Monoid
 import Data.Traversable
 import Unsafe.Coerce
 import TRS
@@ -15,28 +18,30 @@ import TRS
 import Utils
 import Prelude as P
 
-class (T Identifier :<: f, Var :<: f, Traversable f) => TRSC f
-instance (T Identifier :<: f, Var :<: f, Traversable f) => TRSC f
+class (T Identifier :<: f, Var :<: f, Traversable f, MatchShapeable f, Unifyable f, Eq (f(Expr f))) => TRSC f
+instance (T Identifier :<: f, Var :<: f, Traversable f, MatchShapeable f, Unifyable f, Eq (f(Expr f))) => TRSC f
 
-data TRS f = (TRSC f, MatchShapeable f, Unifyable f, Eq (f(Expr f))) => TRS [Rule f]
+data TRS f where TRS :: TRSC f => [Rule f] -> Signature -> TRS f
+
 type  DP a = Rule a
 
-fromTRS (TRS trs) = trs
+instance Ppr f => Show (TRS f) where show trs = show $ rules trs
 
-instance Ppr f => Show (TRS f) where show (TRS trs) = show trs
+instance TRSC f => Monoid (TRS f) where
+    mempty = TRS mempty mempty
+    mappend (TRS r1 _) (TRS r2 _) = let rr = (r1 `mappend` r2) in TRS rr (getSignature rr)
+
+tRS rules = TRS rules (getSignature rules)
+rules (TRS r _) = r; sig   (TRS _ s) = s
 
 mkTRS :: [Rule (T String :+: Var) ] -> TRS (T Identifier :+: Var)
-mkTRS rules = TRS (fmap2 (foldTerm f) rules) where
+mkTRS rules = TRS rules' (getSignature rules') where
+  rules' = fmap2 (foldTerm f) rules
   f :: (T String :<: tstring, T Identifier :<: tident) => tstring (Term tident) -> Term tident
   f t
      | Just(T f tt) <- prj t = term (IdFunction f) tt
      | otherwise = inject (unsafeCoerce t :: tident(Term tident))
 
-
-{-
-class MkTRS f where mkTRSF :: f(Term g) -> (Term (Subst g (T String) (T Identifier)))
-instance MkTRS Var Var where mkTRSF = inject (unsafeCoerce t :: f(Term )
--}
 
 rootSymbol :: (T Identifier :<: f) => Term f -> Maybe Identifier
 rootSymbol t | Just (T root _) <- match t = Just root
@@ -57,8 +62,7 @@ unmarkDPRule, markDPRule :: (T Identifier :<: f) => Rule f -> Rule f
 markDPRule   = fmap   markDP
 unmarkDPRule = fmap unmarkDP
 
-data Identifier = IdFunction String | IdDP String
-  deriving (Eq, Ord)
+data Identifier = IdFunction String | IdDP String  deriving (Eq, Ord)
 
 instance Show Identifier where
     show (IdFunction f) = f
@@ -68,5 +72,47 @@ isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
 
 class (Var :<: f) => ExtraVars t f | t -> f where extraVars :: t -> [Var (Term f)]
-instance (Var :<: f) => ExtraVars (TRS f) f where extraVars (TRS trs) = concat [vars r \\ vars l | l :-> r <- trs]
+instance (Var :<: f) => ExtraVars (TRS f) f where extraVars trs@TRS{} = concat [vars r \\ vars l | l :-> r <- rules trs]
 instance (Var :<: f, Foldable f) => ExtraVars (Rule f) f where extraVars (l:->r) = vars r \\ vars l
+
+-------------------------
+-- Signatures
+-------------------------
+
+data Signature = Sig { constructorSymbols :: [Identifier]
+                     , definedSymbols :: [Identifier]
+                     , arity :: Map.Map Identifier Int}
+                 deriving (Show, Eq)
+
+instance Monoid Signature where
+    mempty  = Sig mempty mempty mempty
+    mappend (Sig c1 s1 a1) (Sig c2 s2 a2) = Sig (snub $ mappend c1 c2) (snub $ mappend s1 s2) (mappend a1 a2)
+
+class SignatureC a where getSignature :: a -> Signature
+instance (TRSC f) => SignatureC [Rule f] where
+  getSignature rules =
+      Sig{arity= Map.fromList [(f,length tt) | l :-> r <- rules, t <- [l,r]
+                                             , Just (T (f::Identifier) tt) <- map match (subterms t)]
+         , definedSymbols     = dd
+         , constructorSymbols = snub [ root | l :-> r <- rules, t <- subterms r ++ properSubterms l, Just root <- [rootSymbol t]] \\ dd}
+    where dd = snub [ root | l :-> _ <- rules, let Just root = rootSymbol l]
+
+instance SignatureC (TRS f) where getSignature trs@TRS{} = sig trs
+
+instance SignatureC (Problem f) where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
+
+getArity :: Signature -> Identifier -> Int
+getArity Sig{..} f = fromMaybe (error $ "getArity: symbol " ++ show f ++ " not in signature")
+                               (Map.lookup f arity)
+
+---------------------------
+-- DP Problems
+---------------------------
+
+data Problem_ a = Problem  ProblemType a a
+     deriving (Eq,Show)
+
+type Problem f = Problem_ (TRS f)
+
+data ProblemType = Rewriting | Narrowing
+     deriving (Eq, Show)

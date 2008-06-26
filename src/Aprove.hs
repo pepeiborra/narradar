@@ -12,6 +12,7 @@ import Text.Printf
 import Text.XHtml
 import Text.HTML.TagSoup
 
+import Types
 import Problem
 import TRS
 
