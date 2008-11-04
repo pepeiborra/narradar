@@ -185,12 +185,12 @@ acronym, abbr, span.caps
 	}
 
 a, h2 a:hover, h3 a:hover {
-	color: #06c;
+	color: #ff7b00;
 	text-decoration: none;
 	}
 
 a:hover {
-	color: #147;
+	color: #8c3d00;
 	text-decoration: underline;
 	}
 
