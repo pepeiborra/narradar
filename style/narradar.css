@@ -1,0 +1,53 @@
+/* @override http://localhost/~pepe/Narradar/narradar.css */
+body {
+-x-system-font:none;
+background-color:white;
+font-family:verdana,arial,helvetica,sans-serif;
+font-size:x-small;
+font-size-adjust:none;
+font-stretch:normal;
+font-style:normal;
+font-variant:normal;
+font-weight:normal;
+line-height:normal;
+z-index:1;
+}
+
+.TRS_TITLE {
+	font-weight: bold;
+	color: #000;
+}
+
+td.DPS {
+	font-weight: bold;
+	color: #000;
+}
+
+.TRS {
+	color: #3439fd;
+	font: xx-small "Lucida Grande", Lucida, Verdana, sans-serif;
+	text-align: left;
+}
+
+.DP {
+	color: #fa2b44;
+	font: xx-small "Lucida Grande", Lucida, Verdana, sans-serif;	
+}
+
+.NDP {
+	color: #db35fd;
+	font: xx-small "Lucida Grande", Lucida, Verdana, sans-serif;
+}
+
+span.rhs {
+	text-align: right;
+    float: right;
+}	
+
+span.arrow {
+
+}
+
+td.rhs {
+	text-align: left;
+}
