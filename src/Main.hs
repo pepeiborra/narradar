@@ -22,4 +22,4 @@ main = do
                 Right trs_ -> do
                   sol <- solveNarrowing $ mkTRS trs_
                   putStr (renderHtml sol)
-    _ -> getProgName >>= \n -> printf "Narradar - Automated Narrowing Termination Proofs\n USAGE: %s <system.trs>" n
+    _ -> getProgName >>= \n -> printf "Narradar - Automated Narrowing Termination Proofs\n USAGE: %s <system.trs>\n" n

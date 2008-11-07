@@ -2,10 +2,6 @@
 <html xmlns="http://www.w3.org/1999/xhtml" <?php language_attributes(); ?>>
 
 <head profile="http://gmpg.org/xfn/11">
-<script type="text/javascript" src="/scripts/jquery.pack.js"></script>
-<script type="text/javascript" src="/scripts/jquery.form.js"></script>
-<script type="text/javascript" src="/scripts/jquery.blockUI.js"></script>
-<script type="text/javascript" src="/scripts/thickbox.js"></script>
 
 <meta http-equiv="Content-Type" content="<?php bloginfo('html_type'); ?>; charset=<?php bloginfo('charset'); ?>" />
 

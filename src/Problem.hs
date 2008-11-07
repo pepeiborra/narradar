@@ -1,15 +1,17 @@
-{-# LANGUAGE PatternGuards, OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
 module Problem where
 
 import Control.Applicative
-import Data.AlaCarte
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable as T
 import Data.HashTable (hashString)
 import Data.Maybe
+import Data.Monoid
 import qualified Data.Map as Map
 import Data.Traversable as T
 import Text.PrettyPrint
@@ -63,6 +65,8 @@ instance Monad (Progress_ f s) where
             join (Or  pi pr pp) = Or  pi pr (map join pp)
             join p              = unsafeCoerce p
 
+instance SignatureC (Problem f) Identifier where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
+
 success :: ProblemProgress s f -> Bool
 success NotDone{} = False
 success Success{} = True
@@ -110,7 +114,7 @@ class Ppr a where ppr :: a -> Doc
 instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . vcat . punctuate comma . toList . fmap ppr
 instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
 instance Show (Term a) => Ppr (Rule a) where ppr = text . show
-instance TRS.Ppr f => Ppr (TRS f) where ppr trs@TRS{} = ppr $ rules trs
+instance TRS.Ppr f => Ppr (TRS id f) where ppr trs@TRS{} = ppr $ rules trs
 
 instance Ppr ProblemType where
     ppr Narrowing = text "NDP"
@@ -212,7 +216,7 @@ instance TRS.Ppr f => HTML (ProblemProgress Html f) where
 --           "Problem was divided in " +++ show(length sub) +++ " subproblems" +++ br +++
            H.unordList sub
 
-instance (T Identifier :<: f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
+instance (HashConsed f, T Identifier :<: f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
     cell r | (lhs :-> rhs ) <- unmarkDPRule r =
                                 td ! [theclass "lhs"]   << show lhs <->
                                 td ! [theclass "arrow"] << (" " +++ H.primHtmlChar "#x2192" +++ " ") <->
@@ -231,3 +235,5 @@ thickbox thing c | label <- hashHtml thing =
          H.hotlink ("#TB_inline?height=600&width=600&inlineId=tb" ++ label) ! [theclass "thickbox"] << c
 
 hashHtml = show . abs . hashString . H.renderHtml
+
+-- instance H.ADDATTRS H.HotLink where h ! aa = h{H.hotLinkAttributes = H.hotLinkAttributes h ++ aa}

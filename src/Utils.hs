@@ -4,6 +4,7 @@ import Control.Monad (join, liftM)
 import Data.Graph.Inductive (nodes, edges, suc, Graph, Node(..))
 import Data.List (group, sort)
 import Data.Traversable
+import qualified Data.Set as Set
 
 import Prelude hiding (mapM)
 
@@ -22,7 +23,7 @@ inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
 
 snub :: Ord a => [a] -> [a]
-snub  = map head . group . sort
+snub  = Set.toList . Set.fromList
 
 on :: (t1 -> t1 -> t2) -> (t -> t1) -> t -> t -> t2
 on cmp f x y = cmp (f x) (f y)

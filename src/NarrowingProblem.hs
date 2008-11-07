@@ -4,7 +4,6 @@
 module NarrowingProblem where
 
 import Control.Exception
-import Data.AlaCarte
 import Data.Foldable (Foldable)
 import Data.List (sortBy)
 import Data.Monoid
