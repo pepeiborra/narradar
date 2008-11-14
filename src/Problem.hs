@@ -2,9 +2,11 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Problem where
 
 import Control.Applicative
+import qualified Control.Monad as M
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
@@ -26,19 +28,26 @@ import Unsafe.Coerce
 import Types hiding (Ppr(..),ppr, (!))
 import qualified Types as TRS
 import Utils
+import Operad
+import TaskPoolSTM
 import qualified ArgumentFiltering as AF
 
 import Prelude as P hiding (log, mapM, foldr, concatMap)
 
-data Progress_ f s a =   NotDone    a
-                       | And        {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
-                       | Or         {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
-                       | Success    {procInfo::ProcInfo, problem::Problem f, res::s}
-                       | Fail       {procInfo::ProcInfo, problem::Problem f, res::s}
+data Progress_ f s a =   NotDone a
+                       | And     {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
+                       | Or      {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
+                       | Done    {procInfo::ProcInfo, problem::Problem f, res::s}
                        | Empty
      deriving (Show)
 
-type ProblemProgress s f = Progress_ f s (Problem f)
+type ProblemProgress s f = Progress_ f (Result s) (Problem f)
+
+data Result a = Success a | Fail a
+isSuccessR Success{} = True ; isSuccessR _ = False
+success pi p s = Done pi p (Success s)
+fail    pi p s = Done pi p (Fail s)
+
 
 data ProcInfo = AFProc AF.AF
               | DependencyGraph
@@ -56,44 +65,59 @@ $(derive makeTraversable ''Problem_)
 instance Foldable (Progress_ f s) where foldMap = foldMapDefault
 $(derive makeFunctor     ''Progress_)
 $(derive makeTraversable ''Progress_)
+-- $(derive makeNFData      ''Progress_)
 
 instance Monad (Progress_ f s) where
     return   = NotDone
     xs >>= f = join (fmap f xs)
-      where join (NotDone p)    = p
-            join (And pi pr pp) = And pi pr (map join pp)
-            join (Or  pi pr pp) = Or  pi pr (map join pp)
-            join p              = unsafeCoerce p
+
+{-# RULES "Progress join" M.join = Problem.join #-}
+join :: Progress_ f s (Progress_ f s a) -> Progress_ f s a
+join (NotDone p)    = p
+join (And pi pr pp) = And pi pr (map join pp)
+join (Or  pi pr pp) = Or  pi pr (map join pp)
+join Empty          = Empty
+join (Done pi pr s) = Done pi pr s
 
 instance SignatureC (Problem f) Identifier where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
 
-success :: ProblemProgress s f -> Bool
-success NotDone{} = False
-success Success{} = True
-success Fail{}    = False
-success (And _ _ ll)  = P.all success ll
-success (Or  _ _ ll)  = P.any success ll
-success Empty     = True
+isSuccess :: ProblemProgress s f -> Bool
+isSuccess NotDone{} = False
+isSuccess Done{res} = isSuccessR res
+isSuccess (And _ _ ll)  = P.all isSuccess ll
+isSuccess (Or  _ _ ll)  = P.any isSuccess ll
+isSuccess Empty     = True
 
-solveProblem :: (Problem a -> ProblemProgress s a) -> ProblemProgress s a -> ProblemProgress s a
-solveProblem = (=<<)
+type PP_ f s a = EfficientMonad (Progress_ f s) a
+type PP  s a   = PP_ a (Result s) (Problem a)
+
+solveProblem :: (Problem a -> ProblemProgress s a) -> PP s a -> PP s a
+solveProblem f m = (inE . f) =<< m -- join (fMap f xs)
+
+runPP :: PP s a -> ProblemProgress s a
+runPP = unE
 
 class Monad m => SolveProblemM m where
-  solveProblemM :: (Problem a -> m (ProblemProgress s a)) -> ProblemProgress s a -> m (ProblemProgress s a)
-  solveProblemM = concatMapM
+  solveProblemM :: (Problem a -> m (ProblemProgress s a)) -> PP s a -> m (PP s a)
+  solveProblemM f = concatMapM (M.liftM inE . f)
+
 
 instance SolveProblemM IO where
-  solveProblemM f = concatMapM (unsafeInterleaveIO . f)
+  solveProblemM f p = do
+    let (EM (MO op xx)) = fmap (M.liftM inE . f) p
+    xx' <- parSequence 2 xx
+    return (M.join (EM(MO op xx')))
+
+--  solveProblemM f = concatMapM (unsafeInterleaveIO . M.liftM inE . f)
 
 simplify :: ProblemProgress s f -> Maybe (ProblemProgress s f)
-simplify p@(Or _ _ aa) | success p = listToMaybe [p | p <- aa, success p]
+simplify p@(Or _ _ aa) | isSuccess p = listToMaybe [p | p <- aa, isSuccess p]
 simplify _ = Nothing
 
-logLegacy proc prob Nothing = Fail proc prob "Failed"
-logLegacy proc prob (Just msg) = Success proc prob msg
+logLegacy proc prob Nothing    = Done proc prob (Fail "Failed")
+logLegacy proc prob (Just msg) = Done proc prob (Success msg)
 
-pprSkelt Fail{}    = text "failure"
-pprSkelt Success{} = text "success"
+pprSkelt Done{res} = text $ if isSuccessR res then "success" else "failure"
 pprSkelt NotDone{} = text "not done"
 pprSkelt Empty     = text "empty"
 pprSkelt (And _ _ pp) = parens $ cat $ punctuate (text " & ") $ map pprSkelt pp
@@ -102,7 +126,7 @@ pprSkelt (Or _ _ pp)  = parens $ cat $ punctuate (text " | ") $ map pprSkelt pp
 pprTPDB :: TRS.Ppr f => Problem f -> String
 pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
   unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs))
-          , printf "(PAIRS\n %s)" (unlines (map (show . unmarkDPRule) (rules dps)))
+          , printf "(PAIRS\n %s)" (unlines (map show (rules dps)))
           , printf "(RULES\n %s)" (unlines (map show (rules trs)))]
 
 -------------------
@@ -131,30 +155,33 @@ instance TRS.Ppr a => Ppr (ProblemProgress String a) where
     ppr Empty = Text.PrettyPrint.empty
     ppr (NotDone prob) = ppr prob $$
                          text ("RESULT: Not solved yet")
-    ppr (Success proc prob res) = ppr prob $$
-                                  text "PROCESSOR: " <> text (show proc) $$
-                                  text ("RESULT: Problem solved succesfully") $$
-                                  text ("Output: ") <>  (vcat . map text . lines) res
-    ppr (Fail proc prob res) = ppr prob $$
-                               text "PROCESSOR: " <> (text.show) proc  $$
-                               text ("RESULT: Problem could not be solved.") $$
-                               text ("Output: ") <> (vcat . map text . lines) res
-    ppr p@(Or proc prob sub) | Just res <- simplify p = ppr res
-                  | otherwise =
-                     ppr prob $$
-                     text "PROCESSOR: " <> (text.show) proc $$
-                     text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
-                     nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
+    ppr (Done proc prob (Success res)) =
+        ppr prob $$
+        text "PROCESSOR: " <> text (show proc) $$
+        text ("RESULT: Problem solved succesfully") $$
+        text ("Output: ") <>  (vcat . map text . lines) res
+    ppr (Done proc prob (Fail res)) =
+        ppr prob $$
+        text "PROCESSOR: " <> (text.show) proc  $$
+        text ("RESULT: Problem could not be solved.") $$
+        text ("Output: ") <> (vcat . map text . lines) res
+    ppr p@(Or proc prob sub)
+      | Just res <- simplify p = ppr res
+      | otherwise =
+        ppr prob $$
+        text "PROCESSOR: " <> (text.show) proc $$
+        text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
+        nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
     ppr (And proc prob sub)
-        | length sub > 1=
-                     ppr prob $$
-                     text "PROCESSOR: " <> (text.show) proc $$
-                     text ("Problem was divided to " ++ show (length sub) ++ " subproblems.") $$
-                     nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
-        | otherwise =
-                     ppr prob $$
-                     text "PROCESSOR: " <> (text.show) proc $$
-                     nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
+      | length sub > 1=
+        ppr prob $$
+        text "PROCESSOR: " <> (text.show) proc $$
+        text ("Problem was divided to " ++ show (length sub) ++ " subproblems.") $$
+        nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
+      | otherwise =
+        ppr prob $$
+        text "PROCESSOR: " <> (text.show) proc $$
+        nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
 --------------
 -- HTML
 -------------
@@ -190,13 +217,13 @@ instance TRS.Ppr f => HTML (Problem f) where
 instance TRS.Ppr f => HTML (ProblemProgress Html f) where
     toHtml Empty = noHtml
     toHtml (NotDone prob) = p << prob
-    toHtml (Success proc prob res) =
+    toHtml (Done proc prob (Success res)) =
         p
         << prob +++ br +++
            proc +++ br +++
            divyes +++ thickbox res << spani "seeproof" << "(see proof)"
 
-    toHtml (Fail proc prob res) =
+    toHtml (Done proc prob (Fail res)) =
         p
         << prob +++ br +++
            proc +++ br +++

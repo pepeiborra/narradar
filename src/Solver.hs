@@ -5,6 +5,7 @@ import NarrowingProblem
 import Aprove
 import DPairs
 import Types
+import Operad
 
 import Text.XHtml
 
