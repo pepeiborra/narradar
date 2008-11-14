@@ -8,8 +8,8 @@ license:             BSD3
 license-file:        LICENSE
 author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
-build-Depends:       base, mtl, pretty, containers, process, directory, bytestring,
-		     xhtml, tagsoup, curl, derive, fgl, cgi,
+build-Depends:       base < 4, mtl, pretty, containers, process, directory, bytestring,
+		     xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath,
 		     TRS, alacarte, fetchrules, fetchrules-trs
 
 executable:          narradar

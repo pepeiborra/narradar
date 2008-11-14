@@ -19,8 +19,8 @@ cgiMain = do
      case ei_trs of
        Left parse_error -> output $ show parse_error
        Right trs -> do
-          res <- liftIO $ solveNarrowing $ mkTRS trs
+          res <- liftIO $ solveNarrowingWeb $ mkTRS trs
           output$ renderHtml $
-           if success res
+           if isSuccess res
              then thediv ! [identifier "title"] << h3 << "Termination was proved succesfully" +++ res
              else thediv ! [identifier "title"] << h3 << "Termination could not be proved"    +++ res
