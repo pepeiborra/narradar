@@ -18,18 +18,20 @@ import Types
 
 mkNDPProblem trs = Problem Narrowing trs (tRS $ getNPairs trs)
 
-afProcessor :: AnnotateWithPos f f => Problem f -> ProblemProgress Html f
+afProcessor :: (IsVar f, AnnotateWithPos f f) => Problem f -> ProblemProgress Html f
 afProcessor p@(Problem Narrowing trs dps) = if null orProblems
                                                   then Fail (AFProc mempty) p (toHtml "Could not find a grounding AF")
                                                   else Or   (AFProc mempty) p (sortByDefinedness orProblems)
     where afs = snub $ map (findGroundAF p) (rules dps)
-          orProblems = [And (AFProc af) p [NotDone $ AF.applyAF af (Problem Rewriting trs dps)] | af <- afs]
+          orProblems = [And (AFProc af) p [NotDone $ AF.applyAF af (Problem Rewriting trs dps)] | Just af <- afs]
           sortByDefinedness = sortBy (flip compare `on` (AF.countPositionsFiltered . (\(And (AFProc af) _ _)-> af)))
 
 
-findGroundAF :: AnnotateWithPos f f => Problem f -> DP f -> AF.AF
-findGroundAF p@(Problem _ trs@TRS{} dps) (_:->r) =
-    ( assertNoExtraVars . assertGroundDP . invariantSignature . invariantExtraVars trs . invariantExtraVars dps) $ (mkGround r)
+findGroundAF :: (IsVar f, AnnotateWithPos f f) => Problem f -> DP f -> Maybe AF.AF
+findGroundAF p@(Problem _ trs@TRS{} dps) (_:->r)
+  | isVar r   = Nothing
+  | otherwise =
+    ( return . assertNoExtraVars . assertGroundDP . invariantExtraVars trs . invariantExtraVars dps) $ (mkGround r)
   where mkGround t
           | null pp = mempty
           | otherwise
