@@ -1,0 +1,10 @@
+
+(VAR x)
+(RULES
+
+f(h(x)) -> g(x,x,x)
+g(a,b,x) -> f(x)
+c -> a
+c -> b
+)
+
