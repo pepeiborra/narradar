@@ -1,10 +1,14 @@
 module Utils where
 
+import Control.Applicative
+import Control.Exception (bracket)
 import Control.Monad (join, liftM)
 import Data.Graph.Inductive (nodes, edges, suc, Graph, Node(..))
 import Data.List (group, sort)
 import Data.Traversable
 import qualified Data.Set as Set
+import System.IO
+import System.Directory
 
 import Prelude hiding (mapM)
 
@@ -38,6 +42,16 @@ select xx ii = go 0 xx (sort ii)
 propSelect xx ii = map (xx!!) ii' == select xx ii'
   where types = (xx::[Int], ii::[Int])
         ii'   = filter (< length xx) (map abs ii)
+
+
+asTypeOf1 :: f a -> f b -> f a
+asTypeOf1 x _ = x
+
+chunks n _ | n < 1 = error "chunks: zero or negative chunk size"
+chunks _ []   = []
+chunks n list = xx : chunks n rest  where (xx, rest) = (take n list, drop n list)
+
+withTempFile dir name m = bracket (openTempFile dir name) (removeFile . fst) (uncurry m)
 
 -- Implementacion libre de:
 --  "A new way to enumerate cycles in graph" - Hongbo Liu, Jiaxin Wang
