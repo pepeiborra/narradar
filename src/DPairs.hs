@@ -19,7 +19,8 @@ import TRS.Types
 cycleProcessor :: Problem f -> ProblemProgress Html f
 cycleProcessor problem@(Problem typ trs@TRS{} dps)
   | null cc   = success DependencyGraph problem (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
-  | otherwise =  And DependencyGraph problem [NotDone $ Problem typ trs  (tRS$ map (rules dps !!) ciclo) | ciclo <- cc]
+  | otherwise =  And DependencyGraph problem
+                 [NotDone $ Problem typ trs (tRS$ map (rules dps !!) ciclo) | ciclo <- cc]
     where cc = cycles $ getEDG trs (rules dps)
 
 

@@ -7,7 +7,7 @@ module ArgumentFiltering where
 
 import Control.Arrow (first, second)
 import Control.Monad (liftM)
-import Data.List ((\\))
+import Data.List ((\\), intersperse)
 import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -20,7 +20,12 @@ import qualified Prelude
 import Types
 import Utils
 
-newtype AF = AF {fromAF:: Map Identifier (Set Int)} deriving (Eq, Ord, Show)
+newtype AF = AF {fromAF:: Map Identifier (Set Int)} deriving (Eq, Ord)
+
+instance Show AF where show af = -- unlines . fmap show . fmap (second Set.toList) . Map.toList . fromAF
+                              unlines [ unwords $ intersperse ","
+                                         [ show f ++ ": " ++ show (fmap succ (Set.toList aa)) | (f, aa) <- xx]
+                                      | xx <- chunks 3 $ Map.toList $ fromAF af]
 
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
@@ -64,5 +69,7 @@ instance (TRSC f, T Identifier :<: f) => ApplyAF (Term f) where
 instance ApplyAF (TRS Identifier f) where
     applyAF af trs@TRS{} = tRS$ applyAF af (rules trs)
 
-initAF t | sig <- getSignature t = fromList [ (d, [0.. getArity sig d -1])
-                                                 | d <- Foldable.toList(definedSymbols sig `mappend` constructorSymbols sig)]
+initAF t | sig <- getSignature t = fromList
+    [ (d, [0.. getArity sig d -1])
+          | d <- Foldable.toList(definedSymbols sig `mappend` constructorSymbols sig)
+          , getArity sig d > 0]
