@@ -1,4 +1,4 @@
-
+{-# LANGUAGE CPP, ScopedTypeVariables #-}
 module TaskPoolSTM ( parSequence, parSequence', parSequence_
                    , parMapM, parMapM_, parMapM', parMapMS_
                    , parForM, parForM_, parForM', parForMS_
@@ -28,6 +28,7 @@ parSequence n jobs = do
   results_c <- parSequence' n jobs
   results   <- atomically $ replicateM (length jobs) (readTChan results_c)
   return [ r | Suc r <- results ]
+
 {-
 parSequenceT :: Traversable t => Int -> t(IO a) -> IO (t a)
 parSequenceT n t = do
@@ -71,6 +72,9 @@ forkWorker count act = forkIO $ act
 
 modifyTVar_ tv f = readTVar tv >>= writeTVar tv . f
 
+
+#ifndef BASE4
+
 worker jobqueue results_c = loop where
  loop = do
          job <- atomically $ readTChan jobqueue
@@ -94,7 +98,33 @@ workerS_ s0 jobqueue = loop where
          case job of
            Done  -> return ()
            Job x -> ((x s0 >> return ()) `CE.catch` (tasksdebug . ("A task failed: " ++) . show)) >> loop
+#else
+worker jobqueue results_c = loop where
+ loop = do
+         job <- atomically $ readTChan jobqueue
+         case job of
+           Done  -> return ()
+           Job x -> do (x >>= atomically . writeTChan results_c . Suc)
+                             `CE.catch` \(e :: CE.SomeException) ->
+                                              atomically (writeTChan results_c Failed) >>
+                                              tasksdebug ("A task failed: " ++ show e)
+                       loop
 
+worker_ jobqueue = loop where
+ loop = do
+         job <- atomically $ readTChan jobqueue
+         case job of
+           Done  -> return ()
+           Job x -> ((x >> return ()) `CE.catch` (\ (e::CE.SomeException) -> tasksdebug ("A task failed: " ++ show e))) >> loop
+
+workerS_ s0 jobqueue = loop where
+ loop = do
+         job <- atomically $ readTChan jobqueue
+         case job of
+           Done  -> return ()
+           Job x -> ((x s0 >> return ()) `CE.catch` (\ (e::CE.SomeException) -> tasksdebug ("A task failed: " ++ show e))) >> loop
+
+#endif
 waitForChan c = atomically (check =<< isEmptyTChan c)
 waitFor var   = atomically $ do
                   x <- readTVar var
