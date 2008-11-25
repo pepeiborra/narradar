@@ -1,6 +1,7 @@
 name:                narradar
+build-type:          Simple
+cabal-version:       >= 1.2
 version:             0.2
-build-type:	     Simple
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -8,16 +9,58 @@ license:             BSD3
 license-file:        LICENSE
 author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
-build-Depends:       base < 4, mtl, pretty, containers, process, directory, bytestring,
-		     xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath,
-		     TRS, alacarte, fetchrules, fetchrules-trs
 
-executable:          narradar
-main-is:             Main.hs
-ghc-options:         -O2 -threaded
-hs-source-dirs:         src
+Flag base4
 
-executable:          narradarCgi
-main-is:             MainWeb.hs
-ghc-options:         -O2 -threaded
-hs-source-dirs:         src
+Executable narradar
+  if flag(base4)
+     cpp-options: -DBASE4
+     build-depends:     base >= 4
+  else
+     build-depends:     base < 4
+  main-is:             Main.hs
+  ghc-options:         -O2 -threaded -Wall
+  hs-source-dirs:         src
+  build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array,
+     xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
+     TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras
+  other-modules: Types,
+                 MonadSupply,
+     Operad,
+     Problem,
+     GraphTransformation,
+     NarrowingProblem,
+     DPairs,
+     ArgumentFiltering,
+     Utils,
+     Solver,
+     Aprove,
+     TaskPoolSTM
+
+Executable narradarCgi
+  buildable: true
+  if flag(base4)
+    cpp-options:       -DBASE4
+    build-depends:     base >= 4
+  else
+    build-depends:     base < 4
+
+  main-is:             MainWeb.hs
+  ghc-options:         -O2 -threaded
+  hs-source-dirs:      src
+  build-Depends:       mtl, pretty, containers, process, directory, bytestring, array,
+       xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
+       TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras
+
+  other-modules:     Types,
+     MonadSupply,
+     Operad,
+     Problem,
+     GraphTransformation,
+     NarrowingProblem,
+     DPairs,
+     ArgumentFiltering,
+     Utils,
+     Solver,
+     Aprove,
+     TaskPoolSTM
