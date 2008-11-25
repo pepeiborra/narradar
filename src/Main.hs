@@ -1,32 +1,40 @@
+{-# LANGUAGE PackageImports, NoImplicitPrelude #-}
 module Main where
 
+import "monad-param" Control.Monad.Parameterized
 import System.Environment
 import System.Exit
-import System.IO
-import Text.Printf
 import Text.XHtml
+
+import Prelude hiding (Monad(..))
 
 import TRS.FetchRules
 import TRS.FetchRules.TRS
 import Types hiding ((!))
 import Solver
 import Problem
-
-
+import GraphTransformation
+import NarrowingProblem
+main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [file, "SRV"]       -> work file solveNarrowingSrv
-    [file, "WEB"]       -> work file solveNarrowingWeb
-    [file, aprove_path] -> work file (solveNarrowingLocal' aprove_path)
-    [file] -> work file (solveNarrowingLocal' "./runme")
-    _ -> getProgName >>= \n -> printf "Narradar - Automated Narrowing Termination Proofs\n USAGE: %s <system.trs> [path_to_aprove] \n" n
-  where work file aprove_slv = do
+    [file, "SKEL"]      -> parseIt file (print.pprSkelt. (startSolver >=> mainSolverPure))
+    [file, "DOT"]       -> parseIt file (\trs -> putStrLn (pprDot (startSolver trs >>= mainSolverPure)))
+    [file, "SRV"]       -> work file srvSolver
+    [file, "WEB"]       -> work file webSolver
+    [file, aprove_path] -> work file (localSolver' aprove_path)
+    [file] -> work file srvSolver
+    _ -> do n <- getProgName
+            putStrLn$ "Narradar - Automated Narrowing Termination Proofs\n USAGE: " ++ n ++
+                        " <system.trs> [path_to_aprove|SRV|WEB|DOT|SKEL]"
+  where parseIt file k = do
               contents <- readFile file
               case parseFile trsParser file contents of
                 Left error -> print error >> exitWith (ExitFailure 1)
-                Right trs_ -> do
-                  sol <- aprove_slv (mkTRS trs_)
+                Right trs_ -> k (mkTRS trs_)
+        work file slv = parseIt file $ \problem -> do
+                  sol <- runSolver slv problem
                   putStr (renderHtml (page sol))
 
 page res = myhead +++ body << divres where
