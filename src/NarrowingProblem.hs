@@ -8,7 +8,7 @@ import Data.Foldable (Foldable)
 import Data.List (sortBy)
 import Data.Monoid
 import Text.XHtml (toHtml, Html)
-import Prelude as P hiding (fail)
+import Prelude as P
 
 import qualified ArgumentFiltering as AF
 import DPairs
@@ -20,7 +20,7 @@ mkNDPProblem trs = Problem Narrowing trs (tRS $ getNPairs trs)
 
 afProcessor :: (IsVar f, AnnotateWithPos f f) => Problem f -> ProblemProgress Html f
 afProcessor p@(Problem Narrowing trs dps) = if null orProblems
-                                                  then fail (AFProc AF.empty) p (toHtml "Could not find a grounding AF")
+                                                  then failP (AFProc AF.empty) p (toHtml "Could not find a grounding AF")
                                                   else Or   (AFProc AF.empty) p (sortByDefinedness orProblems)
     where afs = snub $ map (findGroundAF p) (rules dps)
           orProblems = [And (AFProc af) p [NotDone $ AF.applyAF af (Problem Rewriting trs dps)] | Just af <- afs]

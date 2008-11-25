@@ -35,7 +35,7 @@ aproveWebProc prob@(Problem Rewriting trs dps) = withCurlDo $ do
   hPutStrLn stderr ("asking aprove to solve the following problem\n" ++ pprTPDB prob)
   response <- perform_with_response curl
   let output = massageWeb $ respBody response
-  return$ (if "proven" `elem` [ text | TagText text <- parseTags output] then success else Problem.fail)
+  return$ (if "proven" `elem` [ text | TagText text <- parseTags output] then success else failP)
                                     (External Aprove) prob (primHtml output)
 
 
@@ -50,7 +50,7 @@ aproveProc path prob@(Problem Rewriting trs dps) =
               output            <- hGetContents out
               errors            <- hGetContents err
               unless (null errors) (error ("Aprove failed with the following error: \n" ++ errors))
-              return$ (if take 3 output == "YES" then success else Problem.fail)
+              return$ (if take 3 output == "YES" then success else failP)
                         (External Aprove) prob (massage output)
 
 
@@ -77,7 +77,7 @@ aproveSrvProc prob@(Problem Rewriting trs dps) = withSocketsDo $ withTempFile "/
 
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
-              _     -> Problem.fail
+              _     -> failP
     evaluate (length res)
     hClose hAprove
     return (k (External Aprove) prob $ primHtml $ tail $ dropWhile (/= '\n') res)
