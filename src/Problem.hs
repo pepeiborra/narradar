@@ -25,6 +25,7 @@ import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import Data.Traversable as T
+import Text.Dot
 import Text.PrettyPrint
 import Text.Printf
 import qualified Text.XHtml as H
@@ -240,6 +241,51 @@ pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
   unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs))
           , printf "(PAIRS\n %s)" (unlines (map show (rules dps)))
           , printf "(RULES\n %s)" (unlines (map show (rules trs)))]
+
+
+pprTPDBdot :: TRS.Ppr f => Problem f -> String
+pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
+  unlines [ "(VAR " ++ (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs)) ++ ")"
+          , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
+          , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")\\l"]
+  where unlines = concat . intersperse "\\l"
+
+instance Functor Dot where fmap = M.liftM
+
+pprDot prb = showDot (work prb =<< node [("label","0")]) where
+    work Success{..} par = trsnode problem par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
+    work Fail{..} par = trsnode problem par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
+    work (NotDone p) par = trsnode p par
+    work MZero{}     par = childnode [("label","Don't Know")] par
+    work DontKnow{..}par = trsnode problem par >>= procnode procInfo >>= childnode [("label","Don't Know")]
+    work (Choice p1 p2) par = go$ do
+        dis <- childnode [] par
+        work p1 dis
+        work p2 dis
+        return dis
+    work And{subProblems=[p],..} par = procnode procInfo par >>= \me -> work p me >> return me
+    work And{..} par = go$ do
+                         trs <- trsnode problem par
+                         (nc,me) <- cluster $ go $ do
+                                      attribute ("color", "#E56A90")
+                                      me <- childnode [("label", show procInfo)] trs
+                                      forM_ subProblems (`work` me)
+                                      return me
+                         return me
+    work Or{..}  par = go$ do
+                         trs <- trsnode problem par
+                         me  <- childnode [("label", show procInfo)] trs
+                         forM_ subProblems (`work` me)
+                         return me
+
+trsLabel trs        = ("label", pprTPDBdot trs)
+trsColor (Problem Narrowing _ _) = ("color", "#F97523")
+trsColor (Problem Rewriting _ _) = ("color", "#60233E")
+trsnode  trs        = childnode [trsLabel trs, trsColor trs, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
+
+procnode procInfo   = childnode [("label", show procInfo)]
+
+childnode attrs par = node (("URL","url"):attrs) >>= \n -> par .->. n >> return n
 
 -------------------
 -- Ppr
