@@ -53,7 +53,15 @@ data ProcInfo = AFProc AF.AF
               | DependencyGraph
               | Polynomial
               | External ExternalProc
-     deriving (Eq, Show)
+              | NarrowingP
+     deriving (Eq)
+instance Show ProcInfo where
+    show DependencyGraph = "Dependency Graph Processor"
+    show (External proc) = "External: " ++ show proc
+    show NarrowingP      = "Narrowing Processor"
+    show (AFProc af) | af == AF.empty = "AF processor"
+                     | otherwise      =  show af
+    show (Polynomial)    = "Polynomial ordering"
 
 data ExternalProc = MuTerm | Aprove | Other String
      deriving (Eq, Show)

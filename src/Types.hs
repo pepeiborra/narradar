@@ -14,13 +14,15 @@ import Data.Maybe
 import Data.Monoid
 import Data.Traversable
 import Unsafe.Coerce
-import TRS hiding (match)
+import TRS hiding (match, Basic)
 import TRS.Types (match) -- for Data.AlaCarte match
 
 import Utils
 import Prelude as P
 
-type BasicId = Var :+: T Identifier
+type Basic   = Var :+: T String     :+: Hole
+type BasicId = Var :+: T Identifier :+: Hole
+instance HashConsed Basic
 instance HashConsed BasicId
 instance HashConsed (T Identifier)
 
