@@ -6,7 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE GADTs#-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE NoImplicitPrelude, PackageImports #-}
 
 module Problem where
@@ -37,24 +37,26 @@ import System.IO.Unsafe
 import Types hiding (Ppr(..),ppr, (!))
 import qualified Types as TRS
 import Utils
-import Operad
 import TaskPoolSTM
 import qualified ArgumentFiltering as AF
 
+import Control.Monad.Free
+import Control.Monad.Operad
+
 import Prelude as P hiding (log, mapM, foldr, concatMap, Monad(..), (=<<))
 
-data Progress_ f s a =
-    NotDone a
-  | And     {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
-  | Or      {procInfo::ProcInfo, problem::Problem f, subProblems::[Progress_ f s a]}
+data ProgressF f (s :: *) k =
+    And     {procInfo::ProcInfo, problem::Problem f, subProblems::[k]}
+  | Or      {procInfo::ProcInfo, problem::Problem f, subProblems::[k]}
   | Success {procInfo::ProcInfo, problem::Problem f, res::s}
   | Fail    {procInfo::ProcInfo, problem::Problem f, res::s}
   | DontKnow{procInfo::ProcInfo, problem::Problem f}
-  | Choice (Progress_ f s a) (Progress_ f s a)
+  | Choice k k
   | MZero
      deriving (Show)
 
-type ProblemProgress s f = Progress_ f s (Problem f)
+type Progress f s a     = Free (ProgressF f s) a
+type ProblemProgress s f = Progress f s (Problem f)
 
 success = Success
 failP   = Fail
@@ -65,6 +67,7 @@ data ProcInfo = AFProc AF.AF
               | External ExternalProc
               | NarrowingP
      deriving (Eq)
+
 instance Show ProcInfo where
     show DependencyGraph = "Dependency Graph Processor"
     show (External proc) = "External: " ++ show proc
@@ -80,161 +83,64 @@ instance Foldable Problem_ where foldMap = foldMapDefault
 $(derive makeFunctor     ''Problem_)
 $(derive makeTraversable ''Problem_)
 
-instance Foldable (Progress_ f s) where foldMap = foldMapDefault
-$(derive makeFunctor     ''Progress_)
-$(derive makeTraversable ''Progress_)
--- $(derive makeNFData      ''Progress_)
+instance Foldable (ProgressF f s) where foldMap = foldMapDefault
+$(derive makeFunctor     ''ProgressF)
+$(derive makeTraversable ''ProgressF)
 
--- Progress is a monad (obvious in retrospect, but I didn't notice at the beginning)
-instance Return (Progress_ f s) where returnM = NotDone
-instance Bind (Progress_ f s) (Progress_ f s) (Progress_ f s) where xs >>= f = join (fmap f xs)
-instance Fail (Progress_ f s) where fail = error
+instance MonadZero (Free (ProgressF f s)) where mzeroM = Impure MZero
+instance MPlus (Free (ProgressF f s)) (Free (ProgressF f s)) (Free (ProgressF f s))  where
+    p1 `mplus` p2 = if isSuccess p1 then p1 else Impure (Choice p1 p2)
 
-instance MonadZero (Progress_ f s) where mzeroM = MZero
-instance MPlus (Progress_ f s) (Progress_ f s) (Progress_ f s) where
-    p1 `mplus` p2 = if isSuccess p1 then p1 else Choice p1 p2
+-- But we are going to need a monad transformer (for the Aprove proc among other things)
+type ProgressT f s m a = FreeT (ProgressF f s) m a
+runProgressT = unwrap
 
--- But we are going to need a monad transformer (for the Aprove proc)
--- This fancy monad transformer allows IO computations in parallel. Cool huh? :)
-data ProgressT_ f s m a where
-    ProgressT :: m (Progress_ f s a) -> ProgressT_ f s m a
-    Par       :: IO(Progress_ f s a) -> ProgressT_ f s IO a
+instance Monad m => MPlus (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) where
+    p1 `mplus` p2 = FreeT $ go $ do
+                      s1  <- runProgressT p1
+                      if isSuccess s1 then unFreeT(wrap s1)
+                         else do s2  <- runProgressT p2
+                                 unFreeT (wrap(Impure$ Choice s1 s2))
 
-runProgressT :: ProgressT_ f s m a -> m(Progress_ f s a)
-runProgressT (ProgressT x) = x
-runProgressT (Par       x) = x
-
-m ||>= f = Par m >>= f
-(>||>) :: forall m s a b c f .  (Bind m (ProgressT_ f s IO) (ProgressT_ f s IO)) =>
-         (a -> m b) -> (b -> ProgressT_ f s IO c) -> (a -> ProgressT_ f s IO c)
-f >||> g  = \a -> Par (runProgressT $ (f >=> returnPPT) a) >>= g
-           where returnPPT :: a' -> ProgressT_ f s IO a'
-                 returnPPT = returnM
-
-type    PPT s m a = ProgressT_ a s m (Problem a)
-
-instance Monad m => Functor (ProgressT_ f s m) where
-    fmap f (ProgressT x) = ProgressT $ liftM (fmap f) x
-    fmap f (Par x)       = ProgressT $ liftM (fmap f) x
-
-instance Monad m => Return (ProgressT_ f s m) where returnM = ProgressT . returnM . NotDone
-instance Monad m => Bind  (ProgressT_ f s m) (ProgressT_ f s m) (ProgressT_ f s m) where
-    Par xs >>= f = bindPar xs f where
-       bindPar p f = ProgressT $ liftM unE $ do
-         sol <- p
-         let (EM (MO op xx)) = fmap (liftM inE . runProgressT . f) (inE sol)
-         xx' <- parSequence 4 xx
-         return (join (EM(MO op xx')))
-
-    xs     >>= f = ProgressT (runProgressT xs >>= concatMapMP (runProgressT . f))
-
-instance Fail (ProgressT_ f s m) where fail = error
-
--- If the below instance was definible, we would have no need for MonadTrans
---  Unfortunately, this conflicts with the definition of MZero, as afaik there
---  is no way to specify an ordering between type equations here :(
-
---instance Monad m => Bind m        (ProgressT_ f s m) (ProgressT_ f s m) where m >>= f = (liftPPT m `asTypeOf1` f undefined) >>= f
-
-instance MonadTrans (ProgressT_ f s) where lift = liftPPT
-
-liftPPT :: Monad m => m a -> ProgressT_ f s m a
-liftPPT = ProgressT . liftM NotDone
-
-instance Monad m => Bind (Progress_ f s) (ProgressT_ f s m) (ProgressT_ f s m) where xs >>= f = (liftProgressT xs `asTypeOf1` f undefined ) >>= f
-instance Monad m => Bind (ProgressT_ f s m) (Progress_ f s) (ProgressT_ f s m) where xs >>= f = let liftF x = liftProgressT x `asTypeOf1` xs in xs >>= (liftF.f)
-
-instance Monad m => MonadZero (ProgressT_ f s m) where mzeroM = ProgressT (returnM MZero)
-instance Monad m => MPlus  (ProgressT_ f s m) (ProgressT_ f s m) (ProgressT_ f s m) where
-    p1 `mplus` p2 = ProgressT $ do
-                      s1 <- runProgressT p1
-                      if isSuccess s1 then returnM s1 else runProgressT p2 >>= \s2 -> return (Choice s1 s2)
-
-liftProgressT :: Monad m => Progress_ f s a -> ProgressT_ f s m a
-liftProgressT = ProgressT . returnM
-
-
-{-# RULES "Progress join" join = Problem.joinP #-}
-joinP :: Progress_ f s (Progress_ f s a) -> Progress_ f s a
-joinP (NotDone p)    = p
-joinP (And pi pr pp) = And pi pr (map joinP pp)
-joinP (Or  pi pr pp) = Or  pi pr (map joinP pp)
-joinP MZero          = MZero
-joinP DontKnow{..}   = DontKnow{..}
-joinP Success{..}    = Success{..}
-joinP Fail{..}       = Fail{..}
-joinP (Choice p1 p2) = Choice (joinP p1) (joinP p2)
+liftProgressT :: Monad m => Progress f s a -> ProgressT f s m a
+liftProgressT = wrap
 
 instance SignatureC (Problem f) Identifier where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
 
-isSuccess :: Progress_ f s a -> Bool
-isSuccess NotDone{} = False
-isSuccess Fail{}    = False
-isSuccess Success{} = True
-isSuccess DontKnow{}= False
-isSuccess (And _ _ ll)  = P.all isSuccess ll
-isSuccess (Or  _ _ ll)  = P.any isSuccess ll
-isSuccess MZero     = False
-isSuccess (Choice p1 p2) = isSuccess p1 || isSuccess p2
+isSuccess :: Progress f s k -> Bool
+isSuccess = foldFree (const False) f where
+  f Fail{}         = False
+  f Success{}      = True
+  f DontKnow{}     = False
+  f (And _ _ ll)   = and ll
+  f (Or  _ _ ll)   = or ll
+  f MZero          = False
+  f (Choice p1 p2) =  p1 || p2
 
-type PP_ f s = EfficientMonad (Progress_ f s)
-type PP  s a = PP_ a s (Problem a)
-instance (M.Monad m, Traversable m) => Return (EfficientMonad m) where returnM = M.return
-instance Fail (EfficientMonad m) where fail = error
-instance (M.Monad m, Traversable m) => Bind (EfficientMonad m) (EfficientMonad m) (EfficientMonad m) where (>>=) = (M.>>=)
 
---solveProblem :: (Problem a -> ProblemProgress s a) -> PP s a -> PP s a
---solveProblem f m =  (inE . f) =<< m 
-solveProblem = (=<<)
-
-runPP :: PP s a -> ProblemProgress s a
-runPP = unE
-{-
-class Monad m => SolveProblemM m where
-  --solveProblemM :: (Problem a -> m (ProblemProgress s a)) -> PP s a -> m (PP s a)
-  --solveProblemM f = concatMapM (M.liftM inE . f)
-    solveProblemM :: (Problem a -> m (ProblemProgress s a)) -> ProblemProgress s a -> m(ProblemProgress s a)
-    solveProblemM = concatMapM
-
-instance SolveProblemM IO where
-  solveProblemM f = concatMapM (unsafeInterleaveIO {-. M.liftM inE -}. f)
-
-solveProblemMPar f p = fmap runPP $ do
-    let (EM (MO op xx)) = fmap (M.liftM inE . f) (inE p)
-    xx' <- liftIO $ parSequence 4 xx
-    return (join (EM(MO op xx')))
--}
-
-slice = everywhere simplifyAll where
- simplifyAll x | Just x' <- simplify x = simplifyAll x'
-               | otherwise = x
-
-everywhere f x@Or{..} = x{subProblems = map f subProblems}
-everywhere f x@And{..} = x{subProblems = map f subProblems}
-everywhere f (Choice p1 p2) = Choice (f p1) (f p2)
-everywhere f x = x
-
-simplify :: ProblemProgress s f -> Maybe (ProblemProgress s f)
-simplify p@(Or  _ _ aa) | isSuccess p = listToMaybe [p | p <- aa, isSuccess p]
-simplify   (Or  _ p []) = Just (NotDone p)
-simplify   (And p f []) = error "simplify: unexpected"
-simplify   (Choice p1 p2)
-    | isSuccess p1 = Just p1
-    | isSuccess p2 = Just p2
-    | otherwise    = Just MZero
-simplify _ = Nothing
+simplify :: ProblemProgress s f -> ProblemProgress s f
+simplify = foldFree returnM f where
+  f p@(Or  _ _ aa)   = msum aa
+  f   (Or  _ p [])   = returnM p
+  f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"
+  f p@(Choice p1 p2)
+      | isSuccess p1 = p1
+      | isSuccess p2 = p2
+      | otherwise    = mzeroM
+  f p@Success{..}    = Impure Success{..}
+  f p@Fail{..}       = Impure Fail{..}
 
 logLegacy proc prob Nothing    = failP proc prob "Failed"
 logLegacy proc prob (Just msg) = success proc prob msg
 
-pprSkelt Success{} = text "success"
-pprSkelt Fail{}    = text "failure"
-pprSkelt NotDone{} = text "not done"
-pprSkelt MZero     = text "don't know"
-pprSkelt DontKnow{}= text "don't know"
-pprSkelt (And _ _ pp) = parens $ cat $ punctuate (text " & ") $ map pprSkelt pp
-pprSkelt (Or _ _ pp)  = parens $ cat $ punctuate (text " | ") $ map pprSkelt pp
-pprSkelt (Choice p1 p2) = pprSkelt p1 <+> text " | " <+> pprSkelt p2
+pprSkelt = foldFree (const$ text "not done") f where
+  f Success{}      = text "success"
+  f Fail{}         = text "failure"
+  f MZero          = text "don't know"
+  f DontKnow{}     = text "don't know"
+  f (And _ _ pp)   = parens $ cat $ punctuate (text " & ") pp
+  f (Or _ _ pp)    = parens $ cat $ punctuate (text " | ") pp
+  f (Choice p1 p2) = p1 <+> text " | " <+> p2
 
 pprTPDB :: TRS.Ppr f => Problem f -> String
 pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
@@ -252,31 +158,31 @@ pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
 
 instance Functor Dot where fmap = M.liftM
 
-pprDot prb = showDot (work prb =<< node [("label","0")]) where
-    work Success{..} par = trsnode problem par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
-    work Fail{..} par = trsnode problem par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
-    work (NotDone p) par = trsnode p par
-    work MZero{}     par = childnode [("label","Don't Know")] par
-    work DontKnow{..}par = trsnode problem par >>= procnode procInfo >>= childnode [("label","Don't Know")]
-    work (Choice p1 p2) par = go$ do
+pprDot prb = showDot (foldFree trsnode f prb =<< node [("label","0")]) where
+    f Success{..} par    = trsnode problem par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
+    f Fail{..} par       = trsnode problem par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
+    f MZero{}     par    = childnode [("label","Don't Know")] par
+    f DontKnow{..}par    = trsnode problem par >>= procnode procInfo >>= childnode [("label","Don't Know")]
+    f (Choice p1 p2) par = go$ do
         dis <- childnode [] par
-        work p1 dis
-        work p2 dis
+        p1 dis
+        p2 dis
         return dis
-    work And{subProblems=[p],..} par = procnode procInfo par >>= \me -> work p me >> return me
-    work And{..} par = go$ do
-                         trs <- trsnode problem par
-                         (nc,me) <- cluster $ go $ do
-                                      attribute ("color", "#E56A90")
-                                      me <- childnode [("label", show procInfo)] trs
-                                      forM_ subProblems (`work` me)
-                                      return me
-                         return me
-    work Or{..}  par = go$ do
-                         trs <- trsnode problem par
-                         me  <- childnode [("label", show procInfo)] trs
-                         forM_ subProblems (`work` me)
-                         return me
+    f And{subProblems=[p],..} par
+                         = procnode procInfo par >>= \me -> p me >> return me
+    f And{..} par        = go$ do
+                                trs <- trsnode problem par
+                                (nc,me) <- cluster $ go $ do
+                                             attribute ("color", "#E56A90")
+                                             me <- childnode [("label", show procInfo)] trs
+                                             forM_ subProblems ($ me)
+                                             return me
+                                return me
+    f Or{..}  par        = go$ do
+                                trs <- trsnode problem par
+                                me  <- childnode [("label", show procInfo)] trs
+                                forM_ subProblems ($ me)
+                                return me
 
 trsLabel trs        = ("label", pprTPDBdot trs)
 trsColor (Problem Narrowing _ _) = ("color", "#F97523")
@@ -310,36 +216,36 @@ instance TRS.Ppr a => Ppr (Problem a) where
 
 
 instance TRS.Ppr a => Ppr (ProblemProgress String a) where
-    ppr MZero = text "don't know"
-    ppr (NotDone prob) = ppr prob $$
-                         text ("RESULT: Not solved yet")
-    ppr Success{..} =
+    ppr = foldFree leaf f . simplify where
+      leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
+      f MZero = text "don't know"
+      f Success{..} =
         ppr problem $$
-        text "PROCESSOR: " <> text (show procInfo) $$
+        text "PROCESSOR: " <> ppr procInfo $$
         text ("RESULT: Problem solved succesfully") $$
         text ("Output: ") <>  (vcat . map text . lines) res
-    ppr Fail{..} =
+      f Fail{..} =
         ppr problem $$
-        text "PROCESSOR: " <> (text.show) procInfo  $$
+        text "PROCESSOR: " <> ppr procInfo  $$
         text ("RESULT: Problem could not be solved.") $$
         text ("Output: ") <> (vcat . map text . lines) res
-    ppr p@(Or proc prob sub)
-      | Just res <- simplify p = ppr res
-      | otherwise =
+      f p@(Or proc prob sub) =
         ppr prob $$
-        text "PROCESSOR: " <> (text.show) proc $$
+        text "PROCESSOR: " <> ppr proc $$
         text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
-        nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
-    ppr (And proc prob sub)
-      | length sub > 1=
-        ppr prob $$
-        text "PROCESSOR: " <> (text.show) proc $$
+        nest 8 (vcat $ punctuate (text "\n") sub)
+      f (And proc prob sub)
+       | length sub > 1 =
+          ppr prob $$
+        text "PROCESSOR: " <> ppr proc $$
         text ("Problem was divided to " ++ show (length sub) ++ " subproblems.") $$
-        nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
-      | otherwise =
-        ppr prob $$
-        text "PROCESSOR: " <> (text.show) proc $$
-        nest 8 (vcat $ punctuate (text "\n") (map ppr sub))
+        nest 8 (vcat $ punctuate (text "\n") sub)
+       | otherwise =
+          ppr prob $$
+        text "PROCESSOR: " <> ppr proc $$
+        nest 8 (vcat $ punctuate (text "\n") sub)
+
+instance Ppr ProcInfo where ppr = text . show
 --------------
 -- HTML
 -------------
@@ -374,12 +280,11 @@ instance TRS.Ppr f => HTML (Problem f) where
                  aboves (rules dps))
 
 instance TRS.Ppr f => HTML (ProblemProgress Html f) where
-   toHtml = work . slice where
+   toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work . simplify where
     work MZero = toHtml  "Don't know"
     work DontKnow{} = toHtml  "Don't know"
-    work (NotDone prob) = p << prob
     work Success{..} =
-        p
+       p
         << problem  +++ br +++
            procInfo +++ br +++
            divyes +++ thickbox res << spani "seeproof" << "(see proof)"
@@ -390,9 +295,7 @@ instance TRS.Ppr f => HTML (ProblemProgress Html f) where
            procInfo +++ br +++
            divmaybe +++ thickbox res << spani "seeproof" << "(see failure)"
 
-    work pr@Or{..}
-        | Just res <- simplify pr = toHtml res
-        | otherwise = p
+    work pr@Or{..} = p
                       << problem +++ br +++
                          procInfo +++ br +++
                           "Problem was translated to " +++ show(length subProblems) +++ " equivalent alternatives" +++ br +++
@@ -403,8 +306,7 @@ instance TRS.Ppr f => HTML (ProblemProgress Html f) where
            proc +++ br +++
 --           "Problem was divided in " +++ show(length sub) +++ " subproblems" +++ br +++
            H.unordList sub
-    work (Choice p1 p2) | isSuccess p1 = work p1
-                        | otherwise    = work p2
+    work (Choice p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
 
 instance (HashConsed f, T Identifier :<: f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
     cell r | (lhs :-> rhs ) <- unmarkDPRule r =

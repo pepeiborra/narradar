@@ -4,8 +4,6 @@ module TaskPoolSTM ( parSequence, parSequence', parSequence_
                    , parForM, parForM_, parForM', parForMS_
                    ) where
 
-import Operad
-
 import Control.Concurrent
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
@@ -28,12 +26,6 @@ parSequence n jobs = do
   results_c <- parSequence' n jobs
   results   <- atomically $ replicateM (length jobs) (readTChan results_c)
   return [ r | Suc r <- results ]
-
-{-
-parSequenceT :: Traversable t => Int -> t(IO a) -> IO (t a)
-parSequenceT n t = do
-  let comp = asComp t
--}
 
 -- | non-blocking version
 parSequence' :: Int -> [IO b] -> IO (TChan (Res b))

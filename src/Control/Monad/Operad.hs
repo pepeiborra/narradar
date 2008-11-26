@@ -1,5 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Operad where
+module Control.Monad.Operad where
 
 import Control.Applicative
 import Control.Monad.State  (runState, get, put)

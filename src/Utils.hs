@@ -2,10 +2,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Utils where
 
-import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad (join, liftM)
-import qualified "monad-param" Control.Monad.Parameterized as MonadP
 import Data.Graph.Inductive (nodes, edges, suc, Graph, Node(..))
 import Data.List (group, sort)
 import Data.Traversable
@@ -18,21 +16,6 @@ import Prelude hiding (mapM)
 fmap2, (<$$>) :: (Functor f, Functor g) => (a -> b) -> f(g a) -> f (g b)
 fmap2 = fmap.fmap
 (<$$>) = fmap2
-
-concatMapM :: (Monad t, Monad m, Traversable t) => (a -> m (t b)) -> t a -> m (t b)
-concatMapM f = liftM join . mapM f
-concatMapMP :: (MonadP.Monad t, MonadP.Monad m, Traversable t) => (a -> m (t b)) -> t a -> m (t b)
-concatMapMP f = MonadP.liftM MonadP.join . mapMP f
-
-mapMP   :: (Traversable t, MonadP.Monad m) => (a -> m b) -> t a -> m (t b)
-mapMP f = unwrapMonadP . traverse (WrapMonadP . f)
-newtype WrappedMonadP m a = WrapMonadP { unwrapMonadP :: m a }
-
-instance MonadP.Monad m => Functor (WrappedMonadP m) where fmap f (WrapMonadP v) = WrapMonadP (MonadP.liftM f v)
-
-instance MonadP.Monad m => Applicative (WrappedMonadP m) where
-        pure = WrapMonadP . MonadP.returnM
-        WrapMonadP f <*> WrapMonadP v = WrapMonadP (f `MonadP.ap` v)
 
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
