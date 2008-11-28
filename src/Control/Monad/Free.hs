@@ -56,6 +56,13 @@ mapFree eta (Pure a)   = Pure a
 mapFree eta (Impure x) = Impure (fmap (mapFree eta) (eta x))
 
 
+data AnnotatedF n f a = Annotated {note::n, dropNote::f a}
+instance Functor f => Functor (AnnotatedF n f) where fmap f (Annotated n x) = Annotated n (fmap f x)
+dropNotes = foldFree Pure (Impure . dropNote)
+annotate :: Functor f => (a -> b) -> (Free f b -> n) -> Free f a -> Free (AnnotatedF n f) a
+annotate p i = fmap fst . foldFree (\x -> Pure (x,p x)) (\x -> Impure (Annotated (i $ Impure $ fmap dropNotes $ (fmap.fmap) snd x) x))
+
+
 -- * Monad Transformer
 --   (built upon Luke Palmer control-monad-free hackage package)
 newtype FreeT f m a = FreeT { unFreeT :: m (Either a (f (FreeT f m a))) }

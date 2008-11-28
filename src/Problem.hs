@@ -165,12 +165,6 @@ pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
 
 instance Functor Dot where fmap = M.liftM
 
-data AnnotatedF n f a = Annotated {note::n, dropNote::f a}
-instance Functor f => Functor (AnnotatedF n f) where fmap f (Annotated n x) = Annotated n (fmap f x)
-dropNotes = foldFree Pure (Impure . dropNote)
-annotate :: Functor f => (a -> b) -> (Free f b -> n) -> Free f a -> Free (AnnotatedF n f) a
-annotate p i = fmap fst . foldFree (\x -> Pure (x,p x)) (\x -> Impure (Annotated (i $ Impure $ fmap dropNotes $ (fmap.fmap) snd x) x))
-
 pprDot prb = showDot (foldFree trsnode' f (annotate (const False) isSuccess prb) =<< node [("label","0")]) where
     f (Annotated done Success{..})    par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
     f (Annotated done Fail{..})       par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
