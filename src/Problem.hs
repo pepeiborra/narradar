@@ -58,8 +58,12 @@ data ProgressF f (s :: *) k =
 type Progress f s a     = Free (ProgressF f s) a
 type ProblemProgress s f = Progress f s (Problem f)
 
-success = Success
-failP   = Fail
+success = ((Impure.).) . Success
+failP   = ((Impure.).) . Fail
+andP    = ((Impure.).) . And
+orP     = ((Impure.).) . Or
+choiceP = (Impure.)    . Choice
+dontKnow= (Impure.)    . DontKnow
 
 data ProcInfo = AFProc AF.AF
               | DependencyGraph
@@ -89,7 +93,7 @@ $(derive makeTraversable ''ProgressF)
 
 instance MonadZero (Free (ProgressF f s)) where mzeroM = Impure MZero
 instance MPlus (Free (ProgressF f s)) (Free (ProgressF f s)) (Free (ProgressF f s))  where
-    p1 `mplus` p2 = if isSuccess p1 then p1 else Impure (Choice p1 p2)
+    p1 `mplus` p2 = if isSuccess p1 then p1 else choiceP p1 p2
 
 -- But we are going to need a monad transformer (for the Aprove proc among other things)
 type ProgressT f s m a = FreeT (ProgressF f s) m a
@@ -100,10 +104,7 @@ instance Monad m => MPlus (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) (F
                       s1  <- runProgressT p1
                       if isSuccess s1 then unFreeT(wrap s1)
                          else do s2  <- runProgressT p2
-                                 unFreeT (wrap(Impure$ Choice s1 s2))
-
-liftProgressT :: Monad m => Progress f s a -> ProgressT f s m a
-liftProgressT = wrap
+                                 unFreeT (wrap(choiceP s1 s2))
 
 instance SignatureC (Problem f) Identifier where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
 
