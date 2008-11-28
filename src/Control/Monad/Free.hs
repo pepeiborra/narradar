@@ -76,6 +76,16 @@ instance (Functor f, Prelude.Monad m) => Prelude.Monad (FreeT f m) where
 instance (Functor f) => Old.MonadTrans (FreeT f) where
     lift = FreeT . Old.liftM Left
 
+instance (Functor f, Return m) => Return (FreeT f m) where returnM = FreeT . returnM . Left
+
+instance (Functor f, Monad m) => Bind (FreeT f m) (FreeT f m) (FreeT f m) where
+    m >>= f = FreeT $ unFreeT m >>= \r ->
+        case r of
+             Left x   -> unFreeT $ f x
+             Right xc -> returnM . Right $ fmap (>>= f) xc
+
+instance (Functor f, Monad m) => Bind (Free f) (FreeT f m) (FreeT f m) where m >>= f = (wrap m `asTypeOf1` f undefined)  >>= f
+
 liftFree :: (Functor f, Monad m) => (a -> Free f b) -> (a -> FreeT f m b)
 liftFree f = wrap . f
 
