@@ -102,6 +102,9 @@ unwrap = foldFreeT (returnM . Pure) (returnM . Impure)
 wrap :: (Functor f, Monad m) => Free f a -> FreeT f m a
 wrap  = FreeT . foldFree (returnM . Left) (returnM . Right . fmap FreeT)
 
+wrap' :: (Functor f, Monad m) => m(Free f a) -> FreeT f m a
+wrap' = FreeT . join . liftM unFreeT . liftM wrap
+
 -- To perform a side-effecting instantiation in parallel, we must
 --  1. calculate all the shape of the current computation by unwraping to a pure Free monad,
 --  2. look at it using the Operad induced monad (which separates the shape from the computations)
