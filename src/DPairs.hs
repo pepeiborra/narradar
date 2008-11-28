@@ -39,7 +39,7 @@ getEDG trs@TRS{} dps = G.mkUGraph [0.. length dps - 1]
                            [ (i,j) | (i,_:->t) <- zip [0..] dps
                                    , (j,u:->_) <- zip [0..] dps
                                    , inChain t u]
-    where inChain t u = isJust (unify t (ren $ cap trs $ u))
+    where inChain t u = isJust (unify u (ren $ cap trs $ t))
 
 ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
 ren t = runSupply (foldTermM f t) where
