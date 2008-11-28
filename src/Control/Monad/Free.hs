@@ -1,7 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude, PackageImports #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE Rank2Types #-}
 module Control.Monad.Free where
 
 import "monad-param" Control.Monad.Parameterized
@@ -49,6 +50,10 @@ evalFree _ i (Impure x) = i x
 foldFree :: Functor f => (a -> b) -> (f b -> b) -> Free f a -> b
 foldFree pure _    (Pure   x) = pure x
 foldFree pure imp  (Impure x) = imp (fmap (foldFree pure imp) x)
+
+mapFree :: (Functor f, Functor g) => (forall a. f a -> g a) -> Free f a -> Free g a
+mapFree eta (Pure a)   = Pure a
+mapFree eta (Impure x) = Impure (fmap (mapFree eta) (eta x))
 
 
 -- * Monad Transformer
