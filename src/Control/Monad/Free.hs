@@ -113,7 +113,7 @@ wrap' = FreeT . join . liftM unFreeT . liftM wrap
 --  5. and finally wrap back to a FreeT
 --
 -- Kind of convoluted, huh?
-parBind :: (Traversable f) => Int -> FreeT f IO a -> (a -> FreeT f IO a) -> (FreeT f IO a)
+parBind :: (Traversable f) => Int -> FreeT f IO a -> (a -> FreeT f IO b) -> (FreeT f IO b)
 parBind n m f = FreeT $ go (unwrap m >>= parBind' f >>= unFreeT . wrap . unE)
   where
    parBind' f val = do
@@ -121,6 +121,22 @@ parBind n m f = FreeT $ go (unwrap m >>= parBind' f >>= unFreeT . wrap . unE)
          xx' <-  parSequence n xx
          return (join (EM(MO op xx')))
 
+-- Parallel binds
+
+(>||>) :: forall a b c m f .
+          (Bind m (FreeT f IO) (FreeT f IO), Traversable f) =>
+          (a -> m b) -> (b -> FreeT f IO c) -> a -> FreeT f IO c
+f >||> g = \x -> f x ||>> g
+
+(||>>) :: forall a b c m f .
+          (Bind m (FreeT f IO) (FreeT f IO), Traversable f) =>
+          m a -> (a -> FreeT f IO b) -> FreeT f IO b
+m ||>> g = parBind 4 (m >>= returnFreeT) g
+  where returnFreeT :: a' -> FreeT f IO a'
+        returnFreeT = returnM
+
+
+-- mapM for Parameterized monads
 
 mapMP   :: (Traversable t, Monad m) => (a -> m b) -> t a -> m (t b)
 mapMP f = unwrapMonadP . traverse (WrapMonadP . f)
@@ -131,3 +147,8 @@ instance Monad m => Functor (WrappedMonadP m) where fmap f (WrapMonadP v) = Wrap
 instance Monad m => Applicative (WrappedMonadP m) where
         pure = WrapMonadP . returnM
         WrapMonadP f <*> WrapMonadP v = WrapMonadP (f `ap` v)
+
+-- Functor coercion
+
+asTypeOf1 :: f a -> f b -> f a
+asTypeOf1 f g = f
