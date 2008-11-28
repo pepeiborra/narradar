@@ -2,26 +2,37 @@
 module Main where
 
 import "monad-param" Control.Monad.Parameterized
+import System.Cmd
+import System.Directory
 import System.Environment
 import System.Exit
+import System.FilePath
+import System.IO
+import Text.Printf
 import Text.XHtml
+
 
 import Prelude hiding (Monad(..))
 
 import TRS.FetchRules
 import TRS.FetchRules.TRS
 import Types hiding ((!))
+import Utils
 import Solver
 import Problem
 import GraphTransformation
 import NarrowingProblem
+
+logfile = "narradar.log"
+
 main :: IO ()
 main = do
   args <- getArgs
   case args of
     [file, "SKEL"]      -> parseIt file (print.pprSkelt. (startSolver >=> mainSolverPure))
-    [file, "DOT"]       -> parseIt file (\trs -> putStrLn (pprDot (startSolver trs >>= mainSolverPure)))
+    [file, "DOT"]       -> parseIt file (putStrLn.pprDot.(startSolver >=> mainSolverPure))
     [file, "SRV"]       -> work file srvSolver
+    [file, "SERIAL"]       -> work file srvSolverSerial
     [file, "WEB"]       -> work file webSolver
     [file, aprove_path] -> work file (localSolver' aprove_path)
     [file] -> work file srvSolver
@@ -36,6 +47,13 @@ main = do
         work file slv = parseIt file $ \problem -> do
                   sol <- runSolver slv problem
                   putStr (renderHtml (page sol))
+                  withTempFile "." "narradar.dot" $ \fp h -> do
+                                hPutStrLn h (pprDot sol)
+                                -- hClose h
+                                system (printf "dot -Tpdf %s -o %s.pdf" fp logfile)
+                                removeFile fp
+                                hPutStrLn stderr (printf "Log written to %s.pdf" logfile)
+
 
 page res = myhead +++ body << divres where
   myhead = header << ( thetitle << title
