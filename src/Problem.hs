@@ -97,7 +97,12 @@ instance MPlus (Free (ProgressF f s)) (Free (ProgressF f s)) (Free (ProgressF f 
 
 -- But we are going to need a monad transformer (for the Aprove proc among other things)
 type ProgressT f s m a = FreeT (ProgressF f s) m a
-runProgressT = unwrap
+type PPT       s m f   = ProgressT f s m (Problem f)
+
+runProgressT  = unwrap
+
+liftProgressT :: Monad m => Progress f s a -> ProgressT f s m a
+liftProgressT = wrap
 
 instance Monad m => MPlus (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) where
     p1 `mplus` p2 = FreeT $ go $ do
@@ -109,27 +114,28 @@ instance Monad m => MPlus (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) (F
 instance SignatureC (Problem f) Identifier where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
 
 isSuccess :: Progress f s k -> Bool
-isSuccess = foldFree (const False) f where
-  f Fail{}         = False
-  f Success{}      = True
-  f DontKnow{}     = False
-  f (And _ _ ll)   = and ll
-  f (Or  _ _ ll)   = or ll
-  f MZero          = False
-  f (Choice p1 p2) =  p1 || p2
+isSuccess = foldFree (const False) isSuccessF where
+
+isSuccessF :: ProgressF f s Bool -> Bool
+isSuccessF Fail{}         = False
+isSuccessF Success{}      = True
+isSuccessF DontKnow{}     = False
+isSuccessF (And _ _ ll)   = and ll
+isSuccessF (Or  _ _ ll)   = or ll
+isSuccessF MZero          = False
+isSuccessF (Choice p1 p2) =  p1 || p2
 
 
 simplify :: ProblemProgress s f -> ProblemProgress s f
 simplify = foldFree returnM f where
+  f   (Or  pi p [])  = dontKnow pi p
   f p@(Or  _ _ aa)   = msum aa
-  f   (Or  _ p [])   = returnM p
   f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"
   f p@(Choice p1 p2)
       | isSuccess p1 = p1
       | isSuccess p2 = p2
       | otherwise    = mzeroM
-  f p@Success{..}    = Impure Success{..}
-  f p@Fail{..}       = Impure Fail{..}
+  f p                = Impure p
 
 logLegacy proc prob Nothing    = failP proc prob "Failed"
 logLegacy proc prob (Just msg) = success proc prob msg
@@ -159,40 +165,53 @@ pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
 
 instance Functor Dot where fmap = M.liftM
 
-pprDot prb = showDot (foldFree trsnode f prb =<< node [("label","0")]) where
-    f Success{..} par    = trsnode problem par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
-    f Fail{..} par       = trsnode problem par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
-    f MZero{}     par    = childnode [("label","Don't Know")] par
-    f DontKnow{..}par    = trsnode problem par >>= procnode procInfo >>= childnode [("label","Don't Know")]
-    f (Choice p1 p2) par = go$ do
-        dis <- childnode [] par
+data AnnotatedF n f a = Annotated {note::n, dropNote::f a}
+instance Functor f => Functor (AnnotatedF n f) where fmap f (Annotated n x) = Annotated n (fmap f x)
+dropNotes = foldFree Pure (Impure . dropNote)
+annotate :: Functor f => (a -> b) -> (Free f b -> n) -> Free f a -> Free (AnnotatedF n f) a
+annotate p i = fmap fst . foldFree (\x -> Pure (x,p x)) (\x -> Impure (Annotated (i $ Impure $ fmap dropNotes $ (fmap.fmap) snd x) x))
+
+pprDot prb = showDot (foldFree trsnode' f (annotate (const False) isSuccess prb) =<< node [("label","0")]) where
+    f (Annotated done Success{..})    par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
+    f (Annotated done Fail{..})       par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
+    f (Annotated done MZero{})        par = childnode' [("label","Don't Know")] (doneEdge done) par
+    f (Annotated done DontKnow{..})   par = trsnode problem done par >>= procnode procInfo >>= childnode [("label","Don't Know")]
+    f (Annotated done (Choice p1 p2)) par = go$ do
+        dis <- childnode' [("shape","point"),("label","")] (doneEdge done) par
         p1 dis
         p2 dis
         return dis
-    f And{subProblems=[p],..} par
-                         = procnode procInfo par >>= \me -> p me >> return me
-    f And{..} par        = go$ do
-                                trs <- trsnode problem par
+    f (Annotated done And{subProblems=[p], procInfo = proc@AFProc{}}) par
+                         = procnode' proc done par >>= \me -> p me >> return me
+    f (Annotated done And{subProblems=[p], ..}) par = f (Annotated done Or {subProblems = [p], ..}) par
+    f (Annotated done And{..}) par = go$ do
+                                trs <- trsnode problem done par
                                 (nc,me) <- cluster $ go $ do
                                              attribute ("color", "#E56A90")
                                              me <- childnode [("label", show procInfo)] trs
                                              forM_ subProblems ($ me)
                                              return me
                                 return me
-    f Or{..}  par        = go$ do
-                                trs <- trsnode problem par
+    f (Annotated done Or{..})  par = go$ do
+                                trs <- trsnode problem done par
                                 me  <- childnode [("label", show procInfo)] trs
                                 forM_ subProblems ($ me)
                                 return me
 
-trsLabel trs        = ("label", pprTPDBdot trs)
+trsLabel trs      = ("label", pprTPDBdot trs)
 trsColor (Problem Narrowing _ _) = ("color", "#F97523")
 trsColor (Problem Rewriting _ _) = ("color", "#60233E")
-trsnode  trs        = childnode [trsLabel trs, trsColor trs, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
+trsAttrs trs      = [trsLabel trs, trsColor trs, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
+trsnode  trs done = childnode'(trsAttrs trs) (doneEdge done)
+trsnode' trs      = childnode (trsAttrs trs)
+doneEdge True     = [("color", "green")]
+doneEdge False    = [("color", "red")]
 
-procnode procInfo   = childnode [("label", show procInfo)]
+procnode  procInfo      = childnode  [("label", show procInfo)]
+procnode' procInfo done = childnode' [("label", show procInfo)] (doneEdge done)
 
-childnode attrs par = node (("URL","url"):attrs) >>= \n -> par .->. n >> return n
+childnode attrs = childnode' attrs []
+childnode' attrs edge_attrs par = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return n
 
 -------------------
 -- Ppr
