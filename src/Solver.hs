@@ -45,7 +45,7 @@ srvSolverSerial = mainSolverSerial (wrap' . aproveSrvProc)
 
 -- Our main solving scheme
 mainSolverBase k = cycleProcessor >=>
-                   ((k afProcessor) `refineBy` (narrowingProcessor >=> cycleProcessor))
+                   (k afProcessor) -- `refineBy` (narrowingProcessor >=> cycleProcessor))
 
 
 mainSolver aproveProc = mainSolverBase (>||> aproveProc)
