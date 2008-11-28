@@ -78,8 +78,8 @@ isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
 
 class (Var :<: f) => ExtraVars t f | t -> f where extraVars :: t -> [Var (Term f)]
-instance (Var :<: f) => ExtraVars (TRS id f) f where extraVars trs@TRS{} = concat [vars r \\ vars l | l :-> r <- rules trs]
-instance (Var :<: f, Foldable f) => ExtraVars (Rule f) f where extraVars (l:->r) = vars r \\ vars l
+instance (Var :<: f) => ExtraVars (TRS id f) f where extraVars trs@TRS{} = snub (concatMap extraVars (rules trs))
+instance (Var :<: f, Foldable f) => ExtraVars (Rule f) f where extraVars (l:->r) = snub (vars r \\ vars l)
 
 ---------------------------
 -- DP Problems
