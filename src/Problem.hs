@@ -19,7 +19,7 @@ import Data.List (intersperse)
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
-import Data.Foldable (Foldable(..), toList)
+import Data.Foldable (Foldable(..), toList, sum)
 import Data.HashTable (hashString)
 import Data.Maybe
 import Data.Monoid
@@ -32,7 +32,6 @@ import qualified Text.XHtml as H
 import Text.XHtml (HTML(..), Html(..), (<<), (+++), (!), p, br, noHtml, theclass, hotlink, thediv
                   ,identifier,table,td)
 import Text.XHtml.Table
-import System.IO.Unsafe
 
 import Types hiding (Ppr(..),ppr, (!))
 import qualified Types as TRS
@@ -43,7 +42,7 @@ import qualified ArgumentFiltering as AF
 import Control.Monad.Free
 import Control.Monad.Operad
 
-import Prelude as P hiding (log, mapM, foldr, concatMap, Monad(..), (=<<))
+import Prelude as P hiding (sum, log, mapM, foldr, concatMap, Monad(..), (=<<))
 
 data ProgressF f (s :: *) k =
     And     {procInfo::ProcInfo, problem::Problem f, subProblems::[k]}
@@ -65,7 +64,7 @@ orP     = ((Impure.).) . Or
 choiceP = (Impure.)    . Choice
 dontKnow= (Impure.)    . DontKnow
 
-data ProcInfo = AFProc AF.AF
+data ProcInfo = AFProc (Maybe AF.AF)
               | DependencyGraph
               | Polynomial
               | External ExternalProc
@@ -76,8 +75,8 @@ instance Show ProcInfo where
     show DependencyGraph = "Dependency Graph Processor"
     show (External proc) = "External: " ++ show proc
     show NarrowingP      = "Narrowing Processor"
-    show (AFProc af) | af == AF.empty = "AF processor"
-                     | otherwise      =  show af
+    show (AFProc (Just af)) = show af
+    show (AFProc Nothing) = "Argument Filtering"
     show (Polynomial)    = "Polynomial ordering"
 
 data ExternalProc = MuTerm | Aprove | Other String
@@ -86,6 +85,7 @@ data ExternalProc = MuTerm | Aprove | Other String
 instance Foldable Problem_ where foldMap = foldMapDefault
 $(derive makeFunctor     ''Problem_)
 $(derive makeTraversable ''Problem_)
+instance Size a => Size (Problem_ a) where size = sum . fmap size
 
 instance Foldable (ProgressF f s) where foldMap = foldMapDefault
 $(derive makeFunctor     ''ProgressF)

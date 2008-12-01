@@ -23,7 +23,7 @@ Executable narradar
   hs-source-dirs:         src
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array,
      xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-     TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras
+     TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad
   other-modules: Types,
                  MonadSupply,
      Operad,

@@ -24,10 +24,11 @@ import qualified Prelude
 
 infixl 1 .|.
 
-type Solver s m f =  (IsVar f, Hole :<: f, AnnotateWithPos f f, Types.Ppr f, Monad m) => Problem f -> PPT s m f
+type Solver s m f =  (Ord (Term f), IsVar f, Hole :<: f, AnnotateWithPos f f, Types.Ppr f, Monad m) => Problem f -> PPT s m f
 
 webSolver, localSolver, srvSolver :: Solver Html IO f
 mainSolver :: Solver Html IO f -> Solver Html IO f
+--mainSolverBase :: Ord (Term f) => ((Problem f -> ProblemProgress s f) -> solver) -> solver
 
 -- solver that connects to the Aprove web site, use only for testing
 webSolver      = mainSolver (wrap' . aproveWebProc)
@@ -61,7 +62,7 @@ refineBy f refiner = loop maxDepth where
   loop 0 x = f x
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
 
-runSolver :: (IsVar f, Hole :<: f, AnnotateWithPos f f, Types.Ppr f, Monad m) => Solver Html m f -> TRS Identifier f -> m (ProblemProgress Html f)
+runSolver :: (IsVar f, Ord(Term f), Hole :<: f, AnnotateWithPos f f, Types.Ppr f, Monad m) => Solver Html m f -> TRS Identifier f -> m (ProblemProgress Html f)
 runSolver solver trs@TRS{} = runProgressT (startSolver trs >>= solver)
 
 startSolver :: TRS Identifier f -> ProblemProgress Html f

@@ -5,7 +5,8 @@
 {-# LANGUAGE GADTs, MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
 module Types (module TRS, module Types) where
 
-import Data.Foldable (Foldable)
+import Control.Applicative
+import Data.Foldable (Foldable(..))
 import Data.HashTable (hashString)
 import Data.Int
 import Data.List ((\\))
@@ -77,9 +78,9 @@ instance HashTerm (T Identifier) where hashF (T id tt) = 14 * sum tt * hashId id
 isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
 
-class (Var :<: f) => ExtraVars t f | t -> f where extraVars :: t -> [Var (Term f)]
-instance (Var :<: f) => ExtraVars (TRS id f) f where extraVars trs@TRS{} = snub (concatMap extraVars (rules trs))
-instance (Var :<: f, Foldable f) => ExtraVars (Rule f) f where extraVars (l:->r) = snub (vars r \\ vars l)
+class (IsVar f) => ExtraVars t f | t -> f where extraVars :: t -> [Term f]
+instance (Ord (Term f), IsVar f) => ExtraVars (TRS id f) f where extraVars trs@TRS{} = concatMap extraVars (rules trs)
+instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where extraVars (l:->r) = snub (vars' r \\ vars' l)
 
 ---------------------------
 -- DP Problems

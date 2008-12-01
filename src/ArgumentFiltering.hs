@@ -29,18 +29,12 @@ instance Show AF where show af = -- unlines . fmap show . fmap (second Set.toLis
 
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
-empty     :: AF
 singleton :: Identifier -> [Int] -> AF
 cut       :: Identifier -> [Int] -> AF -> AF
 cutAll    :: [(Identifier, [Int])] -> AF -> AF
 lookup    :: Monad m => Identifier -> AF -> m [Int]
 fromList  :: [(Identifier,[Int])] -> AF
 
-
--- | left biased union
-union :: AF -> AF -> AF
-
-empty            = AF mempty
 singleton id ii  = AF (Map.singleton id (Set.fromList ii))
 cut id ii (AF m) = AF $ Map.insertWith (flip Set.difference) id (Set.fromList ii) m
 cutAll xx af     = foldr (uncurry cut) af xx
@@ -48,8 +42,11 @@ lookup id (AF m) = maybe (fail "not found") (return.Set.toList) (Map.lookup id m
 fromList         = AF . Map.fromListWith Set.union . Prelude.map (second Set.fromList)
 toList (AF af)   = Map.toList (Map.map Set.toList af)
 null (AF af)     = Map.null af
-union (AF m1) (AF m2) = AF$ Map.union m1 m2
+union (AF m1) (AF m2) = AF$ Map.unionWith Set.intersection m1 m2
 
+concat []   = error "AF.concat: cannot concat the empty set"
+concat [af] = af
+concat xx   = foldr1 union xx
 
 map :: (Identifier -> [Int] -> [Int]) -> AF -> AF
 map f (AF af) = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
