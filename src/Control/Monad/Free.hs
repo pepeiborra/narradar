@@ -83,6 +83,9 @@ instance (Functor f, Prelude.Monad m) => Prelude.Monad (FreeT f m) where
 instance (Functor f) => Old.MonadTrans (FreeT f) where
     lift = FreeT . Old.liftM Left
 
+instance (Functor f) => MonadTrans (FreeT f) where
+    lift = FreeT . liftM Left
+
 instance (Functor f, Return m) => Return (FreeT f m) where returnM = FreeT . returnM . Left
 
 instance (Functor f, Monad m) => Bind (FreeT f m) (FreeT f m) (FreeT f m) where
@@ -101,6 +104,12 @@ foldFreeT p i m = unFreeT m >>= \r ->
               case r of
                 Left   x -> p x
                 Right fx -> join (liftM i (mapMP (foldFreeT p i) fx))
+
+
+foldFreeT' :: (Traversable f, Monad m) => (a -> b) -> (f b -> b) -> FreeT f m a -> m b
+foldFreeT' p i (FreeT m) = m >>= f where
+         f (Left x)   = returnM (p x)
+         f (Right fx) = i `liftM` mapMP (foldFreeT' p i) fx
 
 
 unwrap :: (Traversable f, Monad m) => FreeT f m a -> m(Free f a)
