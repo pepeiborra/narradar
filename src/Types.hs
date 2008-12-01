@@ -17,6 +17,7 @@ import Data.Traversable
 import Unsafe.Coerce
 import TRS hiding (match, Basic)
 import TRS.Types (match) -- for Data.AlaCarte match
+import Text.Printf
 
 import Utils
 import Prelude as P
@@ -93,3 +94,11 @@ type Problem f = Problem_ (TRS Identifier f)
 
 data ProblemType = Rewriting | Narrowing
      deriving (Eq, Show)
+
+
+pprTPDB :: TRS.Ppr f => Problem f -> String
+pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
+  unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs))
+          , printf "(PAIRS\n %s)" (unlines (map show (rules dps)))
+          , printf "(RULES\n %s)" (unlines (map show (rules trs)))]
+

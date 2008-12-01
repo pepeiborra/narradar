@@ -50,7 +50,7 @@ data ProgressF f (s :: *) k =
   | Success {procInfo::ProcInfo, problem::Problem f, res::s}
   | Fail    {procInfo::ProcInfo, problem::Problem f, res::s}
   | DontKnow{procInfo::ProcInfo, problem::Problem f}
-  | Choice k k
+  | MPlus k k
   | MZero
      deriving (Show)
 
@@ -61,7 +61,7 @@ success = ((Impure.).) . Success
 failP   = ((Impure.).) . Fail
 andP    = ((Impure.).) . And
 orP     = ((Impure.).) . Or
-choiceP = (Impure.)    . Choice
+choiceP = (Impure.)    . MPlus
 dontKnow= (Impure.)    . DontKnow
 
 data ProcInfo = AFProc (Maybe AF.AF)
@@ -99,7 +99,7 @@ instance MPlus (Free (ProgressF f s)) (Free (ProgressF f s)) (Free (ProgressF f 
 type ProgressT f s m a = FreeT (ProgressF f s) m a
 type PPT       s m f   = ProgressT f s m (Problem f)
 
-runProgressT  = unwrap
+runProgressT x = unwrap x
 
 liftProgressT :: Monad m => Progress f s a -> ProgressT f s m a
 liftProgressT = wrap
@@ -113,8 +113,21 @@ instance Monad m => MPlus (FreeT (ProgressF f s) m) (FreeT (ProgressF f s) m) (F
 
 instance SignatureC (Problem f) Identifier where getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps -- getSignature (trs `mappend` dps)
 
+
+simplify :: ProblemProgress s f -> ProblemProgress s f
+simplify = foldFree returnM f where
+  f   (Or  pi p [])  = dontKnow pi p
+  f p@(Or  _ _ aa)   = msum aa
+  f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"
+  f p@(MPlus p1 p2)
+      | isSuccess p1 = p1
+      | isSuccess p2 = p2
+      | otherwise    = mzeroM
+  f p                = Impure p
+
 isSuccess :: Progress f s k -> Bool
-isSuccess = foldFree (const False) isSuccessF where
+isSuccess  = foldFree  (const False) isSuccessF
+isSuccessT = foldFreeT (const $ returnM False) (returnM.isSuccessF)
 
 isSuccessF :: ProgressF f s Bool -> Bool
 isSuccessF Fail{}         = False
@@ -123,54 +136,28 @@ isSuccessF DontKnow{}     = False
 isSuccessF (And _ _ ll)   = and ll
 isSuccessF (Or  _ _ ll)   = or ll
 isSuccessF MZero          = False
-isSuccessF (Choice p1 p2) =  p1 || p2
-
-
-simplify :: ProblemProgress s f -> ProblemProgress s f
-simplify = foldFree returnM f where
-  f   (Or  pi p [])  = dontKnow pi p
-  f p@(Or  _ _ aa)   = msum aa
-  f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"
-  f p@(Choice p1 p2)
-      | isSuccess p1 = p1
-      | isSuccess p2 = p2
-      | otherwise    = mzeroM
-  f p                = Impure p
+isSuccessF (MPlus p1 p2) =  p1 || p2
 
 logLegacy proc prob Nothing    = failP proc prob "Failed"
 logLegacy proc prob (Just msg) = success proc prob msg
 
-pprSkelt = foldFree (const$ text "not done") f where
-  f Success{}      = text "success"
-  f Fail{}         = text "failure"
-  f MZero          = text "don't know"
-  f DontKnow{}     = text "don't know"
-  f (And _ _ pp)   = parens $ cat $ punctuate (text " & ") pp
-  f (Or _ _ pp)    = parens $ cat $ punctuate (text " | ") pp
-  f (Choice p1 p2) = p1 <+> text " | " <+> p2
-
-pprTPDB :: TRS.Ppr f => Problem f -> String
-pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
-  unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs))
-          , printf "(PAIRS\n %s)" (unlines (map show (rules dps)))
-          , printf "(RULES\n %s)" (unlines (map show (rules trs)))]
-
-
-pprTPDBdot :: TRS.Ppr f => Problem f -> String
-pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
-  unlines [ "(VAR " ++ (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs)) ++ ")"
-          , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
-          , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")\\l"]
-  where unlines = concat . intersperse "\\l"
+-- ----------------------------
+-- GraphViz logs
+-- ----------------------------
+sliceWorkDone = foldFree returnM (Impure . f) where
+    f (Or p pi pp) = (Or p pi $ takeWhileAndOneMore (not . isSuccess) pp)
+    f x = x
+    takeWhileAndOneMore f []     = []
+    takeWhileAndOneMore f (x:xs) = if f x then x : takeWhileAndOneMore f xs else [x]
 
 instance Functor Dot where fmap = M.liftM
 
-pprDot prb = showDot (foldFree trsnode' f (annotate (const False) isSuccess prb) =<< node [("label","0")]) where
+pprDot prb = showDot (foldFree trsnode' f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< node [("label","0")]) where
     f (Annotated done Success{..})    par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
     f (Annotated done Fail{..})       par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
-    f (Annotated done MZero{})        par = childnode' [("label","Don't Know")] (doneEdge done) par
+    f (Annotated done MZero{})        par = returnM par -- childnode' [("label","Don't Know")] (doneEdge done) par
     f (Annotated done DontKnow{..})   par = trsnode problem done par >>= procnode procInfo >>= childnode [("label","Don't Know")]
-    f (Annotated done (Choice p1 p2)) par = go$ do
+    f (Annotated done (MPlus p1 p2))  par = go$ do
         dis <- childnode' [("shape","point"),("label","")] (doneEdge done) par
         p1 dis
         p2 dis
@@ -189,7 +176,8 @@ pprDot prb = showDot (foldFree trsnode' f (annotate (const False) isSuccess prb)
     f (Annotated done Or{..})  par = go$ do
                                 trs <- trsnode problem done par
                                 me  <- childnode [("label", show procInfo)] trs
-                                forM_ subProblems ($ me)
+                                forM_ (zip [1..] subProblems) (\ (i,p) -> p me >>= \nid -> edge me nid [("label", show i)])
+                                -- mapM_ ($ me) subProblems
                                 return me
 
 trsLabel trs      = ("label", pprTPDBdot trs)
@@ -207,6 +195,13 @@ procnode' procInfo done = childnode' [("label", show procInfo)] (doneEdge done)
 childnode attrs = childnode' attrs []
 childnode' attrs edge_attrs par = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return n
 
+pprTPDBdot :: TRS.Ppr f => Problem f -> String
+pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
+  unlines [ "(VAR " ++ (unwords $ map (show . inject) $ snub $ P.concat (foldMap vars <$> rules trs)) ++ ")"
+          , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
+          , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")\\l"]
+  where unlines = concat . intersperse "\\l"
+
 -------------------
 -- Ppr
 -------------------
@@ -217,6 +212,7 @@ instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . vcat
 instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
 instance Show (Term a) => Ppr (Rule a) where ppr = text . show
 instance TRS.Ppr f => Ppr (TRS id f) where ppr trs@TRS{} = ppr $ rules trs
+instance Ppr Int where ppr = int
 
 instance Ppr ProblemType where
     ppr Narrowing = text "NDP"
@@ -320,7 +316,7 @@ instance TRS.Ppr f => HTML (ProblemProgress Html f) where
            proc +++ br +++
 --           "Problem was divided in " +++ show(length sub) +++ " subproblems" +++ br +++
            H.unordList sub
-    work (Choice p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work (MPlus p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
 
 instance (HashConsed f, T Identifier :<: f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
     cell r | (lhs :-> rhs ) <- unmarkDPRule r =
@@ -341,5 +337,17 @@ thickbox thing c | label <- hashHtml thing =
          H.hotlink ("#TB_inline?height=600&width=600&inlineId=tb" ++ label) ! [theclass "thickbox"] << c
 
 hashHtml = show . abs . hashString . H.renderHtml
+
+-- ----------------------
+-- dumb console logs
+-- ----------------------
+pprSkelt = foldFree ppr f where
+  f Success{}      = text "success"
+  f Fail{}         = text "failure"
+  f MZero          = text "[]"
+  f DontKnow{}     = text "don't know"
+  f (And _ _ pp)   = parens $ cat $ punctuate (text " & ") pp
+  f (Or _ _ pp)    = parens $ cat $ punctuate (text " | ") pp
+  f (MPlus p1 p2) = p1 <+> text " | " <+> p2
 
 -- instance H.ADDATTRS H.HotLink where h ! aa = h{H.hotLinkAttributes = H.hotLinkAttributes h ++ aa}

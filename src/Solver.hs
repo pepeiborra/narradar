@@ -46,7 +46,7 @@ srvSolverSerial = mainSolverSerial (wrap' . aproveSrvProc)
 
 -- Our main solving scheme
 mainSolverBase k = cycleProcessor >=>
-                   (k afProcessor) -- `refineBy` (narrowingProcessor >=> cycleProcessor))
+                   (k afProcessor  `refineBy` (narrowingProcessor >=> cycleProcessor))
 
 
 mainSolver aproveProc = mainSolverBase (>||> aproveProc)
@@ -54,7 +54,6 @@ mainSolverSerial aproveProc = mainSolverBase (>=> aproveProc)
 
 -- For debugging purposes
 mainSolverPure = mainSolverBase id
-
 
 maxDepth = 2
 refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => (a -> m a) -> (a -> m' a) -> a -> m a
