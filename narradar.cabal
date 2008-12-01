@@ -26,7 +26,8 @@ Executable narradar
      TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad
   other-modules: Types,
                  MonadSupply,
-     Operad,
+     Control.Monad.Operad,
+     Control.Monad.Free,
      Problem,
      GraphTransformation,
      NarrowingProblem,
@@ -54,7 +55,8 @@ Executable narradarCgi
 
   other-modules:     Types,
      MonadSupply,
-     Operad,
+     Control.Monad.Operad,
+     Control.Monad.Free,
      Problem,
      GraphTransformation,
      NarrowingProblem,
