@@ -9,6 +9,7 @@ import "monad-param" Control.Monad.Parameterized
 
 import Control.Applicative
 import qualified Control.Monad as Old
+import qualified Control.Monad.Identity (Identity(..))
 import qualified Control.Monad.Trans as Old
 import Control.Monad.Operad
 import Data.Foldable
@@ -18,8 +19,17 @@ import Prelude hiding (Monad(..))
 import qualified Prelude
 
 import TaskPoolSTM
--- This is the standard encoding of Free Monads, see e.g. http://comonad.com/reader/2008/monads-for-free
 
+class (Functor f, Old.Monad m) => MonadFree f m where
+    free :: m a -> m (Either a (f (m a)))
+
+instance (Functor f, Old.Monad m) => MonadFree f (FreeT f m) where
+    free = Old.lift . unFreeT
+
+instance Functor f => MonadFree f (Free f) where
+    free = evalFree (Pure . Left) (Pure . Right)
+
+-- This is the standard encoding of Free Monads, see e.g. http://comonad.com/reader/2008/monads-for-free
 data Free f a = Impure (f (Free f a)) | Pure a
 
 instance Functor f => Functor (Free f) where
@@ -62,7 +72,6 @@ dropNotes = foldFree Pure (Impure . dropNote)
 annotate :: Functor f => (a -> b) -> (Free f b -> n) -> Free f a -> Free (AnnotatedF n f) a
 annotate p i = fmap fst . foldFree (\x -> Pure (x,p x)) (\x -> Impure (Annotated (i $ Impure $ fmap dropNotes $ (fmap.fmap) snd x) x))
 
-
 -- * Monad Transformer
 --   (built upon Luke Palmer control-monad-free hackage package)
 newtype FreeT f m a = FreeT { unFreeT :: m (Either a (f (FreeT f m a))) }
@@ -103,7 +112,7 @@ foldFreeT :: (Traversable f, Monad m) => (a -> m b) -> (f b -> m b) -> FreeT f m
 foldFreeT p i m = unFreeT m >>= \r ->
               case r of
                 Left   x -> p x
-                Right fx -> join (liftM i (mapMP (foldFreeT p i) fx))
+                Right fx -> mapMP (foldFreeT p i) fx >>= i
 
 
 foldFreeT' :: (Traversable f, Monad m) => (a -> b) -> (f b -> b) -> FreeT f m a -> m b

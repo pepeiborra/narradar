@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 module Aprove where
 
 import Control.Exception
@@ -10,18 +10,20 @@ import Network.Curl
 import System.Directory
 import System.FilePath
 import System.IO
+import System.IO.Unsafe
 import System.Process
 import Text.Printf
 import Text.XHtml hiding ((</>))
 import Text.HTML.TagSoup
 
 import Types
-import Problem
+import Output
+import Proof
 import TRS
 import Utils
 
-aproveWebProc :: TRS.Ppr f => Problem f -> IO (ProblemProgress Html f)
-aproveWebProc prob@(Problem Rewriting trs dps) = withCurlDo $ do
+aproveWebProc :: Problem f -> IO (ProblemProof Html f)
+aproveWebProc prob@(Problem Rewriting trs@TRS{} dps) = withCurlDo $ do
   curl <- initialize
   CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
   CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html",
@@ -38,9 +40,10 @@ aproveWebProc prob@(Problem Rewriting trs dps) = withCurlDo $ do
   return$ (if "proven" `elem` [ text | TagText text <- parseTags output] then success else failP)
                                     (External Aprove) prob (primHtml output)
 
+aproveWebProc prob = return$ return prob
 
-aproveProc :: TRS.Ppr f => FilePath -> Problem f -> IO (ProblemProgress Html f)
-aproveProc path prob@(Problem Rewriting trs dps) =
+aproveProc :: FilePath -> Problem f -> IO (ProblemProof Html f)
+aproveProc path prob@(Problem Rewriting trs@TRS{} dps) =
    withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
               hPutStr h_problem_file (pprTPDB prob)
               hPutStr stderr ("solving the following problem with Aprove:\n" ++ pprTPDB prob)
@@ -53,12 +56,19 @@ aproveProc path prob@(Problem Rewriting trs dps) =
               return$ (if take 3 output == "YES" then success else failP)
                         (External Aprove) prob (massage output)
 
+aproveProc _ p = return$ return p
 
 aproveSrvTimeout = 10
 aproveSrvPort    = 5250
 
-aproveSrvProc :: TRS.Ppr f => Problem f -> IO (ProblemProgress Html f)
-aproveSrvProc prob@(Problem Rewriting trs dps) = withSocketsDo $ withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
+{-# NOINLINE aproveSrvProc #-}
+aproveSrvProc :: Problem f -> IO (ProblemProof Html f)
+aproveSrvProc p@(Problem _ trs@TRS{} _) | isRewritingProblem p = unsafePerformIO (memoIO hashProb go) p
+ where
+  hashProb prob = hashString (pprTPDB prob)
+  go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
+                                                 withSocketsDo $
+                                                 withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
     let trs = pprTPDB prob
     let fp = "/tmp" </> fp0
 
@@ -66,6 +76,7 @@ aproveSrvProc prob@(Problem Rewriting trs dps) = withSocketsDo $ withTempFile "/
     hPutStr h_problem_file trs
     hFlush  h_problem_file
     hClose  h_problem_file
+--    runCommand ("chmod o+r " ++ fp)
 
     hAprove <- connectTo "localhost" (PortNumber aproveSrvPort)
   -- hSetBuffering hAprove NoBuffering
@@ -83,6 +94,8 @@ aproveSrvProc prob@(Problem Rewriting trs dps) = withSocketsDo $ withTempFile "/
     return (k (External Aprove) prob $ primHtml $ tail $ dropWhile (/= '\n') res)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
+
+aproveSrvProc p = return$ return p
 
 massage    txt = (primHtml . unlines . drop 8  . lines . take (length txt - 9)) txt
 massageWeb txt = (           unlines . drop 10 . lines . take (length txt - 9)) txt

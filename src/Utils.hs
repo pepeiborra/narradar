@@ -1,21 +1,27 @@
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Utils where
+module Utils (module Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
 
+import Control.Applicative
 import Control.Exception (bracket)
-import Control.Monad (join, liftM)
-import Data.Graph.Inductive (nodes, edges, suc, Graph, Node(..))
-import Data.List (group, sort)
-import Data.Traversable
+import Control.Monad (join, liftM, replicateM)
+import Data.Foldable (toList)
+import Data.Graph.Inductive (nodes, edges, suc, pre, Graph, Node(..), Gr, mkUGraph)
+import qualified Data.HashTable as HT
+import Data.Int
+import Data.List (group, sort,nub)
+import Data.Monoid
 import qualified Data.Set as Set
+import Data.Sequence ((|>), singleton, viewl, viewr, ViewL(..), ViewR(..))
+import Data.Traversable
 import System.IO
 import System.Directory
+import Test.QuickCheck
+
+import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
-
-fmap2, (<$$>) :: (Functor f, Functor g) => (a -> b) -> f(g a) -> f (g b)
-fmap2 = fmap.fmap
-(<$$>) = fmap2
 
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
@@ -23,12 +29,6 @@ mapMif p f= mapM (\x -> if p x then f x else return x)
 
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
-
-snub :: Ord a => [a] -> [a]
-snub  = Set.toList . Set.fromList
-
-on :: (t1 -> t1 -> t2) -> (t -> t1) -> t -> t -> t2
-on cmp f x y = cmp (f x) (f y)
 
 select :: (Ord t, Enum t, Num t) => [a] -> [t] -> [a]
 select xx ii = go 0 xx (sort ii)
@@ -55,8 +55,18 @@ withTempFile dir name m = bracket (openTempFile dir name) (removeFile . fst) (un
 --  "A new way to enumerate cycles in graph" - Hongbo Liu, Jiaxin Wang
 --
 -- TODO reimplementar liuwang con Data.Sequence
-cycles :: Graph gr => gr a b -> [[Node]]
-cycles gr = (snub  . map (sort . getNodes)) (concatMap liuwang [[(n,n)] | n <- nodes gr])
+--cycles :: Graph gr => gr a b -> [[Node]]
+cycles gr = filter (all ((==1) . length) . group) $ concatMap (map getNodes . liuwang) [singleton (n,n) | n <- nodes gr]
+ where
+  liuwang path = [ path |> closure | let closure = (t, h), closure `Set.member` edges_gr] `mappend`
+                 concatMap liuwang [ path |> (t,n) | n <- suc gr t, n > h, (t,n) `notElem` toList path]
+                     where (h,_) :< _ = viewl path
+                           _ :> (_,t) = viewr path
+  getNodes = map fst . tail . toList
+  edges_gr = Set.fromList $ edges gr
+
+cycles_old :: Graph gr => gr a b -> [[Node]]
+cycles_old gr = (snub  . map (sort.getNodes)) (concatMap liuwang [[(n,n)] | n <- nodes gr])
     where liuwang path = [ path ++ [closure] | let closure = (tpath, phead path), closure `elem` edges gr] ++
                         concatMap liuwang [path++[(tpath,n)] | n <- suc gr tpath, n /= hpath, (tpath,n) `notElem` path]
                                     where tpath = ptail path
@@ -64,3 +74,31 @@ cycles gr = (snub  . map (sort . getNodes)) (concatMap liuwang [[(n,n)] | n <- n
           phead = fst . head
           ptail = snd . last
           getNodes = snub . map fst
+
+
+propCycles gr = sort (sort <$> cycles gr) == sort (sort <$> cycles_old gr) where types = gr :: Gr () ()
+
+instance Arbitrary (Gr () ()) where
+  arbitrary = do
+      nodes <- arbitrary
+      edges <- forM [0..nodes] $ \n -> do
+                  n_edges <- arbitrary
+                  edges   <- replicateM n_edges (choose (0,nodes))
+                  return [ (n,e) | e <- edges ]
+      return $ mkUGraph [0..nodes] (concat edges)
+
+-- -------------
+-- Memoization
+-- -------------
+
+memoIO :: Eq a => (a -> Int32) -> (a -> IO b) -> IO (a -> IO b)
+memoIO hash f = do
+  ht <- HT.new (==) hash
+  return (\x -> do
+            prev <- HT.lookup ht x
+            case prev of
+              Just res -> return res
+              Nothing  -> do
+                        res <- f x
+                        HT.insert ht x res
+                        return res)

@@ -21,14 +21,17 @@ Executable narradar
   main-is:             Main.hs
   ghc-options:         -O2 -threaded -Wall
   hs-source-dirs:         src
-  build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array,
+  build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-     TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad
-  other-modules: Types,
-                 MonadSupply,
-     Control.Monad.Operad,
+     TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, Lattice, 
+     parsec, GHood, prolog
+  other-modules: 
+     Types,
+     MonadSupply,
      Control.Monad.Free,
-     Problem,
+     Proof,
+     Output,
+     GraphViz,
      GraphTransformation,
      NarrowingProblem,
      DPairs,
@@ -51,13 +54,15 @@ Executable narradarCgi
   hs-source-dirs:      src
   build-Depends:       mtl, pretty, containers, process, directory, bytestring, array,
        xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-       TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras
+       TRS >= 0.18, alacarte, fetchrules, fetchrules-trs, logict, category-extras,
+       parsec, GHood, prolog
 
   other-modules:     Types,
      MonadSupply,
-     Control.Monad.Operad,
      Control.Monad.Free,
-     Problem,
+     Proof,
+     Output,
+     GraphViz,
      GraphTransformation,
      NarrowingProblem,
      DPairs,
