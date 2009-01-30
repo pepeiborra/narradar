@@ -3,6 +3,8 @@
 {-# LANGUAGE NoMonomorphismRestriction, ScopedTypeVariables #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Control.Monad.Free where
 
 import "monad-param" Control.Monad.Parameterized
@@ -31,6 +33,8 @@ instance Functor f => MonadFree f (Free f) where
 
 -- This is the standard encoding of Free Monads, see e.g. http://comonad.com/reader/2008/monads-for-free
 data Free f a = Impure (f (Free f a)) | Pure a
+
+deriving instance (Show a, Show (f(Free f a))) => Show (Free f a)
 
 instance Functor f => Functor (Free f) where
     fmap f (Pure a)    = Pure   (f a)
@@ -64,7 +68,6 @@ foldFree pure imp  (Impure x) = imp (fmap (foldFree pure imp) x)
 mapFree :: (Functor f, Functor g) => (forall a. f a -> g a) -> Free f a -> Free g a
 mapFree eta (Pure a)   = Pure a
 mapFree eta (Impure x) = Impure (fmap (mapFree eta) (eta x))
-
 
 data AnnotatedF n f a = Annotated {note::n, dropNote::f a}
 instance Functor f => Functor (AnnotatedF n f) where fmap f (Annotated n x) = Annotated n (fmap f x)

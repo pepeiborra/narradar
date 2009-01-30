@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards, ViewPatterns, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE PatternGuards, ViewPatterns, RecordWildCards, ScopedTypeVariables, FlexibleContexts #-}
 
 module GraphTransformation where
 
@@ -52,37 +52,40 @@ propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -
 
 instantiation p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | null dpss || dpss == [dps] = dontKnow InstantiationP p
+  | null dpss = error "Instantiation: weird..."
+  | dpss == [dps] = dontKnow InstantiationP p
   | otherwise = orP InstantiationP p [return $ Problem typ trs (tRS newdps sig)
                                           | newdps <- dpss]
-   where dpss = nub (snd <$$> (catMaybes $ sequence <$>
-                              maps (uncurry f) (zip dps (tail dps ++ dps))))
-         f  (u :-> v) (s :-> t) = listToMaybe
-                                  [(s :-> t, s TRS.// sigma :-> t TRS.// sigma)
-                                      | let [v'] = variant' [ren$ cap trs v] [s],
-                                        sigma <- v' `unify` s]
+   where dpss = nub (catMaybes $ sequence <$> maps f dps)
+         f  (s :-> t) = listToMaybe
+                                  [(s TRS.// sigma :-> t TRS.// sigma)
+                                      | v :-> w <- dps,
+                                        let [w'] = variant' [ren$ cap trs w] [s],
+                                        sigma <- w' `unify` s]
 
 instantiation p = return p
 
 finstantiation p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | null dpss || dpss == [dps] = dontKnow FInstantiationP p
+  | dpss == [dps] = dontKnow FInstantiationP p
   | otherwise = orP FInstantiationP p [return $ Problem typ trs (tRS newdps sig)
                                           | newdps <- dpss]
-   where dpss = nub (fst <$$> (catMaybes $ sequence <$>
-                              maps (uncurry f) (zip dps (tail dps ++ dps))))
-         f (s :-> t) (v:->w) = listToMaybe
-                                  [(s TRS.// sigma :-> t TRS.// sigma, s :-> t)
-                                      | let [v'] = variant' [ren$ capInv trs v] [t],
+   where dpss = nub (catMaybes $ sequence <$> maps f dps)
+         f (s :-> t) = listToMaybe
+                       [(s TRS.// sigma :-> t TRS.// sigma)
+                                      | v :-> w <- dps,
+                                        let [v'] = variant' [ren$ capInv trs v] [t],
                                         sigma <- v' `unify` t]
 
 finstantiation p = return p
 
+capInv :: forall id f. TRS id f -> Term f -> Term f
 capInv trs@TRS{} t
        | collapsing trs = var 0
-       | Just (T (s::Identifier) tt) <- open t
-       = term s [if isDefined (swapRule <$> rules trs) t' then var i else t'
+       | Just (T (s::id) tt) <- open t
+       = term s [if isDefined trs' t' then var i else t'
                        | (i,t') <- [0..] `zip` tt]
        | otherwise = t
+  where trs' = tRS' (swapRule <$> rules trs) :: TRS id f
 
 collapsing trs@TRS{} = any (isVar.rhs) (rules trs)

@@ -4,16 +4,18 @@ module GraphViz where
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Free
-import Data.Graph.Inductive (labNodes, labEdges)
+import Data.Graph
 import Data.Foldable (foldMap)
-import Data.List
+import Data.List hiding (unlines)
 import Text.Dot
 import Text.PrettyPrint
+import Prelude hiding (unlines)
 
 import Proof
 import Types
 import TRS
-import TRS.Utils
+import Utils
+import qualified Language.Prolog.Syntax as Prolog
 
 -- ----------------------------
 -- GraphViz logs
@@ -58,9 +60,11 @@ pprDot prb = showDot $ do
     f (Annotated done Or{..})   par = trsnode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
 
 trsLabel trs      = ("label", pprTPDBdot trs)
-trsColor p | isFullNarrowingProblem p = ("color", "#F97523")
-           | isBNarrowingProblem    p = ("color", "#8E9C6D")
-           | isRewritingProblem     p = ("color", "#60233E")
+trsColor p | isPrologProblem        p = ("color", "#F6D106")
+           | isFullNarrowingProblem p = ("color", "#4488C9")
+           | isBNarrowingProblem    p = ("color", "#FD6802")
+           | isRewritingProblem     p = ("color", "#EAAAFF")
+           | otherwise = error ("trsColor: " ++ show p)
 trsAttrs trs      = [trsLabel trs, trsColor trs, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 trsnode  trs done = childnode'(trsAttrs trs) (doneEdge done)
 trsnode' trs      = childnode (trsAttrs trs)
@@ -97,8 +101,6 @@ unlines = concat . intersperse "\\l"
 -- Graphing fgl graphs
 -- --------------------
 pprGraph g = do
-  let nodes = sortBy (compare `on` fst) (labNodes g)
-      edges = labEdges g
-  nodeids <- forM nodes $ \(n,_) -> node [("label",show n)]
-  forM_ edges $ \(n1,n2,_) -> edge (nodeids !! n1) (nodeids !! n2) []
+  nodeids <- forM (vertices g) $ \n -> node [("label",show n)]
+  forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) []
   return nodeids

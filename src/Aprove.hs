@@ -71,7 +71,7 @@ aproveSrvProc = aproveIOProc go where
     let trs = pprTPDB prob
     let fp = "/tmp" </> fp0
 
-    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+--    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
     hPutStr h_problem_file trs
     hFlush  h_problem_file
     hClose  h_problem_file

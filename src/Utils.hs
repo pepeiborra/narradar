@@ -1,6 +1,7 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE ViewPatterns #-}
 module Utils (module Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
 
 import Control.Applicative
@@ -16,6 +17,7 @@ import Data.List (group, sort,nub)
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Sequence ((|>), singleton, viewl, viewr, ViewL(..), ViewR(..))
+import qualified Data.Sequence as Seq
 import Data.Traversable
 import System.IO
 import System.Directory
@@ -62,27 +64,37 @@ withTempFile dir name m = bracket (openTempFile dir name) (removeFile . fst) (un
 --
 -- TODO reimplementar liuwang con Data.Sequence
 --cycles :: Graph gr => gr a b -> [[Node]]
-cycles gr = filter (all ((==1) . length) . group) $ concatMap (map getNodes . liuwang) [singleton (n,n) | n <- nodes gr]
+cycles gr = filter (all ((==1) . length) . group) $ concatMap (map getNodes . liuwang) [singletonQ n | n <- G.vertices gr]
  where
-  liuwang path = [ path |> closure | let closure = (t, h), closure `Set.member` edges_gr] `mappend`
-                 concatMap liuwang [ path |> (t,n) | n <- suc gr t, n > h, (t,n) `notElem` toList path]
-                     where (h,_) :< _ = viewl path
-                           _ :> (_,t) = viewr path
-  getNodes = map fst . tail . toList
-  edges_gr = Set.fromList $ edges gr
+  liuwang path = [ path | h `elem` gr ! t] ++
+                 concatMap liuwang [ snoc n path | n <- gr ! t, n > h, n `notMemberQ` path]
+                     where h = headQ path
+                           t = tailQ path
+  getNodes = toList . fst
+
+singletonQ n      = (Seq.singleton n, Set.singleton n)
+memberQ n (_,set) = n `Set.member` set
+notMemberQ n q    = not (memberQ n q)
+headQ (viewl -> h:<_, _) = h
+tailQ (viewr -> _:>t, _) = t
+snoc n (seq, set) = (seq |> n, Set.insert n set)
 
 cycles_old :: Graph gr => gr a b -> [[Node]]
 cycles_old gr = (snub  . map (sort.getNodes)) (concatMap liuwang [[(n,n)] | n <- nodes gr])
     where liuwang path = [ path ++ [closure] | let closure = (tpath, phead path), closure `elem` edges gr] ++
                         concatMap liuwang [path++[(tpath,n)] | n <- suc gr tpath, n /= hpath, (tpath,n) `notElem` path]
-                                    where tpath = ptail path
-                                          hpath = phead path
+                            where tpath = ptail path
+                                  hpath = phead path
           phead = fst . head
           ptail = snd . last
           getNodes = snub . map fst
 
 
-propCycles gr = sort (sort <$> cycles gr) == sort (sort <$> cycles_old gr) where types = gr :: Gr () ()
+propCycles gr = not (null$ nodes gr) ==> sort (sort <$> cycles (toG gr)) == sort (sort <$> cycles_old gr) where types = gr :: Gr () ()
+
+toG gr = G.buildG bounds (edges gr)
+         where bounds | null (nodes gr) = (0,0)
+                      | otherwise = (minimum $ nodes gr, maximum $ nodes gr)
 
 instance Arbitrary (Gr () ()) where
   arbitrary = do

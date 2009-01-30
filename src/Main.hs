@@ -21,7 +21,7 @@ import qualified Text.ParserCombinators.Parsec as Parsec
 
 import Prelude hiding (Monad(..))
 
-import Prolog
+import PrologProblem
 import TRS.FetchRules
 import TRS.FetchRules.TRS
 import Types hiding ((!))
@@ -34,7 +34,6 @@ import NarrowingProblem
 import Output
 import qualified Language.Prolog.Parser as Prolog
 
-logfile = "narradar.log"
 
 main :: IO ()
 main = do
@@ -42,41 +41,41 @@ main = do
   case args of
 --    [file, "SKEL"]      -> parseIt file (print.pprSkelt. (startSolver >=> pureSolver))
 --    [file, "DOT"]       -> parseIt file (putStrLn.pprDot.(startSolver >=> pureSolver))
-    [file, "SRV"]       -> work Nothing file srvSolver
-    [file, "SERIAL"]    -> work Nothing file srvSolverSerial
-    [file, "WEB"]       -> work Nothing file webSolver
-    [file, aprove_path] -> work Nothing file (localSolver' aprove_path)
-    [file, "GOAL", goal]-> work (either (error.show) Just $ parseGoal goal) file srvSolver
-    [file, "PROLOG", goal]-> workProlog (either (error.show) id $ parseGoal goal) file srvSolver
-    [file]              -> work Nothing file srvSolver
+    [file, "SRV"]       -> readFile file >>= work Nothing file srvSolver
+    [file, "SERIAL"]    -> readFile file >>= work Nothing file srvSolverSerial
+    [file, "WEB"]       -> readFile file >>= work Nothing file webSolver
+    [file, "GOAL", goal]-> readFile file >>= work (either (error.show) Just $ parseGoal goal) file srvSolver
+    ["PROLOG"]          -> getContents   >>= workProlog [] "narradar" srvSolver
+    (file : "PROLOG" :g)-> readFile file >>= workProlog g file srvSolver
+    [file]              -> readFile file >>= work Nothing file srvSolver
+    [file, aprove_path] -> readFile file >>= work Nothing file (localSolver' aprove_path)
     _ -> do n <- getProgName
             putStrLn$ "Narradar - Automated Narrowing Termination Proofs\n USAGE: " ++ n ++
                         " <system.trs> [path_to_aprove|SRV|WEB|DOT|SKEL|SERIAL]"
-  where parseIt file k = do
-              contents <- readFile file
-              case parseFile trsParser file contents of
+  where parseIt contents k = do
+              case parseFile trsParser "" contents of
                 Left error -> print error >> exitWith (ExitFailure 1)
                 Right trs_ -> k (mkTRS trs_)
-        work goal file slv = parseIt file $ \trs -> do
-                  sol <- runSolver slv (mkBNDPProblem goal trs)
+
+        work goal file slv txt = parseIt txt $ \trs -> do
+                  sol <- runSolver slv (mkNDPProblem goal trs)
                   putStr (renderHtml (page sol))
                   withTempFile "." "narradar.dot" $ \fp h -> do
                                 hPutStrLn h (pprDot sol)
                                 putStrLn (pprDot sol)
-                                system (printf "dot -Tpdf %s -o %s.pdf" fp logfile)
-                                hPutStrLn stderr (printf "Log written to %s.pdf" logfile)
-        workProlog goal file slv = do
-                  ei_pgm <- Parsec.parseFromFile Prolog.program file
-                  case ei_pgm of
-                    Left parseError -> error (show parseError)
-                    Right pgm -> do
-                                sol <- runSolver slv (mkPrologProblem goal pgm)
-                                putStr (renderHtml (page sol))
+                                system (printf "dot -Tpdf %s -o %s.pdf" fp file)
+                                hPutStrLn stderr (printf "Log written to %s.pdf" file)
+        workProlog gg file slv txt = do
+                  case parsePrologProblem txt gg of
+                    Left parseError -> error parseError
+                    Right p -> do
+                                sol <- runSolver slv p
+                                putStrLn$ if isSuccess sol then "YES" else "NO"
                                 withTempFile "." "narradar.dot" $ \fp h -> do
                                  hPutStrLn h (pprDot sol)
-                                 putStrLn (pprDot sol)
-                                 system (printf "dot -Tpdf %s -o %s.pdf" fp logfile)
-                                 hPutStrLn stderr (printf "Log written to %s.pdf" logfile)
+                                 system (printf "dot -Tpdf %s -o %s.pdf 2> /dev/null > /dev/null" fp file)
+                                 return ()
+                                 -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
 
 
 page res = myhead +++ body << divres where

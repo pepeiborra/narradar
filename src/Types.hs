@@ -4,11 +4,11 @@
 {-# LANGUAGE PatternGuards, RecordWildCards #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
 
-module Types (module TRS, module Types) where
+module Types (module TRS, module Types, module Identifiers) where
 
 import Control.Applicative ((<$>),(<*>))
 import Data.Foldable (Foldable(..), sum)
-import Data.Graph.Inductive.PatriciaTree
+import Data.Graph (Graph)
 import Data.HashTable (hashString)
 import Data.Int
 import Data.List ((\\))
@@ -19,73 +19,20 @@ import Data.Monoid
 import qualified Data.Set as Set
 import Data.Traversable
 import Unsafe.Coerce
-import TRS hiding (Basic)
 import Text.Printf
 import Text.ParserCombinators.Parsec
 import Text.Show
+import Text.PrettyPrint ((<>), parens, punctuate, comma, text, sep)
+import qualified Text.PrettyPrint as Ppr
 
-import qualified ArgumentFiltering as AF
+import TRS hiding (apply)
+import ArgumentFiltering (AF, ApplyAF(..))
+import Identifiers
 import Lattice
 import Control.Monad.Free
 import Utils
+import qualified Language.Prolog.Syntax as Prolog
 import Prelude as P hiding (sum)
-
-type Basic   = Var :+: T String     :+: Hole
-type BasicId = Var :+: T Identifier :+: Hole
-instance HashConsed Basic
-instance HashConsed BasicId
-instance HashConsed (T Identifier)
-
-data Identifier = IdFunction String | IdDP String | AnyIdentifier deriving (Ord)
-instance Eq Identifier where
-    IdFunction f1 == IdFunction f2 = f1 == f2
-    IdDP f1       == IdDP f2       = f1 == f2
-    AnyIdentifier == _             = True
-    _             == AnyIdentifier = True
-    _             == _             = False
-
-instance Show Identifier where
-    show (IdFunction f) = f
-    show (IdDP n) = n ++ "#"
-
-mkTRS :: [Rule Basic] -> TRS Identifier BasicId
-mkTRS rr = TRS (Set.fromList rules') (getSignature rules') where rules' = fmap2 (foldTerm mkTIdF) rr
-
-class (Functor f, Functor g) => MkTId f g where mkTIdF :: f (Term g) -> Term g
-instance (T Identifier :<: g, HashConsed g) => MkTId (T String) g where mkTIdF (T f tt) = term (IdFunction f) tt
-instance (MkTId f1 g, MkTId f2 g) => MkTId (f1 :+: f2) g where
-    mkTIdF (Inl x) = mkTIdF x
-    mkTIdF (Inr x) = mkTIdF x
-instance (a :<: g, HashConsed g) => MkTId a g where mkTIdF t = inject(fmap reinject t)
-
-{-
-mkTRS rules = TRS rules' (getSignature rules') where
-  rules' = fmap2 (foldTerm f) rules
---  f :: (T String :<: tstring, HashConsed tident, T Identifier :<: tident) => tstring (Term tident) -> Term tident
-  f t
-     | Just(T f tt) <- prj t = term (IdFunction f) tt
-     | otherwise = fmap reinject t -- (unsafeCoerce t :: tident(Term tident))
--}
-
-markDPSymbol (IdFunction f) = IdDP f
-markDPSymbol f = f
-unmarkDPSymbol (IdDP n) = IdFunction n
-unmarkDPSymbol n = n
-
-markDP, unmarkDP :: (HashConsed f, T Identifier :<: f) => Term f -> Term f
-markDP t | Just (T (n::Identifier) tt) <- open t = term (markDPSymbol n) tt
-         | otherwise                = t
-unmarkDP t | Just (T (n::Identifier) tt) <- open t = term (unmarkDPSymbol n) tt
-           | otherwise              = t
-
-unmarkDPRule, markDPRule :: (HashConsed f,T Identifier :<: f) => Rule f -> Rule f
-markDPRule   = fmap   markDP
-unmarkDPRule = fmap unmarkDP
-
-hashId :: Identifier -> Int32
-hashId = hashString . show
-
-instance HashTerm (T Identifier) where hashF (T id tt) = 14 * sum tt * hashId id
 
 isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
@@ -100,27 +47,38 @@ instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where extra
 ---------------------------
 type  DP a = Rule a
 
-data Problem_ a = Problem {typ::ProblemType, trs,dps::a}
+data Problem_ a = Problem       {typ::ProblemType, trs,dps::a}
+                | PrologProblem {typ::ProblemType, goals::[Goal], program::Prolog.Program}
      deriving (Eq,Show)
+
 instance Functor  Problem_ where fmap f (Problem typ a b) = Problem typ (f a) (f b)
 instance Foldable Problem_ where foldMap f (Problem _ a b) = f a `mappend` f b
 instance Traversable Problem_ where traverse f (Problem typ a b) = Problem typ <$> f a <*> f b
 instance Size a => Size (Problem_ a) where size = sum . fmap size
+instance SignatureC (Problem f) Identifier where
+  getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps
 
 type Problem f = Problem_ (TRS Identifier f)
 
 data ProblemType = Rewriting
-                 | Narrowing  | NarrowingModes Goal
-                 | BNarrowing | BNarrowingModes Goal | LBNarrowingModes Goal
-                 | Prolog Goal
-     deriving (Eq, Show)
+                 | Narrowing   | NarrowingModes AF
+                 | BNarrowing  | BNarrowingModes AF
+                 | LBNarrowing | LBNarrowingModes AF
+		 | Prolog
+                   deriving (Eq, Show)
+
+prologProblem = PrologProblem Prolog
+isProlog Prolog = True ; isProlog _ = False
+isPrologProblem PrologProblem{} = True
+isPrologProblem p = isProlog $ typ p
 
 isFullNarrowing Narrowing{} = True
 isFullNarrowing NarrowingModes{} = True
 isFullNarrowing _ = False
 isFullNarrowingProblem = isFullNarrowing . typ
 
-isBNarrowing BNarrowing{} = True
+isBNarrowing BNarrowing{}  = True
+isBNarrowing LBNarrowing{} = True
 isBNarrowing BNarrowingModes{} = True
 isBNarrowing LBNarrowingModes{} = True
 isBNarrowing _ = False
@@ -129,34 +87,42 @@ isBNarrowingProblem = isBNarrowing . typ
 isAnyNarrowing p = isFullNarrowing p || isBNarrowing p
 isAnyNarrowingProblem = isAnyNarrowing . typ
 
-isRewriting Rewriting =True
-isRewriting _ = False
+isRewriting Rewriting =True; isRewriting _ = False
 isRewritingProblem = isRewriting . typ
 
-isLeftStrategy LBNarrowingModes{} = True
-isLeftStrategy _ = False
+isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 
-getGoal (NarrowingModes goal) = Just goal
-getGoal (BNarrowingModes goal) = Just goal
-getGoal (LBNarrowingModes goal) = Just goal
-getGoal _ = Nothing
+isModed = isJust . getGoalAF
+isModedProblem = isModed . typ
+
+getGoalAF (NarrowingModes goal) = Just goal
+getGoalAF (BNarrowingModes goal) = Just goal
+getGoalAF (LBNarrowingModes goal) = Just goal
+getGoalAF _ = Nothing
+
+withGoalAF(Problem Narrowing trs dps)   goal = Problem (NarrowingModes goal) trs dps
+withGoalAF(Problem BNarrowing trs dps)  goal = Problem (BNarrowingModes goal) trs dps
+withGoalAF(Problem LBNarrowing trs dps) goal = Problem (LBNarrowingModes goal) trs dps
 
 data Mode = G | V deriving (Show, Eq, Bounded)
 type Goal = T String Mode
 
-instance SignatureC (Problem f) Identifier where
-  getSignature (Problem _ trs@TRS{} dps@TRS{}) = sig trs `mappend` sig dps
+instance ApplyAF (Problem f) where
+    apply af p@(Problem typ trs@TRS{} dps) = Problem typ (apply af trs) (apply af dps)
+
 
 -- ------------
 -- Processors
 -- ------------
-data ProcInfo = AFProc (Maybe AF.AF) (Maybe (Division Identifier))
-              | DependencyGraph UGr
+data ProcInfo = AFProc (Maybe AF) (Maybe (Division Identifier))
+              | DependencyGraph Graph
               | Polynomial
               | External ExternalProc
               | NarrowingP
               | InstantiationP
               | FInstantiationP
+              | PrologP
+              | PrologSKP
 
 instance Show ProcInfo where
     show (DependencyGraph _) = "Dependency Graph Processor"
@@ -168,7 +134,8 @@ instance Show ProcInfo where
     show (AFProc (Just af) (Just div)) = show af ++ showParen True (shows (Map.toList div)) ""
     show (AFProc Nothing _) = "Argument Filtering"
     show (Polynomial)    = "Polynomial ordering"
-
+    show PrologP          = "Termination of LP as termination of Leftmost Basic Narrowing"
+    show PrologSKP        = "Termination of LP as termination of Leftmost Basic Narrowing \n (Schneider-Kamp transformation)"
 
 data ExternalProc = MuTerm | Aprove | Other String
      deriving (Eq, Show)
@@ -193,13 +160,28 @@ instance Lattice [Mode] where
     top      = repeat top
     bottom   = repeat bottom
 
+instance Ord id => Lattice (Division id) where
+    meet   = Map.unionWith meet
+    join   = Map.unionWith  join
+    bottom = Map.empty
+    top    = Map.empty
+
+instance Lattice DivEnv where
+    meet   = Map.unionWith meet
+    join   = Map.unionWith  join
+    bottom = Map.empty
+    top    = Map.empty
+
 parseGoal :: String -> Either ParseError Goal
 parseGoal = parse p "" where
-    ident = many1 (alphaNum <|> oneOf "!+-./<>=?\\/^")
-    mode  = (oneOf "g" >> return G) <|> (oneOf "v" >> return V)
+    ident = many1 (alphaNum <|> oneOf "!+_-./<>=?\\/^")
+    mode  = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
     parens= between (char '(') (char ')')
     p = do
       spaces
       id <- ident
       modes <- parens (mode `sepBy` char ',')
       return (T id modes)
+
+pprGoal :: Goal -> String
+pprGoal (T id modes) = show (text id <> parens(sep$ punctuate comma $ map (text.show) modes))

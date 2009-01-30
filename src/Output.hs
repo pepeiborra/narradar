@@ -24,7 +24,9 @@ import Proof
 import Types hiding (Ppr(..),ppr, (!))
 import qualified Types as TRS
 import qualified TRS
-import TRS.Utils (snub)
+import Utils (snub, foldMap3)
+
+import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude hiding (concat)
 -- ----
@@ -38,11 +40,12 @@ pprTPDB p@(Problem _ trs@TRS{} dps@TRS{} ) =
           , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))]
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
-        pprTerm (open -> Just v@Var{})   = ppr (inject v)
-        pprTerm (open -> Just (T (id::Identifier) [])) = text (show id)
-        pprTerm (open -> Just (T (id::Identifier) tt)) =
-            text (show id) <> parens (cat$ punctuate comma$ map pprTerm tt)
---        pprTerm _ = Text.PrettyPrint.empty
+        pprTerm = foldTerm f
+        f (prj -> Just (Var i n))               = ppr (var n :: Term f)
+        f (prj -> Just (T (id::Identifier) [])) = text (show id)
+        f (prj -> Just (T (id::Identifier) tt)) =
+            text (show id) <> parens (cat$ punctuate comma tt)
+        f _ = Text.PrettyPrint.empty
 
 -------------------
 -- Ppr
@@ -58,9 +61,10 @@ instance Ppr Int where ppr = int
 
 instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
 instance Ppr ProblemType where
+    ppr Prolog                    = text "Prolog"
     ppr typ | isFullNarrowing typ = text "NDP"
     ppr typ | isBNarrowing typ    = text "BNDP"
-    ppr Rewriting = text "DP"
+    ppr Rewriting                 = text "DP"
 
 instance TRS.Ppr a => Ppr (Problem a) where
     ppr (Problem typ trs dps) =
@@ -122,14 +126,25 @@ instance HTML ProcInfo where
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"
     toHtml NarrowingP      = "PROCESSOR: " +++ "Narrowing Processor"
+    toHtml p@PrologP       = "PROCESSOR: " +++ show p
+    toHtml p@PrologSKP     = "PROCESSOR: " +++ show p
     toHtml (External e)    = "PROCESSOR: " +++ "External - " +++ show e
+    toHtml InstantiationP  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
+    toHtml FInstantiationP = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
+    toHtml NarrowingP      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
+
+--instance HTML Prolog.Program where toHtml = show . Prolog.ppr
 
 instance TRS.Ppr f => HTML (Problem f) where
-    toHtml (Problem typ  trs@TRS{} dps) | null $ rules dps =
+    toHtml (Problem typ trs@TRS{} dps) | null $ rules dps =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves (rules trs) </>
                  "Dependency Pairs: none")
+    toHtml PrologProblem{..} =
+        H.table ! [typClass typ] << (
+            H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
+            H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves program)
     toHtml (Problem typ trs@TRS{} dps@TRS{}) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
@@ -166,15 +181,30 @@ instance TRS.Ppr f => HTML (ProblemProof Html f) where
 --           "Problem was divided in " +++ show(length sub) +++ " subproblems" +++ br +++
            H.unordList sub
     work (MPlus p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work Step{..} = p
+                    << problem +++ br +++ procInfo +++ br +++ subProblem
 
 instance (HashConsed f, T Identifier :<: f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
     cell (lhs :-> rhs ) = td ! [theclass "lhs"]   << show lhs <->
                           td ! [theclass "arrow"] << (" " +++ H.primHtmlChar "#x2192" +++ " ") <->
                           td ! [theclass "rhs"]   << show rhs
 
+
+instance HTMLTABLE Prolog.Clause where
+    cell = cell . (td <<) .  show . Prolog.ppr
+{-
+    cell (h :- bb) = td ! [theclass "head"]  << show h <->
+                     td ! [theclass "arrow"] << " :- " <->
+                     td ! [theclass "body"]   << bb
+-}
+
+instance HTML Prolog.Pred where
+    toHtml = toHtml . show . Prolog.ppr
+
 typClass typ | isFullNarrowing typ = theclass "NDP"
 typClass typ | isBNarrowing typ = theclass "BNDP"
 typClass Rewriting = theclass "DP"
+typClass Prolog    = theclass "Prolog"
 
 divi ident = H.thediv ! [H.theclass ident]
 spani ident = H.thespan ! [H.theclass ident]
@@ -197,6 +227,7 @@ pprSkelt = foldFree ppr f where
   f DontKnow{}     = text "don't know"
   f (And _ _ pp)   = parens $ cat $ punctuate (text " & ") pp
   f (Or _ _ pp)    = parens $ cat $ punctuate (text " | ") pp
-  f (MPlus p1 p2) = p1 <+> text " | " <+> p2
+  f (MPlus p1 p2)  = p1 <+> text " | " <+> p2
+  f Step{..}       = text " -> " <> subProblem
 
 -- instance H.ADDATTRS H.HotLink where h ! aa = h{H.hotLinkAttributes = H.hotLinkAttributes h ++ aa}
