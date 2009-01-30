@@ -82,11 +82,14 @@ childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge 
 childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 pprTPDBdot :: TRS.Ppr f => Problem f -> String
-pprTPDBdot (Problem _ trs@TRS{} dps@TRS{} ) =
-  unlines [ "(VAR " ++ (unwords $ map (show . inject) $ snub $ concat (foldMap vars <$> rules trs)) ++ ")"
-          , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
-          , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")\\l"]
-  where unlines = concat . intersperse "\\l"
+pprTPDBdot PrologProblem{..} =
+    show (Prolog.ppr program) ++ "\\l" ++
+    unlines ["%Query: " ++ pprGoal g | g <- goals]
+pprTPDBdot p@(Problem typ trs@TRS{} dps@TRS{} ) = unlines $
+    [ "(VAR " ++ (unwords $ map show $ snub $ foldMap3 vars' (rules <$> p)) ++ ")"
+    , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
+    , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")\\l"]
+unlines = concat . intersperse "\\l"
 
 
 -- --------------------

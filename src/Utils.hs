@@ -6,7 +6,9 @@ module Utils (module Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad (join, liftM, replicateM)
-import Data.Foldable (toList)
+import Data.Array.IArray
+import Data.Foldable (toList, foldMap, Foldable)
+import qualified Data.Graph  as G
 import Data.Graph.Inductive (nodes, edges, suc, pre, Graph, Node(..), Gr, mkUGraph)
 import qualified Data.HashTable as HT
 import Data.Int
@@ -26,6 +28,10 @@ import Prelude hiding (mapM)
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
 
+foldMap2 :: (Foldable t, Foldable t', Monoid m) => (a -> m) -> t(t' a) -> m
+foldMap3 :: (Foldable t, Foldable t', Foldable t'',Monoid m) => (a -> m) -> t(t'(t'' a)) -> m
+foldMap2 = foldMap . foldMap
+foldMap3 = foldMap . foldMap2
 
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)

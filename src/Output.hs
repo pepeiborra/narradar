@@ -31,9 +31,9 @@ import Prelude hiding (concat)
 -- TPDB
 -- ----
 
-pprTPDB :: Problem f -> String
-pprTPDB (Problem _ trs@TRS{} dps@TRS{} ) =
-  unlines [ printf "(VAR %s)" (unwords $ map (show . inject) $ snub $ concat (foldMap vars <$> rules trs))
+pprTPDB :: forall f. Problem f -> String
+pprTPDB p@(Problem _ trs@TRS{} dps@TRS{} ) =
+  unlines [ printf "(VAR %s)" (unwords $ map (show . pprTerm) $ snub $ foldMap3 vars' ( rules <$> p))
           , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
           , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))]
 
