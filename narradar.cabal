@@ -42,7 +42,7 @@ Executable narradar
      TaskPoolSTM
 
 Executable narradarCgi
-  buildable: true
+  buildable: True
   if flag(base4)
     cpp-options:       -DBASE4
     build-depends:     base >= 4
