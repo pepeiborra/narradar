@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE PatternSignatures, TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternGuards, ViewPatterns #-}
 
 module ArgumentFiltering where
 
@@ -19,7 +19,7 @@ import Data.Monoid
 import Prelude hiding (lookup, map)
 import qualified Prelude
 
-import {-# SOURCE #-} Types
+import Identifiers
 import TRS hiding (apply)
 import Utils
 import Lattice
@@ -52,19 +52,25 @@ cut       :: Identifier -> Int -> AF -> AF
 cutAll    :: [(Identifier, Int)] -> AF -> AF
 lookup    :: Monad m => Identifier -> AF -> m [Int]
 fromList  :: [(Identifier,[Int])] -> AF
+singleton :: Identifier -> [Int] -> AF
 
-cut id i (AF m) = AF $ Map.insertWith (flip Set.difference) id (Set.singleton i) m
+cut id i (AF m)  = AF $ Map.insertWith (flip Set.difference) id (Set.singleton i) m
 cutAll xx af     = foldr (uncurry cut) af xx
 lookup id (AF m) = maybe (fail "not found") (return.Set.toList) (Map.lookup id m)
 fromList         = AF . Map.fromListWith Set.union . Prelude.map (second Set.fromList)
 toList (AF af)   = Map.toList (Map.map Set.toList af)
-
+singleton id ii  = fromList [(id,ii)]
 map :: (Identifier -> [Int] -> [Int]) -> AF -> AF
 map f (AF af) = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
 
 invert :: SignatureC a Identifier => a -> AF -> AF
 invert rules (AF af) = AF (Map.mapWithKey (\f ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii) af)
   where sig = getSignature rules -- :: Signature (IdFunctions :+*: IdDPs)
+
+init t | sig <- getSignature t = fromList
+    [ (d, [1 .. getArity sig d])
+          | d <- Foldable.toList(definedSymbols sig `mappend` constructorSymbols sig)
+          , getArity sig d > 0]
 
 class ApplyAF t where apply :: AF -> t -> t
 instance (TRSC f, T Identifier :<: f) => ApplyAF (Term f) where
@@ -73,15 +79,21 @@ instance (TRSC f, T Identifier :<: f) => ApplyAF (Term f) where
                  , Just ii       <- lookup n af = term n (select tt (pred <$> ii))
                  | otherwise = inject t
 
-instance ApplyAF (TRS Identifier f) where apply af trs@TRS{} = tRS'$ apply af (rules trs)
-
 --instance (Functor f, ApplyAF a) => ApplyAF (f a) where apply af = fmap (apply af)
 -- The Functor instance can lead to subtle bugs. Replaced with individual instances
 instance ApplyAF a => ApplyAF [a]                            where apply af = fmap (apply af)
-instance (TRSC f, T Identifier :<: f) => ApplyAF (Rule f)    where apply af = fmap (apply af)
-instance (TRSC f, T Identifier :<: f) => ApplyAF (Problem f) where apply af = fmap (apply af)
+--instance (TRSC f, T Identifier :<: f) => ApplyAF (Rule f)    where apply af = fmap (apply af)
 
-init t | sig <- getSignature t = fromList
-    [ (d, [1 .. getArity sig d])
-          | d <- Foldable.toList(definedSymbols sig `mappend` constructorSymbols sig)
-          , getArity sig d > 0]
+
+instance ApplyAF (TRS Identifier f) where apply af trs@TRS{} = tRS'$ applyToRule (getSignature trs) af <$> rules trs
+
+--applyToRule :: Signature Identifier -> AF -> Rule f -> Rule f
+applyToRule sig af (lhs :-> rhs) = apply af lhs :-> applyToRhs af rhs
+  where
+    -- applyToRhs cuts vars to bottoms
+    applyToRhs _ (open -> Just Var{}) = constant (IdFunction "_bottom")  -- TODO fix this hack, introduce a constructor for Bottom
+    applyToRhs af t@(open -> Just (T n tt))
+      | n `Set.member` constructorSymbols sig = case lookup n af of
+                                Just ii -> term n (applyToRhs af <$> select tt (pred <$> ii))
+                                Nothing -> term n (applyToRhs af <$> tt)
+    applyToRhs af t = apply af t  -- we don't cut vars below defined symbols
