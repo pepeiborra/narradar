@@ -1,4 +1,6 @@
 {-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Aprove where
 
 import Control.Exception
@@ -22,11 +24,13 @@ import Proof
 import TRS
 import Utils
 
+
 aproveWebProc :: Problem f -> IO (ProblemProof Html f)
-aproveWebProc prob@(Problem Rewriting trs@TRS{} dps) = withCurlDo $ do
-  curl <- initialize
-  CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
-  CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html",
+aproveWebProc = aproveIOProc go where
+  go prob@(Problem _ trs@TRS{} dps) = do
+    curl <- initialize
+    CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
+    CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html",
                                        multiformString "program_type" "trs"
                                       ,multiformString "source" (pprTPDB prob)
                                       ,multiformString "timeout" "10"
@@ -34,13 +38,11 @@ aproveWebProc prob@(Problem Rewriting trs@TRS{} dps) = withCurlDo $ do
                                       ,multiformString "output" "html"
                                       ,multiformString "submit_mode" "Submit"
                                       ,multiformString "fullscreen_request" "1"])
-  hPutStrLn stderr ("asking aprove to solve the following problem\n" ++ pprTPDB prob)
-  response <- perform_with_response curl
-  let output = massageWeb $ respBody response
-  return$ (if "proven" `elem` [ text | TagText text <- parseTags output] then success else failP)
-                                    (External Aprove) prob (primHtml output)
-
-aproveWebProc prob = return$ return prob
+    hPutStrLn stderr ("asking aprove to solve the following problem\n" ++ pprTPDB prob)
+    response :: CurlResponse <- perform_with_response curl
+    let output = massageWeb $ respBody response
+    return$ (if "proven" `elem` [ text | TagText text <- parseTags output] then success else failP)
+            (External Aprove) prob (primHtml output)
 
 aproveProc :: FilePath -> Problem f -> IO (ProblemProof Html f)
 aproveProc path prob@(Problem Rewriting trs@TRS{} dps) =
@@ -61,11 +63,8 @@ aproveProc _ p = return$ return p
 aproveSrvTimeout = 10
 aproveSrvPort    = 5250
 
-{-# NOINLINE aproveSrvProc #-}
 aproveSrvProc :: Problem f -> IO (ProblemProof Html f)
-aproveSrvProc p@(Problem _ trs@TRS{} _) | isRewritingProblem p = unsafePerformIO (memoIO hashProb go) p
- where
-  hashProb prob = hashString (pprTPDB prob)
+aproveSrvProc = aproveIOProc go where
   go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
                                                  withSocketsDo $
                                                  withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
@@ -95,7 +94,11 @@ aproveSrvProc p@(Problem _ trs@TRS{} _) | isRewritingProblem p = unsafePerformIO
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
 
-aproveSrvProc p = return$ return p
+aproveIOProc go p@(Problem (isRewriting -> True) trs@TRS{} dps)
+    | all (null.properSubterms.rhs) (TRS.rules dps) = return $ failP (External Aprove) p (primHtml "loop")
+    | otherwise = unsafePerformIO (memoIO hashProb go) p
+aproveIOProc _ p = return$ return p
 
+hashProb prob = hashString (pprTPDB prob)
 massage    txt = (primHtml . unlines . drop 8  . lines . take (length txt - 9)) txt
 massageWeb txt = (           unlines . drop 10 . lines . take (length txt - 9)) txt
