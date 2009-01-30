@@ -98,6 +98,10 @@ instance TRS.Ppr a => Ppr (ProblemProof String a) where
           ppr prob $$
         text "PROCESSOR: " <> ppr proc $$
         nest 8 (vcat $ punctuate (text "\n") sub)
+      f (Step{..}) =
+          ppr problem $$
+        text "PROCESSOR: " <> ppr procInfo $$
+        nest 8 subProblem
 
 instance Ppr ProcInfo where ppr = text . show
 --------------

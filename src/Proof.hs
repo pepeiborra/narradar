@@ -42,6 +42,7 @@ import Prelude as P hiding (sum, log, mapM, foldr, concatMap, Monad(..), (=<<))
 data ProofF f (s :: *) k =
     And     {procInfo::ProcInfo, problem::Problem f, subProblems::[k]}
   | Or      {procInfo::ProcInfo, problem::Problem f, subProblems::[k]}
+  | Step    {procInfo::ProcInfo, problem::Problem f, subProblem::k}
   | Success {procInfo::ProcInfo, problem::Problem f, res::s}
   | Fail    {procInfo::ProcInfo, problem::Problem f, res::s}
   | DontKnow{procInfo::ProcInfo, problem::Problem f}
@@ -49,15 +50,18 @@ data ProofF f (s :: *) k =
   | MZero
      deriving (Show)
 
-type Proof f s a     = Free (ProofF f s) a
+type Proof f s a      = Free (ProofF f s) a
 type ProblemProof s f = Proof f s (Problem f)
 
 success = ((Impure.).) . Success
 failP   = ((Impure.).) . Fail
-andP    = ((Impure.).) . And
-orP     = ((Impure.).) . Or
 choiceP = (Impure.)    . MPlus
 dontKnow= (Impure.)    . DontKnow
+andP pi p0 [] = success pi p0 mempty
+andP pi p0 pp = Impure (And pi p0 pp)
+orP  pi p0 [] = success pi p0 mempty
+orP  pi p0 pp = Impure (Or pi p0 pp)
+step pi p0 p  = Impure (Step pi p0 (returnM p))
 
 -- -----------------
 -- Functor instances
@@ -103,7 +107,7 @@ instance Monad m => MPlus (FreeT (ProofF f s) m) (FreeT (ProofF f s) m) (FreeT (
 -- ----------
 --runProofT x = unwrap x
 
-runProofT :: Traversable f => ProofT f s IO a -> IO (Proof f s a)
+runProofT :: (Monoid s, Traversable f) => ProofT f s IO a -> IO (Proof f s a)
 runProofT m = go (unFreeT m >>= f) where
   f (Left v)  = returnM (returnM v)
   f (Right p) = eval p
@@ -139,18 +143,20 @@ isSuccessF Fail{}         = False
 isSuccessF Success{}      = True
 isSuccessF DontKnow{}     = False
 isSuccessF (And _ _ ll)   = and ll
+isSuccessF (Or  _ _ [])   = True  -- unstandard
 isSuccessF (Or  _ _ ll)   = or ll
 isSuccessF MZero          = False
-isSuccessF (MPlus p1 p2) =  p1 || p2
+isSuccessF (MPlus p1 p2)  = p1 || p2
+isSuccessF (Step _ _ p)   = p
 
 isSuccess :: Proof f s k -> Bool
 isSuccess  = foldFree  (const False) isSuccessF
 
 isSuccessT = foldFreeT (const $ returnM False) (returnM.isSuccessF)
 
-simplify :: ProblemProof s f -> ProblemProof s f
+simplify :: Monoid s => ProblemProof s f -> ProblemProof s f
 simplify = foldFree returnM f where
-  f   (Or  pi p [])  = dontKnow pi p
+  f   (Or  pi p [])  = success pi p mempty -- "No additional problems left"
   f p@(Or  _ _ aa)   = msum aa
   f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"
   f p@(MPlus p1 p2)

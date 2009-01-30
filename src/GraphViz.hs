@@ -54,7 +54,8 @@ pprDot prb = showDot $ do
                                              forM_ subProblems ($ me)
                                              return me
                                 return (Cluster cme)
-    f (Annotated done Or{..})  par = trsnode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
+    f (Annotated done Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
+    f (Annotated done Or{..})   par = trsnode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
 
 trsLabel trs      = ("label", pprTPDBdot trs)
 trsColor p | isFullNarrowingProblem p = ("color", "#F97523")
