@@ -241,15 +241,6 @@ divToAFfilterOutputs trs div = -- AF.init trs `mappend`
                                AF.fromList [ (f,  [ i | (i,m) <- zip [1..] modes, m == G])
                                         | (f,modes) <- Map.toList div]
 
--- ----------
--- Labelling
--- ----------
-type InverseAF = AF.AF
-
-labelling :: InverseAF -> TRS f -> (TRS f, AF.AF)
-labelling goalAF trs@TRS{} =
-  trs' = trs `mappend`
-
 -- -----------
 -- Testing
 -- -----------

@@ -71,13 +71,13 @@ aproveSrvProc = aproveIOProc go where
     let trs = pprTPDB prob
     let fp = "/tmp" </> fp0
 
---    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
     hPutStr h_problem_file trs
     hFlush  h_problem_file
     hClose  h_problem_file
 --    runCommand ("chmod o+r " ++ fp)
 
-    hAprove <- connectTo "localhost" (PortNumber aproveSrvPort)
+    hAprove <- connectTo "127.0.0.1" (PortNumber aproveSrvPort)
   -- hSetBuffering hAprove NoBuffering
     hPutStrLn hAprove "2"                     -- Saying hello
     hPutStrLn hAprove fp                      -- Sending the problem path

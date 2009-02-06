@@ -42,7 +42,6 @@ main = do
 --    [file, "SKEL"]      -> parseIt file (print.pprSkelt. (startSolver >=> pureSolver))
 --    [file, "DOT"]       -> parseIt file (putStrLn.pprDot.(startSolver >=> pureSolver))
     [file, "SRV"]       -> readFile file >>= work Nothing file srvSolver
-    [file, "SERIAL"]    -> readFile file >>= work Nothing file srvSolverSerial
     [file, "WEB"]       -> readFile file >>= work Nothing file webSolver
     [file, "GOAL", goal]-> readFile file >>= work (either (error.show) Just $ parseGoal goal) file srvSolver
     ["PROLOG"]          -> getContents   >>= workProlog [] "narradar" srvSolver

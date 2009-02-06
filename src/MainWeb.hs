@@ -35,7 +35,7 @@ cgiMain = do
     _ -> outputError 100 "missing parameter" []
 
 processProblem False problem = do
-  res <- liftIO $ runSolver srvSolverSerial problem
+  res <- liftIO $ runSolver srvSolver problem
   output$ renderHtml $
                  if isSuccess res
                     then thediv ! [identifier "title"] << h3 << "Termination was proved succesfully." +++ p << res
