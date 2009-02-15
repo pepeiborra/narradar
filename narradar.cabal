@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.2
-version:             0.2.20080131
+version:             0.2.20080215
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -11,6 +11,8 @@ author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
 
 Flag base4
+Flag web
+   default: False
 
 Executable narradar
   if flag(base4)
@@ -19,11 +21,11 @@ Executable narradar
   else
      build-depends:     base < 4
   main-is:             Main.hs
-  ghc-options:         -O2 -threaded -Wall
+  ghc-options:         
   hs-source-dirs:         src
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-     TRS == 0.21.20080131, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, Lattice, 
+     TRS >= 0.21.20080206, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, lattice, 
      parsec, GHood, prolog
   other-modules: 
      Types,
@@ -42,7 +44,10 @@ Executable narradar
      TaskPoolSTM
 
 Executable narradarCgi
-  buildable: True
+  if flag(web)
+    buildable: True
+  else
+    buildable: False
   if flag(base4)
     cpp-options:       -DBASE4
     build-depends:     base >= 4
@@ -52,10 +57,7 @@ Executable narradarCgi
   main-is:             MainWeb.hs
   ghc-options:         -O2 -threaded
   hs-source-dirs:      src
-  build-Depends:       mtl, pretty, containers, process, directory, bytestring, array,
-       xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-       TRS == 0.21.20080131, alacarte, fetchrules, fetchrules-trs, logict, category-extras,
-       parsec, GHood, prolog
+  build-Depends:       
 
   other-modules:     Types,
      MonadSupply,

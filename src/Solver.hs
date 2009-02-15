@@ -11,7 +11,7 @@ import "monad-param" Control.Monad.Parameterized
 import "monad-param" Control.Monad.MonadPlus.Parameterized
 import Data.Monoid
 import Data.Traversable
-import Text.XHtml (Html)
+import Text.XHtml (Html, primHtml)
 
 import Proof
 import PrologProblem
@@ -20,35 +20,54 @@ import GraphTransformation
 import Aprove
 import DPairs
 import Types
-import TRS.Utils
+import TRS
 
 import Prelude hiding (Monad(..))
 import qualified Prelude
 
-type Solver s m f = (Ord (Term f), IsVar f, Hole :<: f, Zip f, AnnotateWithPos f f, Types.Ppr f, Monad m) => Problem f -> PPT s m f
+type Solver id s m f = ProblemG id f -> PPT id s m f
 
-webSolver, localSolver, srvSolver :: Solver Html IO BasicId
-narradarSolver :: Solver Html IO BasicId -> Solver Html IO BasicId
+trivialProc p@(Problem typ trs dps@TRS{})
+    | all (null.properSubterms.rhs) (TRS.rules dps) || any (\(l:->r) -> l == r) (TRS.rules dps)
+    = failP Trivial p (primHtml "loop")
+    | otherwise = returnM p
+trivialProc  p = returnM p
+
+--webSolver, localSolver, srvSolver :: Solver Html IO BasicId
+--narradarSolver :: Solver Html IO BasicId -> Solver Html IO BasicId
 
 -- solver that connects to the Aprove web site, use only for testing
-webSolver         = narradarSolver (wrap' . aproveWebProc)
+webSolver         = narradarSolver' (wrap' . aproveWebProc)
 
 -- solver that uses a cmd line version of Aprove, use only for testing
 localSolver       = localSolver' "/usr/local/lib/aprove/runme"
-localSolver' path = narradarSolver (wrap' . aproveProc path)
+localSolver' path = narradarSolver' (wrap' . aproveProc path)
 
 -- solver that uses an Aprove server running on the host machine
-srvSolver       = narradarSolver (wrap' . aproveSrvProc)
 
-pureSolver = narradarSolver returnM
+pureSolver = narradarSolver' returnM
 
 -- Our main solving scheme
-narradarSolver aprove p
+
+{-# SPECIALIZE narradarSolver :: Problem BBasicId -> PPT Id Html IO BBasicId #-}
+narradarSolver       = narradarSolver' (trivialProc >=> (wrap' . aproveSrvProc))
+narradarSolver' aprove p
    | isRewritingProblem    p = aprove p
-   | isPrologProblem       p = prologSolver aprove p
+--   | isPrologProblem       p = prologSolver aprove p
    | isAnyNarrowingProblem p = narrowingSolver aprove p
 
-prologSolver aprove    = (prologP_sk) >=> graphProcessor >=> afProcessor >=> aprove
+allSolver = allSolver' (trivialProc >=> (wrap' . aproveSrvProc)) (trivialProc >=> (wrap' . aproveWebProc))
+allSolver' aproveS aproveL p
+   | isRewritingProblem    p = aproveS (convert p)
+   | isPrologProblem       p = prologSolver'   aproveS aproveL p
+   | isAnyNarrowingProblem p = narrowingSolver aproveS (convert p)
+
+{-# SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId Html IO BBasicLId #-}
+prologSolver = prologSolver' (trivialProc >=> (wrap' . aproveSrvProc)) (trivialProc >=> (wrap' . aproveWebProc))
+prologSolver' aproveShort aproveLong =
+      (prologP_sk >=> (return.convert) >=> graphProcessor >=> afProcessor >=> aproveShort)
+  .|. (prologP_labelling_sk            >=> graphProcessor >=> afProcessor >=> aproveLong)
+
 narrowingSolver aprove =
        graphProcessor >=> afProcessor >=> aprove
                            `refineBy`
@@ -60,15 +79,9 @@ refineBy f refiner = loop maxDepth where
   loop 0 x = f x
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
 
-runSolver :: (Traversable f, Ord (Term f), IsVar f, Hole :<: f, Zip f, AnnotateWithPos f f, Types.Ppr f, Monoid out) =>
-             Solver out IO f -> ProblemProof out f -> IO (ProblemProof out f)
+--runSolver :: (TRS Cf, Hole :<: f, Monoid out) => Solver id out IO f -> ProblemProofG id out f -> IO (ProblemProofG id out f)
 runSolver solver p = runProofT (p >>= solver)
-{-
-startSolver :: TRS Identifier f -> ProblemProof Html f
-startSolver trs@TRS{} = returnM (mkNDPProblem Nothing trs)
-startSolver' :: Maybe Goal -> TRS Identifier f -> ProblemProof Html f
-startSolver' mb_goal trs@TRS{} = returnM (mkNDPProblem mb_goal trs)
--}
+
 infixl 1 .|.
 (.|.) :: MPlus m m m => (b -> m a) -> (b -> m a) -> b -> m a
 f .|. g = \x -> f x `mplus` g x

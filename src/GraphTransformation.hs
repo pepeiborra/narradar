@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternGuards, ViewPatterns, RecordWildCards, ScopedTypeVariables, FlexibleContexts #-}
 
-module GraphTransformation where
+module GraphTransformation (narrowing, instantiation, finstantiation) where
 
 import Control.Applicative
 import Data.Foldable (toList)
@@ -19,10 +19,17 @@ import DPairs
 
 import qualified TRS
 
-narrowing, instantiation, finstantiation :: (Hole :<: f) => Problem f -> ProblemProof Html f
+{-# SPECIALIZE narrowing      :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE narrowing      :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+{-# SPECIALIZE instantiation  :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE instantiation  :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+{-# SPECIALIZE finstantiation :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE finstantiation :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+
+narrowing, instantiation, finstantiation :: (DPMark f id, Hole :<: f) => ProblemG id f -> ProblemProofG id Html f
 narrowing p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig))
   | null dpss || [[]] == dpss = dontKnow NarrowingP p
-  | otherwise = orP NarrowingP p [return $ Problem typ trs (tRS newdps sig) | newdps <- dpss]
+  | otherwise = orP NarrowingP p [return $ Problem typ trs (tRS' newdps sig) | newdps <- dpss]
     where dpss = fst <$$> (map concat $ filter (all (not.null)) $
                       maps (uncurry f) (zip dps (tail dps ++ dps)))
           f dp@(_ :-> r) nxt@(l :-> _)
@@ -54,7 +61,7 @@ instantiation p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
   | null dpss = error "Instantiation: weird..."
   | dpss == [dps] = dontKnow InstantiationP p
-  | otherwise = orP InstantiationP p [return $ Problem typ trs (tRS newdps sig)
+  | otherwise = orP InstantiationP p [return $ Problem typ trs (tRS' newdps sig)
                                           | newdps <- dpss]
    where dpss = nub (catMaybes $ sequence <$> maps f dps)
          f  (s :-> t) = listToMaybe
@@ -68,7 +75,7 @@ instantiation p = return p
 finstantiation p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
   | dpss == [dps] = dontKnow FInstantiationP p
-  | otherwise = orP FInstantiationP p [return $ Problem typ trs (tRS newdps sig)
+  | otherwise = orP FInstantiationP p [return $ Problem typ trs (tRS' newdps sig)
                                           | newdps <- dpss]
    where dpss = nub (catMaybes $ sequence <$> maps f dps)
          f (s :-> t) = listToMaybe
@@ -79,13 +86,13 @@ finstantiation p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) si
 
 finstantiation p = return p
 
-capInv :: forall id f. TRS id f -> Term f -> Term f
+capInv :: forall id f. NarradarTRS id f -> Term f -> Term f
 capInv trs@TRS{} t
        | collapsing trs = var 0
        | Just (T (s::id) tt) <- open t
        = term s [if isDefined trs' t' then var i else t'
                        | (i,t') <- [0..] `zip` tt]
        | otherwise = t
-  where trs' = tRS' (swapRule <$> rules trs) :: TRS id f
+  where trs' = tRS (swapRule <$> rules trs) :: NarradarTRS id f
 
 collapsing trs@TRS{} = any (isVar.rhs) (rules trs)

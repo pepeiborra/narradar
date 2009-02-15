@@ -1,8 +1,8 @@
 {-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Output where
 
@@ -10,7 +10,9 @@ import Control.Applicative
 import Control.Monad.Free
 import Data.HashTable (hashString)
 import Data.Foldable
+import Data.Maybe
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Text.PrettyPrint
 import Text.Printf
 import Text.Show
@@ -33,8 +35,8 @@ import Prelude hiding (concat)
 -- TPDB
 -- ----
 
-pprTPDB :: forall f. Problem f -> String
-pprTPDB p@(Problem _ trs@TRS{} dps@TRS{} ) =
+pprTPDB :: forall f id. (Show id, Bottom :<: f, DPSymbol id) => ProblemG id f -> String
+pprTPDB p@(Problem _ trs dps@TRS{} ) =
   unlines [ printf "(VAR %s)" (unwords $ map (show . pprTerm) $ snub $ foldMap3 vars' ( rules <$> p))
           , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
           , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))]
@@ -42,10 +44,12 @@ pprTPDB p@(Problem _ trs@TRS{} dps@TRS{} ) =
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprTerm = foldTerm f
         f (prj -> Just (Var i n))               = ppr (var n :: Term f)
-        f (prj -> Just (T (id::Identifier) [])) = text (show id)
-        f (prj -> Just (T (id::Identifier) tt)) =
-            text (show id) <> parens (cat$ punctuate comma tt)
-        f _ = Text.PrettyPrint.empty
+        f (prj -> Just (T (id::id) [])) = text (show id)
+        f (prj -> Just (T (id::id) tt)) =
+            text (show id) <> parens (hcat$ punctuate comma tt)
+        f (prj -> Just Bottom) =  -- TODO Cache the obtained representation on first call
+            text $ fromJust $ find (not . flip Set.member (allSymbols$getSignature p) . functionSymbol)
+                                   ("_|_":["_|_"++show i | i <- [0..]])
 
 -------------------
 -- Ppr
@@ -55,23 +59,28 @@ class Ppr a where ppr :: a -> Doc
 
 instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . vcat . punctuate comma . toList . fmap ppr
 instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
-instance Show (Term a) => Ppr (Rule a) where ppr = text . show
-instance TRS.Ppr f => Ppr (TRS id f) where ppr trs@TRS{} = ppr $ rules trs
+instance Show (Term a)  => Ppr (Rule a) where ppr = text . show
+instance TRS.Ppr f      => Ppr (NarradarTRS id f) where ppr trs@TRS{} = ppr $ rules trs
 instance Ppr Int where ppr = int
 
 instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
-instance Ppr ProblemType where
+instance Ppr (ProblemType id) where
     ppr Prolog                    = text "Prolog"
     ppr typ | isFullNarrowing typ = text "NDP"
     ppr typ | isBNarrowing typ    = text "BNDP"
     ppr Rewriting                 = text "DP"
 
-instance TRS.Ppr a => Ppr (Problem a) where
+instance TRS.Ppr f => Ppr (ProblemG id f) where
     ppr (Problem typ trs dps) =
             ppr typ <+> text "Problem" $$
             text "TRS:" <+> ppr trs $$
             text "DPS:" <+> ppr dps
 
+instance Ppr SomeProblem where
+  ppr (SomeProblem p@(Problem typ TRS{} _)) = ppr p
+  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc :: Problem BasicId)
+
+instance Ppr SomeInfo where ppr (SomeInfo p) = ppr p
 
 instance TRS.Ppr a => Ppr (ProblemProof String a) where
     ppr = foldFree leaf f . simplify where
@@ -107,36 +116,36 @@ instance TRS.Ppr a => Ppr (ProblemProof String a) where
         text "PROCESSOR: " <> ppr procInfo $$
         nest 8 subProblem
 
-instance Ppr ProcInfo where ppr = text . show
+instance Show id => Ppr (ProcInfo id) where ppr = text . show
 --------------
 -- HTML
 -------------
 
 instance HTML a => HTMLTABLE a where cell = cell . toHtml
 
-instance HTML AF.AF where
+instance Show id => HTML (AF.AF_ id) where
     toHtml (AF.AF af) = H.unordList [ pi +++ "(" +++ show k +++ ") = " +++ show ii  | (k,ii) <- Map.toList af]
         where pi = H.primHtmlChar "pi"
 
 instance HTML Doc where toHtml = toHtml . show
 
-instance HTML ProcInfo where
+instance Show id => HTML (ProcInfo id) where
     toHtml (AFProc af Nothing)    = "PROCESSOR: " +++ "Argument Filtering " +++ af
     toHtml (AFProc af (Just div)) = "PROCESSOR: " +++ "Argument Filtering " +++ af +++ showParen True (shows div) ""
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"
     toHtml NarrowingP      = "PROCESSOR: " +++ "Narrowing Processor"
-    toHtml p@PrologP       = "PROCESSOR: " +++ show p
-    toHtml p@PrologSKP     = "PROCESSOR: " +++ show p
     toHtml (External e)    = "PROCESSOR: " +++ "External - " +++ show e
     toHtml InstantiationP  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
     toHtml FInstantiationP = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
     toHtml NarrowingP      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
+    toHtml Trivial         = "PROCESSOR: " +++ "Trivial non-termination"
+    toHtml p               = "PROCESSOR: " +++ show p
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
 
-instance TRS.Ppr f => HTML (Problem f) where
-    toHtml (Problem typ trs@TRS{} dps) | null $ rules dps =
+instance TRS.Ppr f => HTML (ProblemG id f) where
+    toHtml (Problem typ trs dps@TRS{}) | null $ rules dps =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves (rules trs) </>
@@ -145,7 +154,7 @@ instance TRS.Ppr f => HTML (Problem f) where
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves program)
-    toHtml (Problem typ trs@TRS{} dps@TRS{}) =
+    toHtml (Problem typ trs dps@TRS{}) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Rules" </>
@@ -153,7 +162,13 @@ instance TRS.Ppr f => HTML (Problem f) where
             H.td ! [H.theclass "DPS" ] << "Dependency Pairs" </>
                  aboves (rules dps))
 
-instance TRS.Ppr f => HTML (ProblemProof Html f) where
+instance HTML SomeProblem where
+    toHtml (SomeProblem p@Problem{}) = toHtml p
+    toHtml (SomePrologProblem gg cc) = toHtml (mkPrologProblem gg cc :: Problem BasicId)
+
+instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
+
+instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
    toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work . simplify where
     work MZero = toHtml  "Don't know"
     work DontKnow{} = toHtml  "Don't know"
@@ -184,7 +199,7 @@ instance TRS.Ppr f => HTML (ProblemProof Html f) where
     work Step{..} = p
                     << problem +++ br +++ procInfo +++ br +++ subProblem
 
-instance (HashConsed f, T Identifier :<: f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
+instance (HashConsed f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
     cell (lhs :-> rhs ) = td ! [theclass "lhs"]   << show lhs <->
                           td ! [theclass "arrow"] << (" " +++ H.primHtmlChar "#x2192" +++ " ") <->
                           td ! [theclass "rhs"]   << show rhs

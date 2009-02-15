@@ -5,12 +5,15 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Free
 import Data.Graph
-import Data.Foldable (foldMap)
+import Data.Foldable (foldMap, toList)
+import qualified Data.Map as Map
 import Data.List hiding (unlines)
+import Data.Maybe
 import Text.Dot
 import Text.PrettyPrint
 import Prelude hiding (unlines)
 
+import ArgumentFiltering (fromAF)
 import Proof
 import Types
 import TRS
@@ -34,22 +37,22 @@ getParentNode (Cluster (_,n)) = getParentNode n
 
 pprDot prb = showDot $ do
                attribute ("compound", "true")
-               foldFree trsnode' f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< (N <$> node [("label","0")])
+               foldFree problemNode' f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< (N <$> node [("label","0")])
   where
-    f (Annotated done Success{..})    par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
-    f (Annotated done Fail{..})       par = trsnode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
+    f (Annotated done Success{..})    par = problemNode problem done par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
+    f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
     f (Annotated done MZero{})        par = return par -- childnode' [("label","Don't Know")] (doneEdge done) par
-    f (Annotated done DontKnow{..})   par = trsnode problem done par >>= procnode procInfo >>= childnode [("label","Don't Know")]
+    f (Annotated done DontKnow{..})   par = problemNode problem done par >>= procnode procInfo >>= childnode [("label","Don't Know")]
     f (Annotated done (MPlus p1 p2))  par = do
         dis <- childnode' [("shape","point"),("label","")] (doneEdge done) par
         p1 dis
         p2 dis
         return dis
-    f (Annotated done And{subProblems=[p], procInfo = proc@AFProc{}}) par
+    f (Annotated done And{subProblems=[p], procInfo = proc@(SomeInfo AFProc{})}) par
                          = procnode' proc done par >>= \me -> p me >> return me
     f (Annotated done And{subProblems=[p], ..}) par = f (Annotated done Or{subProblems = [p], ..}) par
     f (Annotated done And{..}) par = do
-                                trs <- trsnode problem done par
+                                trs <- problemNode problem done par
                                 cme <- cluster $ do
                                              attribute ("color", "#E56A90")
                                              me <- procnode procInfo trs
@@ -57,21 +60,28 @@ pprDot prb = showDot $ do
                                              return me
                                 return (Cluster cme)
     f (Annotated done Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
-    f (Annotated done Or{..})   par = trsnode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
+    f (Annotated done Or{..})   par = problemNode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
 
-trsLabel trs      = ("label", pprTPDBdot trs)
-trsColor p | isPrologProblem        p = ("color", "#F6D106")
-           | isFullNarrowingProblem p = ("color", "#4488C9")
-           | isBNarrowingProblem    p = ("color", "#FD6802")
-           | isRewritingProblem     p = ("color", "#EAAAFF")
-           | otherwise = error ("trsColor: " ++ show p)
-trsAttrs trs      = [trsLabel trs, trsColor trs, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
-trsnode  trs done = childnode'(trsAttrs trs) (doneEdge done)
-trsnode' trs      = childnode (trsAttrs trs)
+problemLabel :: (Show id, Ppr f) => ProblemG id f -> (String, String)
+problemLabel p = ("label", pprTPDBdot p)
+
+problemColor :: ProblemG id f -> (String, String)
+problemColor p | isPrologProblem        p = ("color", "#F6D106")
+               | isFullNarrowingProblem p = ("color", "#4488C9")
+               | isBNarrowingProblem    p = ("color", "#FD6802")
+               | isRewritingProblem     p = ("color", "#EAAAFF")
+               | otherwise = error ("problemColor")
+problemAttrs :: (Show id, Ppr f) => ProblemG id f -> [(String,String)]
+problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
+
+problemNode  (SomeProblem p) done = childnode'(problemAttrs p) (doneEdge done)
+problemNode  (SomePrologProblem cc gg) done = childnode'(problemAttrs (mkPrologProblem cc gg :: Problem BasicId)) (doneEdge done)
+problemNode' p    = childnode (problemAttrs p)
 doneEdge True     = [("color", "green")]
 doneEdge False    = [("color", "red")]
 
-procnode  (DependencyGraph gr) par = do
+procnode :: SomeInfo -> Parent -> Dot Parent
+procnode  (SomeInfo (DependencyGraph gr)) par = do
   (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr))
   case nn of
     []   -> return par
@@ -86,14 +96,22 @@ childnode attrs = childnode' attrs []
 childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return (N n)
 childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
-pprTPDBdot :: TRS.Ppr f => Problem f -> String
+
+pprTPDBdot :: (TRS.Ppr f, Show id) => ProblemG id f  -> String
+{-# SPECIALIZE pprTPDBdot :: Problem BBasicId -> String #-}
 pprTPDBdot PrologProblem{..} =
     show (Prolog.ppr program) ++ "\\l" ++
     unlines ["%Query: " ++ pprGoal g | g <- goals]
-pprTPDBdot p@(Problem typ trs@TRS{} dps@TRS{} ) = unlines $
+pprTPDBdot p@(Problem typ trs dps@TRS{} ) = unlines $
     [ "(VAR " ++ (unwords $ map show $ snub $ foldMap3 vars' (rules <$> p)) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
-    , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")\\l"]
+    , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")"] ++
+    maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getGoalAF typ)) ++ ["\\l"]
+
+pprAF af = unlines [ ' ' : unwords (intersperse ","
+                          [ show f ++ ": " ++ show (toList aa) | (f, aa) <- xx])
+                      | xx <- chunks 4 $ Map.toList $ fromAF af]
+
 unlines = concat . intersperse "\\l"
 
 
