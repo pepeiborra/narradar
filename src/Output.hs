@@ -132,6 +132,7 @@ instance HTML Doc where toHtml = toHtml . show
 instance Show id => HTML (ProcInfo id) where
     toHtml (AFProc af Nothing)    = "PROCESSOR: " +++ "Argument Filtering " +++ af
     toHtml (AFProc af (Just div)) = "PROCESSOR: " +++ "Argument Filtering " +++ af +++ showParen True (shows div) ""
+    toHtml (EVProc af)            = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"
     toHtml NarrowingP      = "PROCESSOR: " +++ "Narrowing Processor"

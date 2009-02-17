@@ -21,6 +21,7 @@ import Aprove
 import DPairs
 import Types
 import TRS
+import ExtraVars
 
 import Prelude hiding (Monad(..))
 import qualified Prelude
@@ -64,18 +65,17 @@ allSolver' aproveS aproveL p
 
 {-# SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId Html IO BBasicLId #-}
 prologSolver = prologSolver' (trivialProc >=> (wrap' . aproveSrvProc)) (trivialProc >=> (wrap' . aproveWebProc))
-prologSolver' aproveShort aproveLong =
-      (prologP_sk >=> (return.convert) >=> graphProcessor >=> afProcessor >=> aproveShort)
-  .|. (prologP_labelling_sk            >=> graphProcessor >=> afProcessor >=> aproveLong)
+prologSolver' aproveShort aproveLong = prologP_sk >=> narrowingSolver aproveShort
+--      (prologP_sk >=> (return.convert) >=> narrowingSolver aproveShort)
+--  .|. (prologP_labelling_sk            >=> narrowingSolver aproveLong)
 
-narrowingSolver aprove =
+narrowingSolver depth aprove =
        graphProcessor >=> afProcessor >=> aprove
-                           `refineBy`
+                           `(refineBy depth)`
        (instantiation .|. finstantiation .|. narrowing)
 
-maxDepth = 1
-refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => (a -> m a) -> (a -> m' a) -> a -> m a
-refineBy f refiner = loop maxDepth where
+refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> (a -> m' a) -> a -> m a
+refineBy maxDepth f refiner = loop maxDepth where
   loop 0 x = f x
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
 

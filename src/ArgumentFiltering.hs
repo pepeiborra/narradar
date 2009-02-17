@@ -93,11 +93,23 @@ init t | sig <- getSignature t = fromList
           | d <- Foldable.toList(definedSymbols sig `mappend` constructorSymbols sig)
           , getArity sig d > 0]
 
+--instance Convert (AF_ id) (AF_ id) where convert = id
+instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapKeys convert
+
+-- ----------------------
+-- Regular AF Application
+-- ----------------------
 class Ord id => ApplyAF t id | t -> id where apply :: AF_ id -> t -> t
+
 instance (T id :<: f, Ord id) => ApplyAF (Term f) id where
     {-# SPECIALIZE instance ApplyAF (Term BBasicId) Id #-}
     apply = applyTerm
 
+instance (Bottom :<: f, Ord id) => ApplyAF (NarradarTRS id f) id where
+    {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
+    {-# SPECIALIZE instance ApplyAF (NarradarTRS LId BBasicLId) LId #-}
+    apply af trs@TRS{} = tRS$ apply af <$$> rules trs
+    apply af (PrologTRS cc sig) = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) sig
 
 {-# SPECIALIZE applyTerm :: AF -> Term BBasicId -> Term BBasicId #-}
 applyTerm :: forall t id f. (T id :<: f, Ord id) => AF_ id -> Term f -> Term f
@@ -106,18 +118,28 @@ applyTerm af = foldTerm f
                  , Just ii       <- lookup n af = term n (select tt (pred <$> ii))
                  | otherwise = inject t
 
---instance (Functor f, ApplyAF a) => ApplyAF (f a) where apply af = fmap (apply af)
--- The Functor instance can lead to subtle bugs. Replaced with individual instances
 instance ApplyAF a id => ApplyAF [a] id where apply af = fmap (apply af)
---instance (TRSC f, T Identifier :<: f) => ApplyAF (Rule f)    where apply af = fmap (apply af)
+instance (T id :<: f, Ord id) => ApplyAF (Rule f) id where apply af = fmap (apply af)
 
+-- --------------------------
+-- Custom rhs AF Application
+-- --------------------------
+class Ord id => ApplyAF_rhs t sig id | t -> id where apply_rhs :: sig -> AF_ id -> t -> t
 
-instance (Bottom :<: f, Ord id) => ApplyAF (NarradarTRS id f) id where
-    {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
-    {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
-    apply af trs@TRS{} = tRS$ applyToRule (getSignature trs) af <$> rules trs
-    apply af (PrologTRS cc sig) = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, applyToRule sig af r)) cc) sig
+instance (T id :<: f, Ord id) => ApplyAF_rhs (Term f) sig id where
+    {-# off SPECIALIZE instance ApplyAF_rhs (Term BBasicId) (Problem BBasicId) Id #-}
+    apply_rhs _ = applyTerm
 
+instance (Bottom :<: f, Ord id) => ApplyAF_rhs (NarradarTRS id f) sig id where
+    {-# SPECIALIZE instance ApplyAF_rhs (NarradarTRS Id  BBasicId)  (NarradarTRS Id  BBasicId)  Id #-}
+    {-# SPECIALIZE instance ApplyAF_rhs (NarradarTRS LId BBasicLId) (NarradarTRS LId BBasicLId) LId #-}
+    apply_rhs _ af trs@TRS{} = tRS$ applyToRule (getSignature trs) af <$> rules trs
+    apply_rhs _ af (PrologTRS cc sig) = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, applyToRule sig af r)) cc) sig
+
+instance (Bottom :<: f, Var :<: f, T id :<: f, Ord id, SignatureC sig id) => ApplyAF_rhs (Rule f) sig id where
+    apply_rhs sig = applyToRule (getSignature sig)
+
+instance ApplyAF_rhs a sig id => ApplyAF_rhs [a] sig id where apply_rhs sig af = fmap (apply_rhs sig af)
 
 {-# SPECIALIZE applyToRule :: Signature Id -> AF -> Rule BBasicId -> Rule BBasicId #-}
 applyToRule :: (Bottom :<: f, Var :<: f, Ord id, T id :<: f) => Signature id -> AF_ id -> Rule f -> Rule f
@@ -133,9 +155,6 @@ applyToRule sig af (lhs :-> rhs) = apply af lhs :-> applyToRhs af rhs
     applyToRhs af t = apply af t  -- we don't cut vars below defined symbols
 
 
---instance Convert (AF_ id) (AF_ id) where convert = id
-instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapKeys convert
-
 -- -----------
 -- Heuristics
 -- -----------
@@ -145,7 +164,7 @@ type Heuristic id f = AF_ id -> Term f -> Position -> Set (id, Int)
 {-# noSPECIALIZE bestHeu :: NarradarTRS Id BBasicId -> AF -> Term BBasicId -> Position -> Set (Id,Int) #-}
 
 bestHeu :: (Foldable f, DPSymbol id, T id :<: f, SignatureC sig id) => sig -> Heuristic id f
-bestHeu = predHeu allInner (cond isDP ===> notNullArity &...& noUs ) `or` allInner
+bestHeu = predHeu allInner (noConstructors ...|... cond isDP ===> notNullArity ...&... noUs ) `or` allInner
 
 innermost _ _ _ [] = mempty
 innermost p af t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
@@ -184,11 +203,11 @@ or h1 h2 p af t pos =  case h1 p af t pos of
                         afs | Set.null afs -> h2 p af t pos
                             | otherwise    -> afs
 
-(&...&) = (liftM2.liftM2.liftM2) (&&) --(f &...& g) x y z = f x y z && g x y
-(|...|) = (liftM2.liftM2.liftM2) (||)
-f ===> g = (((not.).). f) |...| g
+(...&...) = (liftM2.liftM2.liftM2) (&&) --(f &...& g) x y z = f x y z && g x y
+(...|...) = (liftM2.liftM2.liftM2) (||)
+f ===> g = (((not.).). f) ...|... g
 cond f _ _ x = f x
 
-infixr 3 &...&
-infixr 3 |...|
+infixr 3 ...&...
+infixr 3 ...|...
 infixr 2 ===>

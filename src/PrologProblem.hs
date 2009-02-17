@@ -28,7 +28,7 @@ import qualified Data.Traversable as T
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
 import Text.XHtml
 
-import ArgumentFiltering (AF_, AF, noUs, noConstructors, allInner, predHeu, and,or, (&...&))
+import ArgumentFiltering (AF_, AF, noUs, noConstructors, allInner, predHeu, and,or, (...&...))
 import qualified ArgumentFiltering as AF
 import DPairs
 import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, PredF(..), Pred, Term, In(..), Atom)
@@ -43,10 +43,10 @@ import TRS.FetchRules -- for the Error ParseError instance
 import Prelude hiding (and,or,notElem)
 
 import Control.Exception
-import Debug.Trace
+--import Debug.Trace
 import Utils ((<$$>))
 
---trace _ x = x
+trace _ x = x
 
 --instance Error ParseError
 
@@ -159,7 +159,7 @@ labellingTrans goalAF trs@PrologTRS{} =
                        , length pp /= getArity trs f]
     in fix invariantEV $ (trs'', goalAF')
  where
-  heuristic trs af t p = Set.fromList $ take 1 $ toList $ (predHeu allInner (noConstructors &...& noUs) `or` allInner) trs af t p
+  heuristic trs af t p = Set.fromList $ take 1 $ toList $ (predHeu allInner (noConstructors ...&... noUs) `or` allInner) trs af t p
 
   trs'@(PrologTRS rr sig) = convert trs :: NarradarTRS (Labelled id) f'
 
@@ -230,6 +230,8 @@ instance ToTerm Term where
           f :: (MonadFresh m, TRSC f, T String :<: f) => TermF (TRS.Term f) -> m (TRS.Term f)
           f(Term id tt) = return $ term id tt
           f Wildcard    = var   <$>fresh
+          f (Int i)     = return $ constant (show i)
+          f (Float f)   = return $ constant (show f)
           f(Var v)      = return $ toVar v
           toVar (VName id)    = var' (Just id) (abs$ fromIntegral $ hashString id)
           toVar (Auto  id)    = var id

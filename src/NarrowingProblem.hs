@@ -1,6 +1,5 @@
 {-# LANGUAGE PatternSignatures, PatternGuards, ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -13,19 +12,17 @@ module NarrowingProblem (
      mkBNDPProblem,
      mkLBNDPProblem,
      afProcessor,
-     MkProblem(..), mkGoalProblem,
-     cutWith
+     MkProblem(..), mkGoalProblem
              ) where
 
 import Control.Applicative
 import Control.Exception
+import Control.Monad hiding (join)
 import Control.Monad.Free hiding (note)
-import Control.Monad.Fix (fix)
 import Control.Monad.Writer(execWriter, execWriterT, MonadWriter(..), lift)
 import Control.Monad.State (evalState, evalStateT, modify, MonadState(..))
-import Control.RMonad hiding (join)
 import Data.Foldable (Foldable, foldMap, toList)
-import Data.List (sortBy, inits, unfoldr, isPrefixOf, isSuffixOf, intersect)
+import Data.List (intersect)
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
@@ -36,9 +33,6 @@ import Text.XHtml (toHtml, Html)
 
 import Debug.Observe
 import Debug.Trace
-import Prelude hiding (Monad(..), (=<<), or, and, mapM)
-import qualified Prelude as P
-import qualified Control.Monad as P
 
 import ArgumentFiltering (AF_,AF, LabelledAF, Heuristic, bestHeu, allInner)
 import qualified ArgumentFiltering as AF
@@ -48,6 +42,7 @@ import Utils
 import Types
 import TRS
 import Lattice
+import ExtraVars
 
 import Debug.Trace
 
@@ -64,89 +59,54 @@ mkGoalProblem (FromGoal goal) p = mkGoalProblem (FromAF$ mkGoalAF p goal) p
                    let pp = [ i | (i,m) <- zip [1..] modes, m == G]
                    in AF.fromList [(f,pp) | (f,pp) <- [(functionSymbol goal, pp), (dpSymbol goal, pp)]
                                           ]
-mkGoalProblem (FromAF goalAF) p@(Problem typ trs dps) =
+mkGoalProblem (FromAF goalAF) p@(Problem (getGoalAF -> Nothing) trs dps) = do
+    p' <- evProcessor p
+    let orProblems = [(p' `withGoalAF` af) | af <- invariantEV_rhs p' (AF.init p `mappend` goalAF)]
+    if null orProblems
+      then failP (AFProc Nothing Nothing :: ProcInfo ()) p (toHtml "Could not find a sound AF")
+      else msum (map return orProblems)
+
+mkGoalProblem AllTerms p = return p
+
+-- ------------------------------------------------------------------------
+-- This is the AF processor described in our Dependency Pairs for Narrowing
+-- ------------------------------------------------------------------------
+{-# SPECIALIZE groundRhsP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE groundRhsP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+
+groundRhsP p@(Problem typ trs dps) | isAnyNarrowing typ =
     if null orProblems
       then failP (AFProc Nothing Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
-      else P.msum (map P.return orProblems)
-    where afs        = invariantEV p (AF.init p `mappend` goalAF)
-          bestAfs    = (sortByDefinedness dps . selectBest . Set.toList) afs
-          orProblems = [(p `withGoalAF` af)
-                            | af <- bestAfs]
-
-mkGoalProblem AllTerms p = P.return p
-
-{-
-afProcessor p@(Problem (RewritingAF af) trs dps@TRS{}) =
-    let Problem _ trs' dps' = AF.apply af p in return $ Problem Rewriting trs' dps'
--}
---afProcessor :: (Bottom :<: f, Show id) => ProblemG id f -> ProblemProofG id Html f
-{-# SPECIALIZE afProcessor :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE afProcessor :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-afProcessor p@(Problem (getGoalAF -> Just af) trs dps) =
-  step (AFProc (Just af) Nothing) p (AF.apply af $ Problem Rewriting trs dps)
-
-afProcessor p@(Problem typ trs dps) | isAnyNarrowing typ =
-    if null orProblems
-      then failP (AFProc Nothing Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
-      else P.msum orProblems
-    where afs = findGroundAF (AF.init p) p =<< Set.fromList (rules dps)
+      else msum orProblems
+    where afs = findGroundAF (AF.init p) p =<< rules dps
           orProblems = [step (AFProc (Just af) Nothing) p $
-                                AF.apply af (mkProblem Rewriting trs dps)
-                            | af <- (sortByDefinedness . selectBest . Set.toList) afs]
-          sortByDefinedness = sortBy (flip compare `on` dpsSize)
-          selectBest = unfoldr findOne
-          findOne [] = Nothing
-          findOne (m:xx)
-              | any (\x -> Just True == lt m x) xx = findOne xx
-              | otherwise = Just (m, filter (uncomparableTo m) xx)
-              where uncomparableTo x y = isNothing (lt x y)
-          dpsSize af = size (AF.apply af dps)
+                                AF.apply_rhs p af (mkProblem Rewriting trs dps)
+                        | af <- afs]
+          findGroundAF af0 p@(Problem typ trs dps) (_:->r)
+            | isVar r   = mzero
+            | otherwise = assertGroundDP `liftM` (toList(mkGround r) >>= invariantEV_rhs p)
+            where -- mkGround :: Term f -> Set AF
+              assertGroundDP af = assert (isGround $ AF.apply_rhs p af r) af
+              mkGround t = cutWith (allInner p) af0 t varsp
+                  where varsp = [TRS.note v | v <- vars' (annotateWithPos t), TRS.dropNote v `elem` vars' t]
 
+groundRhsP p = return p
 
-afProcessor p = P.return p
+-- ------------------------------------------------------------------
+-- This is the AF processor described in
+-- "Termination of Narrowing via Termination of Narrowing" (G.vidal)
+-- ------------------------------------------------------------------
+-- The only difference is that we talk of 'sound' AFs instead of 'safe'
+-- Soundness is a syntactic condition whereas safeness is not.
+-- That is, we simply filter all the unbound parameters out,
+-- and no extra vars inserted by pi.
+-- We still assume constructor substitutions and use the AF_rhs trick
 
-sortByDefinedness :: (AF.ApplyAF trs id, Ord id, Size trs) => trs -> [AF_ id] -> [AF_ id]
-sortByDefinedness dps = sortBy (flip compare `on` dpsSize) where dpsSize af = size (AF.apply af dps)
-selectBest = unfoldr findOne where
-          findOne [] = Nothing
-          findOne (m:xx)
-              | any (\x -> Just True == lt m x) xx = findOne xx
-              | otherwise = Just (m, filter (uncomparableTo m) xx)
-              where uncomparableTo x y = isNothing (lt x y)
+-- NOTE: For now assume that this processor is unsound. The AF_rhs trick does not work well.
+--       Some extra conditions are needed which I haven't identified yet.
 
-{-# SPECIALIZE findGroundAF :: AF -> Problem BBasicId -> DP BBasicId -> Set AF #-}
-{-# SPECIALIZE findGroundAF :: AF_ LId -> ProblemG LId BBasicLId -> DP BBasicLId -> Set LabelledAF #-}
---findGroundAF :: forall f id. (Bottom :<: f) => AF -> ProblemG id f -> DP f -> Set (AF_ id)
-findGroundAF af0 p@(Problem typ trs dps) (_:->r)
-  | isVar r   = mzero
-  | otherwise = assertGroundDP `liftM` (mkGround r >>= invariantEV p)
-  where -- mkGround :: Term f -> Set AF
-        mkGround t = cutWith (allInner p) af0 t varsp
-         where varsp   = [TRS.note v | v <- vars' (annotateWithPos t), TRS.dropNote v `elem` vars' t]
-        assertNoExtraVars af = assert (null $ extraVars $ AF.apply af trs) $
-                               assert (null $ extraVars $ AF.apply af dps) af
-        assertGroundDP    af = assert (isGround $ AF.apply af r) af
---      invariantSignature af = AF.fromList [ (IdFunction f, pp) | (IdDP f, pp) <- AF.toList af] `AF.union` af -- I disabled this invariant since I don't think it is necessary. It is not in the theory (I cannot find it, at least)
-
-
-{-# SPECIALIZE cutWith :: Heuristic Id BBasicId -> AF -> Term BBasicId -> [Position] -> Set.Set AF #-}
-cutWith heu af t [] = return af
---cutWith heu af t pp = foldM (\af' p -> (heu af' t p >>= \(f,p) -> return$ AF.cut f p af')) af pp
-cutWith heu af t pp = mconcat `liftM` (mapM (heu af t >=> \(f,p) -> return$ AF.cut f p af) pp)
-
---invariantEV :: AF -> Set AF
-{-# SPECIALIZE invariantEV :: ProblemG LId BBasicLId -> LabelledAF -> Set LabelledAF #-}
-{-# SPECIALIZE invariantEV :: Problem BBasicId -> AF -> Set AF #-}
-invariantEV p@Problem{..} = fix (\f -> subinvariantEV trs f >=> subinvariantEV dps f)
-  where
---        subinvariantEV :: TRS Identifier f -> (AF -> Set AF) -> AF -> Set AF
-        subinvariantEV trs f af
-                | null extra = return af
-                | otherwise  = foldM cutEV af (rules trs) >>= f
-              where extra = extraVars (AF.apply af trs)
-        cutEV af rule@(_:->r)
-            | orig_poss <- note <$> extraVars (AF.applyToRule (getSignature p) af (annotateWithPos <$> rule))
-            = cutWith (bestHeu p) af r orig_poss
+safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
+  step (AFProc (Just af) Nothing) p (AF.apply_rhs p af $ Problem Rewriting trs dps)
 
 -- -----
 -- Modes
@@ -186,14 +146,14 @@ eL g rule@( (open -> Just(T (f::Identifier) tt)) :-> r) div
   lhs_vars = Map.fromListWith meet [ (i, m) | (vv,m) <- map vars' tt `zip` mydiv
                                             , v <- vv
                                             , let Just i = uniqueId v]
-  rhs_vars = lub $ execWriter(evalStateT (P.mapM_ accumVars (properSubterms r)) Map.empty)
+  rhs_vars = lub $ execWriter(evalStateT (mapM_ accumVars (properSubterms r)) Map.empty)
   accumVars t
-   | rootSymbol t == Just g =
-    modify(meet (Map.fromList[(i,m)
-                             | v <- vars' t, let Just i = uniqueId v
-                             , let m = fromMaybe V (Map.lookup i lhs_vars)])) P.>>
-    get P.>>= lift. tell.(:[]) P.>>
-    modify(meet (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
+   | rootSymbol t == Just g = do
+     modify(meet (Map.fromList[(i,m)
+                               | v <- vars' t, let Just i = uniqueId v
+                               , let m = fromMaybe V (Map.lookup i lhs_vars)]))
+     get >>= lift. tell.(:[])
+     modify(meet (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
 
    | otherwise = modify(join (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
 
@@ -225,12 +185,6 @@ divToAFfilterInputs p div = AF.init p `mappend`
 divToAFfilterOutputs trs div = -- AF.init trs `mappend`
                                AF.fromList [ (f,  [ i | (i,m) <- zip [1..] modes, m == G])
                                         | (f,modes) <- Map.toList div]
-
--- ----------
--- Labelling
--- ----------
-type InverseAF = AF
-
 
 -- -----------
 -- Testing

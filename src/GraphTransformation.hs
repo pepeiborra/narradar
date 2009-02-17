@@ -86,8 +86,8 @@ finstantiation p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) si
 
 finstantiation p = return p
 
-capInv :: forall id f. NarradarTRS id f -> Term f -> Term f
-capInv trs@TRS{} t
+capInv :: forall id f. (Ord id, T id :<: f, TRSC f) => NarradarTRS id f -> Term f -> Term f
+capInv trs t
        | collapsing trs = var 0
        | Just (T (s::id) tt) <- open t
        = term s [if isDefined trs' t' then var i else t'
@@ -95,4 +95,4 @@ capInv trs@TRS{} t
        | otherwise = t
   where trs' = tRS (swapRule <$> rules trs) :: NarradarTRS id f
 
-collapsing trs@TRS{} = any (isVar.rhs) (rules trs)
+collapsing trs = any (isVar.rhs) (rules trs)

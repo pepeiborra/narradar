@@ -34,7 +34,7 @@ import Text.PrettyPrint ((<>), parens, punctuate, comma, text, sep)
 import qualified Text.PrettyPrint as Ppr
 
 import TRS hiding (apply)
-import ArgumentFiltering (AF, AF_, ApplyAF(..), init)
+import ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
 import Bottom
 import Identifiers
 import Lattice
@@ -139,6 +139,8 @@ getGoalAF (BNarrowingModes goal) = Just goal
 getGoalAF (LBNarrowingModes goal) = Just goal
 getGoalAF _ = Nothing
 
+getProblemAF = getGoalAF
+
 -- -------------
 -- AF Problems
 -- -------------
@@ -149,21 +151,22 @@ class WithGoalAF t id where
   type T' t id :: *
   withGoalAF :: t -> AF_ id -> T' t id -- :: ProblemG id f -> AF_ id -> ProblemG id f
 
-instance WithGoalAF (ProblemG id f) id where
+instance (WithGoalAF (ProblemType id) id) => WithGoalAF (ProblemG id f) id where
   type T' (ProblemG id f) id = ProblemG id f
-  withGoalAF(Problem Narrowing trs dps)   goal = Problem (NarrowingModes goal) trs dps
-  withGoalAF(Problem BNarrowing trs dps)  goal = Problem (BNarrowingModes goal) trs dps
-  withGoalAF(Problem LBNarrowing trs dps) goal = Problem (LBNarrowingModes goal) trs dps
+  withGoalAF(Problem typ trs dps) goal = Problem (withGoalAF typ goal) trs dps
 
-instance WithGoalAF (ProblemType id) id' where
+instance Show id =>  WithGoalAF (ProblemType id) id' where
   type T' (ProblemType id) id' = ProblemType id'
-  withGoalAF (NarrowingModes af) af'   = NarrowingModes af'
-  withGoalAF (BNarrowingModes af) af'  = BNarrowingModes af'
+  withGoalAF (NarrowingModes   af) af' = NarrowingModes af'
+  withGoalAF (BNarrowingModes  af) af' = BNarrowingModes af'
   withGoalAF (LBNarrowingModes af) af' = LBNarrowingModes af'
-  withGoalAF Rewriting   _ = Rewriting
-  withGoalAF Narrowing   _ = Narrowing
-  withGoalAF LBNarrowing _ = LBNarrowing
-  withGoalAF Prolog      _ = Prolog
+  withGoalAF Narrowing   af = NarrowingModes   af
+  withGoalAF BNarrowing  af = BNarrowingModes  af
+  withGoalAF LBNarrowing af = LBNarrowingModes af
+  withGoalAF Rewriting   _  = Rewriting
+  withGoalAF Prolog      _  = Prolog
+  withGoalAF typ _ = error ("withGoalAF - error: " ++ show typ)
+
 
 data Mode = G | V deriving (Show, Eq, Bounded)
 type Goal = T String Mode
@@ -172,11 +175,16 @@ instance (Bottom.Bottom :<: f, Ord id) => ApplyAF (ProblemG id f) id where
     {-# SPECIALIZE instance ApplyAF (Problem BBasicId) Id #-}
     apply af p@(Problem typ trs dps) = Problem typ (apply af trs) (apply af dps)
 
+instance (Bottom.Bottom :<: f, Ord id) => ApplyAF_rhs (ProblemG id f)  (ProblemG id f) id where
+    {-# SPECIALIZE instance ApplyAF_rhs (Problem BBasicId) (Problem BBasicId) Id #-}
+    apply_rhs _ af p@(Problem typ trs dps) = Problem typ (apply_rhs p af trs) (apply_rhs p af dps)
+
 -- ------------
 -- Processors
 -- ------------
 data ProcInfo id where
     AFProc :: Show id => Maybe (AF_ id) -> Maybe (Division id) -> ProcInfo id
+    EVProc :: Show id => AF_ id -> ProcInfo id
     DependencyGraph :: Graph -> ProcInfo ()
     Polynomial      :: ProcInfo ()
     External        :: ExternalProc -> ProcInfo ()
@@ -196,8 +204,9 @@ instance Show id => Show (ProcInfo id) where
     show FInstantiationP  = "Forward Instantiation"
     show (AFProc (Just af) Nothing) = show af
     show (AFProc (Just af) (Just div)) = show af ++ showParen True (shows (Map.toList div)) ""
+    show (EVProc af)      = "Eliminate Extra Vars \n" ++ show af
     show (AFProc Nothing _) = "Argument Filtering"
-    show (Polynomial)    = "Polynomial ordering"
+    show (Polynomial)     = "Polynomial ordering"
     show PrologP          = "Termination of LP as termination of Leftmost Basic Narrowing"
     show PrologSKP        = "Termination of LP as termination of Leftmost Basic Narrowing \n (Schneider-Kamp transformation)"
     show LabellingSKP     = "Termination of LP as termination of Leftmost Basic Narrowing \n (Schneider-Kamp transformation + Labelling)"
