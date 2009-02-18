@@ -130,6 +130,7 @@ instance Monad m => MPlus (FreeT (ProofF f s) m) (FreeT (ProofF f s) m) (FreeT (
                                  unFreeT (wrap(choiceP s1 s2))
 -}
 
+instance Monad m => MonadZero (FreeT (ProofF s) m) where mzeroM = wrap(Impure MZero)
 instance Monad m => MPlus (FreeT (ProofF s) m) (FreeT (ProofF s) m) (FreeT (ProofF s) m) where
     mplus m1 m2 = FreeT $ returnM $ Right (MPlus m1 m2)
 
