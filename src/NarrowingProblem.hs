@@ -8,33 +8,33 @@
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances #-}
 
 module NarrowingProblem (
-     mkNDPProblem,
-     mkBNDPProblem,
-     mkLBNDPProblem,
-     afProcessor,
-     MkProblem(..), mkGoalProblem
-             ) where
+     mkGoalProblem, mkGoalProblem_rhs,
+     groundRhsOneP, groundRhsAllP,
+     safeAFP,
+     MkGoalProblem(..)) where
 
 import Control.Applicative
 import Control.Exception
-import Control.Monad hiding (join)
+import Control.Monad hiding (join, mapM)
 import Control.Monad.Free hiding (note)
 import Control.Monad.Writer(execWriter, execWriterT, MonadWriter(..), lift)
 import Control.Monad.State (evalState, evalStateT, modify, MonadState(..))
 import Data.Foldable (Foldable, foldMap, toList)
-import Data.List (intersect)
+import Data.List (intersect, (\\))
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Map (Map)
 import Data.Set (Set)
+import Data.Traversable
 import Text.XHtml (toHtml, Html)
+import Prelude hiding (mapM)
 
 import Debug.Observe
 import Debug.Trace
 
-import ArgumentFiltering (AF_,AF, LabelledAF, Heuristic, bestHeu, allInner)
+import ArgumentFiltering (AF_,AF, LabelledAF, Heuristic, bestHeu, typeHeu)
 import qualified ArgumentFiltering as AF
 import DPairs
 import Proof
@@ -43,54 +43,81 @@ import Types
 import TRS
 import Lattice
 import ExtraVars
+import Language.Prolog.TypeChecker
 
 import Debug.Trace
 
-data MkProblem id = FromGoal Goal | FromAF (AF_ id) | AllTerms
+data MkGoalProblem id = FromGoal Goal (Maybe TypeAssignment) | FromAF (AF_ id) (Maybe TypeAssignment) | AllTerms
 
-mkNDPProblem   mb_goal trs = mkGoalProblem mb_goal $ mkProblem Narrowing   trs (tRS $ getNPairs trs)
-mkBNDPProblem  mb_goal trs = mkGoalProblem mb_goal $ mkProblem BNarrowing  trs (tRS $ getPairs trs)
-mkLBNDPProblem mb_goal trs = mkGoalProblem mb_goal $ mkProblem LBNarrowing trs (tRS $ getPairs trs)
-
-mkGoalProblem (FromGoal goal) p = mkGoalProblem (FromAF$ mkGoalAF p goal) p
+mkGoalProblem :: (DPMark f id, Lattice (AF_ id), Bottom :<: f) => MkGoalProblem id -> ProblemG id f -> ProblemProofG id Html f
+mkGoalProblem (FromGoal goal typ) p = mkGoalProblem (FromAF (mkGoalAF p goal) typ) p
    where
     mkGoalAF :: (DPSymbol id, Show id, Ord id, SignatureC sig id) => sig -> Goal -> AF_ id
     mkGoalAF p (T goal modes) = AF.init p `mappend`
                    let pp = [ i | (i,m) <- zip [1..] modes, m == G]
                    in AF.fromList [(f,pp) | (f,pp) <- [(functionSymbol goal, pp), (dpSymbol goal, pp)]
                                           ]
-mkGoalProblem (FromAF goalAF) p@(Problem (getGoalAF -> Nothing) trs dps) = do
-    p' <- evProcessor p
-    let orProblems = [(p' `withGoalAF` af) | af <- invariantEV_rhs p' (AF.init p `mappend` goalAF)]
-    if null orProblems
-      then failP (AFProc Nothing Nothing :: ProcInfo ()) p (toHtml "Could not find a sound AF")
-      else msum (map return orProblems)
+mkGoalProblem (FromAF goalAF Nothing) p@(Problem (getGoalAF -> Nothing) trs dps) = do
+--    p' <- evProcessor p
+    let extendedAF = goalAF `mappend` extendAFToTupleSymbols goalAF
+    let orProblems = [(p `withGoalAF` af) | af <- invariantEV (bestHeu p) p (extendedAF)]
+    assert (not $ null orProblems) $ msum (map return orProblems)
+
+mkGoalProblem (FromAF goalAF (Just typing)) p@(Problem (getGoalAF -> Nothing) trs dps) = do
+--    p' <- evProcessor p
+    let extendedAF = goalAF `mappend` extendAFToTupleSymbols goalAF
+    let orProblems = [(p `withGoalAF` af `withTyping` typing) | af <- invariantEV (typeHeu typing) p (extendedAF)]
+    assert (not $ null orProblems) $ msum (map return orProblems)
 
 mkGoalProblem AllTerms p = return p
 
+extendAFToTupleSymbols = AF.mapSymbols markDPSymbol
 -- ------------------------------------------------------------------------
 -- This is the AF processor described in our Dependency Pairs for Narrowing
 -- ------------------------------------------------------------------------
-{-# SPECIALIZE groundRhsP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE groundRhsP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-
-groundRhsP p@(Problem typ trs dps) | isAnyNarrowing typ =
+{-# SPECIALIZE groundRhsOneP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE groundRhsOneP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+groundRhsOneP :: (Bottom :<: f, Lattice (AF_ id), DPMark  f id) => ProblemG id f -> ProblemProofG id Html f
+groundRhsOneP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
-      then failP (AFProc Nothing Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
       else msum orProblems
-    where afs = findGroundAF (AF.init p) p =<< rules dps
-          orProblems = [step (AFProc (Just af) Nothing) p $
-                                AF.apply_rhs p af (mkProblem Rewriting trs dps)
+    where heu        = maybe (bestHeu p) typeHeu (getTyping typ)
+          afs        = findGroundAF heu pi_groundInfo (AF.init p) p =<< rules dps
+          orProblems = [ step (GroundOne (Just af)) p $
+                                AF.apply af (mkProblem Rewriting trs dps)
                         | af <- afs]
-          findGroundAF af0 p@(Problem typ trs dps) (_:->r)
-            | isVar r   = mzero
-            | otherwise = assertGroundDP `liftM` (toList(mkGround r) >>= invariantEV_rhs p)
-            where -- mkGround :: Term f -> Set AF
-              assertGroundDP af = assert (isGround $ AF.apply_rhs p af r) af
-              mkGround t = cutWith (allInner p) af0 t varsp
-                  where varsp = [TRS.note v | v <- vars' (annotateWithPos t), TRS.dropNote v `elem` vars' t]
 
-groundRhsP p = return p
+groundRhsOneP p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowingProblem p = groundRhsOneP (p `withGoalAF` AF.init p)
+groundRhsOneP p = return p
+
+findGroundAF heu pi_groundInfo af0 p (_:->r)
+  | isVar r   = mzero
+  | otherwise = (toList(mkGround r) >>= invariantEV heu p)
+            where
+          --    assertGroundDP af = let af' = goalAF_inv `mappend` af in assert (isGround $ AF.apply af' r) af
+              mkGround t = cutWith heu af0 t varsp -- TODO Fix: cut one at a time
+                  where varsp = [TRS.note v | v <- vars' (annotateWithPos t)] \\
+                                [TRS.note v | v <- subterms (AF.apply pi_groundInfo $ annotateWithPos t)]
+
+-- ------------------------------------------------------------------------
+-- A variation for use with SCCs
+-- ------------------------------------------------------------------------
+{-# SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+groundRhsAllP :: (Bottom :<: f, Lattice (AF_ id), DPMark  f id) => ProblemG id f -> ProblemProofG id Html f
+groundRhsAllP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
+    if null orProblems
+      then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      else msum orProblems
+    where heu        = maybe (bestHeu p) typeHeu (getTyping typ)
+          afs        = foldM (\af -> findGroundAF heu pi_groundInfo af p)  (AF.init p) (rules dps)
+          orProblems = [ step (GroundAll (Just af)) p $
+                                AF.apply af (mkProblem Rewriting trs dps)
+                        | af <- afs]
+
+groundRhsAllP p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowingProblem p = groundRhsAllP (p `withGoalAF` AF.init p)
+groundRhsAllP p = return p
 
 -- ------------------------------------------------------------------
 -- This is the AF processor described in
@@ -104,87 +131,32 @@ groundRhsP p = return p
 
 -- NOTE: For now assume that this processor is unsound. The AF_rhs trick does not work well.
 --       Some extra conditions are needed which I haven't identified yet.
-
+safeAFP :: (Bottom :<: f, DPMark f id) => ProblemG id f -> ProblemProofG id Html f
 safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
-  step (AFProc (Just af) Nothing) p (AF.apply_rhs p af $ Problem Rewriting trs dps)
+  step (GroundAll (Just af)) p (AF.apply_rhs p af $ Problem Rewriting trs dps)
+safeAFP p = return p
 
--- -----
--- Modes
--- -----
+mkBNDPProblem_rhs  mb_goal trs = mkGoalProblem_rhs mb_goal $ mkProblem BNarrowing trs (tRS $ getPairs trs)
 
--- | Receives an initial goal (its modes) and a TRS and returns a Division
-computeDivision,computeDivisionL :: (Identifier ~ id, TRSC f, T id :<: f, DPMark f id) => NarradarTRS id f -> Goal -> Division id
-computeDivision  = computeDivision_ e
-computeDivisionL = computeDivision_ (observe "eL" eL)
+mkGoalProblem_rhs (FromGoal goal typ) p = mkGoalProblem (FromAF (mkGoalAF p goal) typ) p
+   where
+    mkGoalAF :: (DPSymbol id, Show id, Ord id, SignatureC sig id) => sig -> Goal -> AF_ id
+    mkGoalAF p (T goal modes) = AF.init p `mappend`
+                   let pp = [ i | (i,m) <- zip [1..] modes, m == G]
+                   in AF.fromList [(f,pp) | (f,pp) <- [(functionSymbol goal, pp), (dpSymbol goal, pp)]]
+mkGoalProblem_rhs (FromAF goalAF Nothing) p@(Problem (getGoalAF -> Nothing) trs dps) = do
+--    p' <- evProcessor p
+    let extendedAF = goalAF `mappend` extendAFToTupleSymbols goalAF
+    let orProblems = [(p `withGoalAF` af) | af <- invariantEV_rhs (bestHeu p) p (extendedAF)]
+    assert (not $ null orProblems) $ msum (map return orProblems)
 
--- | Receives an initial goal (its modes) and a TRS and returns a Division
---computeDivision :: (Identifier ~ id, TRSC f, T id :<: f) => T id Mode -> TRS id f -> Division id
-computeDivision_ e trs (T id_ tt) = Map.singleton id tt `meet` fixEq go div0
-  where
-    id = IdFunction id_
---    div0 :: Division Identifier
-    div0 = Map.fromList ((id,tt) : [(id,replicate ar G)
-                                    | id <- Set.toList(Set.delete id $ definedSymbols sig)
-                                    , let ar = getArity sig id])
-    sig  = getSignature trs
---    go :: Division Identifier -> Division Identifier
-    go = observe "iteration" go'
-    go' div = Map.mapWithKey (\f b ->
-             lub (b : [ bv trs f (e f rule div) div r
-                       | rule@(l:->r) <- rules trs])) div
+mkGoalProblem_rhs (FromAF goalAF (Just typing)) p@(Problem (getGoalAF -> Nothing) trs dps) = do
+--    p' <- evProcessor p
+    let extendedAF = goalAF `mappend` extendAFToTupleSymbols goalAF
+    let orProblems = [(p `withGoalAF` af `withTyping` typing) | af <- invariantEV_rhs (typeHeu typing) p (extendedAF)]
+    assert (not $ null orProblems) $ msum (map return orProblems)
 
-e _g ( (open -> Just(T (f::Identifier) tt)) :-> _r) div =
-        Map.fromListWith meet
-               [ (i, m) | (vv,m) <- map vars' tt `zip` mydiv, v <- vv, let Just i = uniqueId v]
-     where Just mydiv = Map.lookup f div
-
-eL g rule@( (open -> Just(T (f::Identifier) tt)) :-> r) div
-  | rootSymbol r == Just g = e g rule div
-  | otherwise = lhs_vars `meet` rhs_vars
- where
-  Just mydiv = Map.lookup f div
-  lhs_vars = Map.fromListWith meet [ (i, m) | (vv,m) <- map vars' tt `zip` mydiv
-                                            , v <- vv
-                                            , let Just i = uniqueId v]
-  rhs_vars = lub $ execWriter(evalStateT (mapM_ accumVars (properSubterms r)) Map.empty)
-  accumVars t
-   | rootSymbol t == Just g = do
-     modify(meet (Map.fromList[(i,m)
-                               | v <- vars' t, let Just i = uniqueId v
-                               , let m = fromMaybe V (Map.lookup i lhs_vars)]))
-     get >>= lift. tell.(:[])
-     modify(meet (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
-
-   | otherwise = modify(join (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
-
-
-bv,bv' :: forall p id f . (Show id, Observable id, SignatureC p id, T id :<: f, TRSC f) =>
-          p -> id -> DivEnv -> Division id -> Term f -> [Mode]
-bv trs = observe "bv" (bv' trs)
-bv' trs g rho div (open -> Just Var{}) = replicate (getArity (getSignature trs) g) G
-bv' trs g rho div me@(open -> Just (T (f::id) tt))
---      | isConstructor trs me = bt
-      | f /= g    = bt
-      | otherwise = bt `join` (be <$> tt)
-     where
-       bt  = lub (bv trs g rho div <$> tt)
-       be  = observe "be" be'
-       be' (open -> Just (Var _ i)) | Just xrho <- Map.lookup i rho = xrho
-       be' me@(open -> Just (T (f::id) tt))
-                 -- note that this filters more than the algorithm in the paper
-        | In me' <- AF.apply (divToAFfilterOutputs trs div) me = lub $ toList (be <$> me')
-
-
--- | Returns an AF which filters ground arguments from the TRS and also from the DPs.
-divToAFfilterInputs p div = AF.init p `mappend`
-                            AF.fromList (concat [ [(f, outputs ), (markDPSymbol f, outputs)]
-                                                | (f,modes) <- Map.toList div
-                                                , let outputs = [ i | (i,m) <- zip [1..] modes, m == V]])
-
--- | Filter variables.
-divToAFfilterOutputs trs div = -- AF.init trs `mappend`
-                               AF.fromList [ (f,  [ i | (i,m) <- zip [1..] modes, m == G])
-                                        | (f,modes) <- Map.toList div]
+mkGoalProblem_rhs AllTerms p = return p
 
 -- -----------
 -- Testing

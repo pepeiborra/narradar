@@ -13,6 +13,8 @@ maintainer:          pepeiborra@gmail.com
 Flag base4
 Flag web
    default: False
+Flag debug
+   default: False
 
 Executable narradar
   if flag(base4)
@@ -20,13 +22,15 @@ Executable narradar
      build-depends:     base >= 4
   else
      build-depends:     base < 4
+  if flag(debug)
+     cpp-options: -DDEBUG
   main-is:             Main.hs
   ghc-options:         
   hs-source-dirs:         src
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
      TRS >= 0.21.20080206, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, lattice, 
-     parsec, GHood, prolog
+     parsec, GHood, prolog, regex-posix, unix
   other-modules: 
      Types,
      MonadSupply,

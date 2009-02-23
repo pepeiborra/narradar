@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE PatternSignatures, TypeSynonymInstances #-}
@@ -5,29 +6,39 @@
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module ArgumentFiltering where
 
 import Control.Applicative
 import Control.Arrow (first, second)
 import Control.Monad (liftM,liftM2,guard)
-import Data.List ((\\), intersperse, inits)
+import Control.Monad.Fix (fix)
+import Data.List ((\\), intersperse, partition, find, inits)
 import Data.Map (Map)
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Foldable as Foldable
+import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
 import Data.Monoid
 import Prelude hiding (lookup, map, and, or)
-import qualified Prelude
+import qualified Prelude as P
 
 import Bottom
 import Identifiers
 import TRS hiding (apply)
 import Utils
 import Lattice
+import Language.Prolog.Syntax      (Atom)
+import Language.Prolog.TypeChecker (TypeAssignment)
+
+#ifdef DEBUG
+import Debug.Trace
+#else
+trace _ x = x
+#endif
 
 newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord)
 type AF = AF_ Identifier
@@ -69,32 +80,34 @@ lookup    :: (Ord id, Monad m) => id -> AF_ id -> m [Int]
 fromList  :: Ord id => [(id,[Int])] -> AF_ id
 singleton :: Ord id => id -> [Int] -> AF_ id
 init      :: (SignatureC sig id, Show id) => sig -> AF_ id
+initBottom:: (SignatureC sig id, Show id) => sig -> AF_ id
+map       :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
+mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
+filter    :: Ord id => (id -> Set Int -> Bool) -> AF_ id -> AF_ id
+invert :: (Ord id, Show id, TRS a id f) => a -> AF_ id -> AF_ id
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show id)
                      Just af -> AF $ Map.insertWith (flip Set.difference) id (Set.singleton i) m
 cutAll xx af     = Prelude.foldr (uncurry cut) af xx
 lookup id (AF m) = maybe (fail "not found") (return.Set.toList) (Map.lookup id m)
-fromList         = AF . Map.fromListWith Set.intersection . Prelude.map (second Set.fromList)
+fromList         = AF . Map.fromListWith Set.intersection . P.map (second Set.fromList)
 toList (AF af)   = Map.toList (Map.map Set.toList af)
 singleton id ii  = fromList [(id,ii)]
-map :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
 map f (AF af) = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
-
-mapKeys f (AF af) = AF (Map.mapKeys f af)
-
-invert :: (Ord id, Show id, TRS a id f) => a -> AF_ id -> AF_ id
+mapSymbols f (AF af) = AF (Map.mapKeys f af)
+filter f (AF af) = AF (Map.filterWithKey f af)
 invert rules (AF af) = AF (Map.mapWithKey (\f ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii) af)
   where sig = getSignature rules -- :: Signature (IdFunctions :+*: IdDPs)
-
---init :: (SignatureC sig id) => sig -> AF_ id
 init t | sig <- getSignature t = fromList
     [ (d, [1 .. getArity sig d])
-          | d <- Foldable.toList(definedSymbols sig `mappend` constructorSymbols sig)
+          | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)
           , getArity sig d > 0]
+initBottom t | sig <- getSignature t = fromList
+    [ (d, []) | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)]
 
 --instance Convert (AF_ id) (AF_ id) where convert = id
-instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapKeys convert
+instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapSymbols convert
 
 -- ----------------------
 -- Regular AF Application
@@ -164,50 +177,74 @@ type Heuristic id f = AF_ id -> Term f -> Position -> Set (id, Int)
 {-# noSPECIALIZE bestHeu :: NarradarTRS Id BBasicId -> AF -> Term BBasicId -> Position -> Set (Id,Int) #-}
 
 bestHeu :: (Foldable f, DPSymbol id, T id :<: f, SignatureC sig id) => sig -> Heuristic id f
-bestHeu = predHeu allInner (noConstructors ...|... cond isDP ===> notNullArity ...&... noUs ) `or` allInner
+bestHeu (getSignature -> sig) =
+    predHeuAll  allInner (noConstructors sig ..|..
+                         (cond (isDPSymbol.fst) ==> notNullArity ..&.. noUs))
+     `or`
+    (((Set.fromList .).) . allInner)
 
-innermost _ _ _ [] = mempty
-innermost p af t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
-outermost _ _ _ [] = mempty
-outermost p af t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
+innermost _ _ [] = mempty
+innermost af t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
+outermost _ _ [] = mempty
+outermost af t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
 
-predHeu _     _    _ _  _ []  = mempty
-predHeu strat pred p af t pos = fst $ Set.partition (pred p af . fst) (strat p af t pos)
+predHeuAll _     _    _  _ []  = mempty
+predHeuAll strat pred af t pos = Set.fromList $ fst $ partition (pred af) (strat af t pos)
 
-allInner _ _  _ []  = mempty
-allInner _ af t pos = Set.fromList [(root, last sub_p)
+predHeuOne _     _    _  _ []  = mempty
+predHeuOne strat pred af t pos = maybe mempty Set.singleton $ find (pred af) (strat af t pos)
+
+allInner _  _ []  = mempty
+allInner af t pos =  [(root, last sub_p)
                                     | sub_p <- reverse (tail $ inits pos)
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 
+--typeHeu :: Foldable f => Signature Atom -> TypeAssignment -> Heuristic id f
+typeHeu assig =
+    predHeuOne allInner (\ _ (p,i) -> (Set.notMember (symbol p) constructorSymbols)
+                                    ||
+                                      (Set.notMember (symbol p,i) unboundedPositions))
+  where constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
+        unboundedPositions = fix unboundedF reflexivePositions
+        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
+        unboundedF f uu | null new = uu
+                        | otherwise= f(Set.fromList new `mappend` uu)
+           where new =  [ p | c <- assig
+                            , p <- F.toList c
+                            , p `Set.notMember` uu
+                            , (g,0) <- F.toList (Set.delete p c)
+                            , any (`Set.member` uu) (zip (repeat g) [1..getArity g])]
+        reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
+        getArity g | Just i <- Map.lookup g arities = i
+        arities = Map.fromListWith max (concatMap F.toList assig) :: Map Atom Int
+
 -- Predicates
 -- ----------
-noConstructors p _ = not . (`Set.member` constructorSymbols (getSignature p))
+noConstructors sig _pi (f,_) = f `Set.notMember` constructorSymbols sig
 
-noUs _ _ (symbol -> ('u':'_':_)) = False
-noUs _ _ _ = True
+noUs _ (symbol -> ('u':'_':_),_) = False
+noUs _ _ = True
 
-noDPs _ _ = not . isDP
+noDPs _ = not . isDPSymbol . fst
 
-noUsDPs _ _ s@(symbol -> ('u':'_':_)) = not(isDP s)
-noUsDPs _ _ _ = True
+noUsDPs _ s@(symbol -> ('u':'_':_),_) = not(isDPSymbol s)
+noUsDPs _ _ = True
 
-notNullArity _ af s | Just [_] <- lookup s af = False
-                    | otherwise               = True
+notNullArity af (s,_) | Just [_] <- lookup s af = False
+                      | otherwise               = True
 
-and h1 h2 p af t pos = let
-    afs1 = h1 p af t pos
-    afs2 = h2 p af t pos
+-- Combinators
+-- -----------
+and h1 h2 af t pos = let
+    afs1 = h1 af t pos
+    afs2 = h2 af t pos
     in afs1 `Set.intersection` afs2
 
-or h1 h2 p af t pos =  case h1 p af t pos of
-                        afs | Set.null afs -> h2 p af t pos
+or h1 h2 af t pos =  case h1 af t pos of
+                        afs | Set.null afs -> h2 af t pos
                             | otherwise    -> afs
 
-(...&...) = (liftM2.liftM2.liftM2) (&&) --(f &...& g) x y z = f x y z && g x y
-(...|...) = (liftM2.liftM2.liftM2) (||)
-f ===> g = (((not.).). f) ...|... g
-cond f _ _ x = f x
+cond f _ x = f x
 
-infixr 3 ...&...
-infixr 3 ...|...
-infixr 2 ===>
+f ==> g = ((not.). f) ..|.. g
+infixr 2 ==>

@@ -107,6 +107,7 @@ instance (Functor f, Monad m) => Bind (FreeT f m) (FreeT f m) (FreeT f m) where
              Right xc -> returnM . Right $ fmap (>>= f) xc
 
 instance (Functor f, Monad m) => Bind (Free f) (FreeT f m) (FreeT f m) where m >>= f = (wrap m `asTypeOf1` f undefined)  >>= f
+instance (Functor f, Monad m) => Bind (FreeT f m) (Free f) (FreeT f m) where m >>= f = m >>= \v -> (wrap$ f v) `asTypeOf1` m
 
 liftFree :: (Functor f, Monad m) => (a -> Free f b) -> (a -> FreeT f m b)
 liftFree f = wrap . f

@@ -1,106 +1,144 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PackageImports, NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GADTs #-}
 
-{-
-  This module needs to be reconverted to use GetOpt.
-  Right now there are two many options and because the
-  ad-hoc approach used is not composable, it is hard to
-  add support for Basic Narrowing and/or for Prolog.
--}
 module Main where
 
-import "monad-param" Control.Monad.Parameterized
+import Control.Applicative
+-- import "monad-param" Control.Monad.Parameterized
+import Control.Monad
 import Data.List
+import Data.Maybe
+import Data.Monoid
 import System.Cmd
 import System.Environment
 import System.Exit
 import System.IO
+import System.Posix.Process
+import System.Posix.Signals
+import System.Console.GetOpt
 import Text.Printf
+import Text.Regex.Posix
 import Text.XHtml as Html
 
 
-import Prelude hiding (Monad(..))
+import Prelude -- hiding (Monad(..))
 import qualified Prelude as P
 
 import PrologProblem
 import TRS.FetchRules
 import TRS.FetchRules.TRS
 import Types hiding ((!))
+import DPairs
 import Utils
 import qualified Solver
-import Solver -- hiding (prologSolver)
-import Proof
+import Solver
+import Proof hiding (problem)
 import GraphViz
 import NarrowingProblem
 import Control.Monad.Free
 import Aprove
 
--- prologSolver = allSolver' (wrap' . aproveWebProc)
+returnM = return
 
 main :: IO ()
 main = do
+#ifndef GHCI
+  installHandler sigALRM  (Catch (putStrLn "timeout" >> exitImmediately (ExitFailure (-1)))) Nothing
+#endif
+  (Options{..}, _, errors) <- getOptions
+  sol <- runSolver solver (htmlProof problem)
+  putStrLn$ if isSuccess sol then "YES" else "NO"
+  when diagrams $ withTempFile "." "narradar.dot" $ \fp h -> do
+        hPutStrLn h (pprDot sol)
+        hFlush h
+        system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
+        -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
+        return ()
+
+-- ------------------------------
+-- Command Line Options handling
+-- ------------------------------
+usage = "Narradar - Automated Narrowing Termination Proofs"
+
+getOptions = do
   args <- getArgs
-  case args of
---    [file, "SKEL"]      -> parseIt file (print.pprSkelt. (startSolver >=> pureSolver))
---    [file, "DOT"]       -> parseIt file (putStrLn.pprDot.(startSolver >=> pureSolver))
-    [file, "SRV"]       -> readFile file >>= work Nothing file narradarSolver
-    [file, "WEB"]       -> readFile file >>= work Nothing file webSolver
-    [file, "GOAL", goal]-> readFile file >>= work (either (error.show) Just $ parseGoal goal) file narradarSolver
-    ["PROLOG"]          -> getContents   P.>>= workProlog [] "narradar" prologSolver
-    (file : "PROLOG" :g)-> readFile file P.>>= workProlog g file prologSolver
-    (file : g) | ".pl" `isSuffixOf` file -> readFile file >>= workProlog g file prologSolver
---    [file, aprove_path] -> readFile file >>= work Nothing file (localSolver' aprove_path)
-    [file]              -> readFile file >>= work Nothing file narradarSolver
-    _ -> do n <- getProgName
-            putStrLn$ "Narradar - Automated Narrowing Termination Proofs\n USAGE: " ++ n ++
-                        " <system.trs> [path_to_aprove|SRV|WEB|DOT|SKEL|SERIAL]"
-  where parseIt contents k = do
-              case parseFile trsParser "" contents of
-                Left error -> print error >> exitWith (ExitFailure 1)
-                Right (trs_ :: [Rule Basic]) -> k (mkTRS trs_ :: NarradarTRS Id BBasicId)
+  let (actions, nonOptions, errors) = getOpt Permute opts args
+  flags0@Flags{..} <- foldl (>>=) (return defFlags) actions
+  let solverFlag' = if (".pl" `isSuffixOf` problemFile) && isNothing solverFlag then "PL" else fromMaybe "N" solverFlag
+      problemFile = fromMaybe "INPUT" (listToMaybe nonOptions)
+      someSolver  = parseSolver solverFlag'
+  input <- maybe getContents readFile (listToMaybe nonOptions)
+  opts <- case (getSolver someSolver Labeller, getSolver someSolver Simple, parsePrologProblem input goalFlags, parseFile trsParser problemFile input) of
+             (Just (Prolog, s),_, Right p,_) -> return (Options Prolog problemFile (return p) s diagramsFlag)
+             (_,Just (typ, s), _, Right (trs :: [Rule Basic])) ->
+                 let p = mkGoalProblem (maybe AllTerms (`FromGoal` Nothing) $ listToMaybe
+                                                     (map (either (error.show) id . parseGoal) goalFlags))
+                                       (mkDPProblem typ (mkTRS trs))
+                 in return (Options typ problemFile p s diagramsFlag)
+             (Just (Prolog, _), _, Left parseError, _) -> putStrLn parseError >> exitWith (ExitFailure 1)
+             (_, _, _, Left parseError)                -> print parseError    >> exitWith (ExitFailure 1)
+  return (opts, nonOptions, errors)
 
---        work :: Maybe Goal -> String -> Solver Identifier Html IO BBasicId -> String -> IO ()
-        work (goal::Maybe Goal) file slv txt = parseIt txt $ \trs -> do
-                  sol :: ProblemProofG Id Html BBasicId <- runSolver slv (mkNDPProblem (maybe AllTerms FromGoal goal) trs)
-                  putStr (renderHtml (page sol))
-                  withTempFile "." "narradar.dot" $ \fp h -> do
-                                hPutStrLn h (pprDot sol)
-                                hFlush h
-                                putStrLn (pprDot sol)
-                                system (printf "dot -Tpdf %s -o %s.pdf" fp file)
-                                hPutStrLn stderr (printf "Log written to %s.pdf" file)
-        workProlog gg file slv txt = do
-                  case parsePrologProblem txt gg of
-                    Left parseError -> putStrLn parseError >> exitWith (ExitFailure 1)
-                    Right (p :: ProblemG Identifier BBasicId) -> do
-                                sol :: ProblemProofG LId Html BBasicLId <- runSolver slv (htmlProof $ P.return p)
-                                putStrLn$ if isSuccess sol then "YES" else "NO"
-                                withTempFile "." "narradar.dot" $ \fp h -> do
-                                 hPutStrLn h (pprDot sol)
-                                 hFlush h
-                                 system (printf "dot -Tpdf %s -o %s.pdf " fp file)
-                                 -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
-                                 return ()
+data Options = forall id f . Options { problemType :: ProblemType id
+                                     , problemFile :: FilePath
+                                     , problem     :: ProblemProofG id Html f
+                                     , solver      :: LSolver id f
+                                     , diagrams    :: Bool
+                                     }
 
+data Flags id = Flags { solverFlag      :: Maybe String
+                      , goalFlags       :: [String]
+                      , diagramsFlag    :: Bool
+                      }
 
-page res = myhead +++ body << divres where
-  myhead = header << ( thetitle << title
-                   +++ cssSheet "style/narradar.css"
-                   +++ cssSheet "style/thickbox.css"
-                   +++ map jsScript [ "scripts/narradar.js"
-                                    , "scripts/jquery.pack.js"
-                                    , "scripts/jquery.form.js"
-                                    , "scripts/jquery.blockUI.js"
-                                    , "scripts/thickbox.js"
-                                    ])
-  title  = if isSuccess res
-             then "Termination was proved succesfully"
-             else "Termination could not be proven"
-  divres = thediv ! [Html.identifier "title"] << h3 << title +++ res
+defFlags = Flags{ solverFlag       = Nothing
+                , goalFlags        = []
+                , diagramsFlag     = True
+                }
+--opts :: [OptDescr (Flags f id -> Flags f id)]
+opts = [ Option "s" ["solver"]  (ReqArg (\arg opts -> returnM opts{solverFlag = Just arg}) "DESC")            "DESC = N | BN | PL [LOCAL path|WEB|SRV timeout] (default: automatic)"
+       , Option "g" ["goal"]    (ReqArg (\arg opts -> returnM opts{goalFlags  = arg : goalFlags opts}) "GOAL") "Goal to be solved, if any. Multiple goals can be introduced in separate uses of this flag"
+       , Option ""  ["nodiagrams"] (NoArg $ \opts  -> returnM opts{diagramsFlag = False})                     "Do not produce a pdf proof file"
+       , Option "t" ["timeout"] (ReqArg (\arg opts -> scheduleAlarm (read arg) >> return opts) "SRCONDS")     "Timeout in seconds (default:none)"
+       , Option "h?" ["help"]   (NoArg  (\   _     -> putStrLn(usageInfo usage opts) >> exitSuccess))         "Displays this help screen"
+       ]
 
+type LSolver id f = ProblemG id f -> PPT LId BBasicLId Html IO
+data SomeSolver where LabelSolver  :: ProblemType Id  -> LSolver Id  BBasicId  -> SomeSolver
+                      SimpleSolver :: ProblemType LId -> LSolver LId BBasicLId -> SomeSolver
+data SolverType id f where Labeller :: SolverType Id BBasicId
+                           Simple   :: SolverType LId BBasicLId
 
-cssSheet src = thelink ! [rel "stylesheet", thetype "text/css", href src] << noHtml
-jsScript thesrc = script ! [thetype "text/javascript", src thesrc] << noHtml
+getSolver :: SomeSolver -> SolverType id f -> Maybe (ProblemType id, LSolver id f)
+getSolver (LabelSolver  typ s) Labeller = Just (typ, s)
+getSolver (SimpleSolver typ s) Simple   = Just (typ, s)
+getSolver _ _ = Nothing
+
+parseSolver "N"      = SimpleSolver Narrowing  narradarSolver
+parseSolver "BN"     = SimpleSolver BNarrowing narradarSolver
+parseSolver "PL"     = LabelSolver Prolog      prologSolver
+parseSolver "PL_rhs" = LabelSolver Prolog      prologSolver_rhs
+parseSolver "PL_one" = LabelSolver Prolog      prologSolver_one
+parseSolver "PL_noL" = LabelSolver Prolog      prologSolver_noL
+parseSolver ('P':'L':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver' k)
+parseSolver ('P':'L':'_':'r':'h':'s':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_rhs' k)
+parseSolver ('P':'L':'_':'o':'n':'e':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_one' k)
+parseSolver _ = error "Could not parse the description. Expected (LOCAL path|WEB|SRV timeout)"
+
+parseAprove = go1 where
+    go0 _                                 = Nothing
+    go1 (prefixedBy "SRV"   -> Just timeout) | [(t,[])] <- reads timeout = Just (aproveSrvP t)
+    go1 (prefixedBy "WEB"   -> Just [])   = Just aproveWebP
+    go1 (prefixedBy "LOCAL "-> Just path) = Just $ aproveLocalP path
+    go1 _                                 = Nothing
+
+prefixedBy [] xx = Just xx
+prefixedBy (p:pp) (x:xx) | p == x = prefixedBy pp xx
+                         | otherwise = Nothing

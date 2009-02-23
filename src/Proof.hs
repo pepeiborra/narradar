@@ -115,8 +115,8 @@ instance MPlus (Free (ProofF s)) (Free (ProofF s)) (Free (ProofF s))  where
 -- ------------------
 -- we are going to need a monad transformer (for the Aprove proc)
 
-type ProofT s m a = FreeT (ProofF s) m a
-type PPT    id s m f = ProofT s m (ProblemG id f)
+type ProofT   s m a = FreeT (ProofF s) m a
+type PPT id f s m   = ProofT s m (ProblemG id f)
 
 liftProofT :: Monad m => Proof s a -> ProofT s m a
 liftProofT = wrap
@@ -155,7 +155,7 @@ runProofT m = go (unFreeT m >>= f) where
        return (choiceP s1 s2)
   eval (Or pi pb pp)  = (tryAny pp >>= return . orP' pi pb)
   -- For all the rest, just unwrap
-  eval x = Impure <$> mapMP unwrap x
+  eval x = Impure <$> mapMP runProofT x
   -- Desist on failure
   tryAll [] = returnM []
   tryAll (x:xs) = do
@@ -187,7 +187,9 @@ isSuccess  = foldFree  (const False) isSuccessF
 isSuccessT = foldFreeT (const $ returnM False) (returnM.isSuccessF)
 
 simplify :: Monoid s => ProblemProofG id s f -> ProblemProofG id s f
-simplify = foldFree returnM f where
+simplify = foldFree returnM simplifyF where
+
+simplifyF = f where
   f   (Or  pi p [])  = success' pi p mempty -- "No additional problems left"
   f p@(Or  _ _ aa)   = msum aa
   f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"

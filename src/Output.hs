@@ -130,9 +130,9 @@ instance Show id => HTML (AF.AF_ id) where
 instance HTML Doc where toHtml = toHtml . show
 
 instance Show id => HTML (ProcInfo id) where
-    toHtml (AFProc af Nothing)    = "PROCESSOR: " +++ "Argument Filtering " +++ af
-    toHtml (AFProc af (Just div)) = "PROCESSOR: " +++ "Argument Filtering " +++ af +++ showParen True (shows div) ""
-    toHtml (EVProc af)            = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
+    toHtml (GroundOne af) = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
+    toHtml (GroundAll af) = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
+    toHtml (EVProc af)    = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"
     toHtml NarrowingP      = "PROCESSOR: " +++ "Narrowing Processor"

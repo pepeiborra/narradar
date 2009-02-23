@@ -2,11 +2,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Utils (module Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
 
 import Control.Applicative
 import Control.Exception (bracket)
-import Control.Monad (join, liftM, replicateM)
+import Control.Monad (join, liftM, liftM2, replicateM)
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
@@ -120,3 +121,17 @@ memoIO hash f = do
                         res <- f x
                         HT.insert ht x res
                         return res)
+
+-- ------------------------------
+-- Higher Rank boolean operators
+-- ------------------------------
+
+(.&.) = liftM2 (&&)
+(.|.) = liftM2 (||)
+infixr 3 .&.
+infixr 3 .|.
+
+(..&..) = (liftM2.liftM2) (&&)
+(..|..) = (liftM2.liftM2) (||)
+infixr 3 ..&..
+infixr 3 ..|..

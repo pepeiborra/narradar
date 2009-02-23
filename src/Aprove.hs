@@ -1,4 +1,5 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Aprove where
@@ -6,6 +7,7 @@ module Aprove where
 import Control.Exception
 import Control.Monad
 import qualified Data.ByteString as B
+import Data.Char
 import Data.List
 import Network
 import Network.Curl
@@ -24,7 +26,6 @@ import Proof
 import TRS
 import Utils
 
-
 aproveWebProc :: (Bottom :<: f, Show id, DPSymbol id) => ProblemG id f -> IO (ProblemProofG id Html f)
 aproveWebProc = externalProc go where
   go prob@(Problem _ trs dps@TRS{}) = do
@@ -38,11 +39,19 @@ aproveWebProc = externalProc go where
                                       ,multiformString "output" "html"
                                       ,multiformString "submit_mode" "Submit"
                                       ,multiformString "fullscreen_request" "1"])
---    hPutStrLn stderr ("asking aprove to solve the following problem\n" ++ pprTPDB prob)
+#ifdef DEBUG
+    hPutStrLn stderr ("sending the following problem to aProve web interface \n" ++ pprTPDB prob)
+#endif
     response :: CurlResponse <- perform_with_response curl
-    let output = massageWeb $ respBody response
-    return$ (if "proven" `elem` [ text | TagText text <- parseTags output] then success else failP)
+    let output = respBody response
+    return$ (if isTerminating output then success else failP)
             (External$ Aprove "WEB") prob (primHtml output)
+
+isTerminating (canonicalizeTags.parseTags -> tags) = let
+     ww = words $ map toLower $ innerText $ takeWhile ((~/= "<br>") .&. (~/= "</p>")) $ dropWhile (~/= "<b>") $ dropWhile (~/= "<body>") tags
+  in any (("termination" `isPrefixOf`) .|. ("finiteness" `isPrefixOf`)) ww &&
+     any ("proven" `isPrefixOf`) ww && ("not" `notElem` ww)
+
 
 aproveProc :: (TRS.Ppr f, Bottom :<: f, Show id, DPSymbol id) => FilePath -> ProblemG id f -> IO (ProblemProofG id Html f)
 aproveProc path = externalProc go where
@@ -59,29 +68,30 @@ aproveProc path = externalProc go where
               return$ (if take 3 output == "YES" then success else failP)
                         (External $ Aprove path) prob (massage output)
 
-aproveSrvTimeout = 10
 aproveSrvPort    = 5250
 
-aproveSrvProc :: (Bottom :<: f, TRS.Ppr f, Show id, DPSymbol id) => ProblemG id f -> IO (ProblemProofG id Html f)
-{-# SPECIALIZE aproveSrvProc :: Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
-aproveSrvProc = externalProc go where
+aproveSrvProc :: (Bottom :<: f, TRS.Ppr f, Show id, DPSymbol id) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
+{-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
+aproveSrvProc timeout = externalProc go where
   go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
                                                  withSocketsDo $
                                                  withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
     let trs = pprTPDB prob
     let fp = "/tmp" </> fp0
 
---    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+#ifdef DEBUG
+    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+#endif
     hPutStr h_problem_file trs
     hFlush  h_problem_file
     hClose  h_problem_file
 --    runCommand ("chmod o+r " ++ fp)
 
     hAprove <- connectTo "127.0.0.1" (PortNumber aproveSrvPort)
-  -- hSetBuffering hAprove NoBuffering
+ -- hSetBuffering hAprove NoBuffering
     hPutStrLn hAprove "2"                     -- Saying hello
     hPutStrLn hAprove fp                      -- Sending the problem path
-    hPutStrLn hAprove (show aproveSrvTimeout) -- Sending the timeout
+    hPutStrLn hAprove (show timeout) -- Sending the timeout
     hFlush hAprove
     res <- hGetContents hAprove
 
@@ -90,6 +100,11 @@ aproveSrvProc = externalProc go where
               _     -> failP
     evaluate (length res)
     hClose hAprove
+{-
+#ifdef DEBUG
+    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+#endif
+-}
     return (k (External $ Aprove "SRV") prob $ primHtml $ tail $ dropWhile (/= '\n') res)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
@@ -99,5 +114,4 @@ externalProc go p@(Problem (isRewriting -> True) trs dps@TRS{}) = unsafePerformI
 externalProc _ p = return$ return p
 
 hashProb prob = hashString (pprTPDB prob)
-massage    txt = (primHtml . unlines . drop 8  . lines . take (length txt - 9)) txt
-massageWeb txt = (           unlines . drop 10 . lines . take (length txt - 9)) txt
+massage     = primHtml . unlines . drop 8  . lines

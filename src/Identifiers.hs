@@ -24,6 +24,7 @@ import Prelude
 import TRS.Utils
 import TRS
 import Bottom
+import qualified Language.Prolog.Syntax as Prolog
 
 type Id = Identifier
 type LId = Labelled Identifier
@@ -50,8 +51,8 @@ instance HashConsed (T Identifier)
 class (Show id, Ord id) => DPSymbol id where
   markDPSymbol, unmarkDPSymbol :: id -> id
   functionSymbol, dpSymbol :: String -> id
-  isDP   :: id -> Bool
-  isDP s = markDPSymbol s == s
+  isDPSymbol   :: id -> Bool
+  isDPSymbol s = markDPSymbol s == s
   symbol :: id -> String
 
 instance DPSymbol Identifier where
@@ -133,6 +134,7 @@ instance Convert (Term Basic)  (Term BBasic)   where convert = reinject
 instance Convert (Term Basic)  (Term BBasicId) where convert = convertToId
 instance Convert (Term Basic') (Term BasicId)  where convert = convertToId
 instance Convert (Term BBasic) (Term BBasicId) where convert = convertToId
+instance Convert (Term f) (Term f) where convert = id
 
 -- Identity instances. Annoying
 instance Convert Char Char where convert = id
@@ -141,9 +143,9 @@ instance Convert Bool Bool where convert = id
 instance Convert Float Float where convert = id
 instance Convert Identifier      Identifier        where convert = id
 instance Convert LId             LId               where convert = id
-instance Convert (Term Basic)    (Term Basic)      where convert = id
-instance Convert (Term BBasicId) (Term BBasicId)   where convert = id
-instance Convert (Term BBasicLId) (Term BBasicLId) where convert = id
+--instance Convert (Term Basic)    (Term Basic)      where convert = id
+--instance Convert (Term BBasicId) (Term BBasicId)   where convert = id
+--instance Convert (Term BBasicLId) (Term BBasicLId) where convert = id
 
 
 hashId :: Show a => a -> Int32

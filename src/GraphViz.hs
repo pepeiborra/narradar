@@ -48,8 +48,7 @@ pprDot prb = showDot $ do
         p1 dis
         p2 dis
         return dis
-    f (Annotated done And{subProblems=[p], procInfo = proc@(SomeInfo AFProc{})}) par
-                         = procnode' proc done par >>= \me -> p me >> return me
+    f (Annotated done And{subProblems=[p], procInfo = proc@(SomeInfo pi)}) par | isAFProc pi = procnode' proc done par >>= \me -> p me >> return me
     f (Annotated done And{subProblems=[p], ..}) par = f (Annotated done Or{subProblems = [p], ..}) par
     f (Annotated done And{..}) par = do
                                 trs <- problemNode problem done par

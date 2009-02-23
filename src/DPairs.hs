@@ -14,16 +14,16 @@ import Text.XHtml (toHtml, Html)
 import Prelude as P
 
 import MonadSupply
-import Utils
 import Types
+import Utils
 import TRS
 import Proof
 
-{-# SPECIALIZE graphProcessor :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE graphProcessor :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-graphProcessor :: (Bottom :<: f, T id :<: f, DPMark f id, Ord id) => ProblemG id f -> ProblemProofG id Html f
+{-# SPECIALIZE cycleProcessor :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE sccProcessor   :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+cycleProcessor, sccProcessor :: (Bottom :<: f, T id :<: f, DPMark f id, Ord id) => ProblemG id f -> ProblemProofG id Html f
 
-graphProcessor problem@(Problem typ@(getGoalAF -> Just _) trs dps)
+sccProcessor problem@(Problem typ trs dps)
   | null cc   = success (DependencyGraph gr) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (DependencyGraph gr) problem
@@ -33,13 +33,19 @@ graphProcessor problem@(Problem typ@(getGoalAF -> Just _) trs dps)
           isCycle [n] = n `elem` gr A.! n
           isCycle _   = True
 
-graphProcessor problem@(Problem typ trs dps@TRS{})
+cycleProcessor problem@(Problem typ trs dps@TRS{})
   | null cc   = success (DependencyGraph gr) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (DependencyGraph gr) problem
                  [return $ Problem typ trs (tRS$ map (rules dps !!) ciclo) | ciclo <- cc]
     where cc = cycles gr
           gr = getEDG problem
+
+mkDpProblem :: DPMark f id => ProblemType id -> NarradarTRS id f -> ProblemG id f
+mkDpProblem Rewriting   trs = mkProblem Rewriting trs (tRS $ getPairs trs)
+mkDPProblem Narrowing   trs  = mkProblem Narrowing   trs (tRS $ getNPairs trs)
+mkDPProblem BNarrowing  trs  = mkProblem BNarrowing  trs (tRS $ getPairs trs)
+mkDPProblem LBNarrowing trs = mkProblem LBNarrowing trs (tRS $ getPairs trs)
 
 
 getPairs :: (Ord id, DPMark f id) => NarradarTRS id f -> [DP f]
@@ -58,22 +64,27 @@ getEDG (Problem typ trs (rules->dps)) | isBNarrowing typ =
                [ (i,j) | (i,_:->t) <- zip [0..] dps
                        , (j,u:->_) <- zip [0..] dps
                        , inChain t u]
-    where inChain t u | [t'] <- variant' [cap trs $ t] [u] = isJust (unify t' u)
+    where inChain t u | [t'] <- variant' [icap trs $ t] [u] = isJust (unify t' u)
 
 getEDG (Problem typ trs (rules->dps)) =
     G.buildG (0, length dps - 1)
                [ (i,j) | (i,_:->t) <- zip [0..] dps
                        , (j,u:->_) <- zip [0..] dps
                        , inChain t u]
-    where inChain t u | [t'] <- variant' [ren $ cap trs $ t] [u] = isJust (unify u t')
+    where inChain t u | [t'] <- variant' [ren $ icap trs $ t] [u] = isJust (unify u t')
 
 ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
 ren t = runSupply (foldTermM f t) where
     f t | Just Var{} <- prj t = var <$> next
         | otherwise           = return (inject t)
 
-cap :: forall f id. DPMark f id => NarradarTRS id f -> Term f -> Term f
+cap,icap :: forall f id. DPMark f id => NarradarTRS id f -> Term f -> Term f
 cap trs t | Just (T (s::id) tt) <- open t
                 = term s [if isDefined trs t' then var i else t'
+                       | (i,t') <- [0..] `zip` tt]
+          | otherwise = t
+
+icap trs t | Just (T (s::id) tt) <- open t
+                = term s [if any (unifies t' . lhs) (rules trs) then var i else t'
                        | (i,t') <- [0..] `zip` tt]
           | otherwise = t
