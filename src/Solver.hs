@@ -73,19 +73,19 @@ allSolver' k p
    | isAnyNarrowingProblem p = narrowingSolver 3 k (convert p)
 
 prologSolver_noL    = prologSolver_noL' (aproveSrvP defaultTimeout)
-prologSolver_noL' k = (prologP_sk >=> (return.convert) >=> narrowingSolverScc 2 k)
+prologSolver_noL' k = (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k)
 
 {-# SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
 prologSolver    = prologSolver' (aproveSrvP defaultTimeout)
 prologSolver' k = -- (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k) .|.
-                  (prologP_labelling_sk >=> narrowingSolverScc 2 k)
+                  (prologP_labelling_sk >=> narrowingSolverScc 1 k)
 
 prologSolver_one    = prologSolver_one' (aproveSrvP defaultTimeout)
 prologSolver_one' k = (prologP_sk >=> (return.convert) >=> narrowingSolver 1 k) .|. (prologP_labelling_sk >=> narrowingSolver 1 k)
 
 {-# SPECIALIZE prologSolver_rhs :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
 prologSolver_rhs = prologSolver_rhs' (aproveSrvP defaultTimeout)
-prologSolver_rhs' k = (prologP_sk_rhs >=> (return.convert) >=> narrowingSolverScc 1 k) .|. prologP_labelling_sk_rhs >=> narrowingSolverScc 2 k
+prologSolver_rhs' k = (prologP_sk_rhs >=> (return.convert) >=> narrowingSolverScc 1 k) .|. prologP_labelling_sk_rhs >=> narrowingSolverScc 1 k
 
 narrowingSolver 0 _ = const mzeroM
 narrowingSolver 1 k = cycleProcessor >=> iUsableProcessor >=> groundRhsOneP >=> k
