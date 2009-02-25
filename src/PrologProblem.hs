@@ -170,7 +170,7 @@ labellingTrans goalAF assig trs@PrologTRS{} =
 
   cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = unEmbed $ do
       (f,i) <- embed $ heuristic af r pos
-      embed$ trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show rule) $
+      embed$ trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show (AF.apply af rule)) $
        if "_in" `isSuffixOf` symbol f
         then
          let f_pred = init $ init $ init $ symbol f
@@ -254,7 +254,7 @@ labellingTrans_rhs goalAF assig trs@PrologTRS{} =
 
   cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = unEmbed $ do
       (f,i) <- embed $ heuristic af r pos
-      embed$ trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show rule) $
+      embed$ trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show (AF.apply_rhs trs af rule)) $
        if "_in" `isSuffixOf` symbol f
         then
          let f_pred = init $ init $ init $ symbol f

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns, ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -26,6 +27,12 @@ import qualified ArgumentFiltering as AF
 import Types
 import Proof
 
+#ifdef DEBUG
+import Debug.Trace
+#else
+trace _ x = x
+#endif
+
 evProcessor p | not (isAnyNarrowingProblem p) = P.return p
 evProcessor p@(Problem typ@(getProblemAF -> Just af) trs dps)
      | null extra      = P.return p
@@ -40,7 +47,10 @@ evProcessor p = P.return p
 
 {-# SPECIALIZE cutWith :: Heuristic Id BBasicId -> AF -> Term BBasicId -> [Position] -> Set.Set AF #-}
 cutWith heu af t [] = return af
-cutWith heu af t pp = foldM (\af' p -> (heu af' t p >>= \(f,p) -> return$ AF.cut f p af')) af pp
+cutWith heu af t pp = foldM (\af' pos -> (heu af' t pos >>= \(f,p) ->
+          trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p) $
+          return$ AF.cut f p af'))
+                            af pp
 --cutWith heu af t pp = mconcat `liftM` (mapM (heu af t >=> \(f,p) -> return$ AF.cut f p af) pp)
 
 {-# SPECIALIZE invariantEV :: Heuristic LId BBasicLId -> ProblemG LId BBasicLId -> LabelledAF -> [LabelledAF] #-}
@@ -68,7 +78,12 @@ invariantEV_rhs heu p@Problem{trs,dps} = sortByDefinedness (AF.apply_rhs p)  dps
               where extra = extraVars (AF.apply_rhs p af trs)
         cutEV af rule@(_:->r)
             | orig_poss <- note <$> extraVars (AF.apply_rhs p af (annotateWithPos <$> rule))
-            = cutWith heu af r orig_poss
+            = cutWith heu af r orig_poss where
+              cutWith heu af t [] = return af
+              cutWith heu af t pp = foldM (\af' pos -> (heu af' t pos >>= \(f,p) ->
+                         trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p ++ " rule: " ++ show rule) $
+                         return$ AF.cut f p af'))
+                                          af pp
 
 
 sortByDefinedness :: (Ord id, Size trs) => (AF_ id -> trs -> trs) -> trs -> [AF_ id] -> [AF_ id]

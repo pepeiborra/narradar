@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternSignatures, PatternGuards, ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeOperators #-}
@@ -45,7 +46,11 @@ import Lattice
 import ExtraVars
 import Language.Prolog.TypeChecker
 
+#ifdef DEBUG
 import Debug.Trace
+#else
+trace _ x = x
+#endif
 
 data MkGoalProblem id = FromGoal Goal (Maybe TypeAssignment) | FromAF (AF_ id) (Maybe TypeAssignment) | AllTerms
 
@@ -97,7 +102,7 @@ findGroundAF heu pi_groundInfo af0 p (_:->r)
             where
           --    assertGroundDP af = let af' = goalAF_inv `mappend` af in assert (isGround $ AF.apply af' r) af
               mkGround t = cutWith heu af0 t varsp -- TODO Fix: cut one at a time
-                  where varsp = [TRS.note v | v <- vars' (annotateWithPos t)] \\
+                  where varsp = [TRS.note v | v <- vars' (annotateWithPos t)] \\\
                                 [TRS.note v | v <- subterms (AF.apply pi_groundInfo $ annotateWithPos t)]
 
 -- ------------------------------------------------------------------------
