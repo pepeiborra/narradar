@@ -30,7 +30,7 @@ Executable narradar
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
      TRS >= 0.21.20080206, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, lattice, 
-     parsec, GHood, prolog, regex-posix, unix
+     parsec, GHood, prolog, prolog-tools, regex-posix, unix
   other-modules: 
      Types,
      MonadSupply,

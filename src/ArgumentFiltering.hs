@@ -31,7 +31,7 @@ import Identifiers
 import TRS hiding (apply)
 import Utils
 import Lattice
-import Language.Prolog.Syntax      (Atom)
+import Language.Prolog.Syntax      (Ident)
 import Language.Prolog.TypeChecker (TypeAssignment)
 
 #ifdef DEBUG
@@ -39,6 +39,8 @@ import Debug.Trace
 #else
 trace _ x = x
 #endif
+
+extendAFToTupleSymbols pi = pi `mappend` mapSymbols markDPSymbol pi
 
 newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord)
 type AF = AF_ Identifier
@@ -78,6 +80,7 @@ cut       :: (Show id, Ord id) => id -> Int -> AF_ id -> AF_ id
 cutAll    :: (Show id, Ord id) => [(id, Int)] -> AF_ id -> AF_ id
 lookup    :: (Ord id, Monad m) => id -> AF_ id -> m [Int]
 fromList  :: Ord id => [(id,[Int])] -> AF_ id
+toList    :: AF_ id -> [(id,[Int])]
 singleton :: Ord id => id -> [Int] -> AF_ id
 init      :: (SignatureC sig id, Show id) => sig -> AF_ id
 initBottom:: (SignatureC sig id, Show id) => sig -> AF_ id
@@ -199,11 +202,13 @@ allInner af t pos =  [(root, last sub_p)
                                     | sub_p <- reverse (tail $ inits pos)
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 
---typeHeu :: Foldable f => Signature Atom -> TypeAssignment -> Heuristic id f
+--typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
 typeHeu assig =
-    predHeuOne allInner (\ _ (p,i) -> (Set.notMember (symbol p) constructorSymbols)
-                                    ||
-                                      (Set.notMember (symbol p,i) unboundedPositions))
+    predHeuOne allInner (\ _ (p,i) -> -- not(isDPSymbol p)) &&
+                                         ((Set.notMember (symbol p) constructorSymbols)
+                                        ||
+                                          (Set.notMember (symbol p,i) unboundedPositions)))
+   `or` innermost
   where constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
         unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
@@ -216,7 +221,7 @@ typeHeu assig =
                             , any (`Set.member` uu) (zip (repeat g) [1..getArity g])]
         reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
         getArity g | Just i <- Map.lookup g arities = i
-        arities = Map.fromListWith max (concatMap F.toList assig) :: Map Atom Int
+        arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
 
 -- Predicates
 -- ----------

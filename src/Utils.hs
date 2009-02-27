@@ -28,6 +28,12 @@ import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
 
+isRight Right{} = True; isRight _ = False
+
+mapLeft :: (l -> l') -> Either l r -> Either l' r
+mapLeft f (Left x)  = Left(f x)
+mapLeft f (Right r) = Right r
+
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
 

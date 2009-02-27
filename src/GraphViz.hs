@@ -7,6 +7,7 @@ import Control.Monad.Free
 import Data.Graph
 import Data.Foldable (foldMap, toList)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.List hiding (unlines)
 import Data.Maybe
 import Text.Dot
@@ -81,7 +82,15 @@ doneEdge False    = [("color", "red")]
 
 procnode :: SomeInfo -> Parent -> Dot Parent
 procnode  (SomeInfo (DependencyGraph gr)) par = do
-  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr))
+  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr Nothing))
+  case nn of
+    []   -> return par
+    me:_ -> do case par of
+                N n             -> edge n me [("lhead", show cl)]
+                Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
+               return (Cluster (cl, N me))
+procnode  (SomeInfo (UsableGraph gr reachable)) par = do
+  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr (Just reachable)))
   case nn of
     []   -> return par
     me:_ -> do case par of
@@ -117,7 +126,12 @@ unlines = concat . intersperse "\\l"
 -- --------------------
 -- Graphing fgl graphs
 -- --------------------
-pprGraph g = do
+pprGraph g Nothing = do
   nodeids <- forM (vertices g) $ \n -> node [("label",show n)]
+  forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) []
+  return nodeids
+
+pprGraph g (Just reachable) = do
+  nodeids <- forM (vertices g) $ \n -> node [("label",show n), ("color", if Set.member n reachable then "blue" else "black")]
   forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) []
   return nodeids

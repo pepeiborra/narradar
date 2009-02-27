@@ -214,7 +214,7 @@ instance HTMLTABLE Prolog.Clause where
                      td ! [theclass "body"]   << bb
 -}
 
-instance HTML Prolog.Pred where
+instance HTML Prolog.Atom where
     toHtml = toHtml . show . Prolog.ppr
 
 typClass typ | isFullNarrowing typ = theclass "NDP"

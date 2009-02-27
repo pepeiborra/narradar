@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards, ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards, ViewPatterns, ScopedTypeVariables #-}
 import Control.Applicative
 import Control.Exception (bracket)
 import Data.Maybe (isJust, maybeToList)
@@ -19,6 +19,7 @@ import Output
 import Proof
 import GraphViz
 import Types hiding ((!))
+import DPairs
 import Utils
 import Solver
 import Aprove
@@ -61,7 +62,7 @@ processProblem True (problem :: ProblemProof Html BBasicId) = do
 
 mkProblem "PROLOG" pgm mb_goal k  = either output (k.return) $ parsePrologProblem pgm (maybeToList mb_goal)
 mkProblem "PROLOG2" pgm mb_goal k = either output (k.return) $ parsePrologProblem pgm (maybeToList mb_goal)
-mkProblem typ rules (mb_goal) k = do
+mkProblem the_typ rules (mb_goal) k = do
      let ei_trs = parseFile trsParser "input" rules
      case ei_trs of
        Left parse_error -> output $ show parse_error
@@ -69,10 +70,10 @@ mkProblem typ rules (mb_goal) k = do
           let  mb_ei_goal =  parseGoal <$> mb_goal
           case mb_ei_goal of
             Just (Left parse_error) -> output ("Syntax error in the goal: " ++ show parse_error)
-            _ | (mb_goal' :: Maybe Goal) <- fromRight <$> mb_ei_goal -> do
-                      case typ of
-                       "FULL"   -> k $ mkNDPProblem  (maybe AllTerms FromGoal mb_goal') $ (mkTRS trs :: NarradarTRS Identifier BBasicId)
-                       "BASIC"  -> k $ mkBNDPProblem (maybe AllTerms FromGoal mb_goal') $ mkTRS trs
+            _ | (mb_goal' :: Maybe Goal) <- fromRight <$> mb_ei_goal ->
+              k $ mkGoalProblem (maybe AllTerms (`FromGoal` Nothing) mb_goal') $ mkDPProblem (parse the_typ) $ (mkTRS trs :: NarradarTRS Identifier BBasicId)
+   where parse "BASIC" = BNarrowing
+         parse "FULL"  = Narrowing
 
 
 fromRight (Right x) = x

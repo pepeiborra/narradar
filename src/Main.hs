@@ -31,6 +31,7 @@ import Text.XHtml as Html
 import Prelude -- hiding (Monad(..))
 import qualified Prelude as P
 
+import ArgumentFiltering (typeHeu, innermost)
 import PrologProblem
 import TRS.FetchRules
 import TRS.FetchRules.TRS
@@ -127,9 +128,11 @@ parseSolver "PL"     = LabelSolver Prolog      prologSolver
 parseSolver "PL_rhs" = LabelSolver Prolog      prologSolver_rhs
 parseSolver "PL_one" = LabelSolver Prolog      prologSolver_one
 parseSolver "PL_noL" = LabelSolver Prolog      prologSolver_noL
-parseSolver ('P':'L':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver' k)
+parseSolver "PL_inn" = LabelSolver Prolog    $ prologSolver' (\_ _ -> innermost) (aproveSrvP 30)
+parseSolver "PL_typ" = LabelSolver Prolog    $ prologSolver' ((typeHeu.) . const) (aproveSrvP 30)
+parseSolver ('P':'L':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver' ((typeHeu.) . const) k)
 parseSolver ('P':'L':'_':'r':'h':'s':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_rhs' k)
-parseSolver ('P':'L':'_':'o':'n':'e':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_one' k)
+parseSolver ('P':'L':'_':'o':'n':'e':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_one' ((typeHeu.) . const) k)
 parseSolver _ = error "Could not parse the description. Expected (LOCAL path|WEB|SRV timeout)"
 
 parseAprove = go1 where

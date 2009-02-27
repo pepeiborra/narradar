@@ -16,7 +16,7 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Control.Applicative (Applicative(..),(<$>),(<*>))
 import Data.Foldable (Foldable(..), sum, toList)
-import Data.Graph (Graph)
+import Data.Graph (Graph, Vertex)
 import Data.HashTable (hashString)
 import Data.Int
 import Data.List ((\\))
@@ -24,6 +24,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable
 import Unsafe.Coerce
@@ -42,7 +43,8 @@ import Control.Monad.Free
 import Utils
 import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.TypeChecker as Prolog
-import Prelude as P hiding (sum)
+import qualified Language.Prolog.Parser as PrologP
+import Prelude as P hiding (sum, pi)
 
 isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
@@ -83,12 +85,15 @@ type Problem     f = ProblemG Identifier f
 type ProblemG id f = ProblemF id (NarradarTRS id f)
 
 data ProblemTypeF a = Rewriting
-                    | Narrowing   | NarrowingModes   a (Maybe Prolog.TypeAssignment)
-                    | BNarrowing  | BNarrowingModes  a (Maybe Prolog.TypeAssignment)
-                    | LBNarrowing | LBNarrowingModes a (Maybe Prolog.TypeAssignment)
+                    | Narrowing   | NarrowingModes   {pi::a, types::Maybe Prolog.TypeAssignment, goal::Maybe Goal}
+                    | BNarrowing  | BNarrowingModes  {pi::a, types::Maybe Prolog.TypeAssignment, goal::Maybe Goal}
+                    | LBNarrowing | LBNarrowingModes {pi::a, types::Maybe Prolog.TypeAssignment, goal::Maybe Goal}
 	            | Prolog
                     deriving (Eq, Show)
 
+narrowingModes0 =   NarrowingModes{types=Nothing, goal=Nothing, pi=error "narrowingModes0"}
+bnarrowingModes0 =  BNarrowingModes{types=Nothing, goal=Nothing, pi=error "bnarrowingModes0"}
+lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=Nothing, pi=error "lbnarrowingModes0"}
 
 mkProblem :: ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
 mkProblem = Problem
@@ -135,17 +140,16 @@ isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 isModed = isJust . getGoalAF
 isModedProblem = isModed . typ
 
-getGoalAF (NarrowingModes   goal _) = Just goal
-getGoalAF (BNarrowingModes  goal _) = Just goal
-getGoalAF (LBNarrowingModes goal _) = Just goal
+getProblemAF = getGoalAF
+getGoalAF NarrowingModes{pi}   = Just pi
+getGoalAF BNarrowingModes{pi}  = Just pi
+getGoalAF LBNarrowingModes{pi} = Just pi
 getGoalAF _ = Nothing
 
-getTyping (NarrowingModes   _ (Just a)) = Just a
-getTyping (BNarrowingModes  _ (Just a)) = Just a
-getTyping (LBNarrowingModes _ (Just a)) = Just a
+getTyping NarrowingModes{types}   = types
+getTyping BNarrowingModes{types}  = types
+getTyping LBNarrowingModes{types} = types
 getTyping _ = Nothing
-
-getProblemAF = getGoalAF
 
 -- -------------
 -- AF Problems
@@ -157,43 +161,21 @@ class WithGoalAF t id where
   type T' t id :: *
   withGoalAF :: t -> AF_ id -> T' t id
 
-class WithTyping t where
-  withTyping :: t -> Prolog.TypeAssignment -> t
-
 instance (WithGoalAF (ProblemType id) id) => WithGoalAF (ProblemG id f) id where
   type T' (ProblemG id f) id = ProblemG id f
   withGoalAF(Problem typ trs dps) goal = Problem (withGoalAF typ goal) trs dps
 
 instance Show id =>  WithGoalAF (ProblemType id) id' where
   type T' (ProblemType id) id' = ProblemType id'
-  withGoalAF (NarrowingModes   _ typ) pi' = NarrowingModes   pi' typ
-  withGoalAF (BNarrowingModes  _ typ) pi' = BNarrowingModes  pi' typ
-  withGoalAF (LBNarrowingModes _ typ) pi' = LBNarrowingModes pi' typ
-  withGoalAF Narrowing   pi = NarrowingModes   pi Nothing
-  withGoalAF BNarrowing  pi = BNarrowingModes  pi Nothing
-  withGoalAF LBNarrowing pi = LBNarrowingModes pi Nothing
+  withGoalAF pt@NarrowingModes{}   pi' = pt{pi=pi'}
+  withGoalAF pt@BNarrowingModes{}  pi' = pt{pi=pi'}
+  withGoalAF pt@LBNarrowingModes{} pi' = pt{pi=pi'}
+  withGoalAF Narrowing   pi = narrowingModes0{pi}
+  withGoalAF BNarrowing  pi = bnarrowingModes0{pi}
+  withGoalAF LBNarrowing pi = lbnarrowingModes0{pi}
   withGoalAF Rewriting   _  = Rewriting
   withGoalAF Prolog      _  = Prolog
   withGoalAF typ _ = error ("withGoalAF - error: " ++ show typ)
-
-
-instance WithTyping (ProblemType id) => WithTyping (ProblemG id f) where
-  withTyping(Problem typ trs dps) goal = Problem (withTyping typ goal) trs dps
-
-instance WithTyping (ProblemType id) where
-  withTyping (NarrowingModes   pi _) typ' = NarrowingModes   pi (Just typ')
-  withTyping (BNarrowingModes  pi _) typ' = BNarrowingModes  pi (Just typ')
-  withTyping (LBNarrowingModes pi _) typ' = LBNarrowingModes pi (Just typ')
-  withTyping Narrowing   typ = NarrowingModes   (error "Error: withTyping applied to a non AF problem type") (Just typ)
-  withTyping BNarrowing  typ = BNarrowingModes  (error "Error: withTyping applied to a non AF problem type") (Just typ)
-  withTyping LBNarrowing typ = LBNarrowingModes (error "Error: withTyping applied to a non AF problem type") (Just typ)
-  withTyping Rewriting   _  = Rewriting
-  withTyping Prolog      _  = Prolog
---  withTyping typ _ = error ("withTyping - error: " ++ show typ)
-
-
-data Mode = G | V deriving (Show, Eq, Bounded)
-type Goal = T String Mode
 
 instance (Bottom.Bottom :<: f, Ord id) => ApplyAF (ProblemG id f) id where
     {-# SPECIALIZE instance ApplyAF (Problem BBasicId) Id #-}
@@ -210,6 +192,7 @@ data ProcInfo id where                    -- vv ignored vv
     GroundAll       :: Show id => Maybe (AF_ id) -> ProcInfo id
     EVProc          :: Show id => AF_ id -> ProcInfo id
     DependencyGraph :: Graph -> ProcInfo ()
+    UsableGraph     :: Graph -> Set Vertex -> ProcInfo ()
     Polynomial      :: ProcInfo ()
     External        :: ExternalProc -> ProcInfo ()
     NarrowingP      :: ProcInfo ()
@@ -231,6 +214,7 @@ isAFProc _           = False
 
 instance Show id => Show (ProcInfo id) where
     show (DependencyGraph _) = "Dependency Graph Processor"
+    show (UsableGraph _ _)= "Usable Graph Processor"
     show (External proc)  = "External: " ++ show proc
     show NarrowingP       = "Narrowing"
     show InstantiationP   = "Instantiation"
@@ -254,9 +238,30 @@ data ExternalProc = MuTerm | Aprove String | Other String
 -- ------
 -- Modes
 -- ------
-type Division id = Map id [Mode]
-type DivEnv      = Map Int Mode
+data Mode = G | V deriving (Eq, Bounded)
+type Goal = T String Mode
+instance Show Mode where show G = "b"; show V = "f"
 
+goalP =do
+      spaces
+      id <- PrologP.ident
+      modes <- modesP
+      return (T id modes)
+
+modesP = parens (modeP `sepBy` char ',') where parens= between (char '(') (char ')')
+
+modeP = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
+
+parseGoal :: String -> Either ParseError Goal
+parseGoal = parse goalP ""
+
+pprGoal :: Goal -> String
+pprGoal (T id modes) = show (text id <> parens(sep$ punctuate comma $ map (text.show) modes))
+
+
+--type Division id = Map id [Mode]
+--type DivEnv      = Map Int Mode
+{-
 instance Lattice Mode where
     join G G = G
     join _ _ = V
@@ -282,21 +287,7 @@ instance Lattice DivEnv where
     join   = Map.unionWith  join
     bottom = Map.empty
     top    = Map.empty
-
-parseGoal :: String -> Either ParseError Goal
-parseGoal = parse p "" where
-    ident = many1 (alphaNum <|> oneOf "!+_-./<>=?\\/^")
-    mode  = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
-    parens= between (char '(') (char ')')
-    p = do
-      spaces
-      id <- ident
-      modes <- parens (mode `sepBy` char ',')
-      return (T id modes)
-
-pprGoal :: Goal -> String
-pprGoal (T id modes) = show (text id <> parens(sep$ punctuate comma $ map (text.show) modes))
-
+-}
 -- ------------------
 -- Functor Instances
 -- ------------------

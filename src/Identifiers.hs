@@ -15,10 +15,11 @@ import Control.Arrow
 import Data.HashTable (hashString)
 import Data.Foldable (toList, Foldable)
 import Data.Int
+import Data.List (isSuffixOf)
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Set (Set)
-import Language.Prolog.Syntax (Atom)
+import Language.Prolog.Syntax (Ident)
 import Prelude
 
 import TRS.Utils
@@ -208,7 +209,10 @@ convertToLabelled = foldTerm convertToLF
 
 class (T (Labelled id) :<: g) =>  ConvertToL id f g | f g -> id where convertToLF :: f(Term g) -> Term g
 instance (T (Labelled id) :<: f) => ConvertToL id f f where convertToLF = In
-instance (T (Labelled id) :<: g, HashConsed g) => ConvertToL id (T id) g where convertToLF (T f tt) = term (Plain f) tt
+instance (T (Labelled id) :<: g, HashConsed g, DPSymbol id) => ConvertToL id (T id) g where
+    convertToLF (T f tt)
+      | "_in" `isSuffixOf` symbol f || "_out" `isSuffixOf` symbol f = term (Labelling [1.. length tt] f) tt
+      | otherwise                   = term (Plain f) tt
 instance (a :<: g, T (Labelled id) :<: g) => ConvertToL id a g where convertToLF = inject
 instance (ConvertToL id a g, ConvertToL id b g) => ConvertToL id (a:+:b) g where
   convertToLF (Inl x) = convertToLF x; convertToLF (Inr x) = convertToLF x
@@ -217,6 +221,7 @@ instance Convert (Term BBasicId) (Term BBasicLId) where convert = convertToLabel
 instance Convert (Term Basic)    (Term BBasicLId) where convert = (convertToLabelled :: Term BBasicId -> Term BBasicLId) . convertToId
 --instance (f' ~ LabelledVersionOf f) => Convert f f' where convert = convertToLabelled
 
+{-
 type family   LabelledVersionOf (f :: * -> *) :: * -> *
 type instance LabelledVersionOf (T id)    = T (Labelled id)
 type instance LabelledVersionOf Var       = Var
@@ -225,7 +230,7 @@ type instance LabelledVersionOf Bottom    = Bottom
 type instance LabelledVersionOf Hole      = Hole
 
 --instance (f' ~ LabelledVersionOf f, DPMark f id) => DPMark f' (Labelled id) where
-
+-}
 
 -- --------------------
 -- TRSs in our setting
@@ -233,7 +238,7 @@ type instance LabelledVersionOf Hole      = Hole
 
 data NarradarTRS id f where
     TRS :: (Ord id, TRSC f, T id :<: f) => Set (Rule f) -> Signature id -> NarradarTRS id f
-    PrologTRS :: (Ord id, TRSC f, T id :<: f) => Set (Atom, Rule f) -> Signature id -> NarradarTRS id f
+    PrologTRS :: (Ord id, TRSC f, T id :<: f) => Set (Ident, Rule f) -> Signature id -> NarradarTRS id f
 
 instance (Ord id, Ord (Term f), DPMark f id) => Ord (NarradarTRS id f) where
     {-# SPECIALIZE instance Ord(NarradarTRS Id  BasicId) #-}
@@ -286,10 +291,10 @@ instance (ConvertT f f', Ord id, Ord id', T id :<: f, T id' :<: f', TRSC f, TRSC
 
 tRS' rr sig  = TRS (Set.fromList rr) sig
 
-prologTRS :: forall id f. (Ord id, TRSC f, T id :<: f) => [(Atom, Rule f)] -> NarradarTRS id f
+prologTRS :: forall id f. (Ord id, TRSC f, T id :<: f) => [(Ident, Rule f)] -> NarradarTRS id f
 prologTRS rr = prologTRS' (Set.fromList rr)
 
-prologTRS' :: forall id f. (Ord id, TRSC f, T id :<: f) => Set(Atom, Rule f) -> NarradarTRS id f
+prologTRS' :: forall id f. (Ord id, TRSC f, T id :<: f) => Set(Ident, Rule f) -> NarradarTRS id f
 prologTRS' rr = PrologTRS rr (getSignature (snd <$> toList rr))
 
 

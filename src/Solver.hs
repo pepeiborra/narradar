@@ -16,6 +16,7 @@ import Data.Traversable
 import Text.XHtml (Html, primHtml)
 import Data.Typeable
 
+import ArgumentFiltering (typeHeu, innermost)
 import Proof
 import PrologProblem
 import NarrowingProblem
@@ -66,22 +67,22 @@ narradarSolver' aproveS p
    | isRewritingProblem    p = aproveS p
    | isAnyNarrowingProblem p = narrowingSolver 3 aproveS p
 
-allSolver = allSolver' (aproveSrvP defaultTimeout)
-allSolver' k p
+allSolver = allSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+allSolver' heu k p
    | isRewritingProblem    p = k (convert p)
-   | isPrologProblem       p = prologSolver'     k p
+   | isPrologProblem       p = prologSolver' heu k p
    | isAnyNarrowingProblem p = narrowingSolver 3 k (convert p)
 
 prologSolver_noL    = prologSolver_noL' (aproveSrvP defaultTimeout)
 prologSolver_noL' k = (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k)
 
 {-# SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
-prologSolver    = prologSolver' (aproveSrvP defaultTimeout)
-prologSolver' k = -- (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k) .|.
-                  (prologP_labelling_sk >=> narrowingSolverScc 1 k)
+prologSolver    = prologSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+prologSolver' heu k = -- (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k) .|.
+                      (prologP_labelling_sk heu >=> narrowingSolverScc 1 k)
 
-prologSolver_one    = prologSolver_one' (aproveSrvP defaultTimeout)
-prologSolver_one' k = (prologP_sk >=> (return.convert) >=> narrowingSolver 1 k) .|. (prologP_labelling_sk >=> narrowingSolver 1 k)
+prologSolver_one        = prologSolver_one' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+prologSolver_one' heu k = (prologP_labelling_sk heu >=> usableSCCsProcessor >=> narrowingSolver 1 k)
 
 {-# SPECIALIZE prologSolver_rhs :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
 prologSolver_rhs = prologSolver_rhs' (aproveSrvP defaultTimeout)
@@ -97,10 +98,10 @@ narrowingSolver depth k =
         (refineNarrowing >=> narrowingSolver (depth-1) k))
 
 narrowingSolverScc 0 _ = const mzeroM
-narrowingSolverScc 1 k = sccProcessor >=> iUsableProcessor >=> groundRhsAllP >=> k
+narrowingSolverScc 1 k = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP >=> k
 narrowingSolverScc depth _ | depth < 0 = error "narrowingSolverScc: depth must be positive"
 narrowingSolverScc depth k =
-       sccProcessor >=> iUsableProcessor >=>
+       usableSCCsProcessor >=> iUsableProcessor >=>
        ((groundRhsAllP >=> k)
         .|.
         (refineNarrowing >=> narrowingSolverScc (depth-1) k))

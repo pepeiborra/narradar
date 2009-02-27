@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
@@ -29,12 +30,12 @@ import qualified Data.Traversable as T
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
 import Text.XHtml
 
-import ArgumentFiltering (AF_, AF, typeHeu)
+import ArgumentFiltering (AF_, AF, typeHeu, innermost)
 import qualified ArgumentFiltering as AF
 import DPairs
-import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, PredF(..), Pred, Term, In(..), Atom)
+import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom)
 import qualified Language.Prolog.Syntax as Prolog
-import Language.Prolog.Parser (program)
+import qualified Language.Prolog.Parser as Prolog (program, clause, query, ident)
 import Language.Prolog.TypeChecker (infer, TypeAssignment)
 import Types hiding (Var,Term,In, program)
 import qualified Types as TRS
@@ -42,7 +43,7 @@ import NarrowingProblem
 import Proof
 import Lattice
 import TRS.FetchRules -- for the Error ParseError instance
-import Utils ((<$$>),(..&..))
+import Utils ((<$$>),(..&..), mapLeft)
 
 import Prelude hiding (and,or,notElem)
 
@@ -51,25 +52,6 @@ import Debug.Trace
 #else
 trace _ x = x
 #endif
---instance Error ParseError
-
---mkPrologProblem = (return.) . mkPrologProblem
-parsePrologProblem pgm gg = do
-     let ei_prolog = parse problemParser "input" pgm
-     case ei_prolog of
-       Left parse_error -> Left $ show parse_error
-       Right (cc, specials) ->
-          let gg' = queries specials
-              all_goals = mapM parseGoal (gg ++ gg')
-          in case all_goals of
-            Left e   -> Left $ show e
-            Right [] -> Left "A goal must be supplied in order to solve a Prolog termination problem"
-            Right all-> Right (mkPrologProblem all cc)
-
-
---mkSKPrologProblem  :: [Goal] -> Program -> ProblemProof res BasicId
---prologP_sk :: Problem BasicId -> ProblemProof Html BasicId
---prologP_sk :: Problem BBasicId -> ProblemProof Html BBasaicId
 
 {-# SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 {-# SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
@@ -82,7 +64,7 @@ prologP_sk p = return p
 
 skTransform :: [Clause] -> NarradarTRS String Basic
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
-       clauseRules :: [(Atom, Rule Basic)] = concat $ (`evalState` [0..]) $
+       clauseRules :: [(Ident, Rule Basic)] = concat $ (`evalState` [0..]) $
          -- The counter is global, the list of vars is local to each clause
          -- We use a State Transformer on top of a state monad.
          -- Several StateT computations are run inside one single State computation
@@ -119,43 +101,49 @@ addMissingPredicates cc
           = cc `mappend` [ Pred f (take (getArity sig f) vars) :- [] | f <- toList (definedSymbols sig `Set.difference` definedPredicates)]
    where vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
 
-{-# SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
+{-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
 
-prologP_labelling_sk :: forall f f' id. (Bottom :<: f, MapLabelT f', T id :<: f, Bottom :<: f', DPMark f id, DPMark f' (Labelled id), ConvertT f f', ConvertT Basic f, Ord id, Show id, Lattice (AF_ (Labelled id)))
-              => ProblemG id f -> ProblemProofG (Labelled id) Html f'
-prologP_labelling_sk p@(PrologProblem typ gg cc) =
-    let trs :: NarradarTRS id f = convert $ skTransform cc
+prologP_labelling_sk :: forall f f' id. (Bottom :<: f, MapLabelT f', T id :<: f, Bottom :<: f', DPMark f id, DPMark f' (Labelled id), ConvertT f f', ConvertT Basic f, Ord id, Show id, Lattice (AF_ (Labelled id))) => (TypeAssignment -> NarradarTRS (Labelled id) f' -> AF.Heuristic (Labelled id) f') -> ProblemG id f -> ProblemProofG (Labelled id) Html f'
+prologP_labelling_sk mkHeu p@(PrologProblem typ gg cc) =
+    let trs = convert (skTransform cc) :: NarradarTRS id f
         problems = do  T goal mm   <- gg
                        let pp     = [ i | (i,m) <- zip [1..] mm, m == G]
                            goal_f = functionSymbol $ goal++"_in"
                            goalAF = AF.singleton goal_f pp
                            assig  = infer cc
-                       (trs', af') <- toList $ labellingTrans goalAF assig trs
-                       return (mkGoalProblem (FromAF af' (Just assig)) (mkDPProblem BNarrowing trs'))
+                       (trs', af') <- toList $ labellingTrans mkHeu goalAF assig trs
+                       let Problem typ trs dps = mkDPProblem Narrowing trs'
+                       return$return (Problem BNarrowingModes{Types.pi=AF.extendAFToTupleSymbols af' ,types= Just assig, goal = Just(T (goal ++ "_in") mm)} trs dps)
     in andP LabellingSKP p problems
 
 --labellingTrans :: AF -> NarradarTRS Identifier BBasicId -> (NarradarTRS (Labelled Identifier) BBasicLId, AF_ (Labelled Identifier))
 labellingTrans :: forall id f f'. (Bottom :<: f, MapLabelT f' , DPMark f' (Labelled id), DPMark f id, ConvertT f f', T (Labelled id) :<: f', Bottom :<: f', Ord id, Show id) =>
-                  AF_ id -> TypeAssignment -> NarradarTRS id f -> Set(NarradarTRS (Labelled id) f', AF_ (Labelled id))
-labellingTrans goalAF assig trs@PrologTRS{} =
-    let goalAF' = AF.init trs'' `mappend`
-                  AF.fromList [ (Labelling pp f, pp) | (f,pp) <- candidates]
-
-        trs''   = trs' `mappend` prologTRS'(mconcat [ insertMarkedSymbol (Plain f, pp) | (f,pp) <- candidates])
-        candidates = [ (f, pp)
-                       | (f, pp) <- AF.toList goalAF
-                       , "_in" `isSuffixOf` symbol f
-                       , f `Set.member` getFunctionSymbols trs
-                       , length pp /= getArity trs f]
-    in fix invariantEV (trs'', goalAF')
+                  (TypeAssignment -> NarradarTRS (Labelled id) f' -> AF.Heuristic (Labelled id) f') -> AF_ id -> TypeAssignment -> NarradarTRS id f -> Set(NarradarTRS (Labelled id) f', AF_ (Labelled id))
+labellingTrans mkHeu goalAF assig trs@PrologTRS{} =
+    let trs0 :: NarradarTRS (Labelled id) f'
+        trs0 = prologTRS' $ mconcat([insertMarkedSymbol (Plain f, pp)
+                                         | (f, pp) <- AF.toList (AF.init trs `mappend` goalAF)
+                                         , "_in" `isSuffixOf` symbol f
+                                         , f `Set.member` getFunctionSymbols trs
+                                         ] ++
+                                    [insertMarkedSymbol (Plain f, iFun trs f)
+                                         | (f, pp) <- AF.toList (AF.init trs `mappend` goalAF)
+                                         , pp /= iFun trs f
+                                         , "_in" `isSuffixOf` symbol f
+                                         , f `Set.member` getFunctionSymbols trs
+                                         ])
+        af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList goalAF] `mappend` AF.init trs0
+    in -- trace ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
+       trace (unlines(map show $ Types.rules trs0) ++ "\n" ++ show af0) $
+       fix invariantEV (trs0, af0)
  where
-  heuristic af t p = typeHeu assig af t p
+  heuristic = mkHeu assig trs' --innermost af t p -- typeHeu assig af t p
 
   trs'@(PrologTRS rr sig) = convert trs :: NarradarTRS (Labelled id) f'
 
 --  insertMarkedSymbol :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
   insertMarkedSymbol (id, pp) =
-    let rr' :: Set (Atom, Rule f') =
+    let rr' :: Set (Ident, Rule f') =
                     Set.fromList [ (pred, l  `setLabel` pp :-> r `setLabel` pp)
                                         | (pred, l :-> r) <- toList rr
                                         ,  pred `isPrefixOf` symbol id]
@@ -195,7 +183,7 @@ labellingTrans goalAF assig trs@PrologTRS{} =
             R.return (trs', af')
         else R.return (trs, AF.cut f i af)
 
-labellingTrans af _ p = R.return (convert p :: NarradarTRS (Labelled id) f', convert af :: AF_ (Labelled id))
+labellingTrans _ af _ p = R.return (convert p :: NarradarTRS (Labelled id) f', convert af :: AF_ (Labelled id))
 
 iFun sig f = [1.. getArity sig f]
 
@@ -239,7 +227,7 @@ labellingTrans_rhs goalAF assig trs@PrologTRS{} =
 
 --  insertMarkedSymbol :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
   insertMarkedSymbol (id, pp) =
-    let rr' :: Set (Atom, Rule f') =
+    let rr' :: Set (Ident, Rule f') =
                     Set.fromList [ (pred, l  `setLabel` pp :-> r `setLabel` pp)
                                         | (pred, l :-> r) <- toList rr
                                         ,  pred `isPrefixOf` symbol id]
@@ -284,22 +272,32 @@ labellingTrans_rhs af _ p = R.return (convert p :: NarradarTRS (Labelled id) f',
 -- -------------------------------------------
 -- Parsing Prolog problems
 -- --------------------------
+data PrologSection = Query [Atom] | Clause Clause | QueryString String
 
-data PrologSection = Query String | ModeHint String
 problemParser = do
   txt <- getInput
-  let specials = catMaybes(map f (lines txt))
-  res <- program
-  return (res,specials)
-  where f ('%':'q':'u':'e':'r':'y':':':goal) = Just $ Query goal
-        f ('%':'m':'o':'d':'e':':':goal)     = Just $ ModeHint goal
---        f ('t':'y':'p':'e':':':goal)     = Just $ ModeHint goal
+  let !queryComments = map QueryString $ catMaybes $ map f (lines txt)
+  res <- many (Query <$> Prolog.query <|> Clause <$> Prolog.clause)
+  return (res ++ queryComments)
+  where f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
+        f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
         f _ = Nothing
 
-queries xx = [q | Query q <- xx]
+--mkPrologProblem = (return.) . mkPrologProblem
+parsePrologProblem pgm gg_txt = mapLeft show $ do
+     things <- parse problemParser "input" pgm
+     let cc      = [c | Clause      c <- things]
+         gg1     = [q | Query       q <- things]
+         gg_txt2 = [q | QueryString q <- things]
+     gg2    <- mapM parseGoal (gg_txt ++ gg_txt2)
+     gg1'   <- mapM atomToGoal (concat gg1)
+     return (mkPrologProblem (gg1' ++ gg2) cc)
+ where
+     atomToGoal :: Atom -> Either ParseError Goal
+     atomToGoal (Prolog.Pred f tt) = T f <$> (parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt)
 
 class ToTerm t where toTerm :: (TRSC f, T String :<: f, MonadFresh m) => t -> m(TRS.Term f)
-instance ToTerm Pred where
+instance ToTerm Atom where
    toTerm (Pred id tt) = term id <$> mapM toTerm tt
 instance ToTerm Term where
    toTerm = foldInM f where
@@ -315,7 +313,6 @@ instance ToTerm Term where
 foldIn f  (In t) = f    (fmap (foldIn f) t)
 --ldInM :: (Monad m) => (TermF a -> m a) -> Term -> m a
 foldInM f (In t) = f =<< T.mapM (foldInM f) t
-isRight Right{} = True; isRight _ = False
 
 instance Monad m => Applicative (StateT s m) where pure = return; (<*>) = ap
 instance Applicative (State s) where pure = return; (<*>) = ap

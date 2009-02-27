@@ -32,7 +32,7 @@ import Types hiding (Ppr(..),ppr, (!))
 import qualified Types as TRS
 import qualified TRS.Types as TRS
 import Utils
-import TaskPoolSTM
+--import TaskPoolSTM
 import qualified ArgumentFiltering as AF
 
 import Control.Monad.Free
