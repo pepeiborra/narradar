@@ -35,7 +35,7 @@ import qualified ArgumentFiltering as AF
 import DPairs
 import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom)
 import qualified Language.Prolog.Syntax as Prolog
-import qualified Language.Prolog.Parser as Prolog (program, clause, query, ident)
+import qualified Language.Prolog.Parser as Prolog (program, clause, query, whiteSpace, ident)
 import Language.Prolog.TypeChecker (infer, TypeAssignment)
 import Types hiding (Var,Term,In, program)
 import qualified Types as TRS
@@ -279,7 +279,7 @@ data PrologSection = Query [Atom] | Clause Clause | QueryString String
 problemParser = do
   txt <- getInput
   let !queryComments = map QueryString $ catMaybes $ map f (lines txt)
-  res <- many (Query <$> Prolog.query <|> Clause <$> Prolog.clause)
+  res <- Prolog.whiteSpace >> many (Clause <$> Prolog.clause <|> Query <$> Prolog.query)
   return (res ++ queryComments)
   where f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
         f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
