@@ -87,7 +87,8 @@ initBottom:: (SignatureC sig id, Show id) => sig -> AF_ id
 map       :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
 filter    :: Ord id => (id -> Set Int -> Bool) -> AF_ id -> AF_ id
-invert :: (Ord id, Show id, TRS a id f) => a -> AF_ id -> AF_ id
+invert    :: (Ord id, Show id, TRS a id f) => a -> AF_ id -> AF_ id
+restrictTo:: (SignatureC sig id) => sig -> AF_ id -> AF_ id
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show id)
@@ -97,9 +98,9 @@ lookup id (AF m) = maybe (fail "not found") (return.Set.toList) (Map.lookup id m
 fromList         = AF . Map.fromListWith Set.intersection . P.map (second Set.fromList)
 toList (AF af)   = Map.toList (Map.map Set.toList af)
 singleton id ii  = fromList [(id,ii)]
-map f (AF af) = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
-mapSymbols f (AF af) = AF (Map.mapKeys f af)
+map f (AF af)    = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
 filter f (AF af) = AF (Map.filterWithKey f af)
+mapSymbols f (AF af) = AF (Map.mapKeys f af)
 invert rules (AF af) = AF (Map.mapWithKey (\f ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii) af)
   where sig = getSignature rules -- :: Signature (IdFunctions :+*: IdDPs)
 init t | sig <- getSignature t = fromList
@@ -108,6 +109,8 @@ init t | sig <- getSignature t = fromList
           , getArity sig d > 0]
 initBottom t | sig <- getSignature t = fromList
     [ (d, []) | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)]
+restrictTo (allSymbols.getSignature -> sig) (AF af) =
+    AF (Map.filterWithKey (\k _ -> k `Set.member` sig) af)
 
 --instance Convert (AF_ id) (AF_ id) where convert = id
 instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapSymbols convert

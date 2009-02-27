@@ -36,6 +36,7 @@ import qualified Text.PrettyPrint as Ppr
 
 import TRS hiding (apply)
 import ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
+import qualified ArgumentFiltering as AF
 import Bottom
 import Identifiers
 import Lattice
@@ -95,8 +96,9 @@ narrowingModes0 =   NarrowingModes{types=Nothing, goal=Nothing, pi=error "narrow
 bnarrowingModes0 =  BNarrowingModes{types=Nothing, goal=Nothing, pi=error "bnarrowingModes0"}
 lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=Nothing, pi=error "lbnarrowingModes0"}
 
-mkProblem :: ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
-mkProblem = Problem
+mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
+mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
+mkProblem typ trs dps = Problem typ trs dps
 
 mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
   sig{definedSymbols = definedSymbols `Set.union` Set.mapMonotonic markDPSymbol definedSymbols
@@ -249,7 +251,6 @@ goalP =do
       return (T id modes)
 
 modesP = parens (modeP `sepBy` char ',') where parens= between (char '(') (char ')')
-
 modeP = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
 
 parseGoal :: String -> Either ParseError Goal
