@@ -8,7 +8,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
-
+{-# LANGUAGE RankNTypes #-}
 
 module PrologProblem where
 
@@ -53,14 +53,15 @@ import Debug.Trace
 trace _ x = x
 #endif
 
-{-# SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-prologP_sk :: forall f id. ( ConvertT Basic f, Bottom :<: f, DPMark f id, Lattice (AF_ id)) => ProblemG id f -> ProblemProofG id Html f
-prologP_sk (PrologProblem typ gg clauses) =
-   andP PrologSKP (mkPrologProblem gg clauses :: Problem f)
-     [mkGoalProblem (FromGoal (T (g ++ "_in") modes) (Just $ infer clauses)) (mkDPProblem BNarrowing $ convert $ skTransform clauses) | T g modes <- gg]
+{-# off SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+{-# pff SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+prologP_sk :: forall f id sig. ( ConvertT Basic f, Bottom :<: f, DPMark f id, Lattice (AF_ id)) => (forall sig .SignatureC sig id => TypeAssignment -> sig -> AF.Heuristic id f) -> ProblemG id f -> ProblemProofG id Html f
+prologP_sk mkHeu p@(PrologProblem typ gg clauses) =
+   andP PrologSKP (mkPrologProblem gg clauses `asTypeOf` p)
+     [mkGoalProblem (mkHeu typing)  (FromGoal (T (g ++ "_in") modes) (Just typing)) (mkDPProblem BNarrowing $ convert $ skTransform clauses) | T g modes <- gg]
+  where typing = infer clauses
 
-prologP_sk p = return p
+prologP_sk _ p = return p
 
 skTransform :: [Clause] -> NarradarTRS String Basic
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
@@ -193,7 +194,8 @@ iFun sig f = [1.. getArity sig f]
 prologP_sk_rhs :: forall f id. ( ConvertT Basic f, Bottom :<: f, DPMark f id, Lattice (AF_ id)) => ProblemG id f -> ProblemProofG id Html f
 prologP_sk_rhs (PrologProblem typ gg clauses) =
    andP PrologSKP_rhs (mkPrologProblem gg clauses :: Problem f)
-     [mkGoalProblem_rhs (FromGoal (T (g ++ "_in") modes) (Just $ infer clauses)) (mkDPProblem BNarrowing $ convert $ skTransform clauses) | T g modes <- gg]
+     [mkGoalProblem_rhs (const $ typeHeu typs) (FromGoal (T (g ++ "_in") modes) (Just typs)) (mkDPProblem BNarrowing $ convert $ skTransform clauses) | T g modes <- gg]
+  where typs = infer clauses
 
 prologP_labelling_sk_rhs :: forall f f' id. (Bottom :<: f, MapLabelT f', T id :<: f, Bottom :<: f', DPMark f id, DPMark f' (Labelled id), ConvertT f f', ConvertT Basic f, Ord id, Show id, Lattice (AF_ (Labelled id)))  => ProblemG id f -> ProblemProofG (Labelled id) Html f'
 prologP_labelling_sk_rhs p@(PrologProblem typ gg cc) =
@@ -205,7 +207,7 @@ prologP_labelling_sk_rhs p@(PrologProblem typ gg cc) =
                            assign = infer cc
                        (trs', af') <- toList $ labellingTrans_rhs goalAF assign trs
                        let goalAF' = af' `mappend` AF.singleton (markDPSymbol(Labelling pp goal_f)) pp
-                       return (mkGoalProblem_rhs (FromAF goalAF' (Just assign)) (mkDPProblem BNarrowing trs'))
+                       return (mkGoalProblem_rhs (const $ typeHeu assign) (FromAF goalAF' (Just assign)) (mkDPProblem BNarrowing trs'))
     in andP LabellingSKP_rhs p problems
 
 labellingTrans_rhs :: forall id f f'. (Bottom :<: f, MapLabelT f' , DPMark f' (Labelled id), DPMark f id, ConvertT f f', T (Labelled id) :<: f', Bottom :<: f', Ord id, Show id) => AF_ id -> TypeAssignment -> NarradarTRS id f -> Set(NarradarTRS (Labelled id) f', AF_ (Labelled id))
@@ -327,7 +329,7 @@ prologP :: forall f id. (ConvertT Basic f, Bottom :<: f, DPMark f id, TRSC f, La
 {-# SPECIALIZE prologP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 prologP (PrologProblem typ gg clauses) =
       andP PrologP (mkPrologProblem gg clauses :: ProblemG id f)
-               [mkGoalProblem (FromGoal g (Just $ infer clauses)) (mkDPProblem Narrowing trs) | g <- gg]
+               [mkGoalProblem AF.bestHeu (FromGoal g (Just $ infer clauses)) (mkDPProblem Narrowing trs) | g <- gg]
     where trs = mkTRS(andRules ++ clauseRules)
           clauseRules      = map toRule clauses
           toRule (g :- []) = evalState ((:->) <$> toTerm g <*> pure true) [50..]

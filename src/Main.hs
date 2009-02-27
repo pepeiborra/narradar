@@ -31,7 +31,7 @@ import Text.XHtml as Html
 import Prelude -- hiding (Monad(..))
 import qualified Prelude as P
 
-import ArgumentFiltering (typeHeu, innermost)
+import ArgumentFiltering (bestHeu, typeHeu, innermost)
 import PrologProblem
 import TRS.FetchRules
 import TRS.FetchRules.TRS
@@ -79,7 +79,7 @@ getOptions = do
   opts <- case (getSolver someSolver Labeller, getSolver someSolver Simple, parsePrologProblem input goalFlags, parseFile trsParser problemFile input) of
              (Just (Prolog, s),_, Right p,_) -> return (Options Prolog problemFile (return p) s diagramsFlag)
              (_,Just (typ, s), _, Right (trs :: [Rule Basic])) ->
-                 let p = mkGoalProblem (maybe AllTerms (`FromGoal` Nothing) $ listToMaybe
+                 let p = mkGoalProblem bestHeu (maybe AllTerms (`FromGoal` Nothing) $ listToMaybe
                                                      (map (either (error.show) id . parseGoal) goalFlags))
                                        (mkDPProblem typ (mkTRS trs))
                  in return (Options typ problemFile p s diagramsFlag)

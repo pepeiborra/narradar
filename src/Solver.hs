@@ -15,8 +15,11 @@ import Data.Monoid
 import Data.Traversable
 import Text.XHtml (Html, primHtml)
 import Data.Typeable
+import Language.Prolog.TypeChecker as Prolog (TypeAssignment)
 
-import ArgumentFiltering (typeHeu, innermost)
+import ArgumentFiltering (typeHeu, innermost, AF_)
+import Lattice
+import qualified ArgumentFiltering as AF
 import Proof
 import PrologProblem
 import NarrowingProblem
@@ -32,6 +35,7 @@ import Prelude hiding (Monad(..))
 import qualified Prelude
 
 type Solver id f s m = ProblemG id f -> PPT id f s m
+type Solver' id f id' f' s m = ProblemG id f -> PPT id' f' s m
 
 defaultTimeout = 10
 
@@ -73,8 +77,11 @@ allSolver' heu k p
    | isPrologProblem       p = prologSolver' heu k p
    | isAnyNarrowingProblem p = narrowingSolver 3 k (convert p)
 
-prologSolver_noL    = prologSolver_noL' (aproveSrvP defaultTimeout)
-prologSolver_noL' k = (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k)
+prologSolver_noL' :: (Bottom :<: f, Bottom :<: f', Hole :<: f', ConvertT f f', ConvertT Basic f, DPMark f id, DPMark f' (Labelled id), Monad m, MapLabelT f', Lattice (AF_ id), Lattice (AF_ (Labelled id))) =>
+                     (forall sig .SignatureC sig id => Prolog.TypeAssignment -> sig -> AF.Heuristic id f)
+                         -> Solver (Labelled id) f' Html m -> Solver' id f (Labelled id) f' Html m
+prologSolver_noL    = prologSolver_noL' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+prologSolver_noL' (heu :: (forall sig .SignatureC sig id => Prolog.TypeAssignment -> sig -> AF.Heuristic id f)) k = (prologP_sk heu >=> (return.convert) >=> narrowingSolverScc 1 k)
 
 {-# SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
 prologSolver    = prologSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
@@ -98,7 +105,7 @@ narrowingSolver depth k =
         (refineNarrowing >=> narrowingSolver (depth-1) k))
 
 narrowingSolverScc 0 _ = const mzeroM
-narrowingSolverScc 1 k = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP >=> k
+narrowingSolverScc 1 k = sccProcessor >=> iUsableProcessor >=> groundRhsAllP >=> k
 narrowingSolverScc depth _ | depth < 0 = error "narrowingSolverScc: depth must be positive"
 narrowingSolverScc depth k =
        usableSCCsProcessor >=> iUsableProcessor >=>

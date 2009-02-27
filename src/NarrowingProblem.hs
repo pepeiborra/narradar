@@ -6,6 +6,7 @@
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances #-}
 
 module NarrowingProblem (
@@ -54,10 +55,10 @@ trace _ x = x
 
 data MkGoalProblem id = FromGoal Goal (Maybe TypeAssignment) | FromAF (AF_ id) (Maybe TypeAssignment) | AllTerms
 
-mkGoalProblem :: (DPMark f id, Lattice (AF_ id), Bottom :<: f) => MkGoalProblem id -> ProblemG id f -> ProblemProofG id Html f
-mkGoalProblem = mkGoalProblem' invariantEV
-mkGoalProblem' invariantEV (FromGoal goal types) p = do
-    Problem typ' trs dps <- mkGoalProblem' invariantEV (FromAF (mkGoalAF p goal) types) p
+mkGoalProblem :: (DPMark f id, Lattice (AF_ id), Bottom :<: f) => (forall sig . SignatureC sig id => sig -> AF.Heuristic id f) -> MkGoalProblem id -> ProblemG id f -> ProblemProofG id Html f
+mkGoalProblem mkHeu = mkGoalProblem' invariantEV mkHeu
+mkGoalProblem' invariantEV mkHeu (FromGoal goal types) p = do
+    Problem typ' trs dps <- mkGoalProblem' invariantEV mkHeu (FromAF (mkGoalAF p goal) types) p
     return $ Problem typ'{goal=Just goal} trs dps
    where
     mkGoalAF :: (DPSymbol id, Show id, Ord id, SignatureC sig id) => sig -> Goal -> AF_ id
@@ -65,18 +66,13 @@ mkGoalProblem' invariantEV (FromGoal goal types) p = do
                    let pp = [ i | (i,m) <- zip [1..] modes, m == G]
                    in AF.singleton (functionSymbol goal) pp
 
-mkGoalProblem' invariantEV (FromAF goalAF Nothing) p@(Problem (getGoalAF -> Nothing) trs dps) = do
+mkGoalProblem' invariantEV mkHeu (FromAF goalAF mb_typs) p@(Problem typ@(getGoalAF -> Nothing) trs dps) = do
     let extendedAF = AF.extendAFToTupleSymbols goalAF
-    let orProblems = [(p `withGoalAF` af) | af <- invariantEV (bestHeu p) p extendedAF]
+        typ'       = (typ `withGoalAF` extendedAF){types=mb_typs}
+    let orProblems = [(Problem typ'{Types.pi=af_vc} trs dps) | af_vc <- invariantEV (mkHeu p) p extendedAF]
     assert (not $ null orProblems) $ msum (map return orProblems)
 
-mkGoalProblem' invariantEV (FromAF goalAF (Just typing)) p@(Problem typ@(getGoalAF -> Nothing) trs dps) = do
-    let extendedAF = AF.extendAFToTupleSymbols goalAF
-        typ'       = (typ `withGoalAF` extendedAF){types=Just typing}
-    let orProblems = [(Problem typ'{Types.pi=af_vc} trs dps) | af_vc <- invariantEV (typeHeu typing) p (extendedAF)]
-    assert (not $ null orProblems) $ msum (map return orProblems)
-
-mkGoalProblem' _ AllTerms p = return p
+mkGoalProblem' _ _ AllTerms p = return p
 
 -- ------------------------------------------------------------------------
 -- This is the AF processor described in our Dependency Pairs for Narrowing
@@ -142,7 +138,8 @@ safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
   step (GroundAll (Just af)) p (AF.apply_rhs p af $ Problem Rewriting trs dps)
 safeAFP p = return p
 
-mkBNDPProblem_rhs  mb_goal trs = mkGoalProblem_rhs mb_goal $ mkProblem BNarrowing trs (tRS $ getPairs trs)
+mkBNDPProblem_rhs x@(FromAF af (Just typs)) trs = mkGoalProblem_rhs (const $ typeHeu typs) x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
+mkBNDPProblem_rhs x trs = mkGoalProblem_rhs bestHeu x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
 
 mkGoalProblem_rhs = mkGoalProblem' invariantEV_rhs
 
