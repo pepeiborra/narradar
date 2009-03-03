@@ -33,9 +33,6 @@ import Data.Traversable
 import Text.XHtml (toHtml, Html)
 import Prelude hiding (mapM)
 
-import Debug.Observe
-import Debug.Trace
-
 import ArgumentFiltering (AF_,AF, LabelledAF, Heuristic, bestHeu, typeHeu)
 import qualified ArgumentFiltering as AF
 import DPairs
@@ -49,6 +46,7 @@ import Language.Prolog.TypeChecker
 
 #ifdef DEBUG
 import Debug.Trace
+import Debug.Observe
 #else
 trace _ x = x
 #endif
@@ -169,5 +167,7 @@ append_trs = mkTRS
                append (cons x xx)  yy (cons x zz) :-> append xx yy zz]
 -}
 
+#ifdef DEBUG
 instance Observable Identifier where observer = observeBase
 instance Observable Mode where observer = observeBase
+#endif
