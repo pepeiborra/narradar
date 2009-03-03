@@ -113,8 +113,10 @@ aproveSrvProc timeout = externalProc go where
           headSafe _   x  = head x
 
 
-data Strat = Default | OnlyReductionPair
-strats = [(Default, "narradar.strategy"), (OnlyReductionPair, "reductionpairs.strategy")]
+data Strat = Default | OnlyReductionPair deriving Eq
+
+strats = [ (Default,           "aproveStrats/narradar.strategy")
+         , (OnlyReductionPair, "aproveStrats/reductionpairs.strategy")]
 
 -- aproveSrvProc2 :: (TRS.Ppr f, Show id) => Strat -> Int -> ProblemG id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
@@ -131,13 +133,13 @@ aproveSrvProc2 strat (timeout :: Int) = externalProc go where
     hPutStr h_problem_file trs
     hFlush  h_problem_file
     hClose  h_problem_file
---    runCommand ("chmod o+r " ++ fp)
 
     hAprove <- connectTo "127.0.0.1" (PortNumber aproveSrvPort)
- -- hSetBuffering hAprove NoBuffering
+
     hPutStrLn hAprove "3"                     -- Saying hello
     hPutStrLn hAprove fp                      -- Sending the problem path
-    hPutStrLn hAprove =<< getDataFileName "otto.strat" -- (fromJust (Prelude.lookup strat strats))
+    hPutStrLn hAprove =<< getDataFileName (Data.Maybe.fromJust (Prelude.lookup strat strats))
+
     hPutStrLn hAprove (show timeout) -- Sending the timeout
     hFlush hAprove
     res <- hGetContents hAprove
