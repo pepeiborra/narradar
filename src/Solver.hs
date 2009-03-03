@@ -45,7 +45,7 @@ trivialProc p@(Problem typ trs dps@TRS{})
     | otherwise = returnM p
 trivialProc  p = returnM p
 
-aproveSrvP timeout = trivialProc >=> (wrap' . aproveSrvProc timeout)
+aproveSrvP timeout = trivialProc >=> (wrap' . aproveSrvProc2 Default timeout)
 aproveWebP = trivialProc >=> (wrap' . aproveWebProc)
 aproveLocalP path = trivialProc >=> (wrap' . aproveProc path)
 

@@ -9,6 +9,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
+data-files:          aproveStrats/*.strategy
 
 Flag base4
 Flag web

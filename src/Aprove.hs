@@ -9,6 +9,7 @@ import Control.Monad
 import qualified Data.ByteString as B
 import Data.Char
 import Data.List
+import Data.Maybe
 import Network
 import Network.Curl
 import System.Directory
@@ -19,6 +20,8 @@ import System.Process
 import Text.Printf
 import Text.XHtml hiding ((</>))
 import Text.HTML.TagSoup
+
+import Paths_narradar
 
 import Types
 import Output
@@ -91,6 +94,50 @@ aproveSrvProc timeout = externalProc go where
  -- hSetBuffering hAprove NoBuffering
     hPutStrLn hAprove "2"                     -- Saying hello
     hPutStrLn hAprove fp                      -- Sending the problem path
+    hPutStrLn hAprove (show timeout) -- Sending the timeout
+    hFlush hAprove
+    res <- hGetContents hAprove
+
+    let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
+              "YES" -> success
+              _     -> failP
+    evaluate (length res)
+    hClose hAprove
+{-
+#ifdef DEBUG
+    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+#endif
+-}
+    return (k (External $ Aprove "SRV") prob $ primHtml $ tail $ dropWhile (/= '\n') res)
+    where headSafe err [] = error ("head: " ++ err)
+          headSafe _   x  = head x
+
+
+data Strat = Default | OnlyReductionPair
+strats = [(Default, "narradar.strategy"), (OnlyReductionPair, "reductionpairs.strategy")]
+
+-- aproveSrvProc2 :: (TRS.Ppr f, Show id) => Strat -> Int -> ProblemG id f -> IO (ProblemProofG id Html f)
+{-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
+aproveSrvProc2 strat (timeout :: Int) = externalProc go where
+  go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
+                                                 withSocketsDo $
+                                                 withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
+    let trs = pprTPDB prob
+    let fp = "/tmp" </> fp0
+
+#ifdef DEBUG
+    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+#endif
+    hPutStr h_problem_file trs
+    hFlush  h_problem_file
+    hClose  h_problem_file
+--    runCommand ("chmod o+r " ++ fp)
+
+    hAprove <- connectTo "127.0.0.1" (PortNumber aproveSrvPort)
+ -- hSetBuffering hAprove NoBuffering
+    hPutStrLn hAprove "3"                     -- Saying hello
+    hPutStrLn hAprove fp                      -- Sending the problem path
+    hPutStrLn hAprove =<< getDataFileName "otto.strat" -- (fromJust (Prelude.lookup strat strats))
     hPutStrLn hAprove (show timeout) -- Sending the timeout
     hFlush hAprove
     res <- hGetContents hAprove
