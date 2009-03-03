@@ -234,9 +234,10 @@ instance Show id => Show (ProcInfo id) where
     show UsableRulesP     = "Usable Rules for Basic Narrowing or Full Narrowing with constructor substitutions"
     show Trivial          = "Trivially non terminating"
 
-data ExternalProc = MuTerm | Aprove String | Other String
-     deriving (Eq, Show)
-
+data ExternalProc = MuTerm | Aprove String | Other String   deriving Eq
+instance Show ExternalProc where
+    show (Aprove msg) = "Aprove " ++ msg
+    show (Other  msg) = msg
 -- ------
 -- Modes
 -- ------
