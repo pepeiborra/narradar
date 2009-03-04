@@ -1,6 +1,8 @@
 #!/usr/bin/env runhaskell
 
-import Control.Monad
+{-# LANGUAGE NoImplicitPrelude #-}
+import Prelude hiding (Monad(..))
+
 import Narradar
 import Narradar.Solver
 
