@@ -5,7 +5,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module ExtraVars where
+module Narradar.ExtraVars where
 
 import Control.Applicative
 import Control.RMonad hiding (join)
@@ -20,12 +20,12 @@ import Text.XHtml (toHtml)
 import Prelude hiding (Monad(..), (=<<), or, and, mapM)
 
 import TRS
-import Utils(on)
+import Narradar.Utils(on)
 import Lattice
-import ArgumentFiltering (AF, LabelledAF, AF_, Heuristic, bestHeu, typeHeu)
-import qualified ArgumentFiltering as AF
-import Types
-import Proof
+import Narradar.ArgumentFiltering (AF, LabelledAF, AF_, Heuristic, bestHeu, typeHeu)
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Types
+import Narradar.Proof
 
 #ifdef DEBUG
 import Debug.Trace

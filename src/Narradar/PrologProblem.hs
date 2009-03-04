@@ -10,7 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE RankNTypes #-}
 
-module PrologProblem where
+module Narradar.PrologProblem where
 
 import Control.Applicative
 import Control.Arrow
@@ -28,24 +28,28 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
-import Text.XHtml
+import Text.XHtml (Html)
 
-import ArgumentFiltering (AF_, AF, typeHeu, innermost)
-import qualified ArgumentFiltering as AF
-import DPairs
-import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom)
+import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom, foldInM)
 import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.Parser as Prolog (program, clause, query, whiteSpace, ident)
 import Language.Prolog.TypeChecker (infer, TypeAssignment)
-import Types hiding (Var,Term,In, program)
-import qualified Types as TRS
-import NarrowingProblem
-import Proof
-import Lattice
+import Lattice (Lattice)
 import TRS.FetchRules -- for the Error ParseError instance
-import Utils ((<$$>),(..&..), mapLeft)
+import TRS (Var)
 
-import Prelude hiding (and,or,notElem)
+import Narradar.ArgumentFiltering (AF_, AF, typeHeu, innermost)
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Propositional ((\/), (/\), (-->), Formula)
+import qualified Narradar.Propositional as Prop
+import Narradar.DPairs
+import Narradar.Types hiding (Var,Term,In, program)
+import qualified Narradar.Types as TRS
+import Narradar.NarrowingProblem
+import Narradar.Proof
+import Narradar.Utils ((<$$>),(..&..), mapLeft, on)
+
+import Prelude hiding (and,or,notElem,pi)
 
 #ifdef DEBUG
 import Debug.Trace
@@ -113,8 +117,15 @@ prologP_labelling_sk mkHeu p@(PrologProblem typ gg cc) =
                            goalAF = AF.singleton goal_f pp
                            assig  = infer cc
                        (trs', af') <- toList $ labellingTrans mkHeu goalAF assig trs
+<<<<<<< master:src/PrologProblem.hs
                        let Problem typ trs dps = mkDPProblem Narrowing trs'
                        return$return (Problem BNarrowingModes{Types.pi=AF.extendAFToTupleSymbols af' ,types= Just assig, goal = Just(T (goal ++ "_in") mm)} trs dps)
+=======
+                       let Problem typ trs'' dps = mkDPProblem BNarrowing trs'
+                       return$return (Problem BNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
+                                                             , types= Just assig
+                                                             , goal = AF.mapSymbols' ((IdFunction.) . flip Labelling) goalAF } trs'' dps)
+>>>>>>> local:src/Narradar/PrologProblem.hs
     in andP LabellingSKP p problems
 
 --labellingTrans :: AF -> NarradarTRS Identifier BBasicId -> (NarradarTRS (Labelled Identifier) BBasicLId, AF_ (Labelled Identifier))
@@ -135,7 +146,7 @@ labellingTrans mkHeu goalAF assig trs@PrologTRS{} =
                                          ])
         af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList goalAF] `mappend` AF.init trs0
     in -- trace ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
-       trace (unlines(map show $ Types.rules trs0) ++ "\n" ++ show af0) $
+       trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
        fix invariantEV (trs0, af0)
  where
   heuristic = mkHeu assig trs' --innermost af t p -- typeHeu assig af t p

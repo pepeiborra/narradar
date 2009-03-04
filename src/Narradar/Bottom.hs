@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
-module Bottom where
+module Narradar.Bottom where
 
 import Control.Applicative
 import Data.Foldable (Foldable(..))

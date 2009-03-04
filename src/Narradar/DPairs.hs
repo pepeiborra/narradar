@@ -2,7 +2,7 @@
 {-# LANGUAGE PatternSignatures, PatternGuards, ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
-module DPairs where
+module Narradar.DPairs where
 
 import Control.Applicative
 import qualified Data.Array.IArray as A
@@ -14,11 +14,12 @@ import qualified Data.Tree as Tree
 import Text.XHtml (toHtml, Html)
 import Prelude as P
 
-import MonadSupply
-import Types
-import Utils
 import TRS
-import Proof
+import Control.Monad.MonadSupply
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Types
+import Narradar.Utils
+import Narradar.Proof
 
 mkDpProblem :: DPMark f id => ProblemType id -> NarradarTRS id f -> ProblemG id f
 mkDpProblem Rewriting   trs = mkProblem Rewriting   trs (tRS $ getPairs trs)

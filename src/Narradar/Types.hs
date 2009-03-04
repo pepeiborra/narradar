@@ -8,7 +8,13 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs, TypeFamilies #-}
 
-module Types (module TRS, module Types, module Identifiers, module Bottom) where
+module Narradar.Types ( module TRS
+                      , module Narradar.Types
+                      , module Narradar.DPIdentifiers
+                      , module Narradar.PrologIdentifiers
+                      , module Narradar.Labellings
+                      , module Narradar.Convert
+                      , module Bottom) where
 
 import Data.DeriveTH
 import Data.Derive.Foldable
@@ -34,14 +40,18 @@ import Text.Show
 import Text.PrettyPrint ((<>), parens, punctuate, comma, text, sep)
 import qualified Text.PrettyPrint as Ppr
 
-import TRS hiding (apply)
-import ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
-import qualified ArgumentFiltering as AF
-import Bottom
-import Identifiers
-import Lattice
 import Control.Monad.Free
-import Utils
+import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Bottom as Bottom
+import Narradar.DPIdentifiers
+import Narradar.PrologIdentifiers
+import Narradar.Labellings
+import Narradar.Convert
+import Narradar.Utils
+
+import Lattice
+import TRS hiding (apply)
 import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.TypeChecker as Prolog
 import qualified Language.Prolog.Parser as PrologP

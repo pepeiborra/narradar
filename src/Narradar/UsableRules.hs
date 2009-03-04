@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
 
-module UsableRules where
+module Narradar.UsableRules where
 
 import Control.Applicative
 import qualified Data.Foldable as F
@@ -9,12 +9,12 @@ import Data.Monoid
 import qualified Data.Set as Set
 import Text.XHtml (Html)
 
-import DPairs
-import Identifiers
-import qualified ArgumentFiltering as AF
-import Proof
+import Narradar.DPairs
+import Narradar.DPIdentifiers
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Proof
+import Narradar.Types
 import TRS
-import Types
 
 usableProcessor, iUsableProcessor :: (DPMark f id, Show id) => ProblemG id f -> ProblemProofG id Html f
 usableProcessor p@(Problem typ trs dps@TRS{}) | isBNarrowing typ

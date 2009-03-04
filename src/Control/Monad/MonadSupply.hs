@@ -2,7 +2,7 @@
 {-# LANGUAGE UndecidableInstances, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module MonadSupply where
+module Control.Monad.MonadSupply where
 
 import Control.Monad.State
 

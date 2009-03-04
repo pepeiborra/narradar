@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternGuards, ViewPatterns, RecordWildCards, ScopedTypeVariables, FlexibleContexts #-}
 
-module GraphTransformation (narrowing, instantiation, finstantiation) where
+module Narradar.GraphTransformation (narrowing, instantiation, finstantiation) where
 
 import Control.Applicative
 import Data.Foldable (toList)
@@ -11,11 +11,11 @@ import Control.Comonad.Pointer
 import Control.Monad.Logic
 import Text.XHtml (Html)
 
-import Types hiding ((//), (!))
+import Narradar.Types hiding ((//), (!))
 import TRS (open)
-import Utils ((<$$>))
-import Proof
-import DPairs
+import Narradar.Utils ((<$$>))
+import Narradar.Proof
+import Narradar.DPairs
 
 import qualified TRS
 

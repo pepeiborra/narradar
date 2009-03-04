@@ -17,7 +17,51 @@ Flag web
 Flag debug
    default: False
 
+Library
+  if flag(base4)
+     cpp-options: -DBASE4
+     build-depends:     base >= 4
+  else
+     build-depends:     base < 4
+  if flag(debug)
+     cpp-options: -DDEBUG
+  buildable: True
+  cpp-options: -DGHCI
+  hs-source-dirs: src
+  build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
+     xhtml, tagsoup, curl, derive, fgl, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
+     TRS > 0.21.20080206, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, lattice, 
+     parsec, GHood, prolog, prolog-tools, regex-posix, unix
+  exposed-modules:
+     Narradar,
+     Narradar.Solver,
+     Narradar.Types,
+     Narradar.DPIdentifiers,
+     Narradar.PrologIdentifiers
+     Narradar.Labellings,
+     Narradar.Convert,
+     Narradar.Proof,
+     Narradar.DPairs,
+     Narradar.GraphTransformation,
+     Narradar.ArgumentFiltering,
+     Narradar.UsableRules,
+     Narradar.ExtraVars,
+     Narradar.NarrowingProblem,
+     Narradar.PrologProblem,
+     Narradar.Aprove,
+     Narradar.Output,
+     Narradar.GraphViz,
+     Narradar.Utils,
+     Narradar.Propositional,
+     Narradar.Bottom,
+     Control.Monad.MonadSupply,
+     Control.Monad.Free,
+     Control.Monad.Operad,
+     TaskPoolSTM,
+     Paths_narradar
+
 Executable narradar
+  buildable: False
   if flag(base4)
      cpp-options: -DBASE4
      build-depends:     base >= 4
@@ -33,20 +77,20 @@ Executable narradar
      TRS >= 0.21.20080206, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, lattice, 
      parsec, GHood, prolog, prolog-tools, regex-posix, unix
   other-modules: 
-     Types,
-     MonadSupply,
+     Control.Monad.MonadSupply,
      Control.Monad.Free,
-     Proof,
-     Output,
-     GraphViz,
-     GraphTransformation,
-     NarrowingProblem,
-     DPairs,
-     ArgumentFiltering,
-     Utils,
-     Solver,
-     Aprove,
-     TaskPoolSTM
+     Narradar.Types,
+     Narradar.Proof,
+     Narradar.Output,
+     Narradar.GraphViz,
+     Narradar.GraphTransformation,
+     Narradar.NarrowingProblem,
+     Narradar.DPairs,
+     Narradar.ArgumentFiltering,
+     Narradar.Utils,
+     Narradar.Solver,
+     Narradar.Aprove
+
 
 Executable narradarCgi
   if flag(web)
@@ -64,17 +108,18 @@ Executable narradarCgi
   hs-source-dirs:      src
   build-Depends:       
 
-  other-modules:     Types,
-     MonadSupply,
+  other-modules:
+     Narradar.Types,
+     Control.Monad.MonadSupply,
      Control.Monad.Free,
-     Proof,
-     Output,
-     GraphViz,
-     GraphTransformation,
-     NarrowingProblem,
-     DPairs,
-     ArgumentFiltering,
-     Utils,
-     Solver,
-     Aprove,
-     TaskPoolSTM
+     Narradar.Proof,
+     Narradar.Output,
+     Narradar.GraphViz,
+     Narradar.GraphTransformation,
+     Narradar.NarrowingProblem,
+     Narradar.DPairs,
+     Narradar.ArgumentFiltering,
+     Narradar.Utils,
+     Narradar.Solver,
+     Narradar.Aprove
+

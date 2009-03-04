@@ -8,7 +8,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module ArgumentFiltering where
+module Narradar.ArgumentFiltering where
 
 import Control.Applicative
 import Control.Arrow (first, second)
@@ -26,10 +26,14 @@ import Data.Monoid
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
-import Bottom
-import Identifiers
+import Narradar.Bottom as Bottom
+import Narradar.DPIdentifiers
+import Narradar.PrologIdentifiers
+import Narradar.Labellings
+import Narradar.Convert
+import Narradar.Utils
+
 import TRS hiding (apply)
-import Utils
 import Lattice
 import Language.Prolog.Syntax      (Ident)
 import Language.Prolog.TypeChecker (TypeAssignment)

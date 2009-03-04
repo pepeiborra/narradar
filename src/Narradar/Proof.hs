@@ -11,7 +11,7 @@
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Proof where
+module Narradar.Proof where
 
 import Control.Applicative
 import qualified Control.Monad as M
@@ -28,12 +28,12 @@ import Data.Traversable as T hiding (mapM)
 import Text.XHtml (Html)
 
 import qualified Language.Prolog.Syntax as Prolog (Program)
-import Types hiding (Ppr(..),ppr, (!))
-import qualified Types as TRS
 import qualified TRS.Types as TRS
-import Utils
---import TaskPoolSTM
-import qualified ArgumentFiltering as AF
+
+import Narradar.Types hiding (Ppr(..),ppr, (!))
+import qualified Narradar.Types as TRS
+import Narradar.Utils
+import qualified Narradar.ArgumentFiltering as AF
 
 import Control.Monad.Free
 

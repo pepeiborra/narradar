@@ -3,7 +3,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-module Utils (module Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+module Narradar.Utils (module Narradar.Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
+
 
 import Control.Applicative
 import Control.Exception (bracket)

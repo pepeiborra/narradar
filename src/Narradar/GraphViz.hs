@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, ViewPatterns, PackageImports #-}
-module GraphViz where
+module Narradar.GraphViz where
 
 import Control.Applicative
 import Control.Monad
@@ -14,11 +14,11 @@ import Text.Dot
 import Text.PrettyPrint
 import Prelude hiding (unlines)
 
-import ArgumentFiltering (fromAF)
-import Proof
-import Types
+import Narradar.ArgumentFiltering (fromAF)
+import Narradar.Proof
+import Narradar.Types
+import Narradar.Utils
 import TRS
-import Utils
 import qualified Language.Prolog.Syntax as Prolog
 
 -- ----------------------------

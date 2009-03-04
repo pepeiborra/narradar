@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Aprove where
+module Narradar.Aprove where
 
 import Control.Exception
 import Control.Monad
@@ -23,11 +23,11 @@ import Text.HTML.TagSoup
 
 import Paths_narradar
 
-import Types
-import Output
-import Proof
 import TRS
-import Utils
+import Narradar.Types
+import Narradar.Output
+import Narradar.Proof
+import Narradar.Utils
 
 aproveWebProc :: (Bottom :<: f, Show id, DPSymbol id) => ProblemG id f -> IO (ProblemProofG id Html f)
 aproveWebProc = externalProc go where

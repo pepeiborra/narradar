@@ -9,8 +9,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances #-}
 
-module NarrowingProblem (
-     mkGoalProblem, mkGoalProblem_rhs,
+module Narradar.NarrowingProblem (
+     mkGoalProblem, -- mkGoalProblem_rhs,
      groundRhsOneP, groundRhsAllP,
      safeAFP,
      MkGoalProblem(..)) where
@@ -31,17 +31,18 @@ import Data.Map (Map)
 import Data.Set (Set)
 import Data.Traversable
 import Text.XHtml (toHtml, Html)
-import Prelude hiding (mapM)
+import Prelude hiding (mapM, pi)
 
-import ArgumentFiltering (AF_,AF, LabelledAF, Heuristic, bestHeu, typeHeu)
-import qualified ArgumentFiltering as AF
-import DPairs
-import Proof
-import Utils
-import Types
+import Narradar.ArgumentFiltering (AF_,AF, LabelledAF, Heuristic, bestHeu, typeHeu)
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.DPairs
+import Narradar.Proof
+import Narradar.Utils
+import Narradar.Types as Narradar
+import Narradar.ExtraVars
+import Narradar.Aprove
 import TRS
 import Lattice
-import ExtraVars
 import Language.Prolog.TypeChecker
 
 #ifdef DEBUG
@@ -67,7 +68,7 @@ mkGoalProblem' invariantEV mkHeu (FromGoal goal types) p = do
 mkGoalProblem' invariantEV mkHeu (FromAF goalAF mb_typs) p@(Problem typ@(getGoalAF -> Nothing) trs dps) = do
     let extendedAF = AF.extendAFToTupleSymbols goalAF
         typ'       = (typ `withGoalAF` extendedAF){types=mb_typs}
-    let orProblems = [(Problem typ'{Types.pi=af_vc} trs dps) | af_vc <- invariantEV (mkHeu p) p extendedAF]
+    let orProblems = [(Problem typ'{pi=af_vc} trs dps) | af_vc <- invariantEV (mkHeu (getSignature p)) p extendedAF]
     assert (not $ null orProblems) $ msum (map return orProblems)
 
 mkGoalProblem' _ _ AllTerms p = return p

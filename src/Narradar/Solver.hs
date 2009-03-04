@@ -5,7 +5,7 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE GADTs #-}
 
-module Solver where
+module Narradar.Solver where
 
 import Control.Applicative
 import Control.Monad.Free
@@ -16,20 +16,23 @@ import Data.Traversable
 import Text.XHtml (Html, primHtml)
 import Data.Typeable
 import Language.Prolog.TypeChecker as Prolog (TypeAssignment)
-
-import ArgumentFiltering (typeHeu, innermost, AF_)
-import Lattice
-import qualified ArgumentFiltering as AF
-import Proof
-import PrologProblem
-import NarrowingProblem
-import GraphTransformation
-import Aprove
-import DPairs
-import Types
 import TRS
-import ExtraVars
-import UsableRules
+import TRS.FetchRules
+import TRS.FetchRules.TRS
+import Lattice
+
+
+import Narradar.ArgumentFiltering (typeHeu, innermost, AF_)
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Proof
+import Narradar.PrologProblem
+import Narradar.NarrowingProblem
+import Narradar.GraphTransformation
+import Narradar.Aprove
+import Narradar.DPairs
+import Narradar.Types
+import Narradar.ExtraVars
+import Narradar.UsableRules
 
 import Prelude hiding (Monad(..))
 import qualified Prelude
@@ -39,19 +42,16 @@ type Solver' id f id' f' s m = ProblemG id f -> PPT id' f' s m
 
 defaultTimeout = 10
 
-trivialProc p@(Problem typ trs dps@TRS{})
-    | all (null.properSubterms.rhs) (TRS.rules dps) || any (\(l:->r) -> l == r) (TRS.rules dps)
-    = failP Trivial p (primHtml "loop")
-    | otherwise = returnM p
-trivialProc  p = returnM p
+-- --------------
+-- Aprove flavors
+-- --------------
+aproveSrvP timeout = trivialNonTerm >=> (wrap' . aproveSrvProc2 Default timeout)
+aproveWebP         = trivialNonTerm >=> (wrap' . aproveWebProc)
+aproveLocalP path  = trivialNonTerm >=> (wrap' . aproveProc path)
 
-aproveSrvP timeout = trivialProc >=> (wrap' . aproveSrvProc2 Default timeout)
-aproveWebP = trivialProc >=> (wrap' . aproveWebProc)
-aproveLocalP path = trivialProc >=> (wrap' . aproveProc path)
-
---webSolver, localSolver, srvSolver :: Solver Html IO BasicId
---narradarSolver :: Solver Html IO BasicId -> Solver Html IO BasicId
-
+-- -------
+-- Solvers
+-- -------
 -- solver that connects to the Aprove web site, use only for testing
 webSolver         = narradarSolver' aproveWebP
 
@@ -59,27 +59,21 @@ webSolver         = narradarSolver' aproveWebP
 localSolver       = localSolver' "/usr/local/lib/aprove/runme"
 localSolver' path = narradarSolver' (aproveLocalP path)
 
--- solver that uses an Aprove server running on the host machine
-
-pureSolver = narradarSolver' returnM
-
--- Our main solving scheme
-
 {-# SPECIALIZE narradarSolver :: Problem BBasicId -> PPT Id BBasicId Html IO #-}
+-- Our main solving scheme
 narradarSolver       = narradarSolver' (aproveSrvP defaultTimeout)
 narradarSolver' aproveS p
    | isRewritingProblem    p = aproveS p
    | isAnyNarrowingProblem p = narrowingSolver 3 aproveS p
 
+{-
 allSolver = allSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
 allSolver' heu k p
    | isRewritingProblem    p = k (convert p)
    | isPrologProblem       p = prologSolver' heu k p
    | isAnyNarrowingProblem p = narrowingSolver 3 k (convert p)
+-}
 
-prologSolver_noL' :: (Bottom :<: f, Bottom :<: f', Hole :<: f', ConvertT f f', ConvertT Basic f, DPMark f id, DPMark f' (Labelled id), Monad m, MapLabelT f', Lattice (AF_ id), Lattice (AF_ (Labelled id))) =>
-                     (forall sig .SignatureC sig id => Prolog.TypeAssignment -> sig -> AF.Heuristic id f)
-                         -> Solver (Labelled id) f' Html m -> Solver' id f (Labelled id) f' Html m
 prologSolver_noL    = prologSolver_noL' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
 prologSolver_noL' (heu :: (forall sig .SignatureC sig id => Prolog.TypeAssignment -> sig -> AF.Heuristic id f)) k = (prologP_sk heu >=> (return.convert) >=> narrowingSolverScc 1 k)
 
@@ -91,9 +85,13 @@ prologSolver' heu k = -- (prologP_sk >=> (return.convert) >=> narrowingSolverScc
 prologSolver_one        = prologSolver_one' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
 prologSolver_one' heu k = (prologP_labelling_sk heu >=> usableSCCsProcessor >=> narrowingSolver 1 k)
 
+
+{-
+>>>>>>> local:src/Narradar/Solver.hs
 {-# SPECIALIZE prologSolver_rhs :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
 prologSolver_rhs = prologSolver_rhs' (aproveSrvP defaultTimeout)
 prologSolver_rhs' k = (prologP_sk_rhs >=> (return.convert) >=> narrowingSolverScc 1 k) .|. prologP_labelling_sk_rhs >=> narrowingSolverScc 1 k
+-}
 
 narrowingSolver 0 _ = const mzeroM
 narrowingSolver 1 k = cycleProcessor >=> iUsableProcessor >=> groundRhsOneP >=> k
@@ -115,6 +113,33 @@ narrowingSolverScc depth k =
 
 refineNarrowing = instantiation .|. finstantiation .|. narrowing
 
+-- ------------------------
+-- Trivial nonTermination
+-- ------------------------
+
+trivialNonTerm p@(Problem typ trs dps@TRS{})
+    | all (null.properSubterms.rhs) (TRS.rules dps) || any (\(l:->r) -> l == r) (TRS.rules dps)
+    = failP Trivial p (primHtml "loop")
+    | otherwise = returnM p
+trivialNonTerm  p = returnM p
+
+-- ----------------------
+-- Processor-like Parsers
+-- ----------------------
+
+parseTRS :: ProblemType Id -> String -> PPT Id BasicId Html IO
+parseTRS typ txt = wrap' $ go$ do
+                      rules :: [Rule Basic] <- eitherIO$ parseFile trsParser "" txt
+                      let trs = mkTRS rules :: NarradarTRS String Basic'
+                      return (mkGoalProblem AF.bestHeu AllTerms $ mkDPProblem Narrowing trs)
+
+parseProlog :: String -> PPT String Basic' Html IO
+parseProlog = wrap' . Prelude.return . either error Prelude.return . parsePrologProblem
+
+
+-- -------------
+-- Combinators
+-- -------------
 refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> (a -> m' a) -> a -> m a
 refineBy maxDepth f refiner = loop maxDepth where
   loop 0 x = f x
@@ -127,3 +152,4 @@ infixl 1 .|.
 (.|.) :: MPlus m m m => (b -> m a) -> (b -> m a) -> b -> m a
 f .|. g = \x -> f x `mplus` g x
 
+eitherIO = either (error.show) return

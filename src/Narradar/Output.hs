@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-module Output where
+module Narradar.Output where
 
 import Control.Applicative
 import Control.Monad.Free
@@ -21,12 +21,12 @@ import Text.XHtml (HTML(..), Html(..), (<<), (+++), (!), p, br, noHtml, theclass
                   ,identifier,table,td)
 import Text.XHtml.Table
 
-import qualified ArgumentFiltering as AF
-import Proof
-import Types hiding (Ppr(..),ppr, (!))
-import qualified Types as TRS
+import qualified Narradar.ArgumentFiltering as AF
+import Narradar.Proof
+import Narradar.Types hiding (Ppr(..),ppr, (!))
+import qualified Narradar.Types as TRS
+import Narradar.Utils (snub, foldMap3)
 import qualified TRS
-import Utils (snub, foldMap3)
 
 import qualified Language.Prolog.Syntax as Prolog
 
