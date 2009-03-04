@@ -53,10 +53,11 @@ import Narradar.Utils
 
 import Lattice
 import TRS hiding (apply)
-import qualified Language.Prolog.Syntax as Prolog
+import TRS.FetchRules
+import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.TypeChecker as Prolog
-import qualified Language.Prolog.Parser as PrologP
-import Prelude as P hiding (sum, pi)
+import qualified Language.Prolog.Parser as Prolog
+import Prelude as P hiding (sum, pi, mapM)
 
 isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
@@ -265,7 +266,7 @@ instance Show Mode where show G = "b"; show V = "f"
 
 goalP =do
       spaces
-      id <- PrologP.ident
+      id <- Prolog.ident
       modes <- modesP
       return (AF.singleton id [i | (i,G) <- zip [1..] modes])
 
@@ -282,35 +283,34 @@ pprGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
 pprGoalAF sig pi = vcat [ pprGoal (T f mm) | (f,pp) <- AF.toList pi
                                            , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
 
---type Division id = Map id [Mode]
---type DivEnv      = Map Int Mode
-{-
-instance Lattice Mode where
-    join G G = G
-    join _ _ = V
-    meet V V = V
-    meet _ _ = G
-    top      = V
-    bottom   = G
+-- --------------------------
+-- Parsing Prolog problems
+-- --------------------------
+data PrologSection = Query [Prolog.Atom] | Clause Prolog.Clause | QueryString String
 
-instance Lattice [Mode] where
-    meet     = P.zipWith meet
-    join     = P.zipWith Lattice.join
-    top      = repeat top
-    bottom   = repeat Lattice.bottom
+problemParser = do
+  txt <- getInput
+  let !queryComments = map QueryString $ catMaybes $ map f (lines txt)
+  res <- Prolog.whiteSpace >> many (Clause <$> Prolog.clause <|> Query <$> Prolog.query)
+  return (res ++ queryComments)
+  where f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
+        f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
+        f _ = Nothing
 
-instance Ord id => Lattice (Division id) where
-    meet   = Map.unionWith meet
-    join   = Map.unionWith  join
-    bottom = Map.empty
-    top    = Map.empty
+--mkPrologProblem = (return.) . mkPrologProblem
+parsePrologProblem pgm = mapLeft show $ do
+     things <- parse problemParser "input" pgm
+     let cc      = [c | Clause      c <- things]
+         gg1     = [q | Query       q <- things]
+         gg_txt  = [q | QueryString q <- things]
+     gg2    <- mapM parseGoal gg_txt
+     gg1'   <- mapM atomToGoal (concat gg1)
+     return (mkPrologProblem (gg1' ++ gg2) cc)
+ where
+     atomToGoal (Prolog.Pred f tt) = do
+       mm <- parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
+       return (AF.singleton f [i | (i,G) <- zip [1..] mm])
 
-instance Lattice DivEnv where
-    meet   = Map.unionWith meet
-    join   = Map.unionWith  join
-    bottom = Map.empty
-    top    = Map.empty
--}
 -- ------------------
 -- Functor Instances
 -- ------------------

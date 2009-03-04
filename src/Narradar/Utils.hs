@@ -9,7 +9,8 @@ module Narradar.Utils (module Narradar.Utils, module TRS.Utils, HT.hashInt, HT.h
 
 import Control.Applicative
 import Control.Exception (bracket)
-import Control.Monad (join, liftM, liftM2, replicateM)
+import Control.Monad (join, liftM, liftM2, replicateM, ap)
+import Control.Monad.State (State,StateT)
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
@@ -145,7 +146,6 @@ memoIO hash f = do
 -- ------------------------------
 -- Higher Rank boolean operators
 -- ------------------------------
-
 (.&.) = liftM2 (&&)
 (.|.) = liftM2 (||)
 infixr 3 .&.
@@ -155,3 +155,9 @@ infixr 3 .|.
 (..|..) = (liftM2.liftM2) (||)
 infixr 3 ..&..
 infixr 3 ..|..
+
+-- ---------------------------------------
+-- Missing Applicative instance for StateT
+-- ---------------------------------------
+instance Monad m => Applicative (StateT s m) where pure = return; (<*>) = ap
+instance Applicative (State s) where pure = return; (<*>) = ap

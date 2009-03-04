@@ -180,7 +180,7 @@ labellingTrans mkHeu goalAF assig trs@PrologTRS{} =
       embed$ trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show (AF.apply af rule)) $
        case unlabel f of
         InId f_pred ->
-         let (open -> Just (T u@(unlabel -> UId ui :: PS) ( (open -> Just (T g@(unlabel -> InId{}) vv2)) : vv1))) = r
+         let (open -> Just (T u@(unlabel -> UId{} :: PS) ( (open -> Just (T g@(unlabel -> InId{}) vv2)) : vv1))) = r
              f'  = assert (f==g) $ mapLabel (delete i) (delete i $ iFun trs g) g
              r' = term u (term f' vv2 : vv1)
              changes1 =  Set.insert (pred, l:->r') . Set.delete (pred,rule)
@@ -188,8 +188,8 @@ labellingTrans mkHeu goalAF assig trs@PrologTRS{} =
              changes3 = foldr (.) id
                         [ Set.insert (pred',outrule') . Set.delete (pred',outrule)
                                 | (pred', outrule@(l :-> r)) <- toList rr
-                                , (open -> Just (T (unlabel -> UId ui' :: PS) ( (open -> Just (T p_out@(unlabel -> OutId h) vv2)) : vv1))) <- [l]
-                                , ui == ui', h == f_pred
+                                , (open -> Just (T u' ( (open -> Just (T p_out@(unlabel -> OutId h) vv2)) : vv1))) <- [l]
+                                , u == u', h == f_pred
                                 , let outrule' = term u (term (mapLabel (delete i) (delete i $ iFun trs p_out)  p_out) vv2 : vv1) :-> r]
              trs'@(PrologTRS rr' _) = prologTRS' (changes1 $ changes3 $ changes2 rr)
              af' = af `mappend` AF.singleton f' (labelling f') `mappend` AF.init trs'
@@ -288,37 +288,6 @@ labellingTrans_rhs goalAF assig trs@PrologTRS{} =
 
 labellingTrans_rhs af _ p = R.return (convert p :: NarradarTRS (Labelled id) f', convert af :: AF_ (Labelled id))
 -}
--- -------------------------------------------
--- Parsing Prolog problems
--- --------------------------
-data PrologSection = Query [Atom] | Clause Clause | QueryString String
-
-problemParser = do
-  txt <- getInput
-  let !queryComments = map QueryString $ catMaybes $ map f (lines txt)
-  res <- Prolog.whiteSpace >> many (Clause <$> Prolog.clause <|> Query <$> Prolog.query)
-  return (res ++ queryComments)
-  where f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
-        f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
-        f _ = Nothing
-
---mkPrologProblem = (return.) . mkPrologProblem
-parsePrologProblem pgm = mapLeft show $ do
-     things <- parse problemParser "input" pgm
-     let cc      = [c | Clause      c <- things]
-         gg1     = [q | Query       q <- things]
-         gg_txt  = [q | QueryString q <- things]
-     gg2    <- mapM parseGoal gg_txt
-     gg1'   <- mapM atomToGoal (concat gg1)
-     return (mkPrologProblem (gg1' ++ gg2) cc)
- where
-     atomToGoal :: Atom -> Either ParseError (AF_ String)
-     atomToGoal (Prolog.Pred f tt) = do
-       mm <- parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
-       return (AF.singleton f [i | (i,G) <- zip [1..] mm])
-
-instance Monad m => Applicative (StateT s m) where pure = return; (<*>) = ap
-instance Applicative (State s) where pure = return; (<*>) = ap
 
 {-
 -- ---------------

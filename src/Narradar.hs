@@ -8,7 +8,16 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 
-module Narradar where
+module Narradar ( narradarMain
+                , module Narradar.Solver
+                , module Narradar.ArgumentFiltering
+                , module Narradar.DPairs
+                , module Narradar.GraphTransformation
+                , module Narradar.UsableRules
+                , module Narradar.ExtraVars
+                , module Narradar.NarrowingProblem
+                , module Narradar.PrologProblem
+                ) where
 
 import Control.Monad
 import Data.Maybe
@@ -24,9 +33,18 @@ import Text.Printf
 import Prelude -- hiding (Monad(..))
 import qualified Prelude as P
 
+
 import Narradar.Utils
 import Narradar.Proof hiding (problem)
 import Narradar.GraphViz
+import Narradar.Solver
+import Narradar.ArgumentFiltering
+import Narradar.DPairs
+import Narradar.GraphTransformation
+import Narradar.UsableRules
+import Narradar.ExtraVars
+import Narradar.NarrowingProblem
+import Narradar.PrologProblem
 
 
 --main :: IO ()

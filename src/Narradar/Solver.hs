@@ -15,27 +15,22 @@ import Data.Monoid
 import Data.Traversable
 import Text.XHtml (Html, primHtml)
 import Data.Typeable
-import Language.Prolog.TypeChecker as Prolog (TypeAssignment)
 import TRS
 import TRS.FetchRules
 import TRS.FetchRules.TRS
 import Lattice
 
-
 import Narradar.ArgumentFiltering (typeHeu, innermost, AF_)
 import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Proof
-import Narradar.PrologProblem
-import Narradar.NarrowingProblem
-import Narradar.GraphTransformation
 import Narradar.Aprove
 import Narradar.DPairs
+import Narradar.Proof
 import Narradar.Types
-import Narradar.ExtraVars
-import Narradar.UsableRules
+import Narradar.NarrowingProblem
+import Narradar.PrologProblem
 
-import Prelude hiding (Monad(..))
 import qualified Prelude
+import Prelude hiding (Monad(..))
 
 type Solver id f s m = ProblemG id f -> PPT id f s m
 type Solver' id f id' f' s m = ProblemG id f -> PPT id' f' s m
@@ -62,7 +57,7 @@ trivialNonTerm  p = returnM p
 -- ----------------------
 -- Processor-like Parsers
 -- ----------------------
-
+-- TODO Allow for goals in Narrowing problems
 parseTRS :: ProblemType Id -> String -> PPT Id BasicId Html IO
 parseTRS typ txt = wrap' $ go$ do
                       rules :: [Rule Basic] <- eitherIO$ parseFile trsParser "" txt
@@ -82,7 +77,7 @@ refineBy maxDepth f refiner = loop maxDepth where
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
 
 --runSolver :: (TRS Cf, Hole :<: f, Monoid out) => Solver id out IO f -> ProblemProofG id out f -> IO (ProblemProofG id out f)
-runSolver solver p = runProofT (p >>= solver)
+--runSolver solver p = runProofT (p >>= solver)
 
 infixl 1 .|.
 (.|.) :: MPlus m m m => (b -> m a) -> (b -> m a) -> b -> m a
