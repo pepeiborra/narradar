@@ -21,29 +21,30 @@ import Narradar.Types
 import Narradar.Utils
 import Narradar.Proof
 
-mkDpProblem :: DPMark f id => ProblemType id -> NarradarTRS id f -> ProblemG id f
-mkDpProblem Rewriting   trs = mkProblem Rewriting   trs (tRS $ getPairs trs)
-mkDPProblem Narrowing   trs = mkProblem Narrowing   trs (tRS $ getNPairs trs)
-mkDPProblem BNarrowing  trs = mkProblem BNarrowing  trs (tRS $ getPairs trs)
-mkDPProblem LBNarrowing trs = mkProblem LBNarrowing trs (tRS $ getPairs trs)
+mkDPProblem :: (TRSC f, T id :<: f, T (Identifier id) :<: DPVersionOf f, Convert (Term f) (Term (DPVersionOf f)), TRSC (DPVersionOf f), Show (Identifier id), Ord id) =>
+               ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) (DPVersionOf f)
+mkDPProblem Rewriting   trs = let trs' = convert trs in mkProblem Rewriting   trs' (tRS $ getPairs trs')
+mkDPProblem Narrowing   trs = let trs' = convert trs in mkProblem Narrowing   trs' (tRS $ getNPairs trs')
+mkDPProblem BNarrowing  trs = let trs' = convert trs in mkProblem BNarrowing  trs' (tRS $ getPairs trs')
+mkDPProblem LBNarrowing trs = let trs' = convert trs in mkProblem LBNarrowing trs' (tRS $ getPairs trs')
 
-getPairs :: (Ord id, DPMark f id) => NarradarTRS id f -> [DP f]
+getPairs :: (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> [DP f]
 getPairs trs =
     [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isDefined trs) r]
 
-getNPairs :: (Ord id, DPMark f id) => NarradarTRS id f -> [DP f]
+getNPairs :: (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> [DP f]
 getNPairs trs = getPairs trs ++ getLPairs trs
 
-getLPairs :: (Ord id, DPMark f id) => NarradarTRS id f -> [DP f]
+getLPairs :: (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> [DP f]
 getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isDefined trs lp]
 
 
 {-# SPECIALIZE cycleProcessor :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 {-# SPECIALIZE sccProcessor   :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-cycleProcessor, sccProcessor :: (Bottom :<: f, T id :<: f, DPMark f id, Ord id) => ProblemG id f -> ProblemProofG id Html f
-usableSCCsProcessor :: forall f id. (Bottom :<: f, T (Labelled id) :<: f, DPMark f (Labelled id), DPSymbol id, Ord id) => ProblemG (Labelled id) f -> ProblemProofG (Labelled id) Html f
+cycleProcessor, sccProcessor :: (T id :<: f, DPMark f, Show id, Ord id) => ProblemG id f -> ProblemProofG id Html f
+usableSCCsProcessor :: forall f id. (T LPId :<: f, DPMark f) => ProblemG LPId f -> ProblemProofG LPId Html f
 
-usableSCCsProcessor problem@(Problem typ@(goal -> Just(T goalf tt)) trs dps)
+usableSCCsProcessor problem@(Problem typ@(goal -> goalAF) trs dps)
   | null cc   = success (UsableGraph gr reachable) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (UsableGraph gr reachable) problem
@@ -52,7 +53,7 @@ usableSCCsProcessor problem@(Problem typ@(goal -> Just(T goalf tt)) trs dps)
    gr          = getEDG problem
    cc          = filter isCycle (map Tree.flatten (G.scc gr))
    reachable   = Set.fromList (G.reachable gr =<< goal_pairs)
-   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, rootSymbol (lhs r) == Just (Labelling [ j | (j,G) <- zip [1..] tt] (dpSymbol goalf :: id))]
+   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, Just f <- [rootSymbol (lhs r)], unmarkDPSymbol f `Set.member` AF.domain goalAF]
    isCycle [n] = n `elem` gr A.! n
    isCycle _   = True
 
@@ -76,7 +77,7 @@ cycleProcessor problem@(Problem typ trs dps@TRS{})
     where cc = cycles gr
           gr = getEDG problem
 
-getEDG :: (Ord id, DPMark f id) => ProblemG id f -> G.Graph
+getEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
 getEDG (Problem typ trs (rules->dps)) | isBNarrowing typ =
     G.buildG (0, length dps - 1)
                [ (i,j) | (i,_:->t) <- zip [0..] dps
@@ -96,7 +97,7 @@ ren t = runSupply (foldTermM f t) where
     f t | Just Var{} <- prj t = var <$> next
         | otherwise           = return (inject t)
 
-cap,icap :: forall f id. DPMark f id => NarradarTRS id f -> Term f -> Term f
+cap,icap :: forall f id. (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> Term f -> Term f
 cap trs t | Just (T (s::id) tt) <- open t
                 = term s [if isDefined trs t' then var i else t'
                        | (i,t') <- [0..] `zip` tt]

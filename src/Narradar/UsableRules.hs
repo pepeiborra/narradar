@@ -1,4 +1,7 @@
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Narradar.UsableRules where
 
@@ -16,7 +19,7 @@ import Narradar.Proof
 import Narradar.Types
 import TRS
 
-usableProcessor, iUsableProcessor :: (DPMark f id, Show id) => ProblemG id f -> ProblemProofG id Html f
+usableProcessor, iUsableProcessor :: forall f id a. (DPMark f, Show id, T id :<: f, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
 usableProcessor p@(Problem typ trs dps@TRS{}) | isBNarrowing typ
    = step UsableRulesP p (mkProblem typ trs' dps)
  where
@@ -41,7 +44,7 @@ iUsableProcessor p@(Problem typ@(getGoalAF -> Just pi) trs dps@TRS{}) | isBNarro
   pi'  = AF.filter ((isDPSymbol.) . const) pi
   trs' = mkTRS (F.toList $ usableRules mempty (rhs <$> pi_dps))
   pi_dps = AF.apply pi (rules dps)
-  pi_trs = mkTRS(AF.apply pi (rules trs))
+  pi_trs = mkTRS(AF.apply pi (rules trs)) :: NarradarTRS id f
   usableRules acc [] = acc
   usableRules acc (t@(In in_t):rest)
       | isVar t

@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
 {-# LANGUAGE PatternSignatures, TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
@@ -47,8 +47,8 @@ trace _ x = x
 extendAFToTupleSymbols pi = pi `mappend` mapSymbols markDPSymbol pi
 
 newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord)
-type AF = AF_ Identifier
-type LabelledAF = AF_ (Labelled Identifier)
+type AF = AF_ Id
+type LabelledAF = AF_ LId
 
 instance Show id => Show (AF_ id) where
     show af = -- unlines . fmap show . fmap (second Set.toList) . Map.toList . fromAF
@@ -65,11 +65,17 @@ instance Lattice AF where
   top    = AF mempty
   bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
 
-instance Lattice (AF_ (Labelled Identifier)) where
+instance Lattice (AF_ LId) where
   meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
   join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
   top    = AF mempty
-  bottom = AF $ Map.fromList [(Plain AnyIdentifier, mempty)]
+  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
+
+instance Ord id => Lattice (AF_ id) where
+  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  top    = AF mempty
+
 
 -- | The meet/top monoid
 --   There are (at least) two possible monoids, meet/top and join/bottom
@@ -86,13 +92,15 @@ lookup    :: (Ord id, Monad m) => id -> AF_ id -> m [Int]
 fromList  :: Ord id => [(id,[Int])] -> AF_ id
 toList    :: AF_ id -> [(id,[Int])]
 singleton :: Ord id => id -> [Int] -> AF_ id
-init      :: (SignatureC sig id, Show id) => sig -> AF_ id
-initBottom:: (SignatureC sig id, Show id) => sig -> AF_ id
+init      :: (HasSignature sig id, Show id) => sig -> AF_ id
+initBottom:: (HasSignature sig id, Show id) => sig -> AF_ id
 map       :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
+mapSymbols':: Ord id' => (id -> [Int] -> id') -> AF_ id -> AF_ id'
 filter    :: Ord id => (id -> Set Int -> Bool) -> AF_ id -> AF_ id
 invert    :: (Ord id, Show id, TRS a id f) => a -> AF_ id -> AF_ id
-restrictTo:: (SignatureC sig id) => sig -> AF_ id -> AF_ id
+restrictTo:: (HasSignature sig id) => sig -> AF_ id -> AF_ id
+domain    :: AF_ id -> Set id
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show id)
@@ -105,6 +113,7 @@ singleton id ii  = fromList [(id,ii)]
 map f (AF af)    = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
 filter f (AF af) = AF (Map.filterWithKey f af)
 mapSymbols f (AF af) = AF (Map.mapKeys f af)
+mapSymbols' f pi = fromList [ (f k v, v) | (k,v) <- toList pi ]
 invert rules (AF af) = AF (Map.mapWithKey (\f ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii) af)
   where sig = getSignature rules -- :: Signature (IdFunctions :+*: IdDPs)
 init t | sig <- getSignature t = fromList
@@ -115,6 +124,8 @@ initBottom t | sig <- getSignature t = fromList
     [ (d, []) | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)]
 restrictTo (allSymbols.getSignature -> sig) (AF af) =
     AF (Map.filterWithKey (\k _ -> k `Set.member` sig) af)
+
+domain (AF pi) = Map.keysSet pi
 
 --instance Convert (AF_ id) (AF_ id) where convert = id
 instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapSymbols convert
@@ -128,7 +139,7 @@ instance (T id :<: f, Ord id) => ApplyAF (Term f) id where
     {-# SPECIALIZE instance ApplyAF (Term BBasicId) Id #-}
     apply = applyTerm
 
-instance (Bottom :<: f, Ord id) => ApplyAF (NarradarTRS id f) id where
+instance (Ord id) => ApplyAF (NarradarTRS id f) id where
     {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
     {-# SPECIALIZE instance ApplyAF (NarradarTRS LId BBasicLId) LId #-}
     apply af trs@TRS{} = tRS$ apply af <$$> rules trs
@@ -159,7 +170,7 @@ instance (Bottom :<: f, Ord id) => ApplyAF_rhs (NarradarTRS id f) sig id where
     apply_rhs _ af trs@TRS{} = tRS$ applyToRule (getSignature trs) af <$> rules trs
     apply_rhs _ af (PrologTRS cc sig) = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, applyToRule sig af r)) cc) sig
 
-instance (Bottom :<: f, Var :<: f, T id :<: f, Ord id, SignatureC sig id) => ApplyAF_rhs (Rule f) sig id where
+instance (Bottom :<: f, Var :<: f, T id :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (Rule f) sig id where
     apply_rhs sig = applyToRule (getSignature sig)
 
 instance ApplyAF_rhs a sig id => ApplyAF_rhs [a] sig id where apply_rhs sig af = fmap (apply_rhs sig af)
@@ -182,15 +193,19 @@ applyToRule sig af (lhs :-> rhs) = apply af lhs :-> applyToRhs af rhs
 -- Heuristics
 -- -----------
 type Heuristic id f = AF_ id -> Term f -> Position -> Set (id, Int)
+convertHeu heu af t p = heu (convert af) (convert t) p
+
 --bestHeu, innermost, outermost, noConstructors, noUs, allPos :: sig -> Heuristic id f
 
 {-# noSPECIALIZE bestHeu :: NarradarTRS Id BBasicId -> AF -> Term BBasicId -> Position -> Set (Id,Int) #-}
 
-bestHeu :: (Foldable f, DPSymbol id, T id :<: f, SignatureC sig id) => sig -> Heuristic id f
+bestHeu :: (Foldable f, T id :<: f, HasSignature sig id) => sig -> Heuristic id f
 bestHeu (getSignature -> sig) =
+{-
     predHeuAll  allInner (noConstructors sig ..|..
                          (cond (isDPSymbol.fst) ==> notNullArity ..&.. noUs))
      `or`
+-}
     (((Set.fromList .).) . allInner)
 
 innermost _ _ [] = mempty
@@ -211,10 +226,28 @@ allInner af t pos =  [(root, last sub_p)
 
 --typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
 typeHeu assig =
+    predHeuOne allInner (const f) `or` innermost
+  where f (show -> p,i)  = Set.notMember (p,i) unboundedPositions
+        constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
+        unboundedPositions = fix unboundedF reflexivePositions
+        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
+        unboundedF f uu | null new = uu
+                        | otherwise= f(Set.fromList new `mappend` uu)
+           where new =  [ p | c <- assig
+                            , p <- F.toList c
+                            , p `Set.notMember` uu
+                            , (g,0) <- F.toList (Set.delete p c)
+                            , any (`Set.member` uu) (zip (repeat g) [1..getArity g])]
+        reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
+        getArity g | Just i <- Map.lookup g arities = i
+        arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
+
+-- Ignore unbounded positions
+typeHeu2 assig =
     predHeuOne allInner (\ _ (p,i) -> -- not(isDPSymbol p)) &&
-                                         ((Set.notMember (symbol p) constructorSymbols)
+                                         ((Set.notMember (p) constructorSymbols)
                                         ||
-                                          (Set.notMember (symbol p,i) unboundedPositions)))
+                                          (Set.notMember (p,i) reflexivePositions)))
    `or` innermost
   where constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
@@ -234,13 +267,8 @@ typeHeu assig =
 -- ----------
 noConstructors sig _pi (f,_) = f `Set.notMember` constructorSymbols sig
 
-noUs _ (symbol -> ('u':'_':_),_) = False
+noUs _ (UId _) = False
 noUs _ _ = True
-
-noDPs _ = not . isDPSymbol . fst
-
-noUsDPs _ s@(symbol -> ('u':'_':_),_) = not(isDPSymbol s)
-noUsDPs _ _ = True
 
 notNullArity af (s,_) | Just [_] <- lookup s af = False
                       | otherwise               = True

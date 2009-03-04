@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternGuards, ViewPatterns, RecordWildCards, ScopedTypeVariables, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Narradar.GraphTransformation (narrowing, instantiation, finstantiation) where
 
@@ -26,7 +27,7 @@ import qualified TRS
 {-# SPECIALIZE finstantiation :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
 {-# SPECIALIZE finstantiation :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
 
-narrowing, instantiation, finstantiation :: (DPMark f id, Hole :<: f) => ProblemG id f -> ProblemProofG id Html f
+narrowing, instantiation, finstantiation :: (DPMark f, Hole :<: f, Show id, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
 narrowing p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig))
   | null dpss || [[]] == dpss = dontKnow NarrowingP p
   | otherwise = orP NarrowingP p [return $ Problem typ trs (tRS' newdps sig) | newdps <- dpss]

@@ -7,7 +7,6 @@
 
 module Narradar.Utils (module Narradar.Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
 
-
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad (join, liftM, liftM2, replicateM)
@@ -30,6 +29,18 @@ import Test.QuickCheck
 import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
+
+-- Type Constructor Composition
+-- ----------------------------
+newtype O f g x = O (f(g x))
+instance (Functor f, Functor g) => Functor (O f g) where fmap f (O fgx) = O (fmap2 f fgx)
+
+-- --------------
+-- Various stuff
+-- --------------
+
+hashId :: Show a => a -> Int32
+hashId = HT.hashString . show
 
 isRight Right{} = True; isRight _ = False
 

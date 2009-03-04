@@ -8,6 +8,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs, TypeFamilies #-}
 
+
 module Narradar.Types ( module TRS
                       , module Narradar.Types
                       , module Narradar.DPIdentifiers
@@ -37,7 +38,7 @@ import Unsafe.Coerce
 import Text.Printf
 import Text.ParserCombinators.Parsec
 import Text.Show
-import Text.PrettyPrint ((<>), parens, punctuate, comma, text, sep)
+import Text.PrettyPrint ((<>), parens, punctuate, comma, text, sep, vcat, Doc)
 import qualified Text.PrettyPrint as Ppr
 
 import Control.Monad.Free
@@ -62,10 +63,10 @@ isGround = null . vars
 
 class    ExtraVars t f | t -> f where extraVars :: t -> [Term f]
 
-instance (Ord id, DPMark f id) => ExtraVars (ProblemG id f) f where
+instance (Ord id, TRSC f, T id :<: f) => ExtraVars (ProblemG id f) f where
     {-# SPECIALIZE instance ExtraVars (Problem BBasicId) BBasicId #-}
     extraVars (Problem _ trs dps) = extraVars trs ++ extraVars dps
-instance (Ord id, DPMark f id) => ExtraVars (NarradarTRS id f) f where
+instance (Ord id, TRSC f, T id :<: f) => ExtraVars (NarradarTRS id f) f where
     {-# SPECIALIZE instance ExtraVars (NarradarTRS Id BBasicId) BBasicId #-}
     extraVars trs = concatMap extraVars (rules trs)
 instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
@@ -75,36 +76,30 @@ instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
 ---------------------------
 -- DP Problems
 ---------------------------
-type  DP a = Rule a
-
-data ProblemF id a = Problem       {typ::(ProblemType id), trs,dps::a}
-                   | PrologProblem {typ::(ProblemType id), goals::[Goal], program::Prolog.Program}
+type DP a = Rule a
+type ProblemType id = ProblemTypeF (AF_ id)
+data ProblemF id a = Problem {typ::(ProblemType id), trs,dps::a}
      deriving (Eq,Show)
-{-
-instance Functor  (ProblemF id) where fmap f (Problem typ a b) = Problem typ (f a) (f b)
-instance Foldable ProblemF whee foldMap f (Problem _ a b) = f a `mappend` f b
-instance Traversable ProblemF where traverse f (Problem typ a b) = Problem typ <$> f a <*> f b
--}
 
 instance Size a => Size (ProblemF id a) where size = sum . fmap size
-instance Ord id => SignatureC (ProblemG id f) id where
-  {-# SPECIALIZE instance SignatureC (Problem BBasicId) Id #-}
+instance Ord id => HasSignature (ProblemG id f) id where
+  {-# SPECIALIZE instance HasSignature (Problem BBasicId) Id #-}
   getSignature (Problem _ trs dps) = getSignature trs `mappend` getSignature dps
-  getSignature PrologProblem{} = error "getSignature: tried to get the signature of a PrologProblem"
+--  getSignature PrologProblem{} = error "getSignature: tried to get the signature of a PrologProblem"
 
-type Problem     f = ProblemG Identifier f
+type Problem     f = ProblemG Id f
 type ProblemG id f = ProblemF id (NarradarTRS id f)
 
-data ProblemTypeF a = Rewriting
-                    | Narrowing   | NarrowingModes   {pi::a, types::Maybe Prolog.TypeAssignment, goal::Maybe Goal}
-                    | BNarrowing  | BNarrowingModes  {pi::a, types::Maybe Prolog.TypeAssignment, goal::Maybe Goal}
-                    | LBNarrowing | LBNarrowingModes {pi::a, types::Maybe Prolog.TypeAssignment, goal::Maybe Goal}
-	            | Prolog
+data ProblemTypeF pi   = Rewriting
+                       | Narrowing   | NarrowingModes   {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
+                       | BNarrowing  | BNarrowingModes  {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
+                       | LBNarrowing | LBNarrowingModes {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
+	               | Prolog {goals::[AF_ String], program::Prolog.Program}
                     deriving (Eq, Show)
 
-narrowingModes0 =   NarrowingModes{types=Nothing, goal=Nothing, pi=error "narrowingModes0"}
-bnarrowingModes0 =  BNarrowingModes{types=Nothing, goal=Nothing, pi=error "bnarrowingModes0"}
-lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=Nothing, pi=error "lbnarrowingModes0"}
+narrowingModes0 =   NarrowingModes  {types=Nothing, goal=error "narrowingModes0", pi=error "narrowingModes0"}
+bnarrowingModes0 =  BNarrowingModes {types=Nothing, goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}
+lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
 mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
@@ -115,19 +110,22 @@ mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
      ,arity          = arity `Map.union` Map.fromList [(markDPSymbol f, getArity sig f) | f <- dd]
      }
 
-instance (ConvertT f f', Convert id id', Ord id, Ord id', T id :<: f, DPMark f' id', TRSC f, TRSC f' ) => Convert (ProblemG id f) (ProblemG id' f') where
-  {-# SPECIALIZE instance Convert (Problem BBasicId) (ProblemG LId BBasicLId) #-}
-  {-# SPECIALIZE instance Convert (ProblemG String Basic) (Problem BBasicId) #-}
-  {-# SPECIALIZE instance Convert (ProblemG String Basic) (ProblemG LId BBasicLId) #-}
+instance (ConvertT f f', Convert id id', Ord id, Ord id', T id :<: f, T id' :<: f', TRSC f, TRSC f' ) => Convert (ProblemG id f) (ProblemG id' f') where
   convert p@Problem{..} = (fmap convert p){typ = fmap convert typ}
-  convert (PrologProblem typ gg cc) = PrologProblem (fmap convert typ) gg cc
+--  convert (PrologProblem typ gg cc) = PrologProblem (fmap convert typ) gg cc
 
---mkPrologProblem :: [Goal] -> Prolog.Program -> ProblemG Identifier BBasicId
-mkPrologProblem = PrologProblem Prolog
 
-isProlog Prolog = True ; isProlog _ = False
-isPrologProblem PrologProblem{} = True
-isPrologProblem p = isProlog $ typ p
+data VoidF f; instance Functor VoidF; instance TRS.Ppr VoidF
+
+type PrologProblem = ProblemG String Basic'
+mkPrologProblem :: [AF_ String] -> Prolog.Program -> PrologProblem
+mkPrologProblem gg pgm = mkProblem (Prolog gg pgm) mempty mempty
+
+mkGoalAF (T f tt) = AF.singleton f [ i | (i,G) <- zip [1..] tt]
+
+isProlog Prolog{} = True ; isProlog _ = False
+--isPrologProblem PrologProblem{} = True
+isPrologProblem = isProlog . typ
 
 isFullNarrowing Narrowing{} = True
 isFullNarrowing NarrowingModes{} = True
@@ -167,8 +165,6 @@ getTyping _ = Nothing
 -- AF Problems
 -- -------------
 
-type ProblemType id = ProblemTypeF (AF_ id)
-
 class WithGoalAF t id where
   type T' t id :: *
   withGoalAF :: t -> AF_ id -> T' t id
@@ -176,24 +172,36 @@ class WithGoalAF t id where
 instance (WithGoalAF (ProblemType id) id) => WithGoalAF (ProblemG id f) id where
   type T' (ProblemG id f) id = ProblemG id f
   withGoalAF(Problem typ trs dps) goal = Problem (withGoalAF typ goal) trs dps
-
-instance Show id =>  WithGoalAF (ProblemType id) id' where
+{-
+instance (Convert id id', Ord id', Show id) =>  WithGoalAF (ProblemType id) id' where
   type T' (ProblemType id) id' = ProblemType id'
-  withGoalAF pt@NarrowingModes{}   pi' = pt{pi=pi'}
-  withGoalAF pt@BNarrowingModes{}  pi' = pt{pi=pi'}
-  withGoalAF pt@LBNarrowingModes{} pi' = pt{pi=pi'}
+  withGoalAF pt@NarrowingModes{..}   pi' = pt{pi=pi', goal = convert goal :: AF_ id'}
+  withGoalAF pt@BNarrowingModes{..}  pi' = pt{pi=pi', goal = convert goal :: AF_ id'}
+  withGoalAF pt@LBNarrowingModes{..} pi' = pt{pi=pi', goal = convert goal :: AF_ id'}
+  withGoalAF Narrowing   pi = narrowingModes0{pi, goal=pi}
+  withGoalAF BNarrowing  pi = bnarrowingModes0{pi,goal=pi}
+  withGoalAF LBNarrowing pi = lbnarrowingModes0{pi,goal=pi}
+  withGoalAF Rewriting   _  = Rewriting
+--  withGoalAF typ@Prolog{} _ =
+  withGoalAF typ _ = error ("withGoalAF - error: " ++ show typ)
+-}
+instance (Show id) =>  WithGoalAF (ProblemType id) id where
+  type T' (ProblemType id) id = ProblemType id
+  withGoalAF pt@NarrowingModes{..}   pi' = pt{pi=pi'}
+  withGoalAF pt@BNarrowingModes{..}  pi' = pt{pi=pi'}
+  withGoalAF pt@LBNarrowingModes{..} pi' = pt{pi=pi'}
   withGoalAF Narrowing   pi = narrowingModes0{pi}
   withGoalAF BNarrowing  pi = bnarrowingModes0{pi}
   withGoalAF LBNarrowing pi = lbnarrowingModes0{pi}
   withGoalAF Rewriting   _  = Rewriting
-  withGoalAF Prolog      _  = Prolog
+--  withGoalAF typ@Prolog{} _ =
   withGoalAF typ _ = error ("withGoalAF - error: " ++ show typ)
 
-instance (Bottom.Bottom :<: f, Ord id) => ApplyAF (ProblemG id f) id where
+instance (Ord id) => ApplyAF (ProblemG id f) id where
     {-# SPECIALIZE instance ApplyAF (Problem BBasicId) Id #-}
     apply pi p@(Problem typ trs dps) = Problem typ (apply pi trs) (apply pi dps)
 
-instance (Bottom.Bottom :<: f, Ord id, SignatureC sig id) => ApplyAF_rhs (ProblemG id f) sig id where
+instance (Bottom.Bottom :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (ProblemG id f) sig id where
     apply_rhs _ pi p@(Problem typ trs dps) = Problem typ (apply_rhs p pi trs) (apply_rhs p pi dps)
 
 -- ------------
@@ -252,24 +260,27 @@ instance Show ExternalProc where
 -- Modes
 -- ------
 data Mode = G | V deriving (Eq, Bounded)
-type Goal = T String Mode
+type Goal id = T id Mode
 instance Show Mode where show G = "b"; show V = "f"
 
 goalP =do
       spaces
       id <- PrologP.ident
       modes <- modesP
-      return (T id modes)
+      return (AF.singleton id [i | (i,G) <- zip [1..] modes])
 
 modesP = parens (modeP `sepBy` char ',') where parens= between (char '(') (char ')')
 modeP = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
 
-parseGoal :: String -> Either ParseError Goal
+parseGoal :: String -> Either ParseError (AF_ String)
 parseGoal = parse goalP ""
 
-pprGoal :: Goal -> String
-pprGoal (T id modes) = show (text id <> parens(sep$ punctuate comma $ map (text.show) modes))
+pprGoal :: (Goal String) -> Doc
+pprGoal (T id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)
 
+pprGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
+pprGoalAF sig pi = vcat [ pprGoal (T f mm) | (f,pp) <- AF.toList pi
+                                           , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
 
 --type Division id = Map id [Mode]
 --type DivEnv      = Map Int Mode

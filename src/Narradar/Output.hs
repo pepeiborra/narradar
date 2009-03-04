@@ -35,7 +35,7 @@ import Prelude hiding (concat)
 -- TPDB
 -- ----
 
-pprTPDB :: forall f id. (Show id, Bottom :<: f, DPSymbol id) => ProblemG id f -> String
+pprTPDB :: forall f id. (Show id) => ProblemG id f -> String
 pprTPDB p@(Problem _ trs dps@TRS{} ) =
   unlines [ printf "(VAR %s)" (unwords $ map (show . pprTerm) $ snub $ foldMap3 vars' ( rules <$> p))
           , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
@@ -47,15 +47,17 @@ pprTPDB p@(Problem _ trs dps@TRS{} ) =
         f (prj -> Just (T (id::id) [])) = text (show id)
         f (prj -> Just (T (id::id) tt)) =
             text (show id) <> parens (hcat$ punctuate comma tt)
+{-
         f (prj -> Just Bottom) =  -- TODO Cache the obtained representation on first call
             text $ fromJust $ find (not . flip Set.member (allSymbols$getSignature p) . functionSymbol)
                                    ("_|_":["_|_"++show i | i <- [0..]])
-
+-}
 -------------------
 -- Ppr
 -------------------
 
 class Ppr a where ppr :: a -> Doc
+instance Ppr ()
 
 instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . vcat . punctuate comma . toList . fmap ppr
 instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
@@ -65,7 +67,7 @@ instance Ppr Int where ppr = int
 
 instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
 instance Ppr (ProblemType id) where
-    ppr Prolog                    = text "Prolog"
+    ppr Prolog{}                  = text "Prolog"
     ppr typ | isFullNarrowing typ = text "NDP"
     ppr typ | isBNarrowing typ    = text "BNDP"
     ppr Rewriting                 = text "DP"
@@ -78,7 +80,7 @@ instance TRS.Ppr f => Ppr (ProblemG id f) where
 
 instance Ppr SomeProblem where
   ppr (SomeProblem p@(Problem typ TRS{} _)) = ppr p
-  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc :: Problem BasicId)
+--  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc)
 
 instance Ppr SomeInfo where ppr (SomeInfo p) = ppr p
 
@@ -144,17 +146,16 @@ instance Show id => HTML (ProcInfo id) where
     toHtml p               = "PROCESSOR: " +++ show p
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
-
 instance TRS.Ppr f => HTML (ProblemG id f) where
+    toHtml (Problem typ@Prolog{..} _ _) =
+        H.table ! [typClass typ] << (
+            H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
+            H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves program)
     toHtml (Problem typ trs dps@TRS{}) | null $ rules dps =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves (rules trs) </>
                  "Dependency Pairs: none")
-    toHtml PrologProblem{..} =
-        H.table ! [typClass typ] << (
-            H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
-            H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves program)
     toHtml (Problem typ trs dps@TRS{}) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
@@ -165,7 +166,7 @@ instance TRS.Ppr f => HTML (ProblemG id f) where
 
 instance HTML SomeProblem where
     toHtml (SomeProblem p@Problem{}) = toHtml p
-    toHtml (SomePrologProblem gg cc) = toHtml (mkPrologProblem gg cc :: Problem BasicId)
+--    toHtml (SomePrologProblem gg cc) = toHtml (mkPrologProblem gg cc)
 
 instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
 
@@ -220,7 +221,7 @@ instance HTML Prolog.Atom where
 typClass typ | isFullNarrowing typ = theclass "NDP"
 typClass typ | isBNarrowing typ = theclass "BNDP"
 typClass Rewriting = theclass "DP"
-typClass Prolog    = theclass "Prolog"
+typClass Prolog{}  = theclass "Prolog"
 
 divi ident = H.thediv ! [H.theclass ident]
 spani ident = H.thespan ! [H.theclass ident]

@@ -31,7 +31,7 @@ import Text.XHtml as Html
 import Prelude -- hiding (Monad(..))
 import qualified Prelude as P
 
-import ArgumentFiltering (bestHeu, typeHeu, innermost)
+import ArgumentFiltering (bestHeu, typeHeu, typeHeu2, innermost)
 import PrologProblem
 import TRS.FetchRules
 import TRS.FetchRules.TRS
@@ -53,11 +53,11 @@ main = do
 #ifndef GHCI
   installHandler sigALRM  (Catch (putStrLn "timeout" >> exitImmediately (ExitFailure (-1)))) Nothing
 #endif
-  (Options{..}, _, errors) <- getOptions
-  sol <- runSolver solver (htmlProof problem)
+  (Options problemFile (NiceSolver solver pprSol) diagrams, _, errors) <- getOptions
+  sol <- runProofT solver
   putStrLn$ if isSuccess sol then "YES" else "NO"
   when diagrams $ withTempFile "." "narradar.dot" $ \fp h -> do
-        hPutStrLn h (pprDot sol)
+        hPutStrLn h (pprSol sol)
         hFlush h
         system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
         -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
@@ -76,38 +76,26 @@ getOptions = do
       problemFile = fromMaybe "INPUT" (listToMaybe nonOptions)
       someSolver  = parseSolver solverFlag'
   input <- maybe getContents readFile (listToMaybe nonOptions)
-  opts <- case (getSolver someSolver Labeller, getSolver someSolver Simple, parsePrologProblem input goalFlags, parseFile trsParser problemFile input) of
-             (Just (Prolog, s),_, Right p,_) -> return (Options Prolog problemFile (return p) s diagramsFlag)
-             (_,Just (typ, s), _, Right (trs :: [Rule Basic])) ->
-                 let p = mkGoalProblem bestHeu (maybe AllTerms (`FromGoal` Nothing) $ listToMaybe
-                                                     (map (either (error.show) id . parseGoal) goalFlags))
-                                       (mkDPProblem typ (mkTRS trs))
-                 in return (Options typ problemFile p s diagramsFlag)
-             (Just (Prolog, _), _, Left parseError, _) -> putStrLn parseError >> exitWith (ExitFailure 1)
-             (_, _, _, Left parseError)                -> print parseError    >> exitWith (ExitFailure 1)
-  return (opts, nonOptions, errors)
+  return (Options problemFile (someSolver problemFile input) diagramsFlag, nonOptions, errors)
 
-data Options = forall id f . Options { problemType :: ProblemType id
-                                     , problemFile :: FilePath
-                                     , problem     :: ProblemProofG id Html f
-                                     , solver      :: LSolver id f
-                                     , diagrams    :: Bool
-                                     }
+-- data Options where Options :: (TRSC f, Ppr f) => FilePath -> PPT id f Html IO -> Bool -> Options
+
+data Options =  Options { problemFile :: FilePath
+                        , solver      :: NiceSolver
+                        , diagrams    :: Bool
+                        }
 
 data Flags id = Flags { solverFlag      :: Maybe String
-                      , goalFlags       :: [String]
                       , diagramsFlag    :: Bool
                       }
 
 defFlags = Flags{ solverFlag       = Nothing
-                , goalFlags        = []
                 , diagramsFlag     = True
                 }
 --opts :: [OptDescr (Flags f id -> Flags f id)]
 opts = [ Option "s" ["solver"]  (ReqArg (\arg opts -> returnM opts{solverFlag = Just arg}) "DESC")            "DESC = N | BN | PL [LOCAL path|WEB|SRV timeout] (default: automatic)"
-       , Option "g" ["goal"]    (ReqArg (\arg opts -> returnM opts{goalFlags  = arg : goalFlags opts}) "GOAL") "Goal to be solved, if any. Multiple goals can be introduced in separate uses of this flag"
        , Option ""  ["nodiagrams"] (NoArg $ \opts  -> returnM opts{diagramsFlag = False})                     "Do not produce a pdf proof file"
-       , Option "t" ["timeout"] (ReqArg (\arg opts -> scheduleAlarm (read arg) >> return opts) "SRCONDS")     "Timeout in seconds (default:none)"
+       , Option "t" ["timeout"] (ReqArg (\arg opts -> scheduleAlarm (read arg) >> return opts) "SECONDS")     "Timeout in seconds (default:none)"
        , Option "h?" ["help"]   (NoArg  (\   _     -> putStrLn(usageInfo usage opts) >> exitSuccess))         "Displays this help screen"
        ]
 
@@ -117,24 +105,40 @@ data SomeSolver where LabelSolver  :: ProblemType Id  -> LSolver Id  BBasicId  -
 data SolverType id f where Labeller :: SolverType Id BBasicId
                            Simple   :: SolverType LId BBasicLId
 
+data NiceSolver where NiceSolver :: (TRSC f, Ppr f) => PPT id f Html IO -> (ProblemProofG id Html f -> String) -> NiceSolver
+
 getSolver :: SomeSolver -> SolverType id f -> Maybe (ProblemType id, LSolver id f)
 getSolver (LabelSolver  typ s) Labeller = Just (typ, s)
 getSolver (SimpleSolver typ s) Simple   = Just (typ, s)
 getSolver _ _ = Nothing
 
-parseSolver "N"      = SimpleSolver Narrowing  narradarSolver
-parseSolver "BN"     = SimpleSolver BNarrowing narradarSolver
-parseSolver "PL"     = LabelSolver Prolog      prologSolver
-parseSolver "PL_rhs" = LabelSolver Prolog      prologSolver_rhs
-parseSolver "PL_one" = LabelSolver Prolog      prologSolver_one
+parseTRS :: ProblemType Id -> FilePath -> String -> PPT Id BasicId Html IO
+parseTRS typ file txt = wrap' $ do
+                      rules :: [Rule Basic] <- eitherIO$ parseFile trsParser file txt
+                      let trs = mkTRS rules :: NarradarTRS String Basic'
+                      return (mkGoalProblem bestHeu AllTerms $ mkDPProblem Narrowing trs)
+
+parseProlog :: String -> PPT String Basic' Html IO
+parseProlog = wrap' . return . either error return . parsePrologProblem
+
+parseSolver "N"  file txt = NiceSolver (parseTRS Narrowing  file txt >>= narradarSolver) pprDot
+parseSolver "BN" file txt = NiceSolver (parseTRS BNarrowing file txt >>= narradarSolver) pprDot
+parseSolver "PL" file txt = NiceSolver (parseProlog  txt >>= prologSolver) pprDot
+parseSolver "PL_one" file txt = NiceSolver (parseProlog txt >>= prologSolver_one) pprDot
+parseSolver "PL_inn" file txt = NiceSolver (parseProlog txt >>= prologSolver' (\_ _ -> innermost) (aproveSrvP 30)) pprDot
+--parseSolver "PL_typ2" file txt = NiceSolver (parseProlog txt >>= prologSolver' ((typeHeu2.) . const) (aproveSrvP 30)) pprDot
+{-
+--parseSolver "PL_rhs" = LabelSolver Prolog      prologSolver_rhs
+
 parseSolver "PL_noL" = LabelSolver Prolog      prologSolver_noL
 parseSolver "PL_inn" = LabelSolver Prolog    $ prologSolver' (\_ _ -> innermost) (aproveSrvP 30)
-parseSolver "PL_typ" = LabelSolver Prolog    $ prologSolver' ((typeHeu.) . const) (aproveSrvP 30)
+parseSolver "PL_typ2"= LabelSolver Prolog    $ prologSolver' ((typeHeu2.) . const) (aproveSrvP 30)
+parseSolver "PL_typ" = LabelSolver Prolog    $ prologSolver' ((typeHeu.)  . const) (aproveSrvP 30)
 parseSolver ('P':'L':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver' ((typeHeu.) . const) k)
-parseSolver ('P':'L':'_':'r':'h':'s':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_rhs' k)
+--parseSolver ('P':'L':'_':'r':'h':'s':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_rhs' k)
 parseSolver ('P':'L':'_':'o':'n':'e':' ': (parseAprove -> Just k)) = LabelSolver Prolog (prologSolver_one' ((typeHeu.) . const) k)
 parseSolver _ = error "Could not parse the description. Expected (LOCAL path|WEB|SRV timeout)"
-
+-}
 parseAprove = go1 where
     go0 _                                 = Nothing
     go1 (prefixedBy "SRV"   -> Just timeout) | [(t,[])] <- reads timeout = Just (aproveSrvP t)
@@ -145,3 +149,5 @@ parseAprove = go1 where
 prefixedBy [] xx = Just xx
 prefixedBy (p:pp) (x:xx) | p == x = prefixedBy pp xx
                          | otherwise = Nothing
+
+eitherIO = either (error.show) return

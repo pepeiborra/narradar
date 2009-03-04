@@ -3,17 +3,15 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances #-}
+
 
 module Narradar.NarrowingProblem (
      mkGoalProblem, -- mkGoalProblem_rhs,
      groundRhsOneP, groundRhsAllP,
-     safeAFP,
-     MkGoalProblem(..)) where
+--     safeAFP,
+     MkGoalProblem(..), MkHeu(..)) where
 
 import Control.Applicative
 import Control.Exception
@@ -52,21 +50,26 @@ import Debug.Observe
 trace _ x = x
 #endif
 
-data MkGoalProblem id = FromGoal Goal (Maybe TypeAssignment) | FromAF (AF_ id) (Maybe TypeAssignment) | AllTerms
+data MkGoalProblem id = FromAF (AF_ id) (Maybe TypeAssignment) | AllTerms
+--data MkHeu id f where MkHeu :: HasSignature sig id => (forall sig. sig -> AF.Heuristic id f) -> MkHeu id f
+type MkHeu id f = Signature id -> AF.Heuristic id f
 
-mkGoalProblem :: (DPMark f id, Lattice (AF_ id), Bottom :<: f) => (forall sig . SignatureC sig id => sig -> AF.Heuristic id f) -> MkGoalProblem id -> ProblemG id f -> ProblemProofG id Html f
+mkGoalProblem :: (Identifier a ~ id, Ord a, Show id, T id :<: f, DPMark f, Lattice (AF_ id)) =>
+                 MkHeu id f ->
+                 MkGoalProblem a -> ProblemG id f -> ProblemProofG id Html f
 mkGoalProblem mkHeu = mkGoalProblem' invariantEV mkHeu
+{-
 mkGoalProblem' invariantEV mkHeu (FromGoal goal types) p = do
     Problem typ' trs dps <- mkGoalProblem' invariantEV mkHeu (FromAF (mkGoalAF p goal) types) p
     return $ Problem typ'{goal=Just goal} trs dps
    where
-    mkGoalAF :: (DPSymbol id, Show id, Ord id, SignatureC sig id) => sig -> Goal -> AF_ id
+    mkGoalAF :: (Show id, Ord id, HasSignature sig id) => sig -> Goal -> AF_ id
     mkGoalAF p (T goal modes) = AF.init p `mappend`
                    let pp = [ i | (i,m) <- zip [1..] modes, m == G]
                    in AF.singleton (functionSymbol goal) pp
-
+-}
 mkGoalProblem' invariantEV mkHeu (FromAF goalAF mb_typs) p@(Problem typ@(getGoalAF -> Nothing) trs dps) = do
-    let extendedAF = AF.extendAFToTupleSymbols goalAF
+    let extendedAF = AF.extendAFToTupleSymbols (AF.mapSymbols functionSymbol goalAF)
         typ'       = (typ `withGoalAF` extendedAF){types=mb_typs}
     let orProblems = [(Problem typ'{pi=af_vc} trs dps) | af_vc <- invariantEV (mkHeu (getSignature p)) p extendedAF]
     assert (not $ null orProblems) $ msum (map return orProblems)
@@ -78,7 +81,7 @@ mkGoalProblem' _ _ AllTerms p = return p
 -- ------------------------------------------------------------------------
 {-# SPECIALIZE groundRhsOneP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 {-# SPECIALIZE groundRhsOneP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-groundRhsOneP :: (Bottom :<: f, Lattice (AF_ id), DPMark  f id) => ProblemG id f -> ProblemProofG id Html f
+groundRhsOneP :: (Lattice (AF_ id), Show id, Ord id, T id :<: f, DPMark f) => ProblemG id f -> ProblemProofG id Html f
 groundRhsOneP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
@@ -106,7 +109,7 @@ findGroundAF heu pi_groundInfo af0 p (_:->r)
 -- ------------------------------------------------------------------------
 {-# SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 {-# SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-groundRhsAllP :: (Bottom :<: f, Lattice (AF_ id), DPMark  f id) => ProblemG id f -> ProblemProofG id Html f
+groundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id Html f
 groundRhsAllP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
@@ -132,16 +135,18 @@ groundRhsAllP p = return p
 
 -- NOTE: For now assume that this processor is unsound. The AF_rhs trick does not work well.
 --       Some extra conditions are needed which I haven't identified yet.
-safeAFP :: (Bottom :<: f, DPMark f id) => ProblemG id f -> ProblemProofG id Html f
+{-
+safeAFP :: (Bottom :<: f, DPMark f) => ProblemG id f -> ProblemProofG id Html f
 safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
   step (GroundAll (Just af)) p (AF.apply_rhs p af $ Problem Rewriting trs dps)
 safeAFP p = return p
-
+-}
+{-
 mkBNDPProblem_rhs x@(FromAF af (Just typs)) trs = mkGoalProblem_rhs (const $ typeHeu typs) x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
 mkBNDPProblem_rhs x trs = mkGoalProblem_rhs bestHeu x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
 
 mkGoalProblem_rhs = mkGoalProblem' invariantEV_rhs
-
+-}
 -- -----------
 -- Testing
 -- -----------
@@ -168,7 +173,8 @@ append_trs = mkTRS
                append (cons x xx)  yy (cons x zz) :-> append xx yy zz]
 -}
 
+
 #ifdef DEBUG
-instance Observable Identifier where observer = observeBase
+instance Observable Id   where observer = observeBase
 instance Observable Mode where observer = observeBase
 #endif

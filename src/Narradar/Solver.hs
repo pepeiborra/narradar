@@ -74,24 +74,17 @@ allSolver' heu k p
    | isAnyNarrowingProblem p = narrowingSolver 3 k (convert p)
 -}
 
-prologSolver_noL    = prologSolver_noL' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
-prologSolver_noL' (heu :: (forall sig .SignatureC sig id => Prolog.TypeAssignment -> sig -> AF.Heuristic id f)) k = (prologP_sk heu >=> (return.convert) >=> narrowingSolverScc 1 k)
+narrowingSolverUScc = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP
 
-{-# SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
+prologSolver_noL        = prologSolver_noL' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+prologSolver_noL' heu k = prologP_sk heu >=> (return.convert) >=> narrowingSolverUScc >=> k
+
+{-# off SPECIALIZE prologSolver :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
 prologSolver    = prologSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
-prologSolver' heu k = -- (prologP_sk >=> (return.convert) >=> narrowingSolverScc 1 k) .|.
-                      (prologP_labelling_sk heu >=> narrowingSolverScc 1 k)
+prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
 
 prologSolver_one        = prologSolver_one' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
 prologSolver_one' heu k = (prologP_labelling_sk heu >=> usableSCCsProcessor >=> narrowingSolver 1 k)
-
-
-{-
->>>>>>> local:src/Narradar/Solver.hs
-{-# SPECIALIZE prologSolver_rhs :: Problem BBasicId -> PPT LId BBasicLId Html IO #-}
-prologSolver_rhs = prologSolver_rhs' (aproveSrvP defaultTimeout)
-prologSolver_rhs' k = (prologP_sk_rhs >=> (return.convert) >=> narrowingSolverScc 1 k) .|. prologP_labelling_sk_rhs >=> narrowingSolverScc 1 k
--}
 
 narrowingSolver 0 _ = const mzeroM
 narrowingSolver 1 k = cycleProcessor >=> iUsableProcessor >=> groundRhsOneP >=> k
@@ -106,7 +99,7 @@ narrowingSolverScc 0 _ = const mzeroM
 narrowingSolverScc 1 k = sccProcessor >=> iUsableProcessor >=> groundRhsAllP >=> k
 narrowingSolverScc depth _ | depth < 0 = error "narrowingSolverScc: depth must be positive"
 narrowingSolverScc depth k =
-       usableSCCsProcessor >=> iUsableProcessor >=>
+        sccProcessor >=> iUsableProcessor >=>
        ((groundRhsAllP >=> k)
         .|.
         (refineNarrowing >=> narrowingSolverScc (depth-1) k))

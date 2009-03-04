@@ -37,8 +37,8 @@ import qualified Narradar.ArgumentFiltering as AF
 
 import Control.Monad.Free
 
-import Prelude as P hiding (sum, log, mapM, foldr, concatMap, Monad(..), (=<<))
-
+import Prelude hiding (sum, log, mapM, foldr, concatMap, Monad(..), (=<<))
+import qualified Prelude as P
 -- ---------
 -- Proofs
 -- ---------
@@ -79,15 +79,15 @@ deriving instance (Show s, Show k) => Show (ProofF s k)
 
 data SomeProblem where
     SomeProblem       :: (Show id, TRS.Ppr f) => ProblemG id f -> SomeProblem
-    SomePrologProblem :: [Goal] -> Prolog.Program -> SomeProblem
+--    SomePrologProblem :: [Goal] -> Prolog.Program -> SomeProblem
 
 instance Show SomeProblem where
     show (SomeProblem p) = "<some problem>"
-    show (SomePrologProblem gg pgm) = show (PrologProblem Prolog gg pgm :: Problem BasicId)
+--    show (SomePrologProblem gg pgm) = show (PrologProblem Prolog gg pgm :: Problem BasicId)
 
 someProblem :: (Show id, TRS.Ppr f) => ProblemG id f -> SomeProblem
 someProblem p@Problem{}      = SomeProblem p
-someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
+--someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
 
 
 data SomeInfo where SomeInfo :: Show id => ProcInfo id -> SomeInfo
@@ -118,7 +118,7 @@ instance MPlus (Free (ProofF s)) (Free (ProofF s)) (Free (ProofF s))  where
 type ProofT   s m a = FreeT (ProofF s) m a
 type PPT id f s m   = ProofT s m (ProblemG id f)
 
-liftProofT :: Monad m => Proof s a -> ProofT s m a
+liftProofT :: P.Monad m => Proof s a -> ProofT s m a
 liftProofT = wrap
 
 {-
@@ -130,7 +130,7 @@ instance Monad m => MPlus (FreeT (ProofF f s) m) (FreeT (ProofF f s) m) (FreeT (
                                  unFreeT (wrap(choiceP s1 s2))
 -}
 
-instance Monad m => MonadZero (FreeT (ProofF s) m) where mzeroM = wrap(Impure MZero)
+instance P.Monad m => MonadZero (FreeT (ProofF s) m) where mzeroM = wrap(Impure MZero)
 instance Monad m => MPlus (FreeT (ProofF s) m) (FreeT (ProofF s) m) (FreeT (ProofF s) m) where
     mplus m1 m2 = FreeT $ returnM $ Right (MPlus m1 m2)
 

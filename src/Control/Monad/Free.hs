@@ -106,33 +106,33 @@ instance (Functor f, Monad m) => Bind (FreeT f m) (FreeT f m) (FreeT f m) where
              Left x   -> unFreeT $ f x
              Right xc -> returnM . Right $ fmap (>>= f) xc
 
-instance (Functor f, Monad m) => Bind (Free f) (FreeT f m) (FreeT f m) where m >>= f = (wrap m `asTypeOf1` f undefined)  >>= f
-instance (Functor f, Monad m) => Bind (FreeT f m) (Free f) (FreeT f m) where m >>= f = m >>= \v -> (wrap$ f v) `asTypeOf1` m
+instance (Functor f, Functor m, Old.Monad m) => Bind (Free f) (FreeT f m) (FreeT f m) where m >>= f = (wrap m `asTypeOf1` f undefined)  Old.>>= f
+instance (Functor f, Functor m, Old.Monad m) => Bind (FreeT f m) (Free f) (FreeT f m) where m >>= f = m Old.>>= \v -> (wrap$ f v) `asTypeOf1` m
 
-liftFree :: (Functor f, Monad m) => (a -> Free f b) -> (a -> FreeT f m b)
+liftFree :: (Functor f, Old.Monad m) => (a -> Free f b) -> (a -> FreeT f m b)
 liftFree f = wrap . f
 
-foldFreeT :: (Traversable f, Monad m) => (a -> m b) -> (f b -> m b) -> FreeT f m a -> m b
-foldFreeT p i m = unFreeT m >>= \r ->
+foldFreeT :: (Traversable f, Old.Monad m) => (a -> m b) -> (f b -> m b) -> FreeT f m a -> m b
+foldFreeT p i m = unFreeT m Old.>>= \r ->
               case r of
                 Left   x -> p x
-                Right fx -> mapMP (foldFreeT p i) fx >>= i
+                Right fx -> T.mapM (foldFreeT p i) fx Old.>>= i
 
 
-foldFreeT' :: (Traversable f, Monad m) => (a -> b) -> (f b -> b) -> FreeT f m a -> m b
-foldFreeT' p i (FreeT m) = m >>= f where
-         f (Left x)   = returnM (p x)
-         f (Right fx) = i `liftM` mapMP (foldFreeT' p i) fx
+foldFreeT' :: (Traversable f, Old.Monad m) => (a -> b) -> (f b -> b) -> FreeT f m a -> m b
+foldFreeT' p i (FreeT m) = m Old.>>= f where
+         f (Left x)   = Old.return (p x)
+         f (Right fx) = i `Old.liftM` T.mapM (foldFreeT' p i) fx
 
 
-unwrap :: (Traversable f, Monad m) => FreeT f m a -> m(Free f a)
-unwrap = foldFreeT (returnM . Pure) (returnM . Impure)
+unwrap :: (Traversable f, Old.Monad m) => FreeT f m a -> m(Free f a)
+unwrap = foldFreeT (Old.return . Pure) (Old.return . Impure)
 
-wrap :: (Functor f, Monad m) => Free f a -> FreeT f m a
-wrap  = FreeT . foldFree (returnM . Left) (returnM . Right . fmap FreeT)
+wrap :: (Functor f, Old.Monad m) => Free f a -> FreeT f m a
+wrap  = FreeT . foldFree (Old.return . Left) (Old.return . Right . fmap FreeT)
 
-wrap' :: (Functor f, Monad m) => m(Free f a) -> FreeT f m a
-wrap' = FreeT . join . liftM unFreeT . liftM wrap
+wrap' :: (Functor f, Old.Monad m) => m(Free f a) -> FreeT f m a
+wrap' = FreeT . Old.join . Old.liftM unFreeT . Old.liftM wrap
 
 -- To perform a side-effecting instantiation in parallel, we must
 --  1. calculate all the shape of the current computation by unwraping to a pure Free monad,

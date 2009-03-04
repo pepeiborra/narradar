@@ -75,7 +75,7 @@ problemAttrs :: (Show id, Ppr f) => ProblemG id f -> [(String,String)]
 problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
 problemNode  (SomeProblem p) done = childnode'(problemAttrs p) (doneEdge done)
-problemNode  (SomePrologProblem cc gg) done = childnode'(problemAttrs (mkPrologProblem cc gg :: Problem BasicId)) (doneEdge done)
+--problemNode  (SomePrologProblem cc gg) done = childnode'(problemAttrs (mkPrologProblem cc gg :: Problem BasicId)) (doneEdge done)
 problemNode' p    = childnode (problemAttrs p)
 doneEdge True     = [("color", "green")]
 doneEdge False    = [("color", "red")]
@@ -107,9 +107,10 @@ childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= 
 
 pprTPDBdot :: (TRS.Ppr f, Show id) => ProblemG id f  -> String
 {-# SPECIALIZE pprTPDBdot :: Problem BBasicId -> String #-}
-pprTPDBdot PrologProblem{..} =
+pprTPDBdot p@(Problem Prolog{..} _ _) =
     show (Prolog.ppr program) ++ "\\l" ++
-    unlines ["%Query: " ++ pprGoal g | g <- goals]
+    unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
+
 pprTPDBdot p@(Problem typ trs dps@TRS{} ) = unlines $
     [ "(VAR " ++ (unwords $ map show $ snub $ foldMap3 vars' (rules <$> p)) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"

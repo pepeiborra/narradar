@@ -29,7 +29,7 @@ import Narradar.Output
 import Narradar.Proof
 import Narradar.Utils
 
-aproveWebProc :: (Bottom :<: f, Show id, DPSymbol id) => ProblemG id f -> IO (ProblemProofG id Html f)
+aproveWebProc :: (Show id) => ProblemG id f -> IO (ProblemProofG id Html f)
 aproveWebProc = externalProc go where
   go prob@(Problem _ trs dps@TRS{}) = do
     curl <- initialize
@@ -56,7 +56,7 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
      any ("proven" `isPrefixOf`) ww && ("not" `notElem` ww)
 
 
-aproveProc :: (TRS.Ppr f, Bottom :<: f, Show id, DPSymbol id) => FilePath -> ProblemG id f -> IO (ProblemProofG id Html f)
+aproveProc :: (TRS.Ppr f, Show id) => FilePath -> ProblemG id f -> IO (ProblemProofG id Html f)
 aproveProc path = externalProc go where
    go prob@(Problem Rewriting trs dps) =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
@@ -73,7 +73,7 @@ aproveProc path = externalProc go where
 
 aproveSrvPort    = 5250
 
-aproveSrvProc :: (Bottom :<: f, TRS.Ppr f, Show id, DPSymbol id) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
+aproveSrvProc :: (TRS.Ppr f, Show id) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
 aproveSrvProc timeout = externalProc go where
   go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
