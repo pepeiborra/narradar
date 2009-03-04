@@ -39,7 +39,9 @@ import Prelude as P
 import Narradar.Utils
 import Narradar.Proof hiding (problem)
 import Narradar.GraphViz
-import Narradar.Solver
+import Narradar.Solver hiding ( prologSolver, prologSolver'
+                              , narradarSolver, narradarSolver'
+                              , narrowingSolver )
 import Narradar.ArgumentFiltering (typeHeu, typeHeu2, bestHeu, innermost, outermost)
 import Narradar.DPairs
 import Narradar.GraphTransformation

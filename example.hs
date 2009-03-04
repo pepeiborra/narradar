@@ -4,7 +4,6 @@
 import Prelude hiding (Monad(..))
 
 import Narradar
-import Narradar.Solver
 
 main = narradarMain (parseProlog >=> prologSolver)
 

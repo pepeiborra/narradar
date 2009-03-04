@@ -5,7 +5,10 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Narradar.ExtraVars where
+module Narradar.ExtraVars ( evProcessor, invariantEV
+                          , cutWith
+                          , sortByDefinedness, selectBest, isSoundAF)
+                       where
 
 import Control.Applicative
 import Control.RMonad hiding (join)

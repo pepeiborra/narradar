@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 
-module Narradar.PrologProblem where
+module Narradar.PrologProblem (prologP_sk, prologP_labelling_sk) where
 
 import Control.Applicative
 import Control.Arrow

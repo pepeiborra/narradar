@@ -28,6 +28,8 @@ import Narradar.Proof
 import Narradar.Types
 import Narradar.NarrowingProblem
 import Narradar.PrologProblem
+import Narradar.GraphTransformation
+import Narradar.UsableRules
 
 import qualified Prelude
 import Prelude hiding (Monad(..))
@@ -67,6 +69,28 @@ parseTRS typ txt = wrap' $ go$ do
 parseProlog :: String -> PPT String Basic' Html IO
 parseProlog = wrap' . Prelude.return . either error Prelude.return . parsePrologProblem
 
+-- ------------------
+-- Some Basic solvers
+-- ------------------
+prologSolver    = prologSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
+  where narrowingSolverUScc = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP
+
+-- Our main solving scheme
+narradarSolver       = narradarSolver' (aproveSrvP defaultTimeout)
+narradarSolver' aproveS p
+   | isRewritingProblem    p = aproveS p
+   | isAnyNarrowingProblem p = narrowingSolver 3 aproveS p
+
+narrowingSolver 0 _ = const mzeroM
+narrowingSolver 1 k = cycleProcessor >=> iUsableProcessor >=> groundRhsOneP >=> k
+narrowingSolver depth _ | depth < 0 = error "narrowingSolver: depth must be positive"
+narrowingSolver depth k =
+       cycleProcessor >=> iUsableProcessor >=>
+       ((groundRhsOneP >=> k)
+        .|.
+        (refineNarrowing >=> narrowingSolver (depth-1) k))
+  where refineNarrowing = instantiation .|. finstantiation .|. narrowing
 
 -- -------------
 -- Combinators
