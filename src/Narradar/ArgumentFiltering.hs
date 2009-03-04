@@ -230,7 +230,7 @@ typeHeu assig =
   where f (show -> p,i)  = Set.notMember (p,i) unboundedPositions
         constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
-        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
+--        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
         unboundedF f uu | null new = uu
                         | otherwise= f(Set.fromList new `mappend` uu)
            where new =  [ p | c <- assig
@@ -251,7 +251,7 @@ typeHeu2 assig =
    `or` innermost
   where constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
-        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
+--        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
         unboundedF f uu | null new = uu
                         | otherwise= f(Set.fromList new `mappend` uu)
            where new =  [ p | c <- assig
