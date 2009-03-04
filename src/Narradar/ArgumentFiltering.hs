@@ -242,14 +242,11 @@ typeHeu assig =
         getArity g | Just i <- Map.lookup g arities = i
         arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
 
--- Ignore unbounded positions
+--typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
 typeHeu2 assig =
-    predHeuOne allInner (\ _ (p,i) -> -- not(isDPSymbol p)) &&
-                                         ((Set.notMember (p) constructorSymbols)
-                                        ||
-                                          (Set.notMember (p,i) reflexivePositions)))
-   `or` innermost
-  where constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
+    predHeuOne allInner (const f) `or` innermost
+  where f (show -> p,i)  = Set.notMember (p,i) reflexivePositions
+        constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
 --        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
         unboundedF f uu | null new = uu
