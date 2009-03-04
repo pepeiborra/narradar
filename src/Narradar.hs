@@ -55,9 +55,6 @@ import Narradar.Convert
 
 --main :: IO ()
 narradarMain solver = do
-#ifndef GHCI
-  installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure (-1)))) Nothing
-#endif
   (Options problemFile input diagrams, _, errors) <- getOptions
   sol <- runProofT (solver input)
   putStrLn$ if isSuccess sol then "YES" else "NO"
@@ -94,9 +91,15 @@ defFlags = Flags{ diagramsFlag     = True}
 
 --opts :: [OptDescr (Flags f id -> Flags f id)]
 opts = [ Option ""  ["nodiagrams"] (NoArg $ \opts  -> P.return opts{diagramsFlag = False})                     "Do not produce a pdf proof file"
-       , Option "t" ["timeout"] (ReqArg (\arg opts -> scheduleAlarm (read arg) P.>> P.return opts) "SECONDS")     "Timeout in seconds (default:none)"
+#ifndef GHCI
+       , Option "t" ["timeout"] (ReqArg setTimeout "SECONDS")     "Timeout in seconds (default:none)"
+#endif
        , Option "h?" ["help"]   (NoArg  (\   _     -> putStrLn(usageInfo usage opts) P.>> exitSuccess))         "Displays this help screen"
        ]
 
 -- data NiceSolver where NiceSolver :: (TRSC f, Ppr f) => PPT id f Html IO -> (ProblemProofG id Html f -> String) -> NiceSolver
 
+setTimeout arg opts = do
+  scheduleAlarm (read arg)
+  installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure (-1)))) Nothing
+  P.return opts
