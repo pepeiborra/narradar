@@ -14,7 +14,6 @@ import Control.Monad.State (State,StateT)
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
-import Data.Graph.Inductive (nodes, edges, suc, pre, Graph, Node(..), Gr, mkUGraph)
 import qualified Data.HashTable as HT
 import Data.Int
 import Data.List (group, sort,nub)
@@ -100,7 +99,7 @@ notMemberQ n q    = not (memberQ n q)
 headQ (viewl -> h:<_, _) = h
 tailQ (viewr -> _:>t, _) = t
 snoc n (seq, set) = (seq |> n, Set.insert n set)
-
+{-
 cycles_old :: Graph gr => gr a b -> [[Node]]
 cycles_old gr = (snub  . map (sort.getNodes)) (concatMap liuwang [[(n,n)] | n <- nodes gr])
     where liuwang path = [ path ++ [closure] | let closure = (tpath, phead path), closure `elem` edges gr] ++
@@ -126,7 +125,7 @@ instance Arbitrary (Gr () ()) where
                   edges   <- replicateM n_edges (choose (0,nodes))
                   return [ (n,e) | e <- edges ]
       return $ mkUGraph [0..nodes] (concat edges)
-
+-}
 -- -------------
 -- Memoization
 -- -------------
