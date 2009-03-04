@@ -86,10 +86,8 @@ instance Convert a String => Convert (PIdentifier a) String where
   convert (UId i)       = "u_" ++ show i
   convert (FunctorId f) = convert f
 
-instance Convert PS LPId where convert = IdFunction . Plain
 instance Convert PS PS   where convert = id
 instance Convert PId PId where convert = id
-instance Convert LPId LPId where convert = id
 
 instance Convert (TRS.Term BasicPS)  (TRS.Term BasicPId) where convert = convertToId
 instance Convert (TRS.Term BasicLPS) (TRS.Term BasicLPId) where convert = convertToId
@@ -98,8 +96,10 @@ instance Convert (TRS.Term BasicLPS) (TRS.Term BasicLPId) where convert = conver
 -- ----------
 instance Convert id (Labelled id) where convert = Plain
 instance Convert String LId       where convert = convert . (convert :: String -> Labelled String)
+instance Convert PS     LPId      where convert = IdFunction . Plain
 instance Convert PId    LPId      where convert = fmap Plain
 instance Convert LId    LId       where convert = id
+instance Convert LPId LPId where convert = id
 
 --convertToLabelled :: (T id :<: f, T (Labelled id) :<: g) => Term f -> Term g
 convertToLabelled = foldTerm convertToLF
@@ -112,13 +112,17 @@ instance (T (Labelled (PIdentifier id)) :<: g) => ConvertToL (T (PIdentifier id)
     convertToLF (T f         tt) = term (Plain f) tt
 instance (T (Labelled id) :<: g) => ConvertToL (T id) g where
     convertToLF (T f tt) = term (Plain f) tt
+instance (Eq id, T (Identifier (Labelled id)) :<: g) => ConvertToL (T (Identifier id)) g where
+    convertToLF (T f tt) = term (fmap Plain f) tt
 instance (f :<: g) => ConvertToL f g where convertToLF = inject
 instance (ConvertToL a g, ConvertToL b g) => ConvertToL (a:+:b) g where
   convertToLF (Inl x) = convertToLF x; convertToLF (Inr x) = convertToLF x
 
 
-instance Convert (Term Basic)    (Term BasicLId) where convert = convertToId . (convertToLabelled :: Term Basic -> Term BasicL)
+instance Convert (Term Basic)    (Term BasicLId)  where convert = convertToId . (convertToLabelled :: Term Basic -> Term BasicL)
 instance Convert (Term BasicPS)  (Term BasicLPS)  where convert = convertToLabelled
+instance Convert (Term BasicPId) (Term BasicLPId) where convert = convertToLabelled
+
 
 -- TRSs
 -- ----
