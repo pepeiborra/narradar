@@ -28,6 +28,7 @@ Library
      build-depends: GHood
   buildable: True
 --  cpp-options: -DGHCI
+  ghc-prof-options: -auto
   hs-source-dirs: src
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
