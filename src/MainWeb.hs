@@ -30,11 +30,12 @@ cgiMain = do
   mb_visual <- getInput "LOG"
   mb_type   <- getInput "TYPE"
   mb_goal   <- getInput "GOAL" >>= \mb_g -> return(mb_g >>= \g -> let g' = filter (/= ' ') g in if null g' then Nothing else return g')
+  mb_strat  <- getInput "STRAT"
   case (mb_input, mb_type) of
     (Just input, Just typ) -> do
        (success, dot_proof, html_proof) <- liftIO $  case typ of
                        "PROLOG" -> let input' = maybe input ((input ++) .( "\n%query: " ++)) mb_goal
-                                   in  process(parseProlog input' >>= prologSolver)
+                                   in  process(parseProlog input' >>= stratSolver mb_strat)
                        "BASIC"  -> process(parseTRS BNarrowing input >>= narradarSolver)
                        "FULL"   -> process(parseTRS  Narrowing input >>= narradarSolver)
        proof_log <- liftIO$ withTempFile "/tmp" "narradar-log-" $ \fp h -> do
@@ -52,3 +53,8 @@ cgiMain = do
 
 process :: (Ppr f, Show id) =>  PPT id f Html IO -> IO (Bool, String, Html)
 process p = go(runProofT p >>= \sol -> return (isSuccess sol, pprDot sol, toHtml sol))
+
+stratSolver Nothing           = prologSolver
+stratSolver (Just "TYPEHEU")  = prologSolver -- "Type Heuristic (unbounded positions)"
+stratSolver (Just "TYPEHEU2") = prologSolver' (\typ _ -> typeHeu2 typ) (aproveSrvP defaultTimeout)
+stratSolver (Just "INN")      = prologSolver' (\_   _ -> innermost)    (aproveSrvP defaultTimeout)
