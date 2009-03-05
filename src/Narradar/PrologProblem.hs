@@ -19,7 +19,7 @@ import Control.Monad.Writer
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import Data.HashTable (hashString)
-import Data.List (partition, isSuffixOf, isPrefixOf, delete, sort, groupBy)
+import Data.List (partition, isSuffixOf, isPrefixOf, delete, sort, groupBy, find)
 import Data.Maybe
 import Data.Monoid
 import Data.Foldable (toList, notElem)
@@ -89,6 +89,12 @@ encodeToSat trs gg = encProb where
 
 skTransform :: [Clause] -> NarradarTRS PS BasicPS
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
+       sig = getSignature clauses
+
+       findFreeSymbol :: String -> String
+       findFreeSymbol pre = fromJust $ find (`Set.notMember` allSymbols sig) (pre : [pre ++ show i | i <- [0..]])
+       [equalF] = map findFreeSymbol ["equal"]
+
        clauseRules :: [(Ident, Rule BasicPS)] = concat $ (`evalState` [0..]) $
          -- The counter is global, the list of vars is local to each clause
          -- We use a State Transformer on top of a state monad.
@@ -112,6 +118,8 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
          let tt' = evalState(mapM toTerm tt) [0..]
          i <- lift fresh
          return (term (UId i :: PS) (term (InId id) tt' : vv))
+       mkRhs (f :=: g) = mkRhs (Pred equalF [f,g])
+       mkRhs (Is f  g) = mkRhs (Pred equalF [f,g])
 
        mkLhs (Pred id tt) = do
          vv <- toList <$> get
@@ -119,10 +127,13 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
          modify(Set.fromList(concatMap vars' tt') `mappend`)
          i <- lift current
          return (term (UId i :: PS) (term (OutId id) tt' : vv))
+       mkLhs (f :=: g) = mkLhs (Pred equalF [f,g])
+       mkLhs (Is f  g) = mkLhs (Pred equalF [f,g])
 
        toTerm = foldInM f where
 --         f :: (MonadFresh m, TRSC f, T PS :<: f) => TermF (TRS.Term f) -> m (TRS.Term f)
          f(Term id tt) = return $ term (FunctorId id) tt
+         f(Tuple   tt) = return $ term (FunctorId "','") tt
          f Wildcard    = var   <$>fresh
          f (Int i)     = return $ constant (FunctorId $ show i)
          f (Float f)   = return $ constant (FunctorId $ show f)
