@@ -44,6 +44,7 @@ Library
      Narradar.Convert,
      Narradar.Proof,
      Narradar.DPairs,
+     Narradar.TRS,
      Narradar.GraphTransformation,
      Narradar.ArgumentFiltering,
      Narradar.UsableRules,

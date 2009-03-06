@@ -11,6 +11,7 @@
 
 module Narradar.Types ( module TRS
                       , module Narradar.Types
+                      , module Narradar.TRS
                       , module Narradar.DPIdentifiers
                       , module Narradar.PrologIdentifiers
                       , module Narradar.Labellings
@@ -48,6 +49,7 @@ import Narradar.Bottom as Bottom
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
+import Narradar.TRS
 import Narradar.Convert
 import Narradar.Utils
 

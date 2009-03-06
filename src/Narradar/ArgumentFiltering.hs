@@ -30,6 +30,7 @@ import Narradar.Bottom as Bottom
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
+import Narradar.TRS
 import Narradar.Convert
 import Narradar.Utils
 

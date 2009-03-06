@@ -11,6 +11,7 @@ import qualified Data.Set as Set
 
 import Data.Foldable (toList)
 
+import Narradar.TRS
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
