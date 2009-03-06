@@ -21,7 +21,7 @@ import Narradar.Types
 import Narradar.Utils
 import Narradar.Proof
 
-mkDPProblem :: (TRSC f, T id :<: f, T (Identifier id) :<: DPVersionOf f, Convert (Term f) (Term (DPVersionOf f)), TRSC (DPVersionOf f), Show (Identifier id), Ord id) =>
+mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<: DPVersionOf f, Convert (Term f) (Term (DPVersionOf f)), TRSC (DPVersionOf f), Show (Identifier id), Ord id) =>
                ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) (DPVersionOf f)
 mkDPProblem Rewriting   trs = let trs' = convert trs in mkProblem Rewriting   trs' (tRS $ getPairs trs')
 mkDPProblem Narrowing   trs = let trs' = convert trs in mkProblem Narrowing   trs' (tRS $ getNPairs trs')
