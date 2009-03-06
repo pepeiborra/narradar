@@ -10,6 +10,11 @@ license-file:        LICENSE
 author:              Pepe Iborra
 maintainer:          pepeiborra@gmail.com
 data-files:          aproveStrats/*.strategy
+extra-source-files:  prelude.pl
+source-repository head
+  type:     git
+  location: git://github.com/pepeiborra/narradar.git
+
 
 Flag base4
 Flag web
