@@ -38,7 +38,7 @@ Library
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
      TRS > 0.21.20090206, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
-     parsec, prolog >= 0.1.20090305, prolog-tools, unix
+     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell		 	 
   exposed-modules:
      Narradar,
      Narradar.Solver,

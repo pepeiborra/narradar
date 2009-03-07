@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.PrologProblem (prologP_sk, prologP_labelling_sk) where
 
@@ -27,9 +28,9 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
+import Language.Haskell.TH (runIO)
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
 import Text.XHtml (Html)
-
 
 import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom, foldInM)
 import qualified Language.Prolog.Syntax as Prolog
@@ -49,7 +50,7 @@ import Narradar.Types hiding (Var,Term,In, program)
 import qualified Narradar.Types as TRS
 import Narradar.NarrowingProblem
 import Narradar.Proof
-import Narradar.Utils ((<$$>),(..&..), mapLeft, on)
+import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2)
 
 import Prelude hiding (and,or,notElem,pi)
 
@@ -58,6 +59,7 @@ import Debug.Trace
 #else
 trace _ x = x
 #endif
+
 
 -- ----------------
 -- Transformations
@@ -135,17 +137,39 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
          f(Term id tt) = return $ term (FunctorId id) tt
          f(Tuple   tt) = return $ term (FunctorId "','") tt
          f Wildcard    = var   <$>fresh
-         f (Int i)     = return $ constant (FunctorId $ show i)
+         f (Int i)
+            |i>0       = return (iterate (TRS.term1 (FunctorId "succ")) (constant (FunctorId "zero")) !! fromInteger i)
+            |otherwise = return (iterate (TRS.term1 (FunctorId "pred")) (constant (FunctorId "zero")) !! fromInteger i)
          f (Float f)   = return $ constant (FunctorId $ show f)
          f(Var v)      = return $ toVar v
          toVar (VName id)    = var' (Just id) (abs$ fromIntegral $ hashString id)
          toVar (Auto  id)    = var id
 
+
+Right preludePl = $(do
+                     pgm <- runIO (readFile "prelude.pl")
+                     either (error.show) (\_ ->[| parse Prolog.program "prelude.pl" pgm|]) (parse Prolog.program "prelude.pl" pgm)
+                   )
+preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
 addMissingPredicates cc
-          | sig <- getSignature cc
-          , definedPredicates <- Set.fromList [ f | Pred f _ :- _ <- cc]
-          = cc `mappend` [ Pred f (take (getArity sig f) vars) :- [] | f <- toList (definedSymbols sig `Set.difference` definedPredicates)]
+  | Set.null undefinedPreds = cc
+  | otherwise
+  = (if insertPrelude then cc' else cc)  `mappend`
+    [Pred f (take (getArity sig f) vars) :- []
+     | f <- toList undefinedPreds, f `Set.notMember` preludePreds]
+
    where vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
+         undefinedPreds = Set.fromList [ f | f <- toList (definedSymbols sig `Set.difference` definedPredicates)]
+         insertPrelude  = not $ Set.null (Set.intersection undefinedPreds preludePreds)
+         sig            = getSignature cc
+         definedPredicates = Set.fromList [ f | Pred f _ :- _ <- cc]
+         findFreeName pre  = fromJust $ find (`Set.notMember` allSymbols sig)
+                                              (pre : [pre ++ show i | i <- [0..]])
+         cc' = foldr renamePred (cc `mappend` preludePl) (toList repeatedIdentifiers)
+         repeatedIdentifiers = preludePreds `Set.intersection` definedPredicates
+         renamePred f = fmap2 (rename (findFreeName f))
+         rename f' (Pred f tt) | f == f' = Pred f' tt
+         rename _ x = x
 
 {-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
 
@@ -156,7 +180,7 @@ prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _) =
                        let assig  = infer program
                        (trs', af') <- toList $ labellingTrans mkHeu goalAF assig trs
                        let Problem typ trs'' dps = mkDPProblem BNarrowing trs'
-                       return$return (Problem BNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
+                       return$ return (Problem BNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
                                                              , types= Just assig
                                                              , goal = AF.mapSymbols' ((IdFunction.) . flip Labelling) goalAF } trs'' dps)
     in andP LabellingSKP p problems
