@@ -11,6 +11,7 @@ import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad (join, liftM, liftM2, replicateM, ap)
 import Control.Monad.State (State,StateT)
+import Control.Monad.Writer (Writer, WriterT)
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
@@ -156,7 +157,10 @@ infixr 3 ..&..
 infixr 3 ..|..
 
 -- ---------------------------------------
--- Missing Applicative instance for StateT
+-- Missing Applicative instances
 -- ---------------------------------------
 instance Monad m => Applicative (StateT s m) where pure = return; (<*>) = ap
 instance Applicative (State s) where pure = return; (<*>) = ap
+
+instance (Monoid s, Monad m) => Applicative (WriterT s m) where pure = return; (<*>) = ap
+--instance Applicative (Writer s) where pure = return; (<*>) = ap

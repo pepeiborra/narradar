@@ -53,11 +53,22 @@ instance HashConsed BBasicLId
 -- -----------
 -- Labellings
 -- -----------
-data Labelled a = Labelling {labelling::[Int], unlabel::a} | Plain {unlabel::a} deriving (Eq,Ord)
+data Labelled a = Labelling {labelling::[Int], unlabel::a} | Plain {unlabel::a} deriving (Eq)
+
+instance Ord a => Ord (Labelled a) where
+    compare (Labelling i1 f1) (Labelling i2 f2) = compare (f1,i1) (f2,i2)
+    compare (Plain f1) (Plain f2) = compare f1 f2
+    compare Labelling{} Plain{} = GT
+    compare Plain{} Labelling{} = LT
+
+instance Show (Labelled String) where
+    show (Labelling l a) = a ++ "_" ++ (concatMap show l)
+    show (Plain a)       = a
 
 instance Show a => Show (Labelled a) where
     show (Labelling l a) = show a ++ "_" ++ (concatMap show l)
     show (Plain a)       = show a
+
 instance HashTerm (T LId) where
     hashF (T id tt)      = 15 * sum tt * hashId id
 {-

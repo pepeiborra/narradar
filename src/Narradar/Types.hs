@@ -27,7 +27,7 @@ import Data.Foldable (Foldable(..), sum, toList)
 import Data.Graph (Graph, Vertex)
 import Data.HashTable (hashString)
 import Data.Int
-import Data.List ((\\))
+import Data.List ((\\), groupBy, sort)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -105,7 +105,7 @@ bnarrowingModes0 =  BNarrowingModes {types=Nothing, goal=error "bnarrowingModes0
 lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
-mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
+--mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
 mkProblem typ trs dps = Problem typ trs dps
 
 mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
@@ -223,7 +223,7 @@ data ProcInfo id where                    -- vv ignored vv
     FInstantiationP :: ProcInfo ()
     PrologP         :: ProcInfo ()
     PrologSKP       :: ProcInfo ()
-    LabellingSKP    :: ProcInfo ()
+    LabellingSKP    :: [Labelled String] -> ProcInfo ()
     PrologSKP_rhs   :: ProcInfo ()
     LabellingSKP_rhs:: ProcInfo ()
     UsableRulesP    :: ProcInfo ()
@@ -249,11 +249,14 @@ instance Show id => Show (ProcInfo id) where
     show (Polynomial)     = "Polynomial ordering"
     show PrologP          = "Termination of LP as termination of Narrowing"
     show PrologSKP        = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation)"
-    show LabellingSKP     = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + Labelling)"
+    show (LabellingSKP mm)= "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + Labelling) \n" ++
+                            "Modes used " ++ show (length mm) ++ ": " ++ (unlines $ map (unwords . map show) $ groupBy ((==) `on` unlabel) $ sort mm)
     show PrologSKP_rhs    = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + rhs bottoms trick)"
     show LabellingSKP_rhs = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + Labelling + rhs bottoms trick)"
     show UsableRulesP     = "Usable Rules for Basic Narrowing or Full Narrowing with constructor substitutions"
     show Trivial          = "Trivially non terminating"
+
+--pprLabellingAsMode (Labelled f mm) = text f <> parens (hsep $ punctuate comma [ if | m <- mm])
 
 data ExternalProc = MuTerm | Aprove String | Other String   deriving Eq
 instance Show ExternalProc where
@@ -283,6 +286,7 @@ pprGoal (T id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) 
 
 pprGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
 pprGoalAF sig pi = vcat [ pprGoal (T f mm) | (f,pp) <- AF.toList pi
+                                           , f `Set.member` allSymbols sig
                                            , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
 
 -- --------------------------

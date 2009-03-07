@@ -30,7 +30,7 @@ import qualified Data.Set as Set
 import qualified Data.Traversable as T
 import Language.Haskell.TH (runIO)
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
-import Text.XHtml (Html)
+import Text.XHtml (Html, toHtml)
 
 import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom, foldInM)
 import qualified Language.Prolog.Syntax as Prolog
@@ -174,68 +174,89 @@ addMissingPredicates cc
 {-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
 
 prologP_labelling_sk :: (TypeAssignment -> MkHeu LPS BasicLPS) -> PrologProblem -> ProblemProofG LPId Html BasicLPId
-prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _) =
-    let trs = skTransform program
-        problems = do  goalAF <- AF.mapSymbols InId <$> goals
+prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _)
+  | null goals = success (LabellingSKP []) p (toHtml "There are no queries to analyze")
+  | otherwise = msum problems
+   where trs = skTransform program
+         problems = do goalAF <- AF.mapSymbols InId <$> goals
                        let assig  = infer program
-                       (trs', af') <- toList $ labellingTrans mkHeu goalAF assig trs
+                       ((trs', af'), modes) <- toList $ labellingTrans mkHeu goalAF assig trs
                        let Problem typ trs'' dps = mkDPProblem BNarrowing trs'
-                       return$ return (Problem BNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
-                                                             , types= Just assig
-                                                             , goal = AF.mapSymbols' ((IdFunction.) . flip Labelling) goalAF } trs'' dps)
-    in andP LabellingSKP p problems
+                       return$ step (LabellingSKP modes) p
+                                 (Problem BNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
+                                                         , types= Just assig
+                                                         , goal = AF.mapSymbols' ((IdFunction.) . flip Labelling) goalAF }
+                                          trs'' dps)
 
-labellingTrans :: (TypeAssignment -> MkHeu LPS BasicLPS) -> AF_ PS -> TypeAssignment -> NarradarTRS PS BasicPS -> Set(NarradarTRS LPS BasicLPS, AF_ LPS)
-labellingTrans mkHeu goalAF assig trs@PrologTRS{} =
-    let trs0 :: NarradarTRS LPS BasicLPS
-        trs0 = prologTRS' $ mconcat([insertNewMode (f, pp) | (InId f, pp) <- AF.toList (AF.init trs)] ++
-                                    [insertNewMode (f, pp) | (InId f, pp) <- AF.toList goalAF, pp /= iFun trs (InId f)])
-        af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList goalAF] `mappend` AF.init trs0
-    in -- trace ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
-       trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
-       fix invariantEV (trs0, af0)
+labellingTrans :: (TypeAssignment -> MkHeu LPS BasicLPS) -> AF_ PS -> TypeAssignment -> NarradarTRS PS BasicPS -> Set((NarradarTRS LPS BasicLPS, AF_ LPS), [Labelled String])
+labellingTrans _ _ _ (rules -> []) = Set.singleton mempty
+labellingTrans mkHeu goalAF assig trs@PrologTRS{} = unEmbed $ runWriterT $ do
+--    let trs0 :: NarradarTRS LPS BasicLPS
+    trs0 <- (prologTRS' . mconcat) <$> (
+             (++) <$> sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList (AF.init trs)]
+                  <*> sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList goalAF
+                                                      , InId f `Set.member` allSymbols(getSignature trs)
+                                                      , pp /= iFun trs (InId f)])
+    let af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList goalAF] `mappend` AF.init trs0
+    -- ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
+    trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
+     fix invariantEV (trs0, af0)
  where
   heuristic = mkHeu assig (getSignature trs') --innermost af t p -- typeHeu assig af t p
 
   trs'@(PrologTRS rr sig) = convert trs
 
 --  insertNewMode :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
-  insertNewMode (id, pp) = Set.fromList [ (pred, l  `setLabel` pp :-> r `setLabel` pp)
-                                        | (pred, l :-> r) <- toList rr
-                                        ,  pred == id]
+  insertNewMode (id, pp) = tell [Labelling pp id] >>
+                           return (Set.fromList [ (pred, l  `setLabel` pp :-> r `setLabel` pp)
+                                                 | (pred, l :-> r) <- toList rr
+                                                 ,  pred == id])
   invariantEV f (trs@(PrologTRS rr _), af)
-      | ((pred,rule,pos):_) <- extra = cutEV pred rule pos (trs,af) R.>>= f
-      | otherwise  = R.return (trs, af)
+      | ((pred,rule,pos):_) <- extra = cutEV pred rule pos (trs,af) >>= f
+      | otherwise  = return (trs, af)
       where extra = [(pred, r, note (head ev))
                              | (pred,r) <- toList rr
                              , let ev = extraVars (AF.apply af (annotateWithPos <$> r))
                              , not (null ev)]
-  cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = unEmbed $ do
-      (f, i) <- embed $ heuristic af r pos
-      embed$ trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show (AF.apply af rule)) $
-       case unlabel f of
-        InId f_pred ->
+  cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = do
+      (f, i) <- lift $ embed $ heuristic af r pos
+      trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show (AF.apply af rule)) $ return ()
+      case unlabel f of
+        InId f_pred -> do
          let (open -> Just (T u@(unlabel -> UId{} :: PS) ( (open -> Just (T g@(unlabel -> InId{}) vv2)) : vv1))) = r
              f'  = assert (f==g) $ mapLabel (delete i) (delete i $ iFun trs g) g
              r' = term u (term f' vv2 : vv1)
              changes1 =  Set.insert (pred, l:->r') . Set.delete (pred,rule)
-             changes2 = if f' `notElem` (getDefinedSymbols trs) then (`mappend` insertNewMode (f_pred, labelling f')) else id
+             changes2 x = if f' `notElem` (getDefinedSymbols trs) then  (mappend x) <$> insertNewMode (f_pred, labelling f') else return x
              changes3 = foldr (.) id
                         [ Set.insert (pred',outrule') . Set.delete (pred',outrule)
                                 | (pred', outrule@(l :-> r)) <- toList rr
                                 , (open -> Just (T u' ( (open -> Just (T p_out@(unlabel -> OutId h) vv2)) : vv1))) <- [l]
                                 , u == u', h == f_pred
                                 , let outrule' = term u (term (mapLabel (delete i) (delete i $ iFun trs p_out)  p_out) vv2 : vv1) :-> r]
-             trs'@(PrologTRS rr' _) = prologTRS' (changes1 $ changes3 $ changes2 rr)
-             af' = af `mappend` AF.singleton f' (labelling f') `mappend` AF.init trs'
-
-         in let common = Set.intersection rr' rr; added = rr' `Set.difference` common; deleted = rr `Set.difference` common
-            in trace ("Added " ++ show (Set.size added) ++ " rules and deleted " ++ show (Set.size deleted) ++"\n" ++
-                      "Rules added:\n" ++ unlines (map (show.snd) $ toList added) ++"\nRules deleted:\n" ++ unlines (map (show.snd) $ toList deleted)) $
-               trace (unlines(map (show.snd) $ toList rr') ++ "\n" ++ show af') $
-            R.return (trs', af')
+         trs'@(PrologTRS rr' _) <- (prologTRS' .changes1 . changes3) <$> changes2 rr
+         let af' = af `mappend` AF.singleton f' (labelling f') `mappend` AF.init trs'
+             common = Set.intersection rr' rr; added = rr' `Set.difference` common; deleted = rr `Set.difference` common
+         trace ("Added " ++ show (Set.size added) ++ " rules and deleted " ++ show (Set.size deleted) ++"\n" ++
+                "Rules added:\n" ++ unlines (map (show.snd) $ toList added) ++"\nRules deleted:\n" ++ unlines (map (show.snd) $ toList deleted) ++
+                "\n" ++ unlines(map (show.snd) $ toList rr') ++ "\n" ++ show af') $ return ()
+         R.return (trs', af')
         _ -> R.return (trs, AF.cut f i af)
 
-labellingTrans _ af _ p = R.return (convert p, convert af)
+labellingTrans _ af _ p = R.return ((convert p, convert af), [])
 iFun sig f = [1.. getArity sig f]
 
+-- RMonad instance for WriterT
+-- --------------------------
+
+instance (Monoid s) => R.Suitable (WriterT s m) a where
+   data R.Constraints (WriterT s m) a = WriterTConstraints
+   constraints _ = WriterTConstraints
+
+instance (Monad m, Monoid s) => R.RFunctor (WriterT s m) where
+   fmap = fmap
+
+instance (Monoid s, Monad m) => R.RMonad (WriterT s m) where
+   return = return
+   (>>=) = (>>=)
+   fail = fail

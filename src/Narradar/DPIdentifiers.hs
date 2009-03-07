@@ -25,9 +25,11 @@ import Data.Monoid
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Traversable (Traversable(..))
+import Language.Prolog.Syntax (Ident)
 import Prelude
 
 import TRS
+import qualified Language.Prolog.Syntax as Prolog
 
 import Narradar.Utils
 import Narradar.Bottom
@@ -74,16 +76,6 @@ instance HashConsed (T Id)
 -- ------------
 -- DP Symbols
 -- ------------
-{-
-class (Show id, Ord id) => DPSymbol id where
-  markDPSymbol, unmarkDPSymbol :: id -> id
-  functionSymbol, dpSymbol :: String -> id
-  isDPSymbol   :: id -> Bool
-  isDPSymbol s = markDPSymbol s == s
---  symbol :: id -> String
--}
---instance DPSymbol Identifier where
-
 isDPSymbol (IdDP _ ) = True
 isDPSymbol _         = False
 markDPSymbol (IdFunction f) = IdDP f
@@ -103,6 +95,7 @@ instance (T (Identifier id) :<: g) => DPMark' (T (Identifier id)) g where
 instance (DPMark' a g, DPMark' b g, (a:+:b) :<: g) => DPMark' (a:+:b) g where
     markDPF (Inl x) = markDPF x; markDPF(Inr x) = markDPF x
     unmarkDPF (Inl x) = unmarkDPF x; unmarkDPF(Inr x) = unmarkDPF x
+--instance (T id :<: g) => DPMark' (T id) g where markDPF = inject; unmarkDPF = inject
 instance (t :<: g) => DPMark' t g where markDPF = inject; unmarkDPF = inject
 
 unmarkDPRule, markDPRule :: DPMark f => Rule f -> Rule f
@@ -122,28 +115,3 @@ type instance DPVersionOf (a :+: b) = (DPVersionOf a :+: DPVersionOf b)
 type instance DPVersionOf Bottom    = Bottom
 type instance DPVersionOf Hole      = Hole
 
-
--- -------------------
--- Failed attempts
--- -------------------
-{-
-convert = foldTerm convertF
-
-class (Functor f, TRSC g) => Convert f g where convertF :: f (Term g) -> Term g
-instance TRSC f => Convert f f where convertF = In
-instance (T Identifier :<: g, TRSC g) => Convert (T String) g where
-    convertF (T f tt) = term (IdFunction f) tt
-instance (Convert f1 g, Convert f2 g) => Convert (f1 :+: f2) g where
-    convertF (Inl x) = convertF x
-    convertF (Inr x) = convertF x
-instance (a :<: g, TRSC g) => Convert a g where convertF t = inject(fmap reinject t)
--}
-
-
-{-
-class LabelWith a where
-  type result a
-  labelWith :: a -> [Int] -> result
-
-instance LabelWith (Labelled a) where
-    -}
