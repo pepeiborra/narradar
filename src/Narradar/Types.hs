@@ -95,6 +95,7 @@ type ProblemG id f = ProblemF id (NarradarTRS id f)
 
 data ProblemTypeF pi   = Rewriting
                        | Narrowing   | NarrowingModes   {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
+                       | GNarrowing  | GNarrowingModes  {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
                        | BNarrowing  | BNarrowingModes  {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
                        | LBNarrowing | LBNarrowingModes {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
 	               | Prolog {goals::[AF_ String], program::Prolog.Program}
@@ -102,10 +103,11 @@ data ProblemTypeF pi   = Rewriting
 
 narrowingModes0 =   NarrowingModes  {types=Nothing, goal=error "narrowingModes0", pi=error "narrowingModes0"}
 bnarrowingModes0 =  BNarrowingModes {types=Nothing, goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}
+gnarrowingModes0 =  GNarrowingModes {types=Nothing, goal=error "gnarrowingModes0", pi=error "gnarrowingModes0"}
 lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
---mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
+mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
 mkProblem typ trs dps = Problem typ trs dps
 
 mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
@@ -142,7 +144,12 @@ isBNarrowing LBNarrowingModes{} = True
 isBNarrowing _ = False
 isBNarrowingProblem = isBNarrowing . typ
 
-isAnyNarrowing p = isFullNarrowing p || isBNarrowing p
+isGNarrowing GNarrowing{}  = True
+isGNarrowing GNarrowingModes{} = True
+isGNarrowing _ = False
+isGNarrowingProblem = isGNarrowing . typ
+
+isAnyNarrowing = isFullNarrowing .|. isBNarrowing .|. isGNarrowing
 isAnyNarrowingProblem = isAnyNarrowing . typ
 
 isRewriting Rewriting =True; isRewriting _ = False
@@ -156,10 +163,12 @@ isModedProblem = isModed . typ
 getProblemAF = getGoalAF
 getGoalAF NarrowingModes{pi}   = Just pi
 getGoalAF BNarrowingModes{pi}  = Just pi
+getGoalAF GNarrowingModes{pi}  = Just pi
 getGoalAF LBNarrowingModes{pi} = Just pi
 getGoalAF _ = Nothing
 
 getTyping NarrowingModes{types}   = types
+getTyping GNarrowingModes{types}  = types
 getTyping BNarrowingModes{types}  = types
 getTyping LBNarrowingModes{types} = types
 getTyping _ = Nothing
@@ -192,9 +201,11 @@ instance (Show id) =>  WithGoalAF (ProblemType id) id where
   type T' (ProblemType id) id = ProblemType id
   withGoalAF pt@NarrowingModes{..}   pi' = pt{pi=pi'}
   withGoalAF pt@BNarrowingModes{..}  pi' = pt{pi=pi'}
+  withGoalAF pt@GNarrowingModes{..}  pi' = pt{pi=pi'}
   withGoalAF pt@LBNarrowingModes{..} pi' = pt{pi=pi'}
   withGoalAF Narrowing   pi = narrowingModes0{pi}
   withGoalAF BNarrowing  pi = bnarrowingModes0{pi}
+  withGoalAF GNarrowing  pi = gnarrowingModes0{pi}
   withGoalAF LBNarrowing pi = lbnarrowingModes0{pi}
   withGoalAF Rewriting   _  = Rewriting
 --  withGoalAF typ@Prolog{} _ =

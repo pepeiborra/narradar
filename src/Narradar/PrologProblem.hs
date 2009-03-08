@@ -72,7 +72,7 @@ prologP_sk :: (TypeAssignment -> MkHeu PId BasicPId) ->
 prologP_sk mkHeu p@(Problem Prolog{..} _ _) =
    andP PrologSKP p
      [mkGoalProblem (mkHeu typing) (FromAF (AF.mapSymbols InId pi_g :: AF_ PS) (Just typing))
-                                      (mkDPProblem BNarrowing (skTransform program) :: ProblemG PId BasicPId) | pi_g <- goals]
+                                      (mkDPProblem GNarrowing (skTransform program) :: ProblemG PId BasicPId) | pi_g <- goals]
   where typing = infer program
 
 encodeToSat :: forall f id trs . (TRS trs id f, T id :<: f) => trs -> [Goal id] -> Formula (id, Int)
@@ -181,9 +181,9 @@ prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _)
          problems = do goalAF <- AF.mapSymbols InId <$> goals
                        let assig  = infer program
                        ((trs', af'), modes) <- toList $ labellingTrans mkHeu goalAF assig trs
-                       let Problem typ trs'' dps = mkDPProblem BNarrowing trs'
+                       let Problem typ trs'' dps = mkDPProblem GNarrowing trs'
                        return$ step (LabellingSKP modes) p
-                                 (Problem BNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
+                                 (Problem GNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
                                                          , types= Just assig
                                                          , goal = AF.mapSymbols' ((IdFunction.) . flip Labelling) goalAF }
                                           trs'' dps)

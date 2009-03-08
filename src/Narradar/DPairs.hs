@@ -26,6 +26,7 @@ mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<
 mkDPProblem Rewriting   trs = let trs' = convert trs in mkProblem Rewriting   trs' (tRS $ getPairs trs')
 mkDPProblem Narrowing   trs = let trs' = convert trs in mkProblem Narrowing   trs' (tRS $ getNPairs trs')
 mkDPProblem BNarrowing  trs = let trs' = convert trs in mkProblem BNarrowing  trs' (tRS $ getPairs trs')
+mkDPProblem GNarrowing  trs = let trs' = convert trs in mkProblem GNarrowing  trs' (tRS $ getPairs trs')
 mkDPProblem LBNarrowing trs = let trs' = convert trs in mkProblem LBNarrowing trs' (tRS $ getPairs trs')
 
 getPairs :: (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> [DP f]
@@ -78,7 +79,7 @@ cycleProcessor problem@(Problem typ trs dps@TRS{})
           gr = getEDG problem
 
 getEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
-getEDG (Problem typ trs (rules->dps)) | isBNarrowing typ =
+getEDG (Problem typ trs (rules->dps)) | (isBNarrowing .|. isGNarrowing) typ =
     G.buildG (0, length dps - 1)
                [ (i,j) | (i,_:->t) <- zip [0..] dps
                        , (j,u:->_) <- zip [0..] dps

@@ -17,10 +17,11 @@ import Narradar.DPIdentifiers
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Proof
 import Narradar.Types
+import Narradar.Utils
 import TRS
 
 usableProcessor, iUsableProcessor :: forall f id a. (DPMark f, Show id, T id :<: f, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
-usableProcessor p@(Problem typ trs dps@TRS{}) | isBNarrowing typ
+usableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
    = step UsableRulesP p (mkProblem typ trs' dps)
  where
   dps' = maybe (rules dps) (`AF.apply` rules dps) (getGoalAF typ)
@@ -38,7 +39,7 @@ usableProcessor p = return p
 --     later we will use a more flexible version that filters less in the rules,
 --     but the same in the pairs.
 --     Fix it by using a version of pi restricted to DP symbols here.
-iUsableProcessor p@(Problem typ@(getGoalAF -> Just pi) trs dps@TRS{}) | isBNarrowing typ
+iUsableProcessor p@(Problem typ@(getGoalAF -> Just pi) trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
    = step UsableRulesP p (mkProblem typ trs' dps)
  where
   pi'  = AF.filter ((isDPSymbol.) . const) pi
