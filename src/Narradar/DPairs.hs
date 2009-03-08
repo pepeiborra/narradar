@@ -45,7 +45,7 @@ getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSub
 cycleProcessor, sccProcessor :: (T id :<: f, DPMark f, Show id, Ord id) => ProblemG id f -> ProblemProofG id Html f
 usableSCCsProcessor :: forall f id. (T LPId :<: f, DPMark f) => ProblemG LPId f -> ProblemProofG LPId Html f
 
-usableSCCsProcessor problem@(Problem typ@(goal -> goalAF) trs dps)
+usableSCCsProcessor problem@(Problem typ@(getGoalAF -> Just goalAF) trs dps)
   | null cc   = success (UsableGraph gr reachable) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (UsableGraph gr reachable) problem
