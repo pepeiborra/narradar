@@ -69,6 +69,7 @@ instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
 instance Ppr (ProblemType id) where
     ppr Prolog{}                  = text "Prolog"
     ppr typ | isFullNarrowing typ = text "NDP"
+    ppr typ | isGNarrowing typ    = text "Ground NDP"
     ppr typ | isBNarrowing typ    = text "BNDP"
     ppr Rewriting                 = text "DP"
 
@@ -220,6 +221,7 @@ instance HTML Prolog.Atom where
 
 typClass typ | isFullNarrowing typ = theclass "NDP"
 typClass typ | isBNarrowing typ = theclass "BNDP"
+typClass typ | isGNarrowing typ = theclass "GNDP"
 typClass Rewriting = theclass "DP"
 typClass Prolog{}  = theclass "Prolog"
 

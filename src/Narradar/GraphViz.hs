@@ -69,6 +69,7 @@ problemColor :: ProblemG id f -> (String, String)
 problemColor p | isPrologProblem        p = ("color", "#F6D106")
                | isFullNarrowingProblem p = ("color", "#4488C9")
                | isBNarrowingProblem    p = ("color", "#FD6802")
+               | isGNarrowingProblem    p = ("color", "#FD6802")
                | isRewritingProblem     p = ("color", "#EAAAFF")
                | otherwise = error ("problemColor")
 problemAttrs :: (Show id, Ppr f) => ProblemG id f -> [(String,String)]
