@@ -77,7 +77,7 @@ prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
   where narrowingSolverUScc = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP
 
 -- narradar 1.0 main solving scheme
-narradarSolver       = narradarSolver' (aproveSrvP defaultTimeout)
+narradarSolver       = narradarSolver' aproveWebP
 narradarSolver' aproveS = cycleProcessor >=> groundRhsOneP >=> aproveS
 
 narrowingSolver 0 _ = const mzeroM
