@@ -237,6 +237,7 @@ data ProcInfo id where                    -- vv ignored vv
     LabellingSKP    :: [Labelled String] -> ProcInfo ()
     PrologSKP_rhs   :: ProcInfo ()
     LabellingSKP_rhs:: ProcInfo ()
+    UsableRulesNaiveP :: ProcInfo ()
     UsableRulesP    :: ProcInfo ()
     Trivial         :: ProcInfo ()
 

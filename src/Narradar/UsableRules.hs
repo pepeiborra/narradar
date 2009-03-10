@@ -22,7 +22,7 @@ import TRS
 
 usableProcessor, iUsableProcessor :: forall f id a. (DPMark f, Show id, T id :<: f, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
 usableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
-   = step UsableRulesP p (mkProblem typ trs' dps)
+   = step UsableRulesNaiveP p (mkProblem typ trs' dps)
  where
   dps' = maybe (rules dps) (`AF.apply` rules dps) (getGoalAF typ)
   trs' = mkTRS (concat (usableRules mempty <$> rhs <$> dps'))
