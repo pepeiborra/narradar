@@ -50,16 +50,9 @@ import Narradar.Types hiding (Var,Term,In, program)
 import qualified Narradar.Types as TRS
 import Narradar.NarrowingProblem
 import Narradar.Proof
-import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2)
+import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2, trace)
 
 import Prelude hiding (and,or,notElem,pi)
-
-#ifdef DEBUG
-import Debug.Trace
-#else
-trace _ x = x
-#endif
-
 
 -- ----------------
 -- Transformations

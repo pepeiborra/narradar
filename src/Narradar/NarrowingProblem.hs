@@ -44,10 +44,7 @@ import Lattice
 import Language.Prolog.TypeChecker
 
 #ifdef DEBUG
-import Debug.Trace
 import Debug.Observe
-#else
-trace _ x = x
 #endif
 
 data MkGoalProblem id = FromAF (AF_ id) (Maybe TypeAssignment) | AllTerms

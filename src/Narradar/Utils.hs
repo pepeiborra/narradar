@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -30,6 +31,14 @@ import Test.QuickCheck
 import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
+
+#ifdef DEBUG
+import qualified Debug.Trace
+trace = Debug.Trace.trace
+#else
+{-# INLINE trace #-}
+trace _ x = x
+#endif
 
 -- Type Constructor Composition
 -- ----------------------------
