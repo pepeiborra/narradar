@@ -98,7 +98,7 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        toRule (Pred id tt :- []) = return$
          let tt' = evalState(mapM toTerm tt) [0..] in  -- This evalState is for the MonadFresh in toTerm
           [(id, term (InId id) tt' :-> term (OutId id) tt')]
-       toRule (Pred id tt :- gg) = do
+       toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
          let tt' = evalState(mapM toTerm tt) [0..]
          modify (Set.fromList(concatMap vars' tt') `mappend`)
          rhs_0  <- mkRhs (head gg)
