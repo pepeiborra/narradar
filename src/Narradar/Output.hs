@@ -31,27 +31,7 @@ import qualified TRS
 import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude hiding (concat)
--- ----
--- TPDB
--- ----
 
-pprTPDB :: forall f id. (Show id) => ProblemG id f -> String
-pprTPDB p@(Problem _ trs dps@TRS{} ) =
-  unlines [ printf "(VAR %s)" (unwords $ map (show . pprTerm) $ snub $ foldMap3 vars' ( rules <$> p))
-          , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
-          , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))]
-
-  where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
-        pprTerm = foldTerm f
-        f (prj -> Just (Var i n))               = ppr (var n :: Term f)
-        f (prj -> Just (T (id::id) [])) = text (show id)
-        f (prj -> Just (T (id::id) tt)) =
-            text (show id) <> parens (hcat$ punctuate comma tt)
-{-
-        f (prj -> Just Bottom) =  -- TODO Cache the obtained representation on first call
-            text $ fromJust $ find (not . flip Set.member (allSymbols$getSignature p) . functionSymbol)
-                                   ("_|_":["_|_"++show i | i <- [0..]])
--}
 -------------------
 -- Ppr
 -------------------
