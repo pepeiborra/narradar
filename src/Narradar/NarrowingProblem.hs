@@ -10,7 +10,7 @@
 module Narradar.NarrowingProblem (
      mkGoalProblem, -- mkGoalProblem_rhs,
      groundRhsOneP, groundRhsAllP,
---     safeAFP,
+     safeAFP,
      MkGoalProblem(..), MkHeu(..)) where
 
 import Control.Applicative
@@ -134,12 +134,12 @@ groundRhsAllP p = return p
 
 -- NOTE: For now assume that this processor is unsound. The AF_rhs trick does not work well.
 --       Some extra conditions are needed which I haven't identified yet.
-{-
-safeAFP :: (Bottom :<: f, DPMark f) => ProblemG id f -> ProblemProofG id Html f
-safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
-  step (GroundAll (Just af)) p (AF.apply_rhs p af $ Problem Rewriting trs dps)
+
+safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
+safeAFP p@(Problem (getGoalAF -> Just af) trs dps@TRS{}) = assert (isSoundAF af p) $
+  step (GroundAll (Just af)) p (AF.apply af $ Problem Rewriting trs dps)
 safeAFP p = return p
--}
+
 {-
 mkBNDPProblem_rhs x@(FromAF af (Just typs)) trs = mkGoalProblem_rhs (const $ typeHeu typs) x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
 mkBNDPProblem_rhs x trs = mkGoalProblem_rhs bestHeu x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
