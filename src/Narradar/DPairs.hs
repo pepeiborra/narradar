@@ -1,15 +1,17 @@
 
-{-# LANGUAGE PatternSignatures, PatternGuards, ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables, PatternGuards, ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 
 module Narradar.DPairs where
 
 import Control.Applicative
+import Control.Monad.State
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as G
+import Data.List ((\\))
 import Data.Maybe
 import qualified Data.Set as Set
-import Data.Traversable
+import Data.Traversable as T
 import qualified Data.Tree as Tree
 import Text.XHtml (toHtml, Html)
 import Prelude as P
@@ -84,27 +86,30 @@ getEDG (Problem typ trs (rules->dps)) | (isBNarrowing .|. isGNarrowing) typ =
                [ (i,j) | (i,_:->t) <- zip [0..] dps
                        , (j,u:->_) <- zip [0..] dps
                        , inChain t u]
-    where inChain t u | [t'] <- variant' [icap trs $ t] [u] = isJust (unify t' u)
+    where inChain (In in_t) u | [t'] <- variant' [In(icap trs <$> in_t)] [u] = isJust (unify t' u)
 
 getEDG (Problem typ trs (rules->dps)) =
     G.buildG (0, length dps - 1)
                [ (i,j) | (i,_:->t) <- zip [0..] dps
                        , (j,u:->_) <- zip [0..] dps
                        , inChain t u]
-    where inChain t u | [t'] <- variant' [ren $ icap trs $ t] [u] = isJust (unify u t')
+    where inChain (In in_t) u | [t'] <- variant' [ren $ In (icap trs <$> in_t)] [u] = isJust (unify u t')
 
 ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
 ren t = runSupply (foldTermM f t) where
     f t | Just Var{} <- prj t = var <$> next
         | otherwise           = return (inject t)
 
-cap,icap :: forall f id. (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> Term f -> Term f
-cap trs t | Just (T (s::id) tt) <- open t
-                = term s [if isDefined trs t' then var i else t'
-                       | (i,t') <- [0..] `zip` tt]
-          | otherwise = t
+cap, icap :: forall f id. (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> Term f -> Term f
+cap trs t = evalState (go t) freshvv where
+  freshvv = map var [0..] \\ vars' t
+  go (open -> Just (T (s::id) tt)) | isDefined trs t = next
+                                   | otherwise       = term s <$> P.mapM go tt
+  go v = return v
 
-icap trs t | Just (T (s::id) tt) <- open t
-                = term s [if any (unifies t' . lhs) (rules trs) then var i else t'
-                       | (i,t') <- [0..] `zip` tt]
-          | otherwise = t
+-- Use unification instead of just checking if it is a defined symbol
+icap trs t = runSupply (go t) where
+  go t@(In in_t) | Just (T (f::id) tt) <- open t = do
+      t' <- In <$> (go `T.mapM` in_t)
+      if  any (unifies t' . lhs) (rules trs) then var <$> next else return t'
+  go v = return v

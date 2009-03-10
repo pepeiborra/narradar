@@ -46,12 +46,15 @@ iUsableProcessor p@(Problem typ@(getGoalAF -> Just pi) trs dps@TRS{}) | (isBNarr
   trs' = mkTRS (F.toList $ usableRules mempty (rhs <$> pi_dps))
   pi_dps = AF.apply pi (rules dps)
   pi_trs = mkTRS(AF.apply pi (rules trs)) :: NarradarTRS id f
+  usableRules acc t | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
   usableRules acc [] = acc
   usableRules acc (t@(In in_t):rest)
       | isVar t
       = usableRules acc rest
-      | rr   <- Set.fromList [r | r <- rules trs, let r' = AF.apply pi r, In (icap pi_trs <$> in_t) `unifies` lhs r' ]
+      | rr   <- Set.fromList [r | r <- rules trs
+                                , let r' = AF.apply pi r
+                                , In (icap pi_trs <$> in_t) `unifies` lhs r' ]
       , new  <- Set.difference rr acc
-      = usableRules (rr `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
+      = usableRules (new `mappend` acc) (mconcat [(AF.apply pi . rhs) `map` F.toList new, directSubterms t, rest])
 
 iUsableProcessor p = return p
