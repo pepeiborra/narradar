@@ -9,7 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Narradar.PrologProblem (prologP_sk, prologP_labelling_sk) where
+module Narradar.PrologProblem (prologP_sk, prologP_labelling_sk, skTransform) where
 
 import Control.Applicative
 import Control.Arrow
