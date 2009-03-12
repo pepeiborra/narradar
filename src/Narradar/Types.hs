@@ -75,6 +75,7 @@ instance (Ord id, TRSC f, T id :<: f) => ExtraVars (NarradarTRS id f) f where
 instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
     {-# SPECIALIZE instance ExtraVars (Rule BBasicId) BBasicId #-}
     extraVars (l:->r) = snub (vars' r \\ vars' l)
+instance ExtraVars a f => ExtraVars [a] f where extraVars = concatMap extraVars
 
 ---------------------------
 -- DP Problems
@@ -92,6 +93,13 @@ instance Ord id => HasSignature (ProblemG id f) id where
 
 type Problem     f = ProblemG Id f
 type ProblemG id f = ProblemF id (NarradarTRS id f)
+
+instance (Ord (Term f), TRSC f, Ord id, T id :<: f) => Monoid (ProblemG id f) where
+    mempty = Problem Rewriting mempty mempty
+    Problem typ1 t1 dp1 `mappend` Problem typ2 t2 dp2 = Problem typ2 (t1 `mappend` t2) (dp1`mappend`dp2)
+
+instance (Ord id, TRSC f, T id :<: f) => TRS (ProblemG id f) id f where
+    rules (Problem _ trs dps) = rules trs `mappend` rules dps
 
 data ProblemTypeF pi   = Rewriting
                        | Narrowing   | NarrowingModes   {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}

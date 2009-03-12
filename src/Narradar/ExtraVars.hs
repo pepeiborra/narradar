@@ -58,12 +58,12 @@ cutWith heu af t pp = foldM (\af' pos -> (heu af' t pos >>= \(f,p) ->
 
 {-# SPECIALIZE invariantEV :: Heuristic LId BBasicLId -> ProblemG LId BBasicLId -> LabelledAF -> [LabelledAF] #-}
 {-# SPECIALIZE invariantEV :: Heuristic Id  BBasicId  -> Problem BBasicId -> AF -> [AF] #-}
-invariantEV :: (Show id, Ord id, Lattice (AF_ id), T id :<: f, TRSC f) => AF.Heuristic id f -> ProblemG id f -> AF_ id -> [AF_ id]
-invariantEV heu p@Problem{trs,dps} = sortByDefinedness AF.apply dps . selectBest . Set.toList
-                                   . fix (\f -> subinvariantEV trs f >=> subinvariantEV dps f)
+invariantEV :: (Show id, Ord id, Lattice (AF_ id), T id :<: f, TRSC f, TRS trs id f, ExtraVars trs f, AF.ApplyAF trs id) => AF.Heuristic id f -> trs -> AF_ id -> [AF_ id]
+invariantEV heu trs = selectBest . Set.toList
+                                   . fix subinvariantEV
   where
 --        subinvariantEV :: TRS Identifier f -> (AF -> Set AF) -> AF -> Set AF
-        subinvariantEV trs f af
+        subinvariantEV f af
                 | null extra = return af
                 | otherwise  = foldM cutEV af (rules trs) >>= f
               where extra = extraVars (AF.apply af trs)

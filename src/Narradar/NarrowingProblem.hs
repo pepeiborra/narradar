@@ -9,7 +9,7 @@
 
 module Narradar.NarrowingProblem (
      mkGoalProblem, -- mkGoalProblem_rhs,
-     groundRhsOneP, groundRhsAllP,
+     groundRhsOneP, groundRhsAllP, uGroundRhsAllP,
      safeAFP,
      MkGoalProblem(..), MkHeu(..)) where
 
@@ -19,6 +19,7 @@ import Control.Monad hiding (join, mapM)
 import Control.Monad.Free hiding (note)
 import Control.Monad.Writer(execWriter, execWriterT, MonadWriter(..), lift)
 import Control.Monad.State (evalState, evalStateT, modify, MonadState(..))
+import Control.RMonad.AsMonad
 import Data.Foldable (Foldable, foldMap, toList)
 import Data.List (intersect, (\\))
 import Data.Maybe
@@ -38,6 +39,7 @@ import Narradar.Proof
 import Narradar.Utils
 import Narradar.Types as Narradar
 import Narradar.ExtraVars
+import Narradar.UsableRules
 import Narradar.Aprove
 import TRS
 import Lattice
@@ -68,7 +70,7 @@ mkGoalProblem' invariantEV mkHeu (FromGoal goal types) p = do
 mkGoalProblem' invariantEV mkHeu (FromAF goalAF mb_typs) p@(Problem typ@(getGoalAF -> Nothing) trs dps) = do
     let extendedAF = AF.extendAFToTupleSymbols (AF.mapSymbols functionSymbol goalAF)
         typ'       = (typ `withGoalAF` extendedAF){types=mb_typs}
-    let orProblems = [(Problem typ'{pi=af_vc} trs dps) | af_vc <- invariantEV (mkHeu (getSignature p)) p extendedAF]
+    let orProblems = [(Problem typ'{pi=af_vc} trs dps) | af_vc <- invariantEV (mkHeu (getSignature p)) (rules p) extendedAF]
     assert (not $ null orProblems) $ msum (map return orProblems)
 
 mkGoalProblem' _ _ AllTerms p = return p
@@ -121,6 +123,36 @@ groundRhsAllP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyN
 
 groundRhsAllP p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowingProblem p = groundRhsAllP (p `withGoalAF` AF.init p)
 groundRhsAllP p = return p
+
+-- ------------------------------------------------------------------------
+-- A variation for use with SCCs, incorporate usable rules
+-- ------------------------------------------------------------------------
+{-# SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
+{-# SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+
+uGroundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id Html f
+uGroundRhsAllP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
+    if null orProblems
+      then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      else msum orProblems
+    where heu        = maybe (bestHeu p) typeHeu (getTyping typ)
+          results = unEmbed $ do
+                  af0 <- embed $ Set.fromList $
+                          foldM (\af -> findGroundAF heu pi_groundInfo af dps)
+                                (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
+                                (rules dps)
+                  let utrs = mkTRS(iUsableRules trs (Just af0) (rhs <$> rules dps))
+                  af1 <- embed $ Set.fromList $ invariantEV heu (dps `mappend` utrs) af0
+                  let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
+                  return (af1, utrs')
+          orProblems = [ proofU >>= \p' ->
+                             step (GroundAll (Just af)) p'
+                                (AF.apply af (mkProblem Rewriting trs dps))
+                        | (af,trs) <- toList results
+                        , let proofU = step UsableRulesP p (mkProblem typ trs dps)]
+
+uGroundRhsAllP p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowingProblem p = groundRhsAllP (p `withGoalAF` AF.init p)
+uGroundRhsAllP p = return p
 
 -- ------------------------------------------------------------------
 -- This is the AF processor described in

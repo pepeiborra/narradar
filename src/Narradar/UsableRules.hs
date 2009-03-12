@@ -34,7 +34,9 @@ usableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) 
 
 usableProcessor p = return p
 
-iUsableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)
+iUsableProcessor p@(Problem typ trs dps@TRS{})
+  | (isBNarrowing .|. isGNarrowing) typ
+  = step UsableRulesP p (mkProblem typ trs' dps)
  where
   pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getGoalAF typ
   trs' = mkTRS(iUsableRules trs pi' (rhs <$> rules dps)) `asTypeOf` trs

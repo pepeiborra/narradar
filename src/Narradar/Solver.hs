@@ -74,7 +74,7 @@ parseProlog = wrap' . Prelude.return . either error Prelude.return . parseProlog
 -- ------------------
 prologSolver    = prologSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
 prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
-  where narrowingSolverUScc = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP
+  where narrowingSolverUScc = usableSCCsProcessor >=> uGroundRhsAllP
 
 -- narradar 1.0 main solving scheme
 narradarSolver       = narradarSolver' aproveWebP
