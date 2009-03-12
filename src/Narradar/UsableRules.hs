@@ -34,27 +34,37 @@ usableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) 
 
 usableProcessor p = return p
 
--- FIX Is this a sound approximation of the Usable Rules ?
---     I don't think so, as here we use pi to filter the rules too, but
---     later we will use a more flexible version that filters less in the rules,
---     but the same in the pairs.
---     Fix it by using a version of pi restricted to DP symbols here.
-iUsableProcessor p@(Problem typ@(getGoalAF -> Just pi) trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
-   = step UsableRulesP p (mkProblem typ trs' dps)
+iUsableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)
  where
-  pi'  = AF.filter ((isDPSymbol.) . const) pi
-  trs' = mkTRS (F.toList $ usableRules mempty (rhs <$> pi_dps))
-  pi_dps = AF.apply pi (rules dps)
-  pi_trs = mkTRS(AF.apply pi (rules trs)) :: NarradarTRS id f
-  usableRules acc t | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  usableRules acc [] = acc
-  usableRules acc (t@(In in_t):rest)
+  pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getGoalAF typ
+  trs' = mkTRS(iUsableRules trs pi' (rhs <$> rules dps)) `asTypeOf` trs
+
+iUsableProcessor p = return p
+
+
+-- Assumes Innermost or Constructor Narrowing
+-- TODO Extend to work with Q-narrowing to discharge those assumptions
+iUsableRules :: (Ord id, TRSC f, TRS trs id f, DPMark f) => trs -> Maybe (AF.AF_ id) -> [Term f] -> [Rule f]
+iUsableRules trs Nothing = F.toList . go mempty where
+--  usableRules acc t | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
+  go acc [] = acc
+  go acc (t@(In in_t):rest)
       | isVar t
-      = usableRules acc rest
+      = go acc rest
+      | rr   <- Set.fromList [r | r <- rules trs
+                                , In (icap trs <$> in_t) `unifies` lhs r ]
+      , new  <- Set.difference rr acc
+      = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
+
+iUsableRules trs (Just pi) = F.toList . go mempty where
+  pi_trs = mkTRS(AF.apply pi (rules trs)) `asTypeOf` trs
+--  usableRules acc (AF.apply pi -> t) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
+  go acc [] = acc
+  go acc (AF.apply pi -> t@(In in_t):rest)
+      | isVar t
+      = go acc rest
       | rr   <- Set.fromList [r | r <- rules trs
                                 , let r' = AF.apply pi r
                                 , In (icap pi_trs <$> in_t) `unifies` lhs r' ]
       , new  <- Set.difference rr acc
-      = usableRules (new `mappend` acc) (mconcat [(AF.apply pi . rhs) `map` F.toList new, directSubterms t, rest])
-
-iUsableProcessor p = return p
+      = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
