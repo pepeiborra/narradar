@@ -84,7 +84,7 @@ groundRhsOneP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyN
       then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
       else msum orProblems
     where heu        = maybe (bestHeu p) typeHeu (getTyping typ)
-          afs        = findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getSignature p){definedSymbols=mempty} pi_groundInfo) p =<< rules dps
+          afs        = findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p =<< rules dps
           orProblems = [ step (GroundOne (Just af)) p $
                                 AF.apply af (mkProblem Rewriting trs dps)
                         | af <- afs]
@@ -113,7 +113,7 @@ groundRhsAllP p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyN
       else msum orProblems
     where heu        = maybe (bestHeu p) typeHeu (getTyping typ)
           afs        = foldM (\af -> findGroundAF heu pi_groundInfo af p)
-                             (AF.init p `mappend` AF.restrictTo (getSignature p){definedSymbols=mempty} pi_groundInfo)
+                             (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
                              (rules dps)
           orProblems = [ step (GroundAll (Just af)) p $
                                 AF.apply af (mkProblem Rewriting trs dps)

@@ -100,7 +100,7 @@ mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
 mapSymbols':: Ord id' => (id -> [Int] -> id') -> AF_ id -> AF_ id'
 filter    :: Ord id => (id -> Set Int -> Bool) -> AF_ id -> AF_ id
 invert    :: (Ord id, Show id, TRS a id f) => a -> AF_ id -> AF_ id
-restrictTo:: (HasSignature sig id) => sig -> AF_ id -> AF_ id
+restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
 
 cut id i (AF m)  = case Map.lookup id m of
@@ -123,7 +123,7 @@ init t | sig <- getSignature t = fromList
           , getArity sig d > 0]
 initBottom t | sig <- getSignature t = fromList
     [ (d, []) | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)]
-restrictTo (allSymbols.getSignature -> sig) (AF af) =
+restrictTo sig (AF af) =
     AF (Map.filterWithKey (\k _ -> k `Set.member` sig) af)
 
 domain (AF pi) = Map.keysSet pi

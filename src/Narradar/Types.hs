@@ -107,7 +107,7 @@ gnarrowingModes0 =  GNarrowingModes {types=Nothing, goal=error "gnarrowingModes0
 lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
-mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo p pi) trs dps in p
+mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
 mkProblem typ trs dps = Problem typ trs dps
 
 mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
