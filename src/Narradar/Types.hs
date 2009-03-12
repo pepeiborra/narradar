@@ -16,7 +16,7 @@ module Narradar.Types ( module TRS
                       , module Narradar.PrologIdentifiers
                       , module Narradar.Labellings
                       , module Narradar.Convert
-                      , module Bottom) where
+                      ) where
 
 import Data.DeriveTH
 import Data.Derive.Foldable
@@ -45,7 +45,6 @@ import qualified Text.PrettyPrint as Ppr
 import Control.Monad.Free
 import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
 import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Bottom as Bottom
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
@@ -56,6 +55,7 @@ import Narradar.Utils
 import Lattice
 import TRS hiding (apply)
 import TRS.FetchRules
+import TRS.Bottom as Bottom
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.TypeChecker as Prolog
 import qualified Language.Prolog.Parser as Prolog

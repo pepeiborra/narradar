@@ -12,8 +12,8 @@ module Narradar.Labellings where
 
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
-import Narradar.Bottom
 import Narradar.Utils
+import TRS.Bottom
 import TRS
 
 -- -----------------------

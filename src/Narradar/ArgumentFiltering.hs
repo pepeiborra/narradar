@@ -26,7 +26,6 @@ import Data.Monoid
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
-import Narradar.Bottom as Bottom
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
@@ -35,6 +34,7 @@ import Narradar.Convert
 import Narradar.Utils
 
 import TRS hiding (apply)
+import TRS.Bottom as Bottom
 import Lattice
 import Language.Prolog.Syntax      (Ident)
 import Language.Prolog.TypeChecker (TypeAssignment)

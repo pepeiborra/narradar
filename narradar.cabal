@@ -61,7 +61,6 @@ Library
      Narradar.GraphViz,
      Narradar.Utils,
      Narradar.Propositional,
-     Narradar.Bottom,
      Control.Monad.MonadSupply,
      Control.Monad.Free,
      Control.Monad.Operad,

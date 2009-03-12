@@ -29,10 +29,10 @@ import Language.Prolog.Syntax (Ident)
 import Prelude
 
 import TRS
+import TRS.Bottom
 import qualified Language.Prolog.Syntax as Prolog
 
 import Narradar.Utils
-import Narradar.Bottom
 
 type Id = Identifier String
 
@@ -64,12 +64,10 @@ $(derive makeTraversable ''Identifier)
 -- -----------------------
 
 type Basic'   = Var :+: T String :+: Hole
-type BBasic   = Var :+: T String :+: Hole :+: Bottom
 type BasicId  = Var :+: T Id :+: Hole
 type BBasicId = Var :+: T Id :+: Hole :+: Bottom
 instance HashConsed BBasicId
 instance HashConsed BasicId
-instance HashConsed BBasic
 instance HashConsed Basic'
 instance HashConsed (T Id)
 

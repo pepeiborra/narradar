@@ -17,6 +17,7 @@ import Narradar.PrologIdentifiers
 import Narradar.Labellings
 import Narradar.Utils
 import TRS
+import TRS.Bottom
 
 -- ------------------
 -- External interface

@@ -17,17 +17,19 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 
 import Narradar.DPIdentifiers
-import Narradar.Bottom
+import TRS.Bottom
 import TRS
 
 type PS   = PIdentifier String
 type PId  = Identifier PS
 
 type BasicPS    = Var :+: T PS   :+: Hole
+type BBasicPS   = Var :+: T PS   :+: Hole :+: Bottom
 type BasicPId   = Var :+: T PId  :+: Hole
 type BBasicPId  = Var :+: T PId  :+: Hole :+: Bottom
 instance HashConsed BBasicPId
 instance HashConsed BasicPId
+instance HashConsed BBasicPS
 instance HashConsed BasicPS
 
 -- -------------------
