@@ -64,19 +64,6 @@ import Prelude as P hiding (sum, pi, mapM)
 isGround :: TRSC f => Term f -> Bool
 isGround = null . vars
 
-class    ExtraVars t f | t -> f where extraVars :: t -> [Term f]
-
-instance (Ord id, TRSC f, T id :<: f) => ExtraVars (ProblemG id f) f where
-    {-# SPECIALIZE instance ExtraVars (Problem BBasicId) BBasicId #-}
-    extraVars (Problem _ trs dps) = extraVars trs ++ extraVars dps
-instance (Ord id, TRSC f, T id :<: f) => ExtraVars (NarradarTRS id f) f where
-    {-# SPECIALIZE instance ExtraVars (NarradarTRS Id BBasicId) BBasicId #-}
-    extraVars trs = concatMap extraVars (rules trs)
-instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
-    {-# SPECIALIZE instance ExtraVars (Rule BBasicId) BBasicId #-}
-    extraVars (l:->r) = snub (vars' r \\ vars' l)
-instance ExtraVars a f => ExtraVars [a] f where extraVars = concatMap extraVars
-
 ---------------------------
 -- DP Problems
 ---------------------------

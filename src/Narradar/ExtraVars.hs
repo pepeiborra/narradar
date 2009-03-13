@@ -3,18 +3,23 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
-module Narradar.ExtraVars ( evProcessor, invariantEV
+module Narradar.ExtraVars ( ExtraVars(..)
+                          , evProcessor, invariantEV
                           , cutWith
                           , sortByDefinedness, selectBest, isSoundAF)
                        where
 
 import Control.Applicative
+import Control.Exception
 import Control.RMonad hiding (join)
 import qualified Control.Monad as P
 import Control.Monad.Fix
-import Data.List (sortBy, inits, unfoldr, isPrefixOf, isSuffixOf, intersect)
+import Data.Foldable (Foldable(..))
+import Data.List (sortBy, inits, unfoldr, isPrefixOf, isSuffixOf, intersect,(\\))
 import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
@@ -23,18 +28,23 @@ import Text.XHtml (toHtml)
 import Prelude hiding (Monad(..), (=<<), or, and, mapM)
 
 import TRS
-import Narradar.Utils(on)
+import Narradar.Utils(on, trace,snub)
 import Lattice
-import Narradar.ArgumentFiltering (AF, LabelledAF, AF_, Heuristic, bestHeu, typeHeu)
+import Narradar.ArgumentFiltering (AF, LabelledAF, AF_, Heuristic, bestHeu, typeHeu, mkHeu, Heuristic(..), MkHeu(..))
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Proof
 
-#ifdef DEBUG
-import Debug.Trace
-#else
-trace _ x = x
-#endif
+class    ExtraVars t f | t -> f where extraVars :: t -> [Term f]
+instance (TRS trs id f) => ExtraVars trs f where
+    {-# SPECIALIZE instance ExtraVars (Problem BBasicId) BBasicId #-}
+    {-# SPECIALIZE instance ExtraVars (NarradarTRS Id BBasicId) BBasicId #-}
+    {-# off SPECIALIZE instance ExtraVars [Rule BBasicId] BBasicId #-}
+    extraVars = concatMap extraVars . rules
+
+instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
+    {-# SPECIALIZE instance ExtraVars (Rule BBasicId) BBasicId #-}
+    extraVars (l:->r) = snub (vars' r \\ vars' l)
 
 evProcessor p | not (isAnyNarrowingProblem p) = P.return p
 evProcessor p@(Problem typ@(getProblemAF -> Just af) trs dps)
@@ -42,7 +52,7 @@ evProcessor p@(Problem typ@(getProblemAF -> Just af) trs dps)
      | null orProblems = failP (EVProc mempty :: ProcInfo ()) p (toHtml "Could not find a EV-eliminating AF")
      | otherwise = P.msum (map P.return orProblems)
   where extra = extraVars p
-        heu   = maybe (bestHeu p) typeHeu (getTyping typ)
+        heu   = maybe (mkHeu bestHeu p) ((`mkHeu` p) . typeHeu) (getTyping typ)
         orProblems = [(p `withGoalAF` af') | af' <- invariantEV heu p af]
 
 evProcessor p@(Problem typ trs dps) = evProcessor (p `withGoalAF` AF.init p)
@@ -50,7 +60,7 @@ evProcessor p = P.return p
 
 {-# SPECIALIZE cutWith :: Heuristic Id BBasicId -> AF -> Term BBasicId -> [Position] -> Set.Set AF #-}
 cutWith heu af t [] = return af
-cutWith heu af t pp = foldM (\af' pos -> (heu af' t pos >>= \(f,p) ->
+cutWith heu af t pp = foldM (\af' pos -> (runHeu heu af' t pos >>= \(f,p) ->
           trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p) $
           return$ AF.cut f p af'))
                             af pp
@@ -59,8 +69,7 @@ cutWith heu af t pp = foldM (\af' pos -> (heu af' t pos >>= \(f,p) ->
 {-# SPECIALIZE invariantEV :: Heuristic LId BBasicLId -> ProblemG LId BBasicLId -> LabelledAF -> [LabelledAF] #-}
 {-# SPECIALIZE invariantEV :: Heuristic Id  BBasicId  -> Problem BBasicId -> AF -> [AF] #-}
 invariantEV :: (Show id, Ord id, Lattice (AF_ id), T id :<: f, TRSC f, TRS trs id f, ExtraVars trs f, AF.ApplyAF trs id) => AF.Heuristic id f -> trs -> AF_ id -> [AF_ id]
-invariantEV heu trs = selectBest . Set.toList
-                                   . fix subinvariantEV
+invariantEV heu trs pi = let pi' = (selectBest . Set.toList . fix subinvariantEV) pi in assert (all (`isSoundAF` trs) pi') pi'
   where
 --        subinvariantEV :: TRS Identifier f -> (AF -> Set AF) -> AF -> Set AF
         subinvariantEV f af
@@ -83,7 +92,7 @@ invariantEV_rhs heu p@Problem{trs,dps} = sortByDefinedness (AF.apply_rhs p)  dps
             | orig_poss <- note <$> extraVars (AF.apply_rhs p af (annotateWithPos <$> rule))
             = cutWith heu af r orig_poss where
               cutWith heu af t [] = return af
-              cutWith heu af t pp = foldM (\af' pos -> (heu af' t pos >>= \(f,p) ->
+              cutWith heu af t pp = foldM (\af' pos -> (runHeu heu af' t pos >>= \(f,p) ->
                          trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p ++ " rule: " ++ show rule) $
                          return$ AF.cut f p af'))
                                           af pp
