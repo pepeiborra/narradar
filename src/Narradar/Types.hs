@@ -219,6 +219,7 @@ instance (Bottom.Bottom :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (Prob
 data ProcInfo id where                    -- vv ignored vv
     GroundOne       :: Show id => Maybe (AF_ id) -> ProcInfo id
     GroundAll       :: Show id => Maybe (AF_ id) -> ProcInfo id
+    SafeAFP         :: Show id => Maybe (AF_ id) -> ProcInfo id
     EVProc          :: Show id => AF_ id -> ProcInfo id
     DependencyGraph :: Graph -> ProcInfo ()
     UsableGraph     :: Graph -> Set Vertex -> ProcInfo ()
@@ -251,6 +252,7 @@ instance Show id => Show (ProcInfo id) where
     show FInstantiationP  = "Forward Instantiation"
     show (GroundOne (Just pi)) = "ICLP08 AF Processor\n" ++ show pi
     show (GroundAll (Just pi)) = "All Rhs's Ground AF Processor\n" ++ show pi
+    show (SafeAFP   (Just pi)) = "Safe AF Processor (infinitary constructor rewriting)\n" ++ show pi
     show (EVProc pi)      = "Eliminate Extra Vars \n" ++ show pi
     show (isAFProc -> True) = "Argument Filtering"
     show (Polynomial)     = "Polynomial ordering"

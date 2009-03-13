@@ -169,7 +169,7 @@ uGroundRhsAllP p = return p
 
 safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
 safeAFP p@(Problem (getGoalAF -> Just af) trs dps@TRS{}) = assert (isSoundAF af p) $
-  step (GroundAll (Just af)) p (AF.apply af $ Problem Rewriting trs dps)
+  step (SafeAFP (Just af)) p (AF.apply af $ Problem Rewriting trs dps)
 safeAFP p = return p
 
 {-
