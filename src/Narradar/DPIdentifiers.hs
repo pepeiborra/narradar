@@ -85,7 +85,7 @@ symbol (IdFunction f) = f; symbol(IdDP f) = f
 
 markDP = mapTerm markDPF; unmarkDP = mapTerm unmarkDPF
 class (TRSC f, DPMark' f f) => DPMark f; instance (TRSC f, DPMark' f f) => DPMark f
-class (f :<: g) => DPMark' f g where markDPF, unmarkDPF :: f(Term g) -> Term g
+class (f :<: g) => DPMark' f g where markDPF, unmarkDPF :: f(Term g) -> Term g; markDPF = inject; unmarkDPF = inject
 
 instance (T (Identifier id) :<: g) => DPMark' (T (Identifier id)) g where
     markDPF   (T n tt) = term (markDPSymbol n) tt
@@ -93,8 +93,12 @@ instance (T (Identifier id) :<: g) => DPMark' (T (Identifier id)) g where
 instance (DPMark' a g, DPMark' b g, (a:+:b) :<: g) => DPMark' (a:+:b) g where
     markDPF (Inl x) = markDPF x; markDPF(Inr x) = markDPF x
     unmarkDPF (Inl x) = unmarkDPF x; unmarkDPF(Inr x) = unmarkDPF x
---instance (T id :<: g) => DPMark' (T id) g where markDPF = inject; unmarkDPF = inject
-instance (t :<: g) => DPMark' t g where markDPF = inject; unmarkDPF = inject
+instance (T id   :<: g) => DPMark' (T id) g
+instance (Var    :<: g) => DPMark' Var    g
+instance (Hole   :<: g) => DPMark' Hole   g
+instance (Bottom :<: g) => DPMark' Bottom g
+
+--instance (t :<: g) => DPMark' t g where markDPF = inject; unmarkDPF = inject
 
 unmarkDPRule, markDPRule :: DPMark f => Rule f -> Rule f
 markDPRule   = fmap markDP

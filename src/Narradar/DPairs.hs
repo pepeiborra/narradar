@@ -1,10 +1,12 @@
 
 {-# LANGUAGE ScopedTypeVariables, PatternGuards, ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Narradar.DPairs where
 
 import Control.Applicative
+import Control.Exception (assert)
 import Control.Monad.State
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as G
@@ -22,9 +24,14 @@ import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Utils
 import Narradar.Proof
+import Narradar.ExtraVars
 
-mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<: DPVersionOf f, Convert (Term f) (Term (DPVersionOf f)), TRSC (DPVersionOf f), Show (Identifier id), Ord id) =>
-               ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) (DPVersionOf f)
+-- THERE IS A SERIOUS BUG IN GHC 6.10.1 WITH INSTANCE RESOLUTION IN PRESENCE OF TYPE FUNCTIONS AND OVERLOADING
+-- IT IS NO LONGER TRUE THAT THE MOST SPECIFIC INSTANCE IS PICKED, SINCE TYPE EXPRESSIONS ARE NOT REDUCED
+-- SO STAY AWAY FROM TYPE FUNCTIONS FOR NOW !!!!!!!!!!!!
+
+--mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<: DPVersionOf f, Convert (Term f) (Term (DPVersionOf f)), TRSC (DPVersionOf f), Show (Identifier id), Ord id) => ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) (DPVersionOf f)
+mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<: f', Convert (Term f) (Term f'), TRSC f', Show (Identifier id), Ord id, DPMark f') => ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) f'
 mkDPProblem Rewriting   trs = let trs' = convert trs in mkProblem Rewriting   trs' (tRS $ getPairs trs')
 mkDPProblem Narrowing   trs = let trs' = convert trs in mkProblem Narrowing   trs' (tRS $ getNPairs trs')
 mkDPProblem BNarrowing  trs = let trs' = convert trs in mkProblem BNarrowing  trs' (tRS $ getPairs trs')
@@ -48,6 +55,7 @@ cycleProcessor, sccProcessor :: (T id :<: f, DPMark f, Show id, Ord id) => Probl
 usableSCCsProcessor :: forall f id. (T LPId :<: f, DPMark f) => ProblemG LPId f -> ProblemProofG LPId Html f
 
 usableSCCsProcessor problem@(Problem typ@(getGoalAF -> Just goalAF) trs dps)
+  | assert (isSoundAF goalAF problem) False = undefined
   | null cc   = success (UsableGraph gr reachable) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (UsableGraph gr reachable) problem
