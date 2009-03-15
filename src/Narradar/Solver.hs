@@ -20,7 +20,7 @@ import TRS.FetchRules
 import TRS.FetchRules.TRS
 import Lattice
 
-import Narradar.ArgumentFiltering (typeHeu, innermost, AF_)
+import Narradar.ArgumentFiltering (typeHeu, innermost, bestHeu, AF_)
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Aprove
 import Narradar.DPairs
@@ -64,7 +64,7 @@ parseTRS :: ProblemType Id -> String -> PPT Id BasicId Html IO
 parseTRS typ txt = wrap' $ go$ do
                       rules :: [Rule Basic] <- eitherIO$ parseFile trsParser "" txt
                       let trs = mkTRS rules :: NarradarTRS String Basic'
-                      return (mkGoalProblem AF.bestHeu AllTerms $ mkDPProblem Narrowing trs)
+                      return $ msum (map returnM $ mkGoalProblem AF.bestHeu Narrowing trs)
 
 parseProlog :: String -> PPT String Basic' Html IO
 parseProlog = wrap' . Prelude.return . either error Prelude.return . parsePrologProblem
@@ -72,20 +72,20 @@ parseProlog = wrap' . Prelude.return . either error Prelude.return . parseProlog
 -- ------------------
 -- Some Basic solvers
 -- ------------------
-prologSolver    = prologSolver' (\typ _ -> typeHeu typ) (aproveSrvP defaultTimeout)
+prologSolver = prologSolver' typeHeu (aproveSrvP defaultTimeout)
 prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
-  where narrowingSolverUScc = usableSCCsProcessor >=> uGroundRhsAllP
+  where narrowingSolverUScc = usableSCCsProcessor >=> uGroundRhsAllP bestHeu
 
 -- narradar 1.0 main solving scheme
 narradarSolver       = narradarSolver' aproveWebP
-narradarSolver' aproveS = cycleProcessor >=> groundRhsOneP >=> aproveS
+narradarSolver' aproveS = cycleProcessor >=> groundRhsOneP bestHeu >=> aproveS
 
 narrowingSolver 0 _ = const mzeroM
-narrowingSolver 1 k = cycleProcessor >=> iUsableProcessor >=> groundRhsOneP >=> k
+narrowingSolver 1 k = cycleProcessor >=> iUsableRulesP >=> groundRhsOneP bestHeu >=> k
 narrowingSolver depth _ | depth < 0 = error "narrowingSolver: depth must be positive"
 narrowingSolver depth k =
-       cycleProcessor >=> iUsableProcessor >=>
-       ((groundRhsOneP >=> k)
+       cycleProcessor >=> iUsableRulesP >=>
+       ((groundRhsOneP bestHeu >=> k)
         .|.
         (refineNarrowing >=> narrowingSolver (depth-1) k))
   where refineNarrowing = instantiation .|. finstantiation .|. narrowing

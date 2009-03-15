@@ -7,6 +7,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE Rank2Types, KindSignatures #-}
 
 module Narradar.ArgumentFiltering where
 
@@ -45,7 +47,8 @@ import Debug.Trace
 trace _ x = x
 #endif
 
-extendAFToTupleSymbols pi = pi `mappend` mapSymbols markDPSymbol pi
+extendAFToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
+                            mapSymbols dpSymbol pi
 
 newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord)
 type AF = AF_ Id
@@ -193,42 +196,75 @@ applyToRule sig af (lhs :-> rhs) = apply af lhs :-> applyToRhs af rhs
 -- -----------
 -- Heuristics
 -- -----------
-type Heuristic id f = AF_ id -> Term f -> Position -> Set (id, Int)
+data Heuristic id f = Heuristic { runHeu :: AF_ id -> Term f -> Position -> Set (id, Int), isSafeOnDPs::Bool }
+data MkHeu tag = MkHeu { mkTag :: (HasSignature sig id, PolyHeuristic tag id f) => sig -> tag id f }
+
+class PolyHeuristic tag id f where runPolyHeu :: tag id f -> Heuristic id f
+
+-- I'm gonna burn in hell, and then I'm gonna burn in hell once more
+data WrapHeu id f = WrapHeu ((Foldable f, Ord id, Show id, T id :<: f) => Heuristic id f)
+instance (Ord id, Show id, Foldable f, T id :<: f) => PolyHeuristic WrapHeu id f where runPolyHeu (WrapHeu run) = run
+
+simpleHeu ::  (forall id f. (Foldable f, Ord id, Show id, T id :<: f) => Heuristic id f) -> MkHeu WrapHeu
+simpleHeu h = MkHeu (\sig -> WrapHeu h)
+
+simpleHeu' ::  (forall id f sig. (Foldable f, Ord id, Show id, T id :<: f, HasSignature sig id) => sig -> Heuristic id f) -> MkHeu WrapHeu
+simpleHeu' h = MkHeu (\sig -> WrapHeu (h sig))
+
+mkHeu :: (PolyHeuristic tag id f, HasSignature sig id) => MkHeu tag -> sig -> Heuristic id f
+mkHeu (MkHeu mkTag) sig = runPolyHeu (mkTag sig)
+
 convertHeu heu af t p = heu (convert af) (convert t) p
 
 --bestHeu, innermost, outermost, noConstructors, noUs, allPos :: sig -> Heuristic id f
 
 {-# noSPECIALIZE bestHeu :: NarradarTRS Id BBasicId -> AF -> Term BBasicId -> Position -> Set (Id,Int) #-}
 
-bestHeu :: (Foldable f, T id :<: f, HasSignature sig id) => sig -> Heuristic id f
-bestHeu (getSignature -> sig) =
+--bestHeu :: (Foldable f, T id :<: f, HasSignature sig id) => sig -> Heuristic id f
+bestHeu :: MkHeu WrapHeu
+bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
 {-
     predHeuAll  allInner (noConstructors sig ..|..
                          (cond (isDPSymbol.fst) ==> notNullArity ..&.. noUs))
      `or`
 -}
-    (((Set.fromList .).) . allInner)
 
-innermost _ _ [] = mempty
-innermost af t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
-outermost _ _ [] = mempty
-outermost af t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
+innermost = Heuristic f True where
+   f _ _ [] = mempty
+   f af t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
-predHeuAll _     _    _  _ []  = mempty
-predHeuAll strat pred af t pos = Set.fromList $ fst $ partition (pred af) (strat af t pos)
+outermost = Heuristic f False where
+  f _ _ [] = mempty
+  f af t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
 
-predHeuOne _     _    _  _ []  = mempty
-predHeuOne strat pred af t pos = maybe mempty Set.singleton $ find (pred af) (strat af t pos)
+predHeuAll strat pred = f where
+  f _  _ []  = mempty
+  f af t pos = Set.fromList $ fst $ partition (pred af) (strat af t pos)
+
+predHeuOne strat pred = f where
+  f _  _ []  = mempty
+  f af t pos = maybe mempty Set.singleton $ find (pred af) (strat af t pos)
 
 allInner _  _ []  = mempty
 allInner af t pos =  [(root, last sub_p)
                                     | sub_p <- reverse (tail $ inits pos)
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
+allOuter _  _ []  = mempty
+allOuter af t pos =  [(root, last sub_p)
+                                    | sub_p <- tail $ inits pos
+                                    , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 
---typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
-typeHeu assig =
-    predHeuOne allInner (const f) `or` innermost
-  where f (show -> p,i)  = Set.notMember (p,i) unboundedPositions
+typeHeu assig = MkHeu $ \_ -> (TypeHeu assig)
+
+data TypeHeu id (f :: * -> *) = TypeHeu TypeAssignment
+instance (T String :<: f, Foldable f) => PolyHeuristic TypeHeu String f
+   where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
+           isUnbounded (p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
+instance (T id :<: f, Show id, Ord id, Foldable f) => PolyHeuristic TypeHeu id f
+   where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
+           isUnbounded (show -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
+typeHeu_f assig isUnbounded  = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
+  where f (p,i)            = not $ isUnbounded (p,i) unboundedPositions
         constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
 --        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
@@ -244,8 +280,7 @@ typeHeu assig =
         arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
 
 --typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
-typeHeu2 assig =
-    predHeuOne allInner (const f) `or` innermost
+typeHeu2 assig = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
   where f (show -> p,i)  = Set.notMember (p,i) reflexivePositions
         constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
@@ -263,7 +298,7 @@ typeHeu2 assig =
 
 -- Predicates
 -- ----------
-noConstructors sig _pi (f,_) = f `Set.notMember` constructorSymbols sig
+noConstructors sig _pi (f,_) = f `Set.notMember` getConstructorSymbols sig
 
 noUs _ (UId _) = False
 noUs _ _ = True

@@ -20,8 +20,8 @@ import Narradar.Types
 import Narradar.Utils
 import TRS
 
-usableProcessor, iUsableProcessor :: forall f id a. (DPMark f, Show id, T id :<: f, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
-usableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
+usableRulesP, iUsableRulesP :: forall f id a. (DPMark f, Show id, T id :<: f, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
+usableRulesP p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
    = step UsableRulesNaiveP p (mkProblem typ trs' dps)
  where
   dps' = maybe (rules dps) (`AF.apply` rules dps) (getGoalAF typ)
@@ -32,16 +32,14 @@ usableProcessor p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) 
                            rr  = [r | r <- rules trs, fromJust(rootSymbol(lhs r)) `Set.member` new]
                        in rr ++ concat (usableRules (ff `mappend` seen) <$> rhs <$> rr)
 
-usableProcessor p = return p
+usableRulesP p = return p
 
-iUsableProcessor p@(Problem typ trs dps@TRS{})
-  | (isBNarrowing .|. isGNarrowing) typ
-  = step UsableRulesP p (mkProblem typ trs' dps)
+iUsableRulesP p@(Problem typ trs dps@TRS{})
+  | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)
+  | otherwise = return p
  where
   pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getGoalAF typ
   trs' = mkTRS(iUsableRules trs pi' (rhs <$> rules dps)) `asTypeOf` trs
-
-iUsableProcessor p = return p
 
 
 -- Assumes Innermost or Constructor Narrowing

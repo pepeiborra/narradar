@@ -1,12 +1,13 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.PrologProblem (prologP_sk, prologP_labelling_sk, skTransform) where
@@ -41,7 +42,7 @@ import Lattice (Lattice)
 import TRS.FetchRules -- for the Error ParseError instance
 import TRS (Var)
 
-import Narradar.ArgumentFiltering (AF_, AF, typeHeu, innermost)
+import Narradar.ArgumentFiltering (AF_, AF, typeHeu, innermost, MkHeu, mkHeu, Heuristic(..))
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Propositional ((\/), (/\), (-->), Formula)
 import qualified Narradar.Propositional as Prop
@@ -50,6 +51,7 @@ import Narradar.Types hiding (Var,Term,In, program)
 import qualified Narradar.Types as TRS
 import Narradar.NarrowingProblem
 import Narradar.Proof
+import Narradar.ExtraVars
 import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2, trace)
 
 import Prelude hiding (and,or,notElem,pi)
@@ -60,13 +62,15 @@ import Prelude hiding (and,or,notElem,pi)
 
 {-# off SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 {-# pff SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-prologP_sk :: (TypeAssignment -> MkHeu PId BasicPId) ->
-               PrologProblem -> ProblemProofG PId Html BasicPId
+prologP_sk :: AF.PolyHeuristic heu PId BasicPId => (TypeAssignment -> MkHeu heu) -> PrologProblem -> ProblemProofG PId Html BasicPId
 prologP_sk mkHeu p@(Problem Prolog{..} _ _) =
    andP PrologSKP p
-     [mkGoalProblem (mkHeu typing) (FromAF (AF.mapSymbols InId pi_g :: AF_ PS) (Just typing))
-                                      (mkDPProblem GNarrowing (skTransform program) :: ProblemG PId BasicPId) | pi_g <- goals]
-  where typing = infer program
+     [ return p
+         | goal <- goals
+         , let pi = AF.mapSymbols InId goal :: AF_ PS
+         , p <- mkGoalProblem (mkHeu types) GNarrowingModes{pi,goal=pi,types=Just types} trs]
+  where types = infer program
+        trs   = skTransform program
 
 encodeToSat :: forall f id trs . (TRS trs id f, T id :<: f) => trs -> [Goal id] -> Formula (id, Int)
 encodeToSat trs gg = encProb where
@@ -166,24 +170,22 @@ addMissingPredicates cc
 
 {-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
 
-prologP_labelling_sk :: (TypeAssignment -> MkHeu LPS BasicLPS) -> PrologProblem -> ProblemProofG LPId Html BasicLPId
+prologP_labelling_sk :: (AF.PolyHeuristic heu LPS BasicLPS, AF.PolyHeuristic heu LPId BasicLPId) => (TypeAssignment -> MkHeu heu) -> PrologProblem -> ProblemProofG LPId Html BasicLPId
 prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _)
   | null goals = success (LabellingSKP []) p (toHtml "There are no queries to analyze")
-  | otherwise = msum problems
+  | otherwise = mall problems
    where trs = skTransform program
          problems = do goalAF <- AF.mapSymbols InId <$> goals
                        let assig  = infer program
-                       ((trs', af'), modes) <- toList $ labellingTrans mkHeu goalAF assig trs
-                       let Problem typ trs'' dps = mkDPProblem GNarrowing trs'
-                       return$ step (LabellingSKP modes) p
-                                 (Problem GNarrowingModes{ pi=AF.extendAFToTupleSymbols (convert af')
-                                                         , types= Just assig
-                                                         , goal = AF.mapSymbols' ((IdFunction.) . flip Labelling) goalAF }
-                                          trs'' dps)
+                       ((trs', pi), modes) <- toList $ labellingTrans (mkHeu assig) goalAF trs
+                       let goal     = AF.mapSymbols' (flip Labelling) goalAF
+                           pp'      = mkGoalProblem (mkHeu assig) GNarrowingModes{pi, goal, types = Just assig} trs'
+                       return $ orP (LabellingSKP modes) p (map return pp')
 
-labellingTrans :: (TypeAssignment -> MkHeu LPS BasicLPS) -> AF_ PS -> TypeAssignment -> NarradarTRS PS BasicPS -> Set((NarradarTRS LPS BasicLPS, AF_ LPS), [Labelled String])
-labellingTrans _ _ _ (rules -> []) = Set.singleton mempty
-labellingTrans mkHeu goalAF assig trs@PrologTRS{} = unEmbed $ runWriterT $ do
+
+labellingTrans :: AF.PolyHeuristic heu LPS BasicLPS => MkHeu heu -> AF_ PS -> NarradarTRS PS BasicPS -> Set((NarradarTRS LPS BasicLPS, AF_ LPS), [Labelled String])
+labellingTrans _ _ (rules -> []) = Set.singleton mempty
+labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
 --    let trs0 :: NarradarTRS LPS BasicLPS
     trs0 <- (prologTRS' . mconcat) <$> (
              (++) <$> sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList (AF.init trs)]
@@ -195,7 +197,7 @@ labellingTrans mkHeu goalAF assig trs@PrologTRS{} = unEmbed $ runWriterT $ do
     trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
      fix invariantEV (trs0, af0)
  where
-  heuristic = mkHeu assig (getSignature trs') --innermost af t p -- typeHeu assig af t p
+  heuristic = mkHeu mkH trs' --innermost af t p -- typeHeu assig af t p
 
   trs'@(PrologTRS rr sig) = convert trs
 
@@ -212,7 +214,7 @@ labellingTrans mkHeu goalAF assig trs@PrologTRS{} = unEmbed $ runWriterT $ do
                              , let ev = extraVars (AF.apply af (annotateWithPos <$> r))
                              , not (null ev)]
   cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = do
-      (f, i) <- lift $ embed $ heuristic af r pos
+      (f, i) <- lift $ embed $ runHeu heuristic af r pos
       trace ("pred: " ++  pred ++ ", symbol:" ++ show f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ show (AF.apply af rule)) $ return ()
       case unlabel f of
         InId f_pred -> do
@@ -236,7 +238,7 @@ labellingTrans mkHeu goalAF assig trs@PrologTRS{} = unEmbed $ runWriterT $ do
          R.return (trs', af')
         _ -> R.return (trs, AF.cut f i af)
 
-labellingTrans _ af _ p = R.return ((convert p, convert af), [])
+labellingTrans _ af p = R.return ((convert p, convert af), [])
 iFun sig f = [1.. getArity sig f]
 
 -- RMonad instance for WriterT

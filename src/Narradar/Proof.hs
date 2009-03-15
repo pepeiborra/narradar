@@ -52,6 +52,8 @@ data ProofF s k =
   | DontKnow{procInfo::SomeInfo, problem::SomeProblem}
   | MPlus k k
   | MZero
+  | MAnd  k k
+  | MDone
 
 type Proof s a            = Free (ProofF s) a
 type ProblemProof     s f = Proof s (Problem f)
@@ -71,6 +73,9 @@ orP  pi p0 pp    = Impure (Or (someInfo pi) (someProblem p0) pp)
 orP' pi p0 []    = success' pi p0 mempty
 orP' pi p0 pp    = Impure (Or pi p0 pp)
 step pi p0 p     = Impure (Step (someInfo pi) (someProblem p0) (returnM p))
+mand p1 p2       = Impure (MAnd p1 p2)
+mdone            = Impure MDone
+mall             = foldr mand mdone
 
 htmlProof :: ProblemProofG id Html f -> ProblemProofG id Html f
 htmlProof = id
@@ -153,7 +158,8 @@ runProofT m = go (unFreeT m >>= f) where
      else do
        s2 <- runProofT p2
        return (choiceP s1 s2)
-  eval (Or pi pb pp)  = (tryAny pp >>= return . orP' pi pb)
+  eval (Or pi pb pp) = (tryAny pp >>= return . orP' pi pb)
+  eval (MAnd p1 p2)  = runProofT p1 >>= \s1 -> if not(isSuccess s1) then returnM s1 else mand s1 <$> runProofT p2
   -- For all the rest, just unwrap
   eval x = Impure <$> mapMP runProofT x
   -- Desist on failure
@@ -177,8 +183,10 @@ isSuccessF DontKnow{}     = False
 isSuccessF (And _ _ ll)   = and ll
 isSuccessF (Or  _ _ [])   = True  -- unstandard
 isSuccessF (Or  _ _ ll)   = or ll
-isSuccessF MZero          = False
 isSuccessF (MPlus p1 p2)  = p1 || p2
+isSuccessF MZero          = False
+isSuccessF (MAnd  p1 p2)  = p1 && p2
+isSuccessF MDone          = True
 isSuccessF (Step _ _ p)   = p
 
 isSuccess :: Proof s k -> Bool

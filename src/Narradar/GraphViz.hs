@@ -44,6 +44,15 @@ pprDot prb = showDot $ do
     f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
     f (Annotated done MZero{})        par = return par -- childnode' [("label","Don't Know")] (doneEdge done) par
     f (Annotated done DontKnow{..})   par = problemNode problem done par >>= procnode procInfo >>= childnode [("label","Don't Know")]
+--    f (Annotated done (MAnd p1 ))par = p1 par
+    f (Annotated done MDone{})        par = return par
+    f (Annotated done (MAnd  p1 p2))  par = do
+                                cme <- cluster $ do
+                                             attribute ("color", "#E56A90")
+                                             p1 par
+                                             p2 par
+                                             return par
+                                return (Cluster cme)
     f (Annotated done (MPlus p1 p2))  par = do
         dis <- childnode' [("shape","point"),("label","")] (doneEdge done) par
         p1 dis
