@@ -23,83 +23,15 @@ import Text.XHtml.Table
 
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Proof
-import Narradar.Types hiding (Ppr(..),ppr, (!))
+import Narradar.Types hiding ((!))
 import qualified Narradar.Types as TRS
-import Narradar.Utils (snub, foldMap3)
+import Narradar.Utils (snub, foldMap3, Ppr(..))
 import qualified TRS
 
 import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude hiding (concat)
 
--------------------
--- Ppr
--------------------
-
-class Ppr a where ppr :: a -> Doc
-instance Ppr ()
-
-instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . vcat . punctuate comma . toList . fmap ppr
-instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
-instance Show (Term a)  => Ppr (Rule a) where ppr = text . show
-instance TRS.Ppr f      => Ppr (NarradarTRS id f) where ppr trs@TRS{} = ppr $ rules trs
-instance Ppr Int where ppr = int
-
-instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
-instance Ppr (ProblemType id) where
-    ppr Prolog{}                  = text "Prolog"
-    ppr typ | isFullNarrowing typ = text "NDP"
-    ppr typ | isGNarrowing typ    = text "Ground NDP"
-    ppr typ | isBNarrowing typ    = text "BNDP"
-    ppr Rewriting                 = text "DP"
-
-instance TRS.Ppr f => Ppr (ProblemG id f) where
-    ppr (Problem typ trs dps) =
-            ppr typ <+> text "Problem" $$
-            text "TRS:" <+> ppr trs $$
-            text "DPS:" <+> ppr dps
-
-instance Ppr SomeProblem where
-  ppr (SomeProblem p@(Problem typ TRS{} _)) = ppr p
---  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc)
-
-instance Ppr SomeInfo where ppr (SomeInfo p) = ppr p
-
-instance TRS.Ppr a => Ppr (ProblemProof String a) where
-    ppr = foldFree leaf f . simplify where
-      leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
-      f MZero = text "don't know"
-      f Success{..} =
-        ppr problem $$
-        text "PROCESSOR: " <> ppr procInfo $$
-        text ("RESULT: Problem solved succesfully") $$
-        text ("Output: ") <>  (vcat . map text . lines) res
-      f Fail{..} =
-        ppr problem $$
-        text "PROCESSOR: " <> ppr procInfo  $$
-        text ("RESULT: Problem could not be solved.") $$
-        text ("Output: ") <> (vcat . map text . lines) res
-      f p@(Or proc prob sub) =
-        ppr prob $$
-        text "PROCESSOR: " <> ppr proc $$
-        text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
-        nest 8 (vcat $ punctuate (text "\n") sub)
-      f (And proc prob sub)
-       | length sub > 1 =
-          ppr prob $$
-        text "PROCESSOR: " <> ppr proc $$
-        text ("Problem was divided to " ++ show (length sub) ++ " subproblems.") $$
-        nest 8 (vcat $ punctuate (text "\n") sub)
-       | otherwise =
-          ppr prob $$
-        text "PROCESSOR: " <> ppr proc $$
-        nest 8 (vcat $ punctuate (text "\n") sub)
-      f (Step{..}) =
-          ppr problem $$
-        text "PROCESSOR: " <> ppr procInfo $$
-        nest 8 subProblem
-
-instance Show id => Ppr (ProcInfo id) where ppr = text . show
 --------------
 -- HTML
 -------------
@@ -119,13 +51,12 @@ instance Show id => HTML (ProcInfo id) where
     toHtml (EVProc af)    = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"
-    toHtml NarrowingP      = "PROCESSOR: " +++ "Narrowing Processor"
     toHtml (External e)    = "PROCESSOR: " +++ "External - " +++ show e
-    toHtml InstantiationP  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
-    toHtml FInstantiationP = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
-    toHtml NarrowingP      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
+--    toHtml InstantiationP{}  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
+--    toHtml FInstantiationP{} = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
+--    toHtml NarrowingP{}      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
     toHtml Trivial         = "PROCESSOR: " +++ "Trivial non-termination"
-    toHtml p               = "PROCESSOR: " +++ show p
+    toHtml p               = "PROCESSOR: " +++ show (ppr p)
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
 instance TRS.Ppr f => HTML (ProblemG id f) where

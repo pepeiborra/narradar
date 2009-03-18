@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PackageImports #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverlappingInstances, FlexibleInstances, FlexibleContexts, TypeSynonymInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -30,7 +30,10 @@ import Data.Traversable
 import System.IO
 import System.Directory
 import Test.QuickCheck
+import Text.PrettyPrint
 
+import TRS (Term, Rule)
+import qualified TRS (Ppr, ppr)
 import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
@@ -42,6 +45,20 @@ trace = Debug.Trace.trace
 {-# INLINE trace #-}
 trace _ x = x
 #endif
+
+
+-------------------
+-- Ppr
+-------------------
+class Ppr a where ppr :: a -> Doc
+instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . hcat . punctuate comma . toList . fmap ppr
+instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
+instance Ppr Int where ppr = int
+instance Ppr () where ppr _ = Text.PrettyPrint.empty
+
+instance Show (Term a)  => Ppr (Rule a) where ppr = text . show
+instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
+
 
 -- Type Constructor Composition
 -- ----------------------------

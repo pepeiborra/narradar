@@ -40,7 +40,7 @@ import Unsafe.Coerce
 import Text.Printf
 import Text.ParserCombinators.Parsec
 import Text.Show
-import Text.PrettyPrint ((<>), parens, punctuate, comma, text, sep, vcat, Doc)
+import Text.PrettyPrint hiding (char, Mode)
 import qualified Text.PrettyPrint as Ppr
 
 import Control.Monad.Free
@@ -54,7 +54,8 @@ import Narradar.Convert
 import Narradar.Utils
 
 import Lattice
-import TRS hiding (apply)
+import TRS hiding (ppr, Ppr, apply)
+import qualified TRS
 import TRS.FetchRules
 import TRS.Bottom as Bottom
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
@@ -115,6 +116,18 @@ instance (ConvertT f f', Convert id id', Ord id, Ord id', T id :<: f, T id' :<: 
   convert p@Problem{..} = (fmap convert p){typ = fmap convert typ}
 --  convert (PrologProblem typ gg cc) = PrologProblem (fmap convert typ) gg cc
 
+instance TRS.Ppr f => Ppr (ProblemG id f) where
+    ppr (Problem typ trs dps) =
+            ppr typ <+> text "Problem" $$
+            text "TRS:" <+> ppr trs $$
+            text "DPS:" <+> ppr dps
+
+instance Ppr (ProblemType id) where
+    ppr Prolog{}                  = text "Prolog"
+    ppr typ | isFullNarrowing typ = text "NDP"
+    ppr typ | isGNarrowing typ    = text "Ground NDP"
+    ppr typ | isBNarrowing typ    = text "BNDP"
+    ppr Rewriting                 = text "DP"
 
 data VoidF f; instance Functor VoidF; instance TRS.Ppr VoidF
 
@@ -240,29 +253,28 @@ isAFProc EVProc{}    = True
 isAFProc GroundOne{} = True
 isAFProc _           = False
 
+instance Show id => Ppr (ProcInfo id) where
+    ppr (DependencyGraph _) = text "Dependency Graph Processor (cycles)"
+    ppr (UsableGraph _ _)   = text "Usable Graph Processor"
+    ppr (External proc)     = text "External: " <> text (show proc)
+    ppr (GroundOne (Just pi)) = text "ICLP08 AF Processor" $$ ppr pi
+    ppr (GroundAll (Just pi)) = text "All Rhs's Ground AF Processor" $$ ppr pi
+    ppr (ReductionPair (Just pi)) = text "ICFP08 Reduction Pair Processor + Usable Rules" $$ ppr pi
+    ppr (SafeAFP   (Just pi)) =  text "Safe AF Processor (infinitary constructor rewriting)" $$ ppr pi
+    ppr (EVProc pi)      = text "Eliminate Extra Vars \n" $$ ppr pi
+    ppr (isAFProc -> True) = text "Argument Filtering"
+    ppr (Polynomial)     = text "Polynomial ordering"
+    ppr PrologP          = text "Termination of LP as termination of Narrowing"
+    ppr PrologSKP        = text "Termination of LP as termination of Narrowing" $$
+                           text "(Schneider-Kamp transformation)"
+    ppr (LabellingSKP mm)= text "Termination of LP as termination of Narrowing" $$
+                           text "(Schneider-Kamp transformation + Labelling)" $$
+                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map (text.show)) $ groupBy ((==) `on` unlabel) $ sort mm)
+    ppr PrologSKP_rhs    = text "Termination of LP as termination of Narrowing" $$
+                           text "(Schneider-Kamp transformation + rhs bottoms trick)"
+    ppr UsableRulesP     = text "Usable Rules for Basic Narrowing or Full Narrowing with constructor substitutions"
+    ppr Trivial          = text "Trivially non terminating"
     ppr NoPairs          = text "Trivially terminating"
-instance Show id => Show (ProcInfo id) where
-    show (DependencyGraph _) = "Dependency Graph Processor"
-    show (UsableGraph _ _)= "Usable Graph Processor"
-    show (External proc)  = "External: " ++ show proc
-    show NarrowingP       = "Narrowing"
-    show InstantiationP   = "Instantiation"
-    show FInstantiationP  = "Forward Instantiation"
-    show (GroundOne (Just pi)) = "ICLP08 AF Processor\n" ++ show pi
-    show (GroundAll (Just pi)) = "All Rhs's Ground AF Processor\n" ++ show pi
-    show (ReductionPair (Just pi)) = "ICFP08 Reduction Pair Processor + Usable Rules\n" ++ show pi
-    show (SafeAFP   (Just pi)) = "Safe AF Processor (infinitary constructor rewriting)\n" ++ show pi
-    show (EVProc pi)      = "Eliminate Extra Vars \n" ++ show pi
-    show (isAFProc -> True) = "Argument Filtering"
-    show (Polynomial)     = "Polynomial ordering"
-    show PrologP          = "Termination of LP as termination of Narrowing"
-    show PrologSKP        = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation)"
-    show (LabellingSKP mm)= "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + Labelling) \n" ++
-                            "Modes used " ++ show (length mm) ++ ": " ++ (unlines $ map (unwords . map show) $ groupBy ((==) `on` unlabel) $ sort mm)
-    show PrologSKP_rhs    = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + rhs bottoms trick)"
-    show LabellingSKP_rhs = "Termination of LP as termination of Narrowing \n (Schneider-Kamp transformation + Labelling + rhs bottoms trick)"
-    show UsableRulesP     = "Usable Rules for Basic Narrowing or Full Narrowing with constructor substitutions"
-    show Trivial          = "Trivially non terminating"
 
 --pprLabellingAsMode (Labelled f mm) = text f <> parens (hsep $ punctuate comma [ if | m <- mm])
 

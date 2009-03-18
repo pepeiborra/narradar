@@ -14,9 +14,12 @@ import Data.Foldable
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Monoid
+import Text.PrettyPrint
 
-import TRS
+import TRS hiding (Ppr, ppr)
+import qualified TRS
 import Narradar.DPIdentifiers
+import Narradar.Utils
 import qualified Language.Prolog.Syntax as Prolog
 import Language.Prolog.Syntax (Ident)
 
@@ -51,6 +54,14 @@ instance (Ord id, T id :<: f, TRSC f) => TRS (NarradarTRS id f) id f where
     rules(DPTRS     rr _ _) = elems rr
     tRS = narradarTRS
 
+tRS' rr sig  = TRS (Set.fromList rr) sig
+
+prologTRS :: forall id f. (Ord id, TRSC f, T id :<: f) => [(Ident, Rule f)] -> NarradarTRS id f
+prologTRS rr = prologTRS' (Set.fromList rr)
+
+prologTRS' :: forall id f. (Ord id, TRSC f, T id :<: f) => Set(Ident, Rule f) -> NarradarTRS id f
+prologTRS' rr = PrologTRS rr (getSignature (snd <$> toList rr))
+
 {-# SPECIALIZE narradarTRS ::  [Rule BBasicId] -> NarradarTRS Id BBasicId #-}
 narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 dpTRS rules edges = DPTRS rules edges (getSignature $ elems rules)
@@ -83,10 +94,5 @@ instance (T id :<: f, Ord id, TRSC f) => Monoid (NarradarTRS id f) where
 
 instance (T id :<: f, Ord id, TRSC f) =>  Size (NarradarTRS id f) where size = sizeTRS
 
-tRS' rr sig  = TRS (Set.fromList rr) sig
-
-prologTRS :: forall id f. (Ord id, TRSC f, T id :<: f) => [(Ident, Rule f)] -> NarradarTRS id f
-prologTRS rr = prologTRS' (Set.fromList rr)
-
-prologTRS' :: forall id f. (Ord id, TRSC f, T id :<: f) => Set(Ident, Rule f) -> NarradarTRS id f
-prologTRS' rr = PrologTRS rr (getSignature (snd <$> toList rr))
+instance TRS.Ppr f      => Ppr (NarradarTRS id f) where
+    ppr trs@TRS{} = vcat $ map ppr $ rules trs

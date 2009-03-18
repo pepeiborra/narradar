@@ -72,7 +72,7 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
  heu        = AF.mkHeu mkH p
  dpsSize af = size (AF.apply af dps)
  pprDP      = foldTerm f where
-     f (prj -> Just (Var i n)) = TRS.ppr (var n :: Term Basic)
+     f (prj -> Just (Var i n)) = ppr (var n :: Term Basic)
      f (prj -> Just (T (id::id) [])) = text (show id)
      f (prj -> Just (T (id::id) tt)) =
             text (show id) <> parens (hcat$ punctuate comma tt)

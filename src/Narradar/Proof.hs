@@ -8,6 +8,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -25,13 +26,14 @@ import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import Data.Traversable as T hiding (mapM)
+import Text.PrettyPrint hiding ()
 import Text.XHtml (Html)
+import TaskPoolSTM
 
 import qualified Language.Prolog.Syntax as Prolog (Program)
-import qualified TRS.Types as TRS
+import qualified TRS as TRS
 
-import Narradar.Types hiding (Ppr(..),ppr, (!))
-import qualified Narradar.Types as TRS
+import Narradar.Types
 import Narradar.Utils
 import qualified Narradar.ArgumentFiltering as AF
 
@@ -91,21 +93,54 @@ instance Show SomeProblem where
     show (SomeProblem p) = "<some problem>"
 --    show (SomePrologProblem gg pgm) = show (PrologProblem Prolog gg pgm :: Problem BasicId)
 
+instance Ppr SomeProblem where
+  ppr (SomeProblem p@(Problem typ TRS{} _)) = ppr p
+--  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc)
+
 someProblem :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
 someProblem p@Problem{}      = SomeProblem p
 --someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
 
 
 data SomeInfo where SomeInfo :: Show id => ProcInfo id -> SomeInfo
-instance Show SomeInfo where show (SomeInfo pi) = show pi
+instance Ppr SomeInfo where ppr (SomeInfo pi) = ppr pi
+instance Show SomeInfo where show = show . ppr
 
 someInfo = SomeInfo
--- -----------------
--- Functor instances
--- -----------------
-instance Foldable (ProofF s) where foldMap = foldMapDefault
-$(derive makeFunctor     ''ProofF)
-$(derive makeTraversable ''ProofF)
+
+instance TRS.Ppr a => Ppr (ProblemProof String a) where
+    ppr = foldFree leaf f . simplify where
+      leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
+      f MZero = text "don't know"
+      f Success{..} =
+        ppr problem $$
+        text "PROCESSOR: " <> ppr procInfo $$
+        text ("RESULT: Problem solved succesfully") $$
+        text ("Output: ") <>  (vcat . map text . lines) res
+      f Fail{..} =
+        ppr problem $$
+        text "PROCESSOR: " <> ppr procInfo  $$
+        text ("RESULT: Problem could not be solved.") $$
+        text ("Output: ") <> (vcat . map text . lines) res
+      f p@(Or proc prob sub) =
+        ppr prob $$
+        text "PROCESSOR: " <> ppr proc $$
+        text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
+        nest 8 (vcat $ punctuate (text "\n") sub)
+      f (And proc prob sub)
+       | length sub > 1 =
+          ppr prob $$
+        text "PROCESSOR: " <> ppr proc $$
+        text ("Problem was divided to " ++ show (length sub) ++ " subproblems.") $$
+        nest 8 (vcat $ punctuate (text "\n") sub)
+       | otherwise =
+          ppr prob $$
+        text "PROCESSOR: " <> ppr proc $$
+        nest 8 (vcat $ punctuate (text "\n") sub)
+      f (Step{..}) =
+          ppr problem $$
+        text "PROCESSOR: " <> ppr procInfo $$
+        nest 8 subProblem
 
 -- -------------------
 -- MonadPlus instances
@@ -234,3 +269,10 @@ simplifyF = f where
 
 logLegacy proc prob Nothing    = failP proc prob "Failed"
 logLegacy proc prob (Just msg) = success proc prob msg
+
+-- -----------------
+-- Functor instances
+-- -----------------
+instance Foldable (ProofF s) where foldMap = foldMapDefault
+$(derive makeFunctor     ''ProofF)
+$(derive makeTraversable ''ProofF)

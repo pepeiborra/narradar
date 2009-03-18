@@ -26,6 +26,7 @@ import qualified Data.Set as Set
 import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
 import Data.Monoid
+import Text.PrettyPrint
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
@@ -36,7 +37,7 @@ import Narradar.TRS
 import Narradar.Convert
 import Narradar.Utils
 
-import TRS hiding (apply)
+import TRS hiding (apply, ppr, Ppr)
 import TRS.Bottom as Bottom
 import Lattice
 import Language.Prolog.Syntax      (Ident)
@@ -51,14 +52,13 @@ trace _ x = x
 extendAFToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
 
-newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord)
+newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord, Show)
 type AF = AF_ Id
 type LabelledAF = AF_ LId
 
-instance Show id => Show (AF_ id) where
-    show af = -- unlines . fmap show . fmap (second Set.toList) . Map.toList . fromAF
-              unlines [ unwords $ intersperse ","
-                          [ show f ++ ": " ++ show (Set.toList aa) | (f, aa) <- xx]
+instance Show id => Ppr (AF_ id) where
+    ppr af =  vcat [ hcat $ punctuate comma
+                          [ text(show f) <> colon <+> ppr (Set.toList aa) | (f, aa) <- xx]
                       | xx <- chunks 3 $ Map.toList $ fromAF af]
 
 -- | bottom is ill defined
