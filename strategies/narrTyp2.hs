@@ -1,14 +1,12 @@
 #!/usr/bin/env runhaskell
 
-{-# LANGUAGE NoImplicitPrelude #-}
 import Prelude hiding (Monad(..))
-
 import Narradar
 
-main = narradarMain (parseProlog >=> prologSolver)
+main = narradarMain prologSolver
 
-prologSolver    = prologSolver' (\typ _ -> typeHeu2 typ) (aproveSrvP defaultTimeout)
-prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
+prologSolver txt = do
+  (typ,pl)  <- parseProlog txt
+  prologSolver' (typeHeu2 typ) (typeHeu typ) pl
 
-
-narrowingSolverUScc = usableSCCsProcessor >=> iUsableProcessor >=> groundRhsAllP
+prologSolver' h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> uGroundRhsAllP h2 >=> aproveSrvP defaultTimeout

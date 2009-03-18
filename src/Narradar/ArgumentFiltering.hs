@@ -1,12 +1,12 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
-{-# LANGUAGE PatternSignatures, TypeSynonymInstances #-}
+{-# LANGUAGE TypeSynonymInstances, UndecidableInstances, OverlappingInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 
@@ -16,6 +16,7 @@ import Control.Applicative
 import Control.Arrow (first, second)
 import Control.Monad (liftM,liftM2,guard)
 import Control.Monad.Fix (fix)
+import qualified Data.Array.IArray as A
 import Data.List ((\\), intersperse, partition, find, inits)
 import Data.Map (Map)
 import Data.Monoid
@@ -147,7 +148,8 @@ instance (Ord id) => ApplyAF (NarradarTRS id f) id where
     {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
     {-# SPECIALIZE instance ApplyAF (NarradarTRS LId BBasicLId) LId #-}
     apply af trs@TRS{} = tRS$ apply af <$$> rules trs
-    apply af (PrologTRS cc sig) = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) sig
+    apply af (PrologTRS  cc sig) = let trs' = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) (getSignature $ rules trs') in trs'
+    apply af (DPTRS dpsA gr sig) = let trs' = DPTRS (A.amap (apply af) dpsA) gr (getSignature $ rules trs') in trs'
 
 {-# SPECIALIZE applyTerm :: AF -> Term BBasicId -> Term BBasicId #-}
 applyTerm :: forall t id f. (T id :<: f, Ord id) => AF_ id -> Term f -> Term f
@@ -263,6 +265,7 @@ instance (T String :<: f, Foldable f) => PolyHeuristic TypeHeu String f
 instance (T id :<: f, Show id, Ord id, Foldable f) => PolyHeuristic TypeHeu id f
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (show -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
+
 typeHeu_f assig isUnbounded  = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
   where f (p,i)            = not $ isUnbounded (p,i) unboundedPositions
         constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
@@ -280,7 +283,7 @@ typeHeu_f assig isUnbounded  = Heuristic (predHeuOne allInner (const f) `or` run
         arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
 
 --typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
-typeHeu2 assig = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
+typeHeu2 assig = simpleHeu $ Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
   where f (show -> p,i)  = Set.notMember (p,i) reflexivePositions
         constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions

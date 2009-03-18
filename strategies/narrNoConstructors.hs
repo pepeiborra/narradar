@@ -1,15 +1,17 @@
 #!/usr/bin/env runhaskell
 
-{-# LANGUAGE NoImplicitPrelude, NoMonomorphismRestriction #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 import Prelude hiding (Monad(..))
 
 import Narradar
 import Narradar.ArgumentFiltering
 
-main = narradarMain (parseProlog >=> prologSolver)
+main = narradarMain prologSolver
 
-prologSolver    = prologSolver' (\_ -> simpleHeu' $ \p -> Heuristic (predHeuOne allInner (noConstructors (getSignature p))) False)
-                                (aproveSrvP defaultTimeout)
-prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUScc >=> k)
-narrowingSolverUScc = usableSCCsProcessor >=> uGroundRhsAllP bestHeu
-infSolverUScc = usableSCCsProcessor >=> iUsableRulesP >=> safeAFP
+prologSolver txt = do
+  (typ,pl)  <- parseProlog txt
+  prologSolver' (simpleHeu' $ \p -> Heuristic (predHeuOne allInner (noConstructors (getSignature p))) False) (typeHeu typ) pl
+
+prologSolver' h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver h2
+
+narrowingSolver heu = uGroundRhsAllP heu >=> aproveSrvP defaultTimeout

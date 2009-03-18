@@ -1,4 +1,7 @@
-{-# LANGUAGE RecordWildCards, ViewPatterns, PackageImports #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Narradar.GraphViz where
 
 import Control.Applicative
@@ -71,7 +74,7 @@ pprDot prb = showDot $ do
     f (Annotated done Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
     f (Annotated done Or{..})   par = problemNode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
 
-problemLabel :: (Show id, Ppr f) => ProblemG id f -> (String, String)
+problemLabel :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> (String, String)
 problemLabel p = ("label", pprTPDBdot p)
 
 problemColor :: ProblemG id f -> (String, String)
@@ -81,7 +84,7 @@ problemColor p | isPrologProblem        p = ("color", "#F6D106")
                | isGNarrowingProblem    p = ("color", "#FD6802")
                | isRewritingProblem     p = ("color", "#EAAAFF")
                | otherwise = error ("problemColor")
-problemAttrs :: (Show id, Ppr f) => ProblemG id f -> [(String,String)]
+problemAttrs :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> [(String,String)]
 problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
 problemNode  (SomeProblem p) done = childnode'(problemAttrs p) (doneEdge done)
@@ -91,6 +94,7 @@ doneEdge True     = [("color", "green")]
 doneEdge False    = [("color", "red")]
 
 procnode :: SomeInfo -> Parent -> Dot Parent
+{-
 procnode  (SomeInfo (DependencyGraph gr)) par = do
   (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr Nothing))
   case nn of
@@ -99,6 +103,7 @@ procnode  (SomeInfo (DependencyGraph gr)) par = do
                 N n             -> edge n me [("lhead", show cl)]
                 Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
                return (Cluster (cl, N me))
+-}
 procnode  (SomeInfo (UsableGraph gr reachable)) par = do
   (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr (Just reachable)))
   case nn of
@@ -115,13 +120,13 @@ childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge 
 childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 
-pprTPDBdot :: (TRS.Ppr f, Show id) => ProblemG id f  -> String
+pprTPDBdot :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f  -> String
 {-# SPECIALIZE pprTPDBdot :: Problem BBasicId -> String #-}
 pprTPDBdot p@(Problem Prolog{..} _ _) =
     show (Prolog.ppr program) ++ "\\l" ++
     unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
 
-pprTPDBdot p@(Problem typ trs dps@TRS{} ) = unlines $
+pprTPDBdot p@(Problem typ trs dps) = unlines $
     [ "(VAR " ++ (unwords $ map show $ snub $ foldMap3 vars' (rules <$> p)) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
     , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")"] ++

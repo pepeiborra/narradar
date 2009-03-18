@@ -1,8 +1,9 @@
-{-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
-{-# LANGUAGE TypeOperators, PatternSignatures #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -89,17 +90,17 @@ instance (Ord id, TRSC f, T id :<: f) => TRS (ProblemG id f) id f where
     rules (Problem _ trs dps) = rules trs `mappend` rules dps
 
 data ProblemTypeF pi   = Rewriting
-                       | Narrowing   | NarrowingModes   {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
-                       | GNarrowing  | GNarrowingModes  {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
-                       | BNarrowing  | BNarrowingModes  {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
-                       | LBNarrowing | LBNarrowingModes {pi::pi, types::Maybe Prolog.TypeAssignment, goal::pi}
+                       | Narrowing   | NarrowingModes   {pi, goal::pi}
+                       | GNarrowing  | GNarrowingModes  {pi, goal::pi}
+                       | BNarrowing  | BNarrowingModes  {pi, goal::pi}
+                       | LBNarrowing | LBNarrowingModes {pi, goal::pi}
 	               | Prolog {goals::[AF_ String], program::Prolog.Program}
                     deriving (Eq, Show)
 
-narrowingModes0 =   NarrowingModes  {types=Nothing, goal=error "narrowingModes0", pi=error "narrowingModes0"}
-bnarrowingModes0 =  BNarrowingModes {types=Nothing, goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}
-gnarrowingModes0 =  GNarrowingModes {types=Nothing, goal=error "gnarrowingModes0", pi=error "gnarrowingModes0"}
-lbnarrowingModes0 = LBNarrowingModes{types=Nothing, goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
+narrowingModes0 =   NarrowingModes  {goal=error "narrowingModes0", pi=error "narrowingModes0"}
+bnarrowingModes0 =  BNarrowingModes {goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}
+gnarrowingModes0 =  GNarrowingModes {goal=error "gnarrowingModes0", pi=error "gnarrowingModes0"}
+lbnarrowingModes0 = LBNarrowingModes{goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
 mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
@@ -161,12 +162,6 @@ getGoalAF BNarrowingModes{pi}  = Just pi
 getGoalAF GNarrowingModes{pi}  = Just pi
 getGoalAF LBNarrowingModes{pi} = Just pi
 getGoalAF _ = Nothing
-
-getTyping NarrowingModes{types}   = types
-getTyping GNarrowingModes{types}  = types
-getTyping BNarrowingModes{types}  = types
-getTyping LBNarrowingModes{types} = types
-getTyping _ = Nothing
 
 -- -------------
 -- AF Problems
@@ -235,6 +230,7 @@ data ProcInfo id where                    -- vv ignored vv
     LabellingSKP_rhs:: ProcInfo ()
     UsableRulesNaiveP :: ProcInfo ()
     UsableRulesP    :: ProcInfo ()
+    ReductionPair   :: Show id => Maybe (AF_ id) -> ProcInfo id
     Trivial         :: ProcInfo ()
 
 isAFProc GroundOne{} = True
@@ -252,6 +248,7 @@ instance Show id => Show (ProcInfo id) where
     show FInstantiationP  = "Forward Instantiation"
     show (GroundOne (Just pi)) = "ICLP08 AF Processor\n" ++ show pi
     show (GroundAll (Just pi)) = "All Rhs's Ground AF Processor\n" ++ show pi
+    show (ReductionPair (Just pi)) = "ICFP08 Reduction Pair Processor + Usable Rules\n" ++ show pi
     show (SafeAFP   (Just pi)) = "Safe AF Processor (infinitary constructor rewriting)\n" ++ show pi
     show (EVProc pi)      = "Eliminate Extra Vars \n" ++ show pi
     show (isAFProc -> True) = "Argument Filtering"

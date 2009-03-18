@@ -46,17 +46,17 @@ instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
     {-# SPECIALIZE instance ExtraVars (Rule BBasicId) BBasicId #-}
     extraVars (l:->r) = snub (vars' r \\ vars' l)
 
-evProcessor p | not (isAnyNarrowingProblem p) = P.return p
-evProcessor p@(Problem typ@(getProblemAF -> Just af) trs dps)
+evProcessor _ p | not (isAnyNarrowingProblem p) = P.return p
+evProcessor mkH p@(Problem typ@(getProblemAF -> Just af) trs dps)
      | null extra      = P.return p
      | null orProblems = failP (EVProc mempty :: ProcInfo ()) p (toHtml "Could not find a EV-eliminating AF")
      | otherwise = P.msum (map P.return orProblems)
   where extra = extraVars p
-        heu   = maybe (mkHeu bestHeu p) ((`mkHeu` p) . typeHeu) (getTyping typ)
+        heu = mkHeu mkH p
         orProblems = [(p `withGoalAF` af') | af' <- invariantEV heu p af]
 
-evProcessor p@(Problem typ trs dps) = evProcessor (p `withGoalAF` AF.init p)
-evProcessor p = P.return p
+evProcessor mkH p@(Problem typ trs dps) = evProcessor mkH (p `withGoalAF` AF.init p)
+evProcessor _ p = P.return p
 
 {-# SPECIALIZE cutWith :: Heuristic Id BBasicId -> AF -> Term BBasicId -> [Position] -> Set.Set AF #-}
 cutWith heu af t [] = return af

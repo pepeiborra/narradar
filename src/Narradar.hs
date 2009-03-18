@@ -12,6 +12,7 @@ module Narradar ( narradarMain
                 , module Narradar.Solver
                 , module Narradar.ArgumentFiltering
                 , module Narradar.DPairs
+                , module Narradar.ReductionPair
                 , module Narradar.GraphTransformation
                 , module Narradar.UsableRules
                 , module Narradar.ExtraVars
@@ -42,10 +43,11 @@ import Narradar.GraphViz
 import Narradar.Solver hiding ( prologSolver, prologSolver'
                               , narradarSolver, narradarSolver'
                               , narrowingSolver )
-import Narradar.ArgumentFiltering (typeHeu, typeHeu2, bestHeu, innermost, outermost)
+import Narradar.ArgumentFiltering (Heuristic(..), simpleHeu, simpleHeu', typeHeu, typeHeu2, bestHeu, innermost, outermost)
 import Narradar.DPairs
 import Narradar.GraphTransformation
 import Narradar.UsableRules
+import Narradar.ReductionPair
 import Narradar.ExtraVars
 import Narradar.NarrowingProblem
 import Narradar.PrologProblem
@@ -59,9 +61,13 @@ narradarMain solver = do
   sol <- runProofT (solver input)
   putStrLn$ if isSuccess sol then "YES" else "NO"
   when diagrams $ withTempFile "." "narradar.dot" $ \fp h -> do
-        hPutStrLn h (pprDot sol)
+        let sol' = if isSuccess sol then simplify sol else sol
+        hPutStrLn h (pprDot sol')
         hFlush h
-        system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
+#ifdef DEBUG
+        writeFile (problemFile ++ ".dot") (pprDot sol')
+#endif
+--        system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
         -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
         P.return ()
 

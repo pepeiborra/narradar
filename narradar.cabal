@@ -53,6 +53,7 @@ Library
      Narradar.GraphTransformation,
      Narradar.ArgumentFiltering,
      Narradar.UsableRules,
+     Narradar.ReductionPair
      Narradar.ExtraVars,
      Narradar.NarrowingProblem,
      Narradar.PrologProblem,
@@ -60,13 +61,15 @@ Library
      Narradar.Output,
      Narradar.GraphViz,
      Narradar.Utils,
+     Control.Monad.Free
+  other-modules:
      Narradar.Propositional,
-     Control.Monad.MonadSupply,
-     Control.Monad.Free,
-     Control.Monad.Operad,
      Lattice,
      TaskPoolSTM,
      Paths_narradar
+     Control.Monad.MonadSupply,
+     Control.Monad.Operad,
+     Text.ParserCombinators.Parsec.Tag
 
 Executable narradar
   buildable: False

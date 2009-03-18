@@ -1,40 +1,16 @@
 #!/usr/bin/env runhaskell
-{-# OPTIONS_GHC -w #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ViewPatterns #-}
 
-import Prelude hiding (Monad(..))
 
-import Data.Foldable
 import Narradar
-import Narradar.ArgumentFiltering as AF
 
-main = narradarMain (parseProlog >=> prologSolver)
-
-prologSolver    = prologSolver' (\_ -> simpleHeu outermost) (aproveSrvP defaultTimeout)
-
-prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUSccOne >=> k)
-narrowingSolverUScc = usableSCCsProcessor >=> uGroundRhsAllP bestHeu
-narrowingSolverUSccOne = usableSCCsProcessor >=> cycleProcessor >=> uGroundRhsOneP bestHeu
-infSolverUScc = usableSCCsProcessor >=> iUsableRulesP >=> safeAFP
+main = narradarMain $ \input -> do
+  (typ,pl)  <- parseProlog input
+  prologSolverOne (simpleHeu outermost) (typeHeu typ) pl
 
 
--- No U1s Heuristic
--- ----------------
-noU1sHeu _ = MkHeu (IsU1 . getSignature)
+prologSolverOne h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverOne h2
 
-data IsU1 id (f :: * -> *) = IsU1 (Signature id)
-instance (T id :<: f, IsU1Id id, Ord id, Foldable f) => PolyHeuristic IsU1 id f where
-  runPolyHeu (IsU1 sig) =  Heuristic (predHeuOne allOuter noU1s `AF.or` predHeuOne allOuter (noConstructors sig)) False
-    where noU1s _af (t, 1) = not$ isU1Id t
-          noU1s _ _ = True
-
-class IsU1Id id where isU1Id :: id -> Bool
-instance IsU1Id PId where isU1Id (symbol -> UId{}) = True; isU1Id _ = False
-instance IsU1Id PS  where isU1Id (UId{}) = True; isU1Id _ = False
-instance IsU1Id LPS where isU1Id (unlabel -> UId{}) = True; isU1Id _ = False
-instance IsU1Id LPId where isU1Id (unlabel.symbol -> UId{}) = True; isU1Id _ = False
+narrowingSolverOne heu = solveB 2 ((trivialNonTerm >=> reductionPair heu 20 >=> sccProcessor) <|>
+                                   (refineNarrowing >=> sccProcessor))
+ where
+  refineNarrowing = (finstantiation <|> narrowing <|> instantiation)

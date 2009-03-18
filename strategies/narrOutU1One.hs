@@ -1,31 +1,23 @@
 #!/usr/bin/env runhaskell
 {-# OPTIONS_GHC -w #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns #-}
 
-import Prelude hiding (Monad(..))
-
 import Data.Foldable
 import Narradar
 import Narradar.ArgumentFiltering as AF
+import Strats
 
-main = narradarMain (parseProlog >=> prologSolver)
-
-prologSolver = prologSolver' noU1sHeu (aproveSrvP defaultTimeout)
-
-prologSolver' heu k = (prologP_labelling_sk heu >=> narrowingSolverUSccOne >=> k)
-narrowingSolverUScc = usableSCCsProcessor >=> uGroundRhsAllP bestHeu
-narrowingSolverUSccOne = usableSCCsProcessor >=> cycleProcessor >=> uGroundRhsOneP bestHeu
-infSolverUScc = usableSCCsProcessor >=> iUsableRulesP >=> safeAFP
-
+main = narradarMain $ \input -> do
+  (typ,pl)  <- parseProlog input
+  prologSolverOne noU1sHeu (typeHeu typ) pl
 
 -- No U1s Heuristic
 -- ----------------
-noU1sHeu _ = MkHeu (IsU1 . getSignature)
+noU1sHeu = MkHeu (IsU1 . getSignature)
 
 data IsU1 id (f :: * -> *) = IsU1 (Signature id)
 instance (T id :<: f, IsU1Id id, Ord id, Foldable f) => PolyHeuristic IsU1 id f where

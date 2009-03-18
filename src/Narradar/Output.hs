@@ -114,7 +114,8 @@ instance HTML Doc where toHtml = toHtml . show
 
 instance Show id => HTML (ProcInfo id) where
     toHtml (GroundOne af) = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
-    toHtml (GroundAll af) = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
+    toHtml (GroundAll af) = "PROCESSOR: " +++ "ICLP'08 AF Processor (dumb SCC version) " +++ maybe noHtml toHtml af
+    toHtml (ReductionPair af)= "PROCESSOR: " +++ "ICLP'08 AF Processor for SCCs" +++ maybe noHtml toHtml af
     toHtml (EVProc af)    = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"

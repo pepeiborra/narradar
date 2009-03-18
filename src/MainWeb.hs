@@ -1,7 +1,9 @@
-{-# LANGUAGE PatternGuards, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE PackageImports, PatternGuards, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 import Control.Applicative
 import Control.Exception (bracket)
-import Data.Maybe (isJust, maybeToList)
+import qualified "monad-param" Control.Monad.Parameterized as P
 import Network.CGI
 import TRS.FetchRules
 import TRS.FetchRules.TRS
@@ -35,9 +37,9 @@ cgiMain = do
     (Just input, Just typ) -> do
        (success, dot_proof, html_proof) <- liftIO $  case typ of
                        "PROLOG" -> let input' = maybe input ((input ++) .( "\n%query: " ++)) mb_goal
-                                   in  process(parseProlog input' >>= stratSolver mb_strat)
-                       "BASIC"  -> process(parseTRS BNarrowing input >>= narradarSolver)
-                       "FULL"   -> process(parseTRS  Narrowing input >>= narradarSolver)
+                                   in  process(parseProlog input' >>= uncurry (stratSolver mb_strat))
+                       "BASIC"  -> process(parseTRS BNarrowing input P.>>= narradarSolver)
+                       "FULL"   -> process(parseTRS  Narrowing input P.>>= narradarSolver)
        proof_log <- liftIO$ withTempFile "/tmp" "narradar-log-" $ \fp h -> do
                       let fn = takeBaseName fp ++ ".pdf"
                       hPutStrLn h dot_proof
@@ -51,10 +53,14 @@ cgiMain = do
                     else thediv ! [identifier "title"] << h3 << "Termination could not be proved."    +++ p << proof_log +++ p << html_proof
     _ -> outputError 100 "missing parameter" []
 
-process :: (Ppr f, Show id) =>  PPT id f Html IO -> IO (Bool, String, Html)
-process p = go(runProofT p >>= \sol -> return (isSuccess sol, pprDot sol, toHtml sol))
+process :: (Ord id, Show id, T id :<: f, TRSC f) =>  PPT id f Html IO -> IO (Bool, String, Html)
+process p = go(runProofT p >>= \sol ->
+              let success = isSuccess sol
+                  sol' = if success then simplify sol else sol
+              in return (success, pprDot sol', toHtml sol'))
 
-stratSolver Nothing           = prologSolver
-stratSolver (Just "TYPEHEU")  = prologSolver -- "Type Heuristic (unbounded positions)"
-stratSolver (Just "TYPEHEU2") = prologSolver' (\typ _ -> typeHeu2 typ) (aproveSrvP defaultTimeout)
-stratSolver (Just "INN")      = prologSolver' (\_   _ -> innermost)    (aproveSrvP defaultTimeout)
+--stratSolver :: () => Maybe String ->
+stratSolver Nothing           typ = prologSolver typ
+stratSolver (Just "TYPEHEU")  typ = prologSolver typ -- "Type Heuristic (unbounded positions)"
+stratSolver (Just "TYPEHEU2") typ = prologSolver' (typeHeu typ) (typeHeu typ)
+stratSolver (Just "INN")      typ = prologSolver' (simpleHeu innermost) (typeHeu typ)

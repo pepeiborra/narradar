@@ -10,7 +10,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Narradar.PrologProblem (prologP_sk, prologP_labelling_sk, skTransform) where
+module Narradar.PrologProblem (inferType, prologP_sk, prologP_labelling_sk, skTransform) where
 
 import Control.Applicative
 import Control.Arrow
@@ -56,21 +56,22 @@ import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2, trace)
 
 import Prelude hiding (and,or,notElem,pi)
 
+inferType (Problem Prolog{..} _ _) = infer program
+
 -- ----------------
 -- Transformations
 -- ----------------
 
 {-# off SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof Html BBasicId #-}
 {-# pff SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-prologP_sk :: AF.PolyHeuristic heu PId BasicPId => (TypeAssignment -> MkHeu heu) -> PrologProblem -> ProblemProofG PId Html BasicPId
+prologP_sk :: AF.PolyHeuristic heu PId BasicPId => MkHeu heu -> PrologProblem -> ProblemProofG PId Html BasicPId
 prologP_sk mkHeu p@(Problem Prolog{..} _ _) =
    andP PrologSKP p
      [ return p
          | goal <- goals
          , let pi = AF.mapSymbols InId goal :: AF_ PS
-         , p <- mkGoalProblem (mkHeu types) GNarrowingModes{pi,goal=pi,types=Just types} trs]
-  where types = infer program
-        trs   = skTransform program
+         , p <- mkGoalProblem mkHeu GNarrowingModes{pi,goal=pi} trs]
+  where trs   = skTransform program
 
 encodeToSat :: forall f id trs . (TRS trs id f, T id :<: f) => trs -> [Goal id] -> Formula (id, Int)
 encodeToSat trs gg = encProb where
@@ -170,16 +171,15 @@ addMissingPredicates cc
 
 {-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
 
-prologP_labelling_sk :: (AF.PolyHeuristic heu LPS BasicLPS, AF.PolyHeuristic heu LPId BasicLPId) => (TypeAssignment -> MkHeu heu) -> PrologProblem -> ProblemProofG LPId Html BasicLPId
+prologP_labelling_sk :: (AF.PolyHeuristic heu LPS BasicLPS, AF.PolyHeuristic heu LPId BasicLPId) => MkHeu heu -> PrologProblem -> ProblemProofG LPId Html BasicLPId
 prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _)
   | null goals = success (LabellingSKP []) p (toHtml "There are no queries to analyze")
   | otherwise = mall problems
    where trs = skTransform program
          problems = do goalAF <- AF.mapSymbols InId <$> goals
-                       let assig  = infer program
-                       ((trs', pi), modes) <- toList $ labellingTrans (mkHeu assig) goalAF trs
+                       ((trs', pi), modes) <- toList $ labellingTrans mkHeu goalAF trs
                        let goal     = AF.mapSymbols' (flip Labelling) goalAF
-                           pp'      = mkGoalProblem (mkHeu assig) GNarrowingModes{pi, goal, types = Just assig} trs'
+                           pp'      = mkGoalProblem mkHeu GNarrowingModes{pi, goal} trs'
                        return $ orP (LabellingSKP modes) p (map return pp')
 
 

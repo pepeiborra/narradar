@@ -5,6 +5,8 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Narradar.Utils (module Narradar.Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
 
@@ -13,6 +15,7 @@ import Control.Exception (bracket)
 import Control.Monad (join, liftM, liftM2, replicateM, ap)
 import Control.Monad.State (State,StateT)
 import Control.Monad.Writer (Writer, WriterT)
+import qualified "monad-param" Control.Monad.Parameterized as P
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
@@ -53,6 +56,12 @@ hashId :: Show a => a -> Int32
 hashId = HT.hashString . show
 
 isRight Right{} = True; isRight _ = False
+
+eitherM :: (Monad m, Show err) => Either err a -> m a
+eitherM = either (fail.show) return
+
+instance Show err => P.Bind (Either err) IO IO where
+ m >>= f = eitherM m >>= f
 
 mapLeft :: (l -> l') -> Either l r -> Either l' r
 mapLeft f (Left x)  = Left(f x)

@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables, PatternGuards, ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Narradar.DPairs where
 
@@ -16,7 +17,7 @@ import qualified Data.Set as Set
 import Data.Traversable as T
 import qualified Data.Tree as Tree
 import Text.XHtml (toHtml, Html)
-import Prelude as P
+import Prelude as P hiding (pi)
 
 import TRS
 import Control.Monad.MonadSupply
@@ -54,17 +55,19 @@ getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSub
 cycleProcessor, sccProcessor :: (T id :<: f, DPMark f, Show id, Ord id) => ProblemG id f -> ProblemProofG id Html f
 usableSCCsProcessor :: forall f id. (T LPId :<: f, DPMark f) => ProblemG LPId f -> ProblemProofG LPId Html f
 
-usableSCCsProcessor problem@(Problem typ@(getGoalAF -> Just goalAF) trs dps)
-  | assert (isSoundAF goalAF problem) False = undefined
+usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps)
+  | assert (isSoundAF pi problem) False = undefined
   | null cc   = success (UsableGraph gr reachable) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (UsableGraph gr reachable) problem
-                 [return $ Problem typ trs (tRS$ map (rules dps !!) ciclo) | ciclo <- cc, any (`Set.member` reachable) ciclo ]
+                 [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo))
+                      | ciclo <- cc, any (`Set.member` reachable) ciclo]
   where
+   dd          = rulesArray dps
    gr          = getEDG problem
    cc          = filter isCycle (map Tree.flatten (G.scc gr))
    reachable   = Set.fromList (G.reachable gr =<< goal_pairs)
-   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, Just f <- [rootSymbol (lhs r)], unmarkDPSymbol f `Set.member` AF.domain goalAF]
+   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, Just f <- [rootSymbol (lhs r)], unmarkDPSymbol f `Set.member` AF.domain goal]
    isCycle [n] = n `elem` gr A.! n
    isCycle _   = True
 
@@ -74,18 +77,20 @@ sccProcessor problem@(Problem typ trs dps)
   | null cc   = success (DependencyGraph gr) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (DependencyGraph gr) problem
-                 [return $ Problem typ trs (tRS$ map (rules dps !!) ciclo) | ciclo <- cc]
-    where gr = getEDG problem
+                 [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
+    where dd = rulesArray dps
+          gr = getEDG problem
           cc = filter isCycle (map Tree.flatten (G.scc gr))
           isCycle [n] = n `elem` gr A.! n
           isCycle _   = True
 
-cycleProcessor problem@(Problem typ trs dps@TRS{})
+cycleProcessor problem@(Problem typ trs dps)
   | null cc   = success (DependencyGraph gr) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (DependencyGraph gr) problem
-                 [return $ Problem typ trs (tRS$ map (rules dps !!) ciclo) | ciclo <- cc]
+                 [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
     where cc = cycles gr
+          dd = rulesArray dps
           gr = getEDG problem
 
 getEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
@@ -102,6 +107,10 @@ getEDG (Problem typ trs (rules->dps)) =
                        , (j,u:->_) <- zip [0..] dps
                        , inChain t u]
     where inChain (In in_t) u | [t'] <- variant' [ren $ In (icap trs <$> in_t)] [u] = isJust (unify u t')
+
+extractIxx arr nodes = A.listArray (0, length nodes - 1) [arr A.! n | n <- nodes]
+restrictGt gr nodes  = A.amap (catMaybes . map (`lookup` newIndexes)) (extractIxx gr nodes)
+  where newIndexes = zip nodes [0..]
 
 ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
 ren t = runSupply (foldTermM f t) where

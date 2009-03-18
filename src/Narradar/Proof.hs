@@ -73,6 +73,7 @@ orP  pi p0 pp    = Impure (Or (someInfo pi) (someProblem p0) pp)
 orP' pi p0 []    = success' pi p0 mempty
 orP' pi p0 pp    = Impure (Or pi p0 pp)
 step pi p0 p     = Impure (Step (someInfo pi) (someProblem p0) (returnM p))
+step' pi p0 p    = Impure (Step pi p0 p)
 mand p1 p2       = Impure (MAnd p1 p2)
 mdone            = Impure MDone
 mall             = foldr mand mdone
@@ -83,14 +84,14 @@ htmlProof = id
 deriving instance (Show s, Show k) => Show (ProofF s k)
 
 data SomeProblem where
-    SomeProblem       :: (Show id, TRS.Ppr f) => ProblemG id f -> SomeProblem
+    SomeProblem       :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
 --    SomePrologProblem :: [Goal] -> Prolog.Program -> SomeProblem
 
 instance Show SomeProblem where
     show (SomeProblem p) = "<some problem>"
 --    show (SomePrologProblem gg pgm) = show (PrologProblem Prolog gg pgm :: Problem BasicId)
 
-someProblem :: (Show id, TRS.Ppr f) => ProblemG id f -> SomeProblem
+someProblem :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
 someProblem p@Problem{}      = SomeProblem p
 --someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
 
@@ -138,6 +139,13 @@ instance Monad m => MPlus (FreeT (ProofF f s) m) (FreeT (ProofF f s) m) (FreeT (
 instance P.Monad m => MonadZero (FreeT (ProofF s) m) where mzeroM = wrap(Impure MZero)
 instance Monad m => MPlus (FreeT (ProofF s) m) (FreeT (ProofF s) m) (FreeT (ProofF s) m) where
     mplus m1 m2 = FreeT $ returnM $ Right (MPlus m1 m2)
+
+-- Additional parameterized instances between the Proof and ProofT
+instance (P.Monad m, Monad m) => MPlus (Free (ProofF s)) (FreeT (ProofF s) m) (FreeT (ProofF s) m) where
+    mplus m1 m2 = FreeT $ returnM $ Right (MPlus (wrap m1) m2)
+
+instance (P.Monad m, Monad m) => MPlus (FreeT (ProofF s) m) (Free (ProofF s)) (FreeT (ProofF s) m) where
+    mplus m1 m2 = FreeT $ returnM $ Right (MPlus  m1 (wrap m2))
 
 -- ----------
 -- Evaluator
@@ -199,7 +207,7 @@ simplify = foldFree returnM simplifyF where
 
 simplifyF = f where
   f   (Or  pi p [])  = success' pi p mempty -- "No additional problems left"
-  f p@(Or  _ _ aa)   = msum aa
+  f   (Or  pi p aa)  = step' pi p (msum aa) -- (filter isSuccess aa)
   f   (And p f [])   = error "simplify: empty And clause (probably a bug in your code)"
   f p@(MPlus p1 p2)
       | isSuccess p1 = p1

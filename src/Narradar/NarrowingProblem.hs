@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE PatternSignatures, PatternGuards, ViewPatterns, RecordPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards, ViewPatterns, NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -8,7 +9,7 @@
 
 
 module Narradar.NarrowingProblem (
-     mkGoalProblem, -- mkGoalProblem_rhs,
+     mkGoalProblem, findGroundAF,
      groundRhsOneP, groundRhsAllP, uGroundRhsAllP, uGroundRhsOneP,
      safeAFP,
      MkHeu(..)) where
@@ -60,7 +61,7 @@ mkGoalProblem' typGoal typ heu trs | const True (typGoal `asTypeOf` typ) =
         extendedPi = AF.extendAFToTupleSymbols (pi typGoal)
         goal'      = AF.mapSymbols functionSymbol (goal typGoal)
         orProblems = case (mkHeu heu p) of
-                       heu | isSafeOnDPs heu -> [Problem typGoal{pi=extendedPi,goal=goal'} trs' dps]
+--                       heu | isSafeOnDPs heu -> [Problem typGoal{pi=extendedPi,goal=goal'} trs' dps]
                        heu -> [assert (isSoundAF pi' p) $
                                Problem typGoal{pi=pi', goal=goal'} trs' dps
                                    | pi' <- invariantEV heu (rules p) extendedPi]
@@ -77,7 +78,7 @@ groundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps)
     if null orProblems
       then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
       else msum orProblems
-    where heu        = mkHeu mk p -- maybe (bestHeu p) typeHeu (getTyping typ)
+    where heu        = mkHeu mk p
           afs        = findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p =<< rules dps
           orProblems = [ step (GroundOne (Just af)) p $
                                 AF.apply af (mkProblem Rewriting trs dps)
@@ -106,7 +107,7 @@ groundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isA
     if null orProblems
       then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
       else msum orProblems
-    where heu        = mkHeu mk p -- maybe (bestHeu p) typeHeu (getTyping typ)
+    where heu        = mkHeu mk p
           afs        = foldM (\af -> findGroundAF heu pi_groundInfo af p)
                              (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
                              (rules dps)
@@ -129,7 +130,7 @@ uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
     if null orProblems
       then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
       else msum orProblems
-    where heu        = mkHeu mk p -- maybe (bestHeu p) typeHeu (getTyping typ)
+    where heu        = mkHeu mk p
           results = unEmbed $ do
                   af0 <- embed $ Set.fromList $
                           foldM (\af -> findGroundAF heu pi_groundInfo af dps)
@@ -154,13 +155,13 @@ uGroundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
     if null orProblems
       then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
       else msum orProblems
-    where heu        = mkHeu mk p -- maybe (bestHeu p) typeHeu (getTyping typ)
+    where heu     = mkHeu mk p
           results = unEmbed $ do
                   af0 <- embed $ Set.fromList (
                           findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p
                                 =<< rules dps)
                   let utrs = mkTRS(iUsableRules trs (Just af0) (rhs <$> rules dps))
-                  af1 <- embed $ Set.fromList $ invariantEV heu (dps `mappend` utrs) af0
+                  af1 <- let rr = dps `mappend` utrs in embed $ Set.fromList $ invariantEV heu rr (AF.restrictTo (getAllSymbols rr) af0)
                   let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
                   return (af1, utrs')
           orProblems = [ proofU >>= \p' ->
@@ -176,29 +177,15 @@ uGroundRhsOneP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowing
 uGroundRhsOneP _ p = return p
 
 -- ------------------------------------------------------------------
--- This is the AF processor described in
--- "Termination of Narrowing via Termination of Narrowing" (G.vidal)
+-- This is the infinitary constructor rewriting AF processor described in
+-- "Termination of Logic Programs ..." (Schneider-Kamp et al)
 -- ------------------------------------------------------------------
--- The only difference is that we talk of 'sound' AFs instead of 'safe'
--- Soundness is a syntactic condition whereas safeness is not.
--- That is, we simply filter all the unbound parameters out,
--- and no extra vars inserted by pi.
--- We still assume constructor substitutions and use the AF_rhs trick
-
--- NOTE: For now assume that this processor is unsound. The AF_rhs trick does not work well.
---       Some extra conditions are needed which I haven't identified yet.
 
 safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
 safeAFP p@(Problem (getGoalAF -> Just af) trs dps@TRS{}) = assert (isSoundAF af p) $
   step (SafeAFP (Just af)) p (AF.apply af $ Problem Rewriting trs dps)
 safeAFP p = return p
 
-{-
-mkBNDPProblem_rhs x@(FromAF af (Just typs)) trs = mkGoalProblem_rhs (const $ typeHeu typs) x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
-mkBNDPProblem_rhs x trs = mkGoalProblem_rhs bestHeu x $ mkProblem BNarrowing trs (tRS $ getPairs trs)
-
-mkGoalProblem_rhs = mkGoalProblem' invariantEV_rhs
--}
 -- -----------
 -- Testing
 -- -----------

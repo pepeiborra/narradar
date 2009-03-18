@@ -100,14 +100,19 @@ instance (Functor f) => MonadTrans (FreeT f) where
 
 instance (Functor f, Return m) => Return (FreeT f m) where returnM = FreeT . returnM . Left
 
-instance (Functor f, Monad m) => Bind (FreeT f m) (FreeT f m) (FreeT f m) where
-    m >>= f = FreeT $ unFreeT m >>= \r ->
-        case r of
-             Left x   -> unFreeT $ f x
-             Right xc -> returnM . Right $ fmap (>>= f) xc
+instance (Functor f, Monad m) => Bind (FreeT f m) (FreeT f m) (FreeT f m) where (>>=) = (>>=)
+instance (Functor f, Bind m m' m', Monad m') => Bind (FreeT f m) (FreeT f m') (FreeT f m') where
+  m >>= f =
+     FreeT (unFreeT m >>= \r ->
+             case r of
+               Left x   -> unFreeT (f x)
+               Right xc -> returnM $ Right $ fmap (>>= f) xc
+           )
 
 instance (Functor f, Functor m, Old.Monad m) => Bind (Free f) (FreeT f m) (FreeT f m) where m >>= f = (wrap m `asTypeOf1` f undefined)  Old.>>= f
 instance (Functor f, Functor m, Old.Monad m) => Bind (FreeT f m) (Free f) (FreeT f m) where m >>= f = m Old.>>= \v -> (wrap$ f v) `asTypeOf1` m
+
+-- instance Bind (FreeT f m) (FreeT f m') (FreeT f m'') where m >>= f = FreeT $ unFreeT 
 
 liftFree :: (Functor f, Old.Monad m) => (a -> Free f b) -> (a -> FreeT f m b)
 liftFree f = wrap . f
