@@ -232,6 +232,7 @@ data ProcInfo id where                    -- vv ignored vv
     UsableRulesP    :: ProcInfo ()
     ReductionPair   :: Show id => Maybe (AF_ id) -> ProcInfo id
     Trivial         :: ProcInfo ()
+    NoPairs         :: ProcInfo ()
 
 isAFProc GroundOne{} = True
 isAFProc GroundAll{} = True
@@ -239,6 +240,7 @@ isAFProc EVProc{}    = True
 isAFProc GroundOne{} = True
 isAFProc _           = False
 
+    ppr NoPairs          = text "Trivially terminating"
 instance Show id => Show (ProcInfo id) where
     show (DependencyGraph _) = "Dependency Graph Processor"
     show (UsableGraph _ _)= "Usable Graph Processor"

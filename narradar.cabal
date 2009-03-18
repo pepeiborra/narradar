@@ -57,6 +57,7 @@ Library
      Narradar.ExtraVars,
      Narradar.NarrowingProblem,
      Narradar.PrologProblem,
+     Narradar.RewritingProblem,
      Narradar.Aprove,
      Narradar.Output,
      Narradar.GraphViz,
@@ -89,19 +90,6 @@ Executable narradar
      TRS >= 0.21.20090318, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
      parsec, prolog, prolog-tools, regex-posix, unix
   other-modules: 
-     Control.Monad.MonadSupply,
-     Control.Monad.Free,
-     Narradar.Types,
-     Narradar.Proof,
-     Narradar.Output,
-     Narradar.GraphViz,
-     Narradar.GraphTransformation,
-     Narradar.NarrowingProblem,
-     Narradar.DPairs,
-     Narradar.ArgumentFiltering,
-     Narradar.Utils,
-     Narradar.Solver,
-     Narradar.Aprove
 
 
 Executable narradarCgi
@@ -121,17 +109,4 @@ Executable narradarCgi
   build-Depends:       
 
   other-modules:
-     Narradar.Types,
-     Control.Monad.MonadSupply,
-     Control.Monad.Free,
-     Narradar.Proof,
-     Narradar.Output,
-     Narradar.GraphViz,
-     Narradar.GraphTransformation,
-     Narradar.NarrowingProblem,
-     Narradar.DPairs,
-     Narradar.ArgumentFiltering,
-     Narradar.Utils,
-     Narradar.Solver,
-     Narradar.Aprove
 

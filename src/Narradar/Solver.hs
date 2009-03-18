@@ -31,6 +31,7 @@ import Narradar.Proof
 import Narradar.Types
 import Narradar.NarrowingProblem
 import Narradar.PrologProblem
+import Narradar.RewritingProblem
 import Narradar.ReductionPair
 import Narradar.GraphTransformation
 import Narradar.UsableRules
@@ -47,19 +48,10 @@ defaultTimeout = 10
 -- --------------
 -- Aprove flavors
 -- --------------
-aproveSrvP timeout = trivialNonTerm >=> (wrap' . aproveSrvProc2 Default timeout)
-aproveWebP         = trivialNonTerm >=> (wrap' . aproveWebProc)
-aproveLocalP path  = trivialNonTerm >=> (wrap' . aproveProc path)
+aproveSrvP timeout = trivialP >=> (wrap' . aproveSrvProc2 Default timeout)
+aproveWebP         = trivialP >=> (wrap' . aproveWebProc)
+aproveLocalP path  = trivialP >=> (wrap' . aproveProc path)
 
--- ------------------------
--- Trivial nonTermination
--- ------------------------
-
-trivialNonTerm p@(Problem typ trs dps@TRS{})
-    | all (null.properSubterms.rhs) (TRS.rules dps) || any (\(l:->r) -> l == r) (TRS.rules dps)
-    = failP Trivial p (primHtml "loop")
-    | otherwise = returnM p
-trivialNonTerm  p = returnM p
 
 -- ----------------------
 -- Processor-like Parsers
@@ -81,7 +73,7 @@ parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
 prologSolver  typ   = prologSolver' (typeHeu2 typ) (typeHeu typ)
 prologSolver' h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver h2
   where
-   narrowingSolver heu = solveB 3 ((trivialNonTerm >=> reductionPair heu 20 >=> sccProcessor) <|>
+   narrowingSolver heu = solveB 3 ((trivialP >=> reductionPair heu 20 >=> sccProcessor) <|>
                                    refineNarrowing)
 
 refineNarrowing = instantiation <|> finstantiation <|> narrowing
