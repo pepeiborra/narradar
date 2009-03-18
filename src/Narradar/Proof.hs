@@ -147,39 +147,55 @@ instance (P.Monad m, Monad m) => MPlus (Free (ProofF s)) (FreeT (ProofF s) m) (F
 instance (P.Monad m, Monad m) => MPlus (FreeT (ProofF s) m) (Free (ProofF s)) (FreeT (ProofF s) m) where
     mplus m1 m2 = FreeT $ returnM $ Right (MPlus  m1 (wrap m2))
 
--- ----------
--- Evaluator
--- ----------
---runProofT x = unwrap x
+-- ------------
+-- * Evaluators
+-- ------------
 
-runProofT :: (Monoid s) => ProofT s IO a -> IO (Proof s a)
-runProofT m = go (unFreeT m >>= f) where
+type Gen f = f -> f
+
+-- | Prunes the proof tree in an unsafe way
+--   Cannot be used to inspect an unfinished proof
+--   since it will corrupt it
+runAndPruneProofT :: (Monoid s) => ProofT s IO a -> IO (Proof s a)
+runAndPruneProofT m = unFreeT m >>= f where
   f (Left v)  = returnM (returnM v)
-  f (Right p) = eval p
---  eval :: ProofF f s (ProofT f s m a) -> m (Proof f s a)
-  -- Special cases
-  eval (And pi pb pp) = tryAll pp >>= return . andP' pi pb
---  eval (And pi pb pp) = (parMapM 4 runProofT pp >>= return . andP pi pb) -- run in parallel speculatively
-  eval (MPlus p1 p2)  = do
-    s1 <- runProofT p1
+  f (Right p) = eval' p
+  eval' (And pi pb pp) = tryAll runAndPruneProofT pp >>= (return . andP' pi pb)
+--  eval' (And pi pb pp) = (parMapM 4 runAndPruneProofT pp >>= return . andP' pi pb) -- run in parallel speculatively
+  eval' x = eval runAndPruneProofT x
+
+-- | Alternative version which only applies safe prunes.
+--   A proof can be always be run unpruned with @Control.Monad.Free.unwrap@
+runProofT :: (Monoid s) => ProofT s IO a -> IO (Proof s a)
+runProofT m = unFreeT m >>= f where
+  f (Left v)  = returnM (returnM v)
+  f (Right p) = eval runProofT p
+
+
+eval rec (MPlus p1 p2)  = do
+    s1 <- rec p1
     if isSuccess s1 then returnM s1
      else do
-       s2 <- runProofT p2
+       s2 <- rec p2
        return (choiceP s1 s2)
-  eval (Or pi pb pp) = (tryAny pp >>= return . orP' pi pb)
-  eval (MAnd p1 p2)  = runProofT p1 >>= \s1 -> if not(isSuccess s1) then returnM s1 else mand s1 <$> runProofT p2
-  -- For all the rest, just unwrap
-  eval x = Impure <$> mapMP runProofT x
+eval rec (Or pi pb pp) = tryAny rec pp >>= return . orP' pi pb
+eval rec (MAnd p1 p2)  = rec p1 >>= \s1 -> if not(isSuccess s1) then returnM s1 else mand s1 <$> rec p2
+
+ -- For all the rest, just unwrap
+eval rec x = Impure <$> mapMP rec x
+
   -- Desist on failure
-  tryAll [] = returnM []
-  tryAll (x:xs) = do
-    s <- runProofT x
-    if not(isSuccess s) then returnM [s] else (s:) <$> tryAll xs
+tryAll f [] = returnM []
+tryAll f (x:xs) = do
+    s <- f x
+--    if isSuccess s then (s:) <$> tryAll xs else returnM [s, mzeroM] -- throw in a mzero "just to sleep better"
+    if isSuccess s then (s:) <$> tryAll f xs else returnM [s]
+
   -- Stop on success
-  tryAny [] = returnM []
-  tryAny (x:xs) = do
-    s <- runProofT x
-    if isSuccess s then returnM [s] else (s:) <$> tryAny xs
+tryAny f [] = returnM []
+tryAny f (x:xs) = do
+    s <- f x
+    if isSuccess s then returnM [s] else (s:) <$> tryAny f xs
 
 -- ------------------
 -- Algebra of proofs
@@ -189,7 +205,7 @@ isSuccessF Fail{}         = False
 isSuccessF Success{}      = True
 isSuccessF DontKnow{}     = False
 isSuccessF (And _ _ ll)   = and ll
-isSuccessF (Or  _ _ [])   = True  -- unstandard
+isSuccessF (Or  _ _ [])   = True  -- HEADS UP unstandard
 isSuccessF (Or  _ _ ll)   = or ll
 isSuccessF (MPlus p1 p2)  = p1 || p2
 isSuccessF MZero          = False

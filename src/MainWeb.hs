@@ -54,7 +54,7 @@ cgiMain = do
     _ -> outputError 100 "missing parameter" []
 
 process :: (Ord id, Show id, T id :<: f, TRSC f) =>  PPT id f Html IO -> IO (Bool, String, Html)
-process p = go(runProofT p >>= \sol ->
+process p = go(runAndPruneProofT p >>= \sol ->
               let success = isSuccess sol
                   sol' = if success then simplify sol else sol
               in return (success, pprDot sol', toHtml sol'))

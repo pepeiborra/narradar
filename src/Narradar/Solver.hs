@@ -98,6 +98,12 @@ narrowingSolver depth k =
 solve' :: P.MonadPlus m => (a -> m a) -> a -> m a
 solve' f x = let x' = f x in x' `P.mplus` (x' P.>>= solve' f)
 
+{-
+DANGEROUS. solve and solveB become unsound if used with alternatives
+These combinators look at intermediate states of the proof (they use runProofT)
+This does not play well with some optimizations inside runProofT
+which cut nonproductive failure branches.
+-}
 solve f x = do
   fx <- lift $ runProofT (f x)
   if null(toList fx) then wrap fx else solve f P.=<< wrap fx

@@ -58,7 +58,7 @@ import Narradar.Convert
 --main :: IO ()
 narradarMain solver = do
   (Options problemFile input diagrams, _, errors) <- getOptions
-  sol <- runProofT (solver input)
+  sol <- runAndPruneProofT (solver input)
   putStrLn$ if isSuccess sol then "YES" else "NO"
   when diagrams $ withTempFile "." "narradar.dot" $ \fp h -> do
         let sol' = if isSuccess sol then simplify sol else sol
@@ -67,7 +67,7 @@ narradarMain solver = do
 #ifdef DEBUG
         writeFile (problemFile ++ ".dot") (pprDot sol')
 #endif
---        system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
+        system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
         -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
         P.return ()
 

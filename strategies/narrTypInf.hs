@@ -7,4 +7,6 @@ main = narradarMain prologSolver
 
 prologSolver txt = do
   (typ,pl)  <- parseProlog txt
-  prologSolverAll (typeHeu2 typ) (typeHeu typ) pl
+  prologSolverInf (typeHeu typ) pl
+
+
