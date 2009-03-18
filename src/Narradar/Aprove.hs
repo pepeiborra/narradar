@@ -37,7 +37,7 @@ import Narradar.Proof
 import Narradar.Utils
 
 aproveWebProc :: (Ord id, Show id, TRSC f, T id :<: f) => ProblemG id f -> IO (ProblemProofG id Html f)
-aproveWebProc = externalProc go where
+aproveWebProc = memoExternalProc go where
   go prob@(Problem _ trs dps) = do
     curl <- initialize
     CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
@@ -64,7 +64,7 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
 
 
 aproveProc :: (Ord id, Show id, TRSC f, T id :<: f) => FilePath -> ProblemG id f -> IO (ProblemProofG id Html f)
-aproveProc path = externalProc go where
+aproveProc path = go where
    go prob@(Problem Rewriting trs dps) =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
               hPutStr h_problem_file (pprTPDB prob)
@@ -82,7 +82,7 @@ aproveSrvPort    = 5250
 
 aproveSrvProc :: (Ord id, Show id,TRSC f, T id :<: f) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
-aproveSrvProc timeout = externalProc go where
+aproveSrvProc timeout = memoExternalProc go where
   go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
                                                  withSocketsDo $
                                                  withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
@@ -146,7 +146,7 @@ aproveSrvXML strat (timeout :: Int) prob@(Problem Rewriting trs dps) =
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
 
-aproveSrvProc2 strat (timeout :: Int) = externalProc go where
+aproveSrvProc2 strat (timeout :: Int) =  go where
   go prob@(Problem Rewriting trs dps) = do
     res <- aproveSrvXML strat timeout prob
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
@@ -156,8 +156,9 @@ aproveSrvProc2 strat (timeout :: Int) = externalProc go where
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
 
-externalProc go p@(Problem (isRewriting -> True) trs dps) = unsafePerformIO (memoIO hashProb go) p
-externalProc _ p = return$ return p
+{-# NOINLINE memoExternalProc #-}
+memoExternalProc go = unsafePerformIO (memoIO hashProb go)
+
 
 hashProb prob = hashString (pprTPDB prob)
 massage     = primHtml . unlines . drop 8  . lines

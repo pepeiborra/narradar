@@ -148,7 +148,7 @@ instance Arbitrary (Gr () ()) where
 -- -------------
 -- Memoization
 -- -------------
-
+{-# NOINLINE memoIO #-}
 memoIO :: Eq a => (a -> Int32) -> (a -> IO b) -> IO (a -> IO b)
 memoIO hash f = do
   ht <- HT.new (==) hash

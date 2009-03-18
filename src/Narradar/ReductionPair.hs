@@ -23,7 +23,8 @@ import Prelude -- hiding (Monad(..), (=<<))
 import qualified Prelude as P
 
 import Lattice
-import TRS
+import TRS hiding (Ppr, ppr)
+import qualified TRS
 import Narradar.Aprove
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.ArgumentFiltering (AF_, PolyHeuristic)
@@ -34,6 +35,10 @@ import Narradar.UsableRules
 import Narradar.Utils
 import Narradar.Types
 import Narradar.TRS
+import Narradar.RewritingProblem
+
+aproveXML :: forall f id. (Ord id, Show id, T id :<: f, DPMark f, TRSC f, Lattice (AF_ id)) => ProblemG id f -> IO String
+aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
 reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> PPT id f Html IO
 reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowing typ = msum orProblems where
@@ -47,7 +52,7 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
  orProblems =
     [ wrap' $ do
         let rp = AF.apply af $ mkProblem Rewriting trs' dps
-        xml <- aproveSrvXML OnlyReductionPair timeout rp
+        xml <- aproveXML rp
         return (proofU >>= \p' ->
          let mb_nonDecreasingDPs :: Maybe [Rule Basic] = findResultingPairs (parseTags xml)
              the_af = AF.restrictTo (getAllSymbols p') af
@@ -72,3 +77,5 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
      f (prj -> Just (T (id::id) tt)) =
             text (show id) <> parens (hcat$ punctuate comma tt)
      f t = pprF t
+
+reductionPair _ _ p = error ("reductionPair " ++ show (typ p))
