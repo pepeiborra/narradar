@@ -140,7 +140,7 @@ uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
                   af1 <- embed $ Set.fromList $ invariantEV heu (dps `mappend` utrs) af0
                   let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
                   return (af1, utrs')
-          orProblems = [ proofU >>= \p' ->
+          orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundAll (Just (AF.restrictTo (getAllSymbols p') af))) p'
                                 (AF.apply af (mkProblem Rewriting trs dps))
                         | (af,trs) <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
@@ -164,7 +164,7 @@ uGroundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
                   af1 <- let rr = dps `mappend` utrs in embed $ Set.fromList $ invariantEV heu rr (AF.restrictTo (getAllSymbols rr) af0)
                   let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
                   return (af1, utrs')
-          orProblems = [ proofU >>= \p' ->
+          orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundOne (Just (AF.restrictTo (getAllSymbols p') af))) p'
                                 (AF.apply af (mkProblem Rewriting trs dps))
                         | (af,trs) <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)

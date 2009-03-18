@@ -28,12 +28,14 @@ import Text.XHtml (toHtml)
 import Prelude hiding (Monad(..), (=<<), or, and, mapM)
 
 import TRS
-import Narradar.Utils(on, trace,snub)
+import Narradar.Utils(on,snub)
 import Lattice
 import Narradar.ArgumentFiltering (AF, LabelledAF, AF_, Heuristic, bestHeu, typeHeu, mkHeu, Heuristic(..), MkHeu(..))
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Proof
+
+trace _ = id
 
 class    ExtraVars t f | t -> f where extraVars :: t -> [Term f]
 instance (TRS trs id f) => ExtraVars trs f where
