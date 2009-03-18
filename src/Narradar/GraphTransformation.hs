@@ -10,6 +10,7 @@ module Narradar.GraphTransformation (narrowing, instantiation, finstantiation) w
 import Control.Applicative
 import Data.Array.IArray hiding ( array )
 import Data.Foldable (toList)
+import qualified Data.Graph as Gr
 import Data.List (nub, foldl1', isPrefixOf)
 import Data.Maybe
 import qualified Data.Set as Set
@@ -18,8 +19,8 @@ import Control.Monad.Logic
 import Text.XHtml (Html)
 
 import Narradar.Types hiding ((//), (!))
-import TRS (open)
-import Narradar.Utils ((<$$>), (.|.))
+import TRS (open, EqModulo_(..))
+import Narradar.Utils ((<$$>), (.|.), snub)
 import Narradar.Proof
 import Narradar.DPairs
 import Narradar.UsableRules
@@ -35,12 +36,20 @@ import qualified TRS
 
 narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, Hole :<: f, T id :<: f, Show id, id ~ Identifier a, Ord a) => ProblemG id f -> ProblemProofG id Html f
 narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA gr sig))
-  | null dpss || [[]] == dpss = dontKnow NarrowingP p
-  | otherwise = orP NarrowingP p [return $ Problem typ trs (tRS' newdps sig) | newdps <- dpss]
-    where dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
-          f (i, dp@(_s :-> t))
-              | isNothing (unify t `mapM` uu) =
-                  let new_dps = [(i,dp') | (dp',p) <- narrow1DP dp
+   = msum [ step (NarrowingP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+                     | (i,dps') <- dpss
+                     , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
+                     , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
+    where --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
+          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                         , all (not.null) dps]
+          f (i, olddp@(_s :-> t))
+              | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
+              | otherwise = []
+           where
+             newdps
+              | (isBNarrowing .|. isGNarrowing) typ || isLinear t , isNothing (unify t `mapM` uu) =
+                  let new_dps = [(i,dp') | (dp',p) <- narrow1DP olddp
                                          , let validPos = Set.toList(Set.fromList(positions (icap trs t)) `Set.intersection` pos_uu)
                                          , any (`isPrefixOf` p) validPos]
                   in -- extra condition to avoid specializing to pairs whose rhs are variables
@@ -53,21 +62,6 @@ narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA
           narrow1DP (l :-> r) = [ (l TRS.// theta :-> r', p)
                                   | ((r',p),theta) <- observeAll (narrow1P (rules trs) r)
                                   ]
-
-narrowing p@(Problem typ@(isAnyNarrowing->True) trs (TRS (toList -> dps) sig))
-  | null dpss || [[]] == dpss = dontKnow NarrowingP p
-  | otherwise = orP NarrowingP p [return $ Problem typ trs (tRS' newdps sig) | newdps <- dpss]
-    where dpss = fst <$$> (map concat $ filter (all (not.null)) $
-                      maps (uncurry f) (zip dps (tail dps ++ dps)))
-          f dp@(_ :-> r) nxt@(l :-> _)
-              | isLinear r, isNothing (r `unify` l) =
-                  let new_dps = [(dp', nxt) | dp' <- narrow1DP dp]
-                  in -- extra condition to avoid specializing to pairs whose rhs are variables
-                      -- (I don't recall having seen this in any paper but surely is common knowledge)
-                    if any (isVar.rhs.fst) new_dps then [] else new_dps
-              | otherwise                           = []
-          narrow1DP (l :-> r) = [ l TRS.// theta :-> markDP r'
-                                  | (r',theta) <- observeAll (narrow1 (rules trs) (unmarkDP r))]
 
 narrowing p = return p
 
@@ -84,62 +78,48 @@ maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
 -- maps and maps' are equivalent
 propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -> [Bool])
 
-instantiation p@(Problem typ@(isBNarrowing .|. isGNarrowing -> True) trs (rules -> dps))
-  | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | null dpss = error "Instantiation: weird..."
-  | dpss == [dps] = dontKnow InstantiationP p
-  | otherwise = orP InstantiationP p [return $ Problem typ trs (tRS newdps)
-                                          | newdps <- dpss]
-   where dpss = nub (catMaybes $ sequence <$> maps f dps)
-         f  (s :-> t) = listToMaybe
-                                  [(s TRS.// sigma :-> t TRS.// sigma)
-                                      | v :-> w <- dps,
-                                        let [w'] = variant' [icap trs w] [s],
-                                        sigma <- w' `unify` s]
 
-instantiation p@(Problem typ@(isAnyNarrowing->True) trs (rules -> dps))
+instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr sig))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | null dpss = error "Instantiation: weird..."
-  | dpss == [dps] = dontKnow InstantiationP p
-  | otherwise = orP InstantiationP p [return $ Problem typ trs (tRS newdps)
-                                          | newdps <- dpss]
-   where dpss = nub (catMaybes $ sequence <$> maps f dps)
-         f  (s :-> t) = listToMaybe
-                                  [(s TRS.// sigma :-> t TRS.// sigma)
-                                      | v :-> w <- dps,
-                                        let [w'] = variant' [ren$ icap trs w] [s],
-                                        sigma <- w' `unify` s]
+  | otherwise = msum [ step (InstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+                     | (i,dps') <- dpss
+                     , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
+                     , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
+
+   where dps  = elems dpsA
+         dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                         , all (not.null) dps]
+         f  (i,olddp@(s :-> t))
+                  | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
+                  | otherwise = []
+            where newdps = [(i, s TRS.// sigma :-> t TRS.// sigma)
+                                      | v :-> w <- (dpsA !) <$> [ m | (m,n) <- Gr.edges gr, n == i]
+                                      , let [w'] = variant' [mbren$ icap trs w] [s]
+                                      , sigma <- w' `unify` s]
+         mbren = if (isBNarrowing .|. isGNarrowing) typ then id else ren
 
 instantiation p = return p
 
-finstantiation p@(Problem typ@(isGNarrowing .|. isBNarrowing ->True) trs (DPTRS dpsA gr sig))
+finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | dpss == [dps] = dontKnow FInstantiationP p
-  | otherwise = orP FInstantiationP p [return $ Problem typ trs (tRS' newdps sig)
-                                          | newdps <- dpss]
+  | otherwise = msum [ step (FInstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+                     | (i, dps') <- dpss
+                     , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
+                     , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
    where dps  = elems dpsA
-         dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f $ assocs dpsA)
-         f (i, s :-> t) =
-                         [(i, s TRS.// sigma :-> t TRS.// sigma)
+         dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                         , all (not.null) dps]
+         f (i, olddp@(s :-> t))
+                  | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
+                  | otherwise = []
+              where newdps = [(i,  s TRS.// sigma :-> t TRS.// sigma)
                                       | v :-> w <- (dpsA !) <$> gr ! i
-                                      , let trs' = tRS (swapRule <$> iUsableRules trs Nothing [t]) `asTypeOf` trs
+                                      , let trs' = tRS (swapRule <$> mbUsableRules trs t) `asTypeOf` trs
                                       , let [v'] = variant' [ren$ icap trs' v] [t]
                                       , sigma <- v' `unify` t]
-
-
-finstantiation p@(Problem typ@(isAnyNarrowing->True) trs (rules -> dps))
-  | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | dpss == [dps] = dontKnow FInstantiationP p
-  | otherwise = orP FInstantiationP p [return $ Problem typ trs (tRS newdps)
-                                          | newdps <- dpss]
-   where dpss = nub (catMaybes $ sequence <$> maps f dps)
-         f (s :-> t) = listToMaybe
-                       [(s TRS.// sigma :-> t TRS.// sigma)
-                                      | v :-> w <- dps
-                                      , let trs' = tRS (swapRule <$> rules trs) `asTypeOf` trs
-                                      , let [v'] = variant' [ren$ icap trs' v] [t]
-                                      , sigma <- v' `unify` t]
-
+         mbUsableRules trs t = if isBNarrowing typ || isGNarrowing typ
+                                 then iUsableRules trs Nothing [t]
+                                 else rules trs
 finstantiation p = return p
 
 capInv :: forall id f. (Ord id, T id :<: f, TRSC f) => NarradarTRS id f -> Term f -> Term f

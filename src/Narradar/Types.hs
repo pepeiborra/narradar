@@ -233,9 +233,9 @@ data ProcInfo id where                    -- vv ignored vv
     UsableGraph     :: Graph -> Set Vertex -> ProcInfo ()
     Polynomial      :: ProcInfo ()
     External        :: ExternalProc -> ProcInfo ()
-    NarrowingP      :: ProcInfo ()
-    InstantiationP  :: ProcInfo ()
-    FInstantiationP :: ProcInfo ()
+    NarrowingP      :: (TRSC f, Ord id, Show id, T id :<: f) => NarradarTRS id f -> NarradarTRS id f -> ProcInfo id
+    InstantiationP  :: (TRSC f, Ord id, Show id, T id :<: f) => NarradarTRS id f -> NarradarTRS id f -> ProcInfo id
+    FInstantiationP :: (TRSC f, Ord id, Show id, T id :<: f) => NarradarTRS id f -> NarradarTRS id f -> ProcInfo id
     PrologP         :: ProcInfo ()
     PrologSKP       :: ProcInfo ()
     LabellingSKP    :: [Labelled String] -> ProcInfo ()
@@ -257,6 +257,15 @@ instance Show id => Ppr (ProcInfo id) where
     ppr (DependencyGraph _) = text "Dependency Graph Processor (cycles)"
     ppr (UsableGraph _ _)   = text "Usable Graph Processor"
     ppr (External proc)     = text "External: " <> text (show proc)
+    ppr (NarrowingP dp dps')= text "Narrowing Processor." $$
+                                   text "Pair" <+> parens(ppr dp) <+> text "is replaced by:" $$
+                                   ppr dps'
+    ppr (InstantiationP dp dps')= text "Instantiation Processor." $$
+                                   text "Pair" <+> parens(ppr dp) <+> text "is replaced by:" $$
+                                   ppr dps'
+    ppr (FInstantiationP dp dps')= text "Forward Instantiation Processor." $$
+                                   text "Pair" <+> parens(ppr dp) <+> text "is replaced by:" $$
+                                   ppr dps'
     ppr (GroundOne (Just pi)) = text "ICLP08 AF Processor" $$ ppr pi
     ppr (GroundAll (Just pi)) = text "All Rhs's Ground AF Processor" $$ ppr pi
     ppr (ReductionPair (Just pi)) = text "ICFP08 Reduction Pair Processor + Usable Rules" $$ ppr pi
