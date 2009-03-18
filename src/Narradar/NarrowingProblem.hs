@@ -181,8 +181,8 @@ uGroundRhsOneP _ p = return p
 -- "Termination of Logic Programs ..." (Schneider-Kamp et al)
 -- ------------------------------------------------------------------
 
-safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
-safeAFP p@(Problem (getGoalAF -> Just af) trs dps@TRS{}) = assert (isSoundAF af p) $
+--safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
+safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = htmlProof $ assert (isSoundAF af p) $
   step (SafeAFP (Just af)) p (AF.apply af $ Problem Rewriting trs dps)
 safeAFP p = return p
 
