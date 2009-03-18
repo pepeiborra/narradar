@@ -74,9 +74,9 @@ usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps)
 usableSCCsProcessor p = sccProcessor p
 
 sccProcessor problem@(Problem typ trs dps)
-  | null cc   = success (DependencyGraph gr) problem
+  | null cc   = success (SCCGraph gr []) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
-  | otherwise =  andP (DependencyGraph gr) problem
+  | otherwise =  andP (SCCGraph gr (map Set.fromList cc)) problem
                  [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
     where dd = rulesArray dps
           gr = getEDG problem

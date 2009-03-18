@@ -231,6 +231,7 @@ data ProcInfo id where                    -- vv ignored vv
     EVProc          :: Show id => AF_ id -> ProcInfo id
     DependencyGraph :: Graph -> ProcInfo ()
     UsableGraph     :: Graph -> Set Vertex -> ProcInfo ()
+    SCCGraph        :: Graph -> [Set Vertex] -> ProcInfo ()
     Polynomial      :: ProcInfo ()
     External        :: ExternalProc -> ProcInfo ()
     NarrowingP      :: (TRSC f, Ord id, Show id, T id :<: f) => NarradarTRS id f -> NarradarTRS id f -> ProcInfo id
@@ -256,6 +257,7 @@ isAFProc _           = False
 instance Show id => Ppr (ProcInfo id) where
     ppr (DependencyGraph _) = text "Dependency Graph Processor (cycles)"
     ppr (UsableGraph _ _)   = text "Usable Graph Processor"
+    ppr (SCCGraph    _ _)   = text "Dependency Graph Processor (SCCs)"
     ppr (External proc)     = text "External: " <> text (show proc)
     ppr (NarrowingP dp dps')= text "Narrowing Processor." $$
                                    text "Pair" <+> parens(ppr dp) <+> text "is replaced by:" $$

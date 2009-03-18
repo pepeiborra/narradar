@@ -40,13 +40,14 @@ getParentNode (N n) = n
 getParentNode (Cluster (_,n)) = getParentNode n
 
 pprDot prb = showDot $ do
+               attribute ("size", "100,100")
                attribute ("compound", "true")
                foldFree problemNode' f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< (N <$> node [("label","0")])
   where
-    f (Annotated done Success{..})    par = problemNode problem done par >>= procnode procInfo >>= childnode [("label", "YES"), ("color","#29431C")]
-    f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode procInfo >>= childnode [("label", "NO"),("color","#60233E")]
+    f (Annotated done Success{..})    par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "YES"), ("color","#29431C")] (doneEdge done)
+    f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "NO"),("color","#60233E")] (doneEdge done)
     f (Annotated done MZero{})        par = return par -- childnode' [("label","Don't Know")] (doneEdge done) par
-    f (Annotated done DontKnow{..})   par = problemNode problem done par >>= procnode procInfo >>= childnode [("label","Don't Know")]
+    f (Annotated done DontKnow{..})   par = procnode done procInfo par   >>= childnode' [("label","Don't Know")] (doneEdge done)
 --    f (Annotated done (MAnd p1 ))par = p1 par
     f (Annotated done MDone{})        par = return par
     f (Annotated done (MAnd  p1 p2))  par = do
@@ -64,15 +65,17 @@ pprDot prb = showDot $ do
     f (Annotated done And{subProblems=[p], procInfo = proc@(SomeInfo pi)}) par | isAFProc pi = procnode' proc done par >>= \me -> p me >> return me
     f (Annotated done And{subProblems=[p], ..}) par = f (Annotated done Or{subProblems = [p], ..}) par
     f (Annotated done And{..}) par = do
-                                trs <- problemNode problem done par
+                                trs <- if done then problemNode problem done par else return par
                                 cme <- cluster $ do
                                              attribute ("color", "#E56A90")
-                                             me <- procnode procInfo trs
+                                             me <- procnode done procInfo trs
                                              forM_ subProblems ($ me)
                                              return me
                                 return (Cluster cme)
     f (Annotated done Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
-    f (Annotated done Or{..})   par = problemNode problem done par >>= procnode procInfo >>= \me -> forM_ subProblems ($ me) >> return me
+    f (Annotated done Or{..})   par
+      | done      = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
+      | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
 
 problemLabel :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> (String, String)
 problemLabel p = ("label", pprTPDBdot p)
@@ -87,32 +90,43 @@ problemColor p | isPrologProblem        p = ("color", "#F6D106")
 problemAttrs :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> [(String,String)]
 problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
-problemNode  (SomeProblem p) done = childnode'(problemAttrs p) (doneEdge done)
+problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
 --problemNode  (SomePrologProblem cc gg) done = childnode'(problemAttrs (mkPrologProblem cc gg :: Problem BasicId)) (doneEdge done)
 problemNode' p    = childnode (problemAttrs p)
 doneEdge True     = [("color", "green")]
 doneEdge False    = [("color", "red")]
 
-procnode :: SomeInfo -> Parent -> Dot Parent
-{-
-procnode  (SomeInfo (DependencyGraph gr)) par = do
-  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr Nothing))
+procnode :: Bool -> SomeInfo -> Parent -> Dot Parent
+procnode done (SomeInfo (DependencyGraph gr)) par | done = do
+  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> pprGraph gr [])
   case nn of
     []   -> return par
     me:_ -> do case par of
-                N n             -> edge n me [("lhead", show cl)]
+                N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
                 Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
                return (Cluster (cl, N me))
--}
-procnode  (SomeInfo (UsableGraph gr reachable)) par = do
-  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr (Just reachable)))
+
+procnode done (SomeInfo (SCCGraph gr sccs)) par = do
+  (cl, nn) <- cluster (
+                attribute ("shape", "ellipse") >>
+                pprGraph gr (zip sccs (cycle ["yellow","darkorange"
+                                             , "hotpink", "hotpink4", "purple", "brown","red","green"])))
   case nn of
     []   -> return par
     me:_ -> do case par of
-                N n             -> edge n me [("lhead", show cl)]
+                N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
                 Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
                return (Cluster (cl, N me))
-procnode  procInfo      par = childnode  [("label", show procInfo)] par >>= \me -> return me
+
+procnode done (SomeInfo (UsableGraph gr reachable)) par = do
+  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr [(reachable,"blue")]))
+  case nn of
+    []   -> return par
+    me:_ -> do case par of
+                N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
+                Cluster (cl',n) -> edge (getParentNode n) me ([("ltail", show cl'), ("lhead", show cl)] ++ doneEdge done)
+               return (Cluster (cl, N me))
+procnode done  procInfo      par = childnode'  [("label", show procInfo),("fontsize","10")] (doneEdge done) par >>= \me -> return me
 procnode' procInfo done par = childnode' [("label", show procInfo)] (doneEdge done) par >>= \me -> return me
 
 childnode attrs = childnode' attrs []
@@ -142,12 +156,14 @@ unlines = concat . intersperse "\\l"
 -- --------------------
 -- Graphing fgl graphs
 -- --------------------
-pprGraph g Nothing = do
-  nodeids <- forM (vertices g) $ \n -> node [("label",show n)]
-  forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) []
-  return nodeids
 
-pprGraph g (Just reachable) = do
-  nodeids <- forM (vertices g) $ \n -> node [("label",show n), ("color", if Set.member n reachable then "blue" else "black")]
-  forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) []
+pprGraph g specials = do
+  nodeids <- forM (vertices g) $ \n -> node [("label",show n), ("color", getColor n)]
+  forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) [("color",getColorEdge n1 n2)]
   return nodeids
+  where
+     getColor node = maybe "black" snd $ find ((node `Set.member`) . fst) specials
+     getColorEdge n1 n2
+        | c1 == c2  = c1
+        | otherwise = "black"
+           where c1 = getColor n1; c2 = getColor n2
