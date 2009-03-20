@@ -7,7 +7,7 @@
 module Narradar.Solver where
 
 import Control.Applicative hiding (Alternative(..))
-import Control.Arrow
+import Control.Arrow hiding (first)
 import qualified Control.Monad as P
 import Control.Monad.Free
 import "monad-param" Control.Monad.Parameterized
@@ -77,6 +77,9 @@ prologSolver' h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrow
                                    refineNarrowing)
 
 refineNarrowing = instantiation <|> finstantiation <|> narrowing
+refineNarrowing' = reducingP (narrowing >=> sccProcessor) <|>
+                   reducingP (finstantiation >=> sccProcessor) <|>
+                   reducingP (instantiation >=> sccProcessor)
 
 -- narradar 1.0 main solving scheme
 narradarSolver          = narradarSolver' aproveWebP
@@ -117,6 +120,25 @@ refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> 
 refineBy maxDepth f refiner = loop maxDepth where
   loop 0 x = f x
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
+
+firstP :: [a -> Proof s a] -> a -> Proof s a
+firstP [] _ = P.mzero
+firstP (a:alternatives) p = case a p of
+                             Impure MZero      -> firstP alternatives p
+                             Impure DontKnow{} -> firstP alternatives p
+                             anything_else     -> anything_else
+{-
+first :: P.Monad m => [a -> ProofT s m a] -> a -> ProofT s m a
+first [] _ = mzeroM
+first (a:alternatives) p = FreeT $ do
+                           x <- unFreeT (a p)
+                           case x of
+                             Right MZero          -> unFreeT(first alternatives p)
+                             p@(Right DontKnow{}) -> unFreeT(first alternatives p)
+                             anything_else        -> P.return anything_else
+-}
+-- reducingP :: (a -> ProblemProofG id s f) -> a -> ProblemProofG id s f
+reducingP solver p = solver p >>= \p' -> guard (length (rules p') <= length (rules p)) >> return p'
 
 --runSolver :: (TRS Cf, Hole :<: f, Monoid out) => Solver id out IO f -> ProblemProofG id out f -> IO (ProblemProofG id out f)
 --runSolver solver p = runProofT (p >>= solver)
