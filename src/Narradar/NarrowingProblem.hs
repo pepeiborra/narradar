@@ -134,9 +134,9 @@ uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
           results = unEmbed $ do
                   af0 <- embed $ Set.fromList $
                           foldM (\af -> findGroundAF heu pi_groundInfo af dps)
-                                (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
+                                (AF.init p `mappend` AF.restrictTo (getConstructorSymbols trs) pi_groundInfo)
                                 (rules dps)
-                  let utrs = mkTRS(iUsableRules trs (Just af0) (rhs <$> rules dps))
+                  let utrs  = mkTRS(iUsableRules  trs (Just af0) (rhs <$> rules dps))
                   af1 <- embed $ Set.fromList $ invariantEV heu (dps `mappend` utrs) af0
                   let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
                   return (af1, utrs')
