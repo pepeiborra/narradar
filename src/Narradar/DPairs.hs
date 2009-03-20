@@ -8,7 +8,6 @@ module Narradar.DPairs where
 
 import Control.Applicative
 import Control.Exception (assert)
-import Control.Monad.State
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as G
 import Data.List ((\\))
@@ -20,12 +19,12 @@ import Text.XHtml (toHtml, Html)
 import Prelude as P hiding (pi)
 
 import TRS
-import Control.Monad.MonadSupply
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Utils
 import Narradar.Proof
 import Narradar.ExtraVars
+import Narradar.UsableRules
 
 -- THERE IS A SERIOUS BUG IN GHC 6.10.1 WITH INSTANCE RESOLUTION IN PRESENCE OF TYPE FUNCTIONS AND OVERLOADING
 -- IT IS NO LONGER TRUE THAT THE MOST SPECIFIC INSTANCE IS PICKED, SINCE TYPE EXPRESSIONS ARE NOT REDUCED
@@ -101,34 +100,27 @@ getEDG (Problem typ trs (rules->dps)) | (isBNarrowing .|. isGNarrowing) typ =
                        , inChain t u]
     where inChain (In in_t) u | [t'] <- variant' [In(icap trs <$> in_t)] [u] = isJust (unify t' u)
 
-getEDG (Problem typ trs (rules->dps)) =
+getEDG p = filterSEDG p $ getdirectEDG p
+
+getdirectEDG (Problem typ trs (rules->dps)) =
     G.buildG (0, length dps - 1)
                [ (i,j) | (i,_:->t) <- zip [0..] dps
                        , (j,u:->_) <- zip [0..] dps
                        , inChain t u]
     where inChain (In in_t) u | [t'] <- variant' [ren $ In (icap trs <$> in_t)] [u] = isJust (unify u t')
 
+filterSEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph -> G.Graph
+filterSEDG (Problem typ trs (rulesArray->dps)) gr =
+    G.buildG (0, length (G.vertices gr) - 1)
+               [ (i,j) | (i,j) <- G.edges gr
+                       , let _:->t = dps A.! i
+                       , let u:->_ = dps A.! j
+                       , inChain t u]
+    where inChain t@(In in_t) u | [t'] <- variant' [ren $ In (icap (trs' t) <$> in_t)] [u] = isJust (unify u t')
+          trs'
+             | isBNarrowing typ || isGNarrowing typ = \t -> tRS (swapRule <$> iUsableRules trs Nothing [t]) `asTypeOf` trs
+             | otherwise = \_ -> mapRules swapRule trs
+
 extractIxx arr nodes = A.listArray (0, length nodes - 1) [arr A.! n | n <- nodes]
 restrictGt gr nodes  = A.amap (catMaybes . map (`lookup` newIndexes)) (extractIxx gr nodes)
   where newIndexes = zip nodes [0..]
-
-ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
-ren t = runSupply (foldTermM f t) where
-    f t | Just Var{} <- prj t = var <$> next
-        | otherwise           = return (inject t)
-
-cap, icap :: forall trs f id. (Ord id, TRSC f, TRS trs id f) => trs -> Term f -> Term f
-cap trs t = evalState (go t) freshvv where
-  freshvv = map var [0..] \\ vars' t
-  go (open -> Just (T (s::id) tt)) | isDefined trs t = next
-                                   | otherwise       = term s <$> P.mapM go tt
-  go v = return v
-
--- Use unification instead of just checking if it is a defined symbol
--- This is not the icap defined in Rene Thiemann. I.e. it does not integrate the REN function
-icap trs t = runSupply (go t) where
-  go t@(In in_t) | Just (T (f::id) tt) <- open t
-                 , f `Set.member` getDefinedSymbols trs = do
-      t' <- In <$> (go `T.mapM` in_t)
-      if  any (unifies t' . lhs) (rules trs) then var <$> next else return t'
-  go v = return v

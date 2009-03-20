@@ -35,14 +35,17 @@ import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Traversable
+import Data.Traversable as T
 import Unsafe.Coerce
 import Text.Printf
 import Text.ParserCombinators.Parsec
 import Text.Show
 import Text.PrettyPrint hiding (char, Mode)
 import qualified Text.PrettyPrint as Ppr
+import Control.Monad.State hiding (mapM)
+import Prelude as P hiding (mapM, pi, sum)
 
+import Control.Monad.MonadSupply
 import Control.Monad.Free
 import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
 import qualified Narradar.ArgumentFiltering as AF
@@ -350,6 +353,32 @@ parsePrologProblem pgm = mapLeft show $ do
      atomToGoal (Prolog.Pred f tt) = do
        mm <- parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
        return (AF.singleton f [i | (i,G) <- zip [1..] mm])
+
+-- -----------------
+-- Cap & friends
+-- -----------------
+
+ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
+ren t = runSupply (foldTermM f t) where
+    f t | Just Var{} <- prj t = var <$> next
+        | otherwise           = return (inject t)
+
+cap, icap :: forall trs f id. (Ord id, TRSC f, TRS trs id f) => trs -> Term f -> Term f
+cap trs t = evalState (go t) freshvv where
+  freshvv = map var [0..] \\ vars' t
+  go (open -> Just (T (s::id) tt)) | isDefined trs t = next
+                                   | otherwise       = term s <$> mapM go tt
+  go v = return v
+
+-- Use unification instead of just checking if it is a defined symbol
+-- This is not the icap defined in Rene Thiemann. I.e. it does not integrate the REN function
+icap trs t = runSupply (go t) where
+  go t@(In in_t) | Just (T (f::id) tt) <- open t
+                 , f `Set.member` getDefinedSymbols trs = do
+      t' <- In <$> (go `T.mapM` in_t)
+      if  any (unifies t' . lhs) (rules trs) then var <$> next else return t'
+  go v = return v
+
 
 -- ------------------
 -- Functor Instances

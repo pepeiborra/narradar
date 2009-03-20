@@ -12,7 +12,6 @@ import Data.Monoid
 import qualified Data.Set as Set
 import Text.XHtml (Html)
 
-import Narradar.DPairs
 import Narradar.DPIdentifiers
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Proof
