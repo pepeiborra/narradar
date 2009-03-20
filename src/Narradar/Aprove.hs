@@ -21,7 +21,7 @@ import System.FilePath
 import System.IO
 import System.IO.Unsafe
 import System.Process
-import Text.PrettyPrint (parens, text ,hcat, punctuate, comma, (<>), (<+>))
+import Text.PrettyPrint (parens, int, text ,hcat, punctuate, comma, (<>), (<+>))
 import Text.Printf
 import Text.XHtml (Html, primHtml, toHtml)
 import Text.HTML.TagSoup
@@ -176,7 +176,7 @@ pprTPDB p@(Problem typ trs dps) =
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprTerm = foldTerm f
-        f (prj -> Just (Var i n))       = TRS.ppr (var n :: Term f)
+        f (prj -> Just (Var i n))       = text "v" <> int n
         f (prj -> Just (T (id::id) [])) = text (show id)
         f (prj -> Just (T (id::id) tt)) =
             text (show id) <> parens (hcat$ punctuate comma tt)
@@ -191,10 +191,11 @@ pprTPDB p@(Problem typ trs dps) =
 -- Parse XML
 -- ----------------
 
-findResultingPairs = dropWhile (~/= "<qdp-reduction-pair-proof>")
+findResultingPairs x = (parseTags
+                 >>> dropWhile (~/= "<qdp-reduction-pair-proof>")
                  >>> dropWhile (~/= "<implication value='equivalent'>")
                  >>> dropWhile (~/= "<dps>")
-                 >>> (tailSafe >=> (eitherM . parse (many ruleP) ""))
+                 >>> (tailSafe >=> (eitherM . parse (many ruleP) ""))) x
   where tailSafe []     = Nothing
         tailSafe (_:xx) = Just xx
 
