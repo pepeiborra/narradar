@@ -90,7 +90,7 @@ instance (Ord (Term f), TRSC f, Ord id, T id :<: f) => Monoid (ProblemG id f) wh
 instance (Ord id, TRSC f, T id :<: f) => TRS (ProblemG id f) id f where
     rules (Problem _ trs dps) = rules trs `mappend` rules dps
 
-data ProblemTypeF pi   = Rewriting
+data ProblemTypeF pi   = Rewriting   | InnermostRewriting
                        | Narrowing   | NarrowingModes   {pi, goal::pi}
                        | GNarrowing  | GNarrowingModes  {pi, goal::pi}
                        | BNarrowing  | BNarrowingModes  {pi, goal::pi}
@@ -161,8 +161,11 @@ isGNarrowingProblem = isGNarrowing . typ
 isAnyNarrowing = isFullNarrowing .|. isBNarrowing .|. isGNarrowing
 isAnyNarrowingProblem = isAnyNarrowing . typ
 
-isRewriting Rewriting =True; isRewriting _ = False
+isRewriting Rewriting =True; isRewriting InnermostRewriting = True; isRewriting _ = False
 isRewritingProblem = isRewriting . typ
+
+isInnermostRewriting InnermostRewriting = True
+isInnermostRewriting _ = False
 
 isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 

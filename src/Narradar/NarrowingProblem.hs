@@ -81,7 +81,7 @@ groundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps)
     where heu        = mkHeu mk p
           afs        = findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p =<< rules dps
           orProblems = [ step (GroundOne (Just af)) p $
-                                AF.apply af (mkProblem Rewriting trs dps)
+                                AF.apply af (mkProblem InnermostRewriting trs dps)
                         | af <- afs]
 
 groundRhsOneP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps)
@@ -112,7 +112,7 @@ groundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isA
                              (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
                              (rules dps)
           orProblems = [ step (GroundAll (Just af)) p $
-                                AF.apply af (mkProblem Rewriting trs dps)
+                                AF.apply af (mkProblem InnermostRewriting trs dps)
                         | af <- afs]
 
 groundRhsAllP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps)
@@ -142,7 +142,7 @@ uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
                   return (af1, utrs')
           orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundAll (Just (AF.restrictTo (getAllSymbols p') af))) p'
-                                (AF.apply af (mkProblem Rewriting trs dps))
+                                (AF.apply af (mkProblem InnermostRewriting trs dps))
                         | (af,trs) <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
                         , let proofU = step UsableRulesP p (mkProblem typ trs dps)]
           dpsSize af = size (AF.apply af dps)
@@ -166,7 +166,7 @@ uGroundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
                   return (af1, utrs')
           orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundOne (Just (AF.restrictTo (getAllSymbols p') af))) p'
-                                (AF.apply af (mkProblem Rewriting trs dps))
+                                (AF.apply af (mkProblem InnermostRewriting trs dps))
                         | (af,trs) <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
                         , let proofU = step UsableRulesP p (mkProblem typ trs dps)]
           dpsSize af = size (AF.apply af dps)
@@ -183,7 +183,7 @@ uGroundRhsOneP _ p = return p
 
 --safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
 safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = htmlProof $ assert (isSoundAF af p) $
-  step (SafeAFP (Just af)) p (AF.apply af $ Problem Rewriting trs dps)
+  step (SafeAFP (Just af)) p (AF.apply af $ Problem InnermostRewriting trs dps)
 safeAFP p = return p
 
 -- -----------

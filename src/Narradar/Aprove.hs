@@ -38,7 +38,7 @@ import Narradar.Utils
 
 aproveWebProc :: (Ord id, Show id, TRSC f, T id :<: f) => ProblemG id f -> IO (ProblemProofG id Html f)
 aproveWebProc = memoExternalProc go where
-  go prob@(Problem _ trs dps) = do
+  go prob@(Problem  (isRewriting -> True) trs dps) = do
     curl <- initialize
     CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
     CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html",
@@ -65,7 +65,7 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
 
 aproveProc :: (Ord id, Show id, TRSC f, T id :<: f) => FilePath -> ProblemG id f -> IO (ProblemProofG id Html f)
 aproveProc path = go where
-   go prob@(Problem Rewriting trs dps) =
+   go prob@(Problem (isRewriting -> True) trs dps) =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
               hPutStr h_problem_file (pprTPDB prob)
               hPutStr stderr ("solving the following problem with Aprove:\n" ++ pprTPDB prob)
@@ -83,7 +83,7 @@ aproveSrvPort    = 5250
 aproveSrvProc :: (Ord id, Show id,TRSC f, T id :<: f) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
 aproveSrvProc timeout = memoExternalProc go where
-  go prob@(Problem Rewriting trs dps) = unsafeInterleaveIO $
+  go prob@(Problem  (isRewriting -> True) trs dps) = unsafeInterleaveIO $
                                                  withSocketsDo $
                                                  withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
     let trs = pprTPDB prob
@@ -120,7 +120,7 @@ data Strat = Default | OnlyReductionPair deriving Eq
 strats = [ (Default,           "aproveStrats/narradar.strategy")
          , (OnlyReductionPair, "aproveStrats/reductionPair.strategy")]
 
-aproveSrvXML strat (timeout :: Int) prob@(Problem Rewriting trs dps) =
+aproveSrvXML strat (timeout :: Int) prob@(Problem  (isRewriting -> True) trs dps) =
   withSocketsDo $ withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
     let trs = pprTPDB prob
     let fp = "/tmp" </> fp0
@@ -147,7 +147,7 @@ aproveSrvXML strat (timeout :: Int) prob@(Problem Rewriting trs dps) =
           headSafe _   x  = head x
 
 aproveSrvProc2 strat (timeout :: Int) =  go where
-  go prob@(Problem Rewriting trs dps) = do
+  go prob@(Problem  (isRewriting -> True) trs dps) = do
     res <- aproveSrvXML strat timeout prob
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
@@ -172,7 +172,7 @@ pprTPDB p@(Problem typ trs dps) =
   unlines ([ printf "(VAR %s)" (unwords $ map (show . pprTerm) $ snub $ foldMap3 vars' ( rules <$> p))
            , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
            , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))
-           ] ++ if (isGNarrowing typ || isBNarrowing typ) then ["(STRATEGY INNERMOST)"] else [])
+           ] ++ if (isInnermostRewriting typ) then ["(STRATEGY INNERMOST)"] else [])
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprTerm = foldTerm f
