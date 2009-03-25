@@ -24,12 +24,15 @@ import TaskPoolSTM
 
 class (Functor f, Old.Monad m) => MonadFree f m where
     free :: m a -> m (Either a (f (m a)))
+    jail :: f (m a) -> m a
 
 instance (Functor f, Old.Monad m) => MonadFree f (FreeT f m) where
     free = Old.lift . unFreeT
+    jail = FreeT . Old.return . Right
 
 instance Functor f => MonadFree f (Free f) where
     free = evalFree (Pure . Left) (Pure . Right)
+    jail = Impure
 
 -- This is the standard encoding of Free Monads, see e.g. http://comonad.com/reader/2008/monads-for-free
 data Free f a = Impure (f (Free f a)) | Pure a
