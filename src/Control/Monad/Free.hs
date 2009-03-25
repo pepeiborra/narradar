@@ -74,13 +74,21 @@ mapFree eta (Impure x) = Impure (fmap (mapFree eta) (eta x))
 
 data AnnotatedF n f a = Annotated {note::n, dropNote::f a}
 instance Functor f => Functor (AnnotatedF n f) where fmap f (Annotated n x) = Annotated n (fmap f x)
+instance Foldable f => Foldable (AnnotatedF n f) where foldMap f (Annotated n x) = foldMap f x
+instance Traversable f => Traversable (AnnotatedF n f) where traverse f (Annotated n x) = Annotated n <$> traverse f x
 dropNotes = foldFree Pure (Impure . dropNote)
 annotate :: Functor f => (a -> b) -> (Free f b -> n) -> Free f a -> Free (AnnotatedF n f) a
-annotate p i = fmap fst . foldFree (\x -> Pure (x,p x)) (\x -> Impure (Annotated (i $ Impure $ fmap dropNotes $ (fmap.fmap) snd x) x))
+annotate p i = fmap fst . foldFree (\x -> Pure (x,p x)) (\x -> Impure (Annotated (i $ Impure $ fmap (dropNotes . fmap snd) x) x))
 
 -- * Monad Transformer
 --   (built upon Luke Palmer control-monad-free hackage package)
 newtype FreeT f m a = FreeT { unFreeT :: m (Either a (f (FreeT f m a))) }
+
+instance (Traversable m, Traversable f) => Foldable (FreeT f m) where foldMap = foldMapDefault
+instance (Traversable m, Traversable f) => Traversable (FreeT f m) where
+  traverse f (FreeT a) = FreeT <$> ( traverse f' a) where
+      f' (Left  x) = Left  <$> f x
+      f' (Right x) = Right <$> (traverse.traverse) f x
 
 editEither l r = either (Left . l) (Right . r)
 conj f = FreeT . f . unFreeT
