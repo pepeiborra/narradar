@@ -18,7 +18,7 @@ import Data.Foldable
 import Data.Monoid
 import Data.Traversable as T
 import Prelude hiding (Monad(..))
-import qualified Prelude
+import qualified Prelude as P
 
 import TaskPoolSTM
 
@@ -51,13 +51,13 @@ instance Traversable f => Traversable (Free f) where
     traverse f (Pure a)   = Pure   <$> f a
     traverse f (Impure a) = Impure <$> traverse (traverse f) a
 
-instance Functor f => Prelude.Monad (Free f) where
+instance Functor f => P.Monad (Free f) where
     return          = Pure
     Pure a    >>= f = f a
     Impure fa >>= f = Impure (fmap (>>= f) fa)
 
 instance Return (Free f) where returnM = Pure
-instance Functor f => Bind (Free f) (Free f) (Free f) where (>>=) = (Prelude.>>=)
+instance Functor f => Bind (Free f) (Free f) (Free f) where (>>=) = (P.>>=)
 instance Fail (Free f) where fail = error
 
 evalFree :: (a -> b) -> (f(Free f a) -> b) -> Free f a -> b
@@ -67,6 +67,10 @@ evalFree _ i (Impure x) = i x
 foldFree :: Functor f => (a -> b) -> (f b -> b) -> Free f a -> b
 foldFree pure _    (Pure   x) = pure x
 foldFree pure imp  (Impure x) = imp (fmap (foldFree pure imp) x)
+
+foldFreeM :: (P.Monad m, Traversable f) => (a -> m b) -> (f b -> m b) -> Free f a -> m b
+foldFreeM pure _    (Pure   x) = pure x
+foldFreeM pure imp  (Impure x) = imp P.=<< T.mapM (foldFreeM pure imp) x
 
 mapFree :: (Functor f, Functor g) => (forall a. f a -> g a) -> Free f a -> Free g a
 mapFree eta (Pure a)   = Pure a
@@ -96,12 +100,12 @@ conj f = FreeT . f . unFreeT
 instance (Functor f, Functor m) => Functor (FreeT f m) where
     fmap f = conj $ fmap (editEither f ((fmap.fmap) f))
 
-instance (Functor f, Prelude.Monad m) => Prelude.Monad (FreeT f m) where
-    return = FreeT . Prelude.return . Left
-    m >>= f = FreeT $ unFreeT m Prelude.>>= \r ->
+instance (Functor f, P.Monad m) => P.Monad (FreeT f m) where
+    return = FreeT . P.return . Left
+    m >>= f = FreeT $ unFreeT m P.>>= \r ->
         case r of
-             Left x   -> unFreeT $ f x
-             Right xc -> Prelude.return . Right $ fmap (Prelude.>>= f) xc
+             Left  x  -> unFreeT $ f x
+             Right xc -> P.return . Right $ fmap (P.>>= f) xc
 
 instance (Functor f) => Old.MonadTrans (FreeT f) where
     lift = FreeT . Old.liftM Left
@@ -140,6 +144,9 @@ foldFreeT' p i (FreeT m) = m Old.>>= f where
          f (Left x)   = Old.return (p x)
          f (Right fx) = i `Old.liftM` T.mapM (foldFreeT' p i) fx
 
+
+mapFreeT :: (Functor f, Functor m) => (forall a. m a -> m' a) -> FreeT f m a -> FreeT f m' a
+mapFreeT f (FreeT m) = FreeT (f ((fmap.fmap.fmap) (mapFreeT f) m))
 
 unwrap :: (Traversable f, Old.Monad m) => FreeT f m a -> m(Free f a)
 unwrap = foldFreeT (Old.return . Pure) (Old.return . Impure)
