@@ -13,6 +13,7 @@ import Control.Monad.Free
 import "monad-param" Control.Monad.Parameterized
 import "monad-param" Control.Monad.MonadPlus.Parameterized
 import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
 import Data.Monoid
 import Data.Traversable
 import Language.Prolog.TypeChecker
@@ -43,7 +44,7 @@ import Prelude hiding (Monad(..))
 type Solver id f s m = ProblemG id f -> PPT id f s m
 type Solver' id f id' f' s m = ProblemG id f -> PPT id' f' s m
 
-defaultTimeout = 10
+defaultTimeout = 15
 
 -- --------------
 -- Aprove flavors
@@ -69,17 +70,30 @@ parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
 -- ------------------
 -- Some Basic solvers
 -- ------------------
+prologSolver opts typ = prologSolver' opts (typeHeu2 typ) (typeHeu typ)
 
-prologSolver  typ   = prologSolver' (typeHeu2 typ) (typeHeu typ)
+{-
 prologSolver' h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver h2
   where
-   narrowingSolver heu = solveB 3 ((trivialP >=> reductionPair heu 20 >=> sccProcessor) <|>
-                                   refineNarrowing)
+   narrowingSolver heu = solveBT 3 (((reductionPair heu 20) >=> sccProcessor) <|>                                    refineNarrowing)
+-}
 
-refineNarrowing = instantiation <|> finstantiation <|> narrowing
-refineNarrowing' = reducingP (narrowing >=> sccProcessor) <|>
-                   reducingP (finstantiation >=> sccProcessor) <|>
-                   reducingP (instantiation >=> sccProcessor)
+prologSolver' opts h1 h2 = pSolver opts
+                           (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver)
+  where narrowingSolver = refineBy 20 (solve (reductionPair h2 20 >=> sccProcessor))
+                                     refineNarrowing
+
+pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe prob sol, "") where
+    prob = solver p
+    sol = runProof prob
+
+refineNarrowing = firstP [ msumPar . instantiation
+                         , msumPar . finstantiation
+                         , msumPar . narrowing ] >=> sccProcessor
+
+refineNarrowing' = reducingP ((msum.narrowing) >=> sccProcessor) <|>
+                   reducingP ((msum.finstantiation) >=> sccProcessor) <|>
+                   reducingP ((msum.instantiation) >=> sccProcessor)
 
 -- narradar 1.0 main solving scheme
 narradarSolver          = narradarSolver' aproveWebP
@@ -107,14 +121,21 @@ These combinators look at intermediate states of the proof (they use runProofT)
 This does not play well with some optimizations inside runProofT
 which cut nonproductive failure branches.
 -}
-solve f x = do
+{-
+solveT f x = do
   fx <- lift $ runProofT (f x)
-  if null(toList fx) then wrap fx else solve f P.=<< wrap fx
+  if null(toList fx) then wrap fx else solveT f P.=<< wrap fx
+
+solveBT 0 f x = f x
+solveBT b f x = do
+  fx <- lift $ runProofT (f x)
+  if isSuccess fx then wrap fx else solveBT (b-1) f P.=<< wrap fx
+-}
+
+solve f x = let fx = f x; in fromMaybe (solve f P.=<< fx) (runProof fx)
 
 solveB 0 f x = f x
-solveB b f x = do
-  fx <- lift $ runProofT (f x)
-  if null(toList fx) then wrap fx else solveB (b-1) f P.=<< wrap fx
+solveB b f x = let fx = f x in if isSuccess fx then fx else solveB (b-1) f P.=<< fx
 
 refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> (a -> m' a) -> a -> m a
 refineBy maxDepth f refiner = loop maxDepth where
@@ -127,20 +148,26 @@ firstP (a:alternatives) p = case a p of
                              Impure MZero      -> firstP alternatives p
                              Impure DontKnow{} -> firstP alternatives p
                              anything_else     -> anything_else
-{-
+
 first :: P.Monad m => [a -> ProofT s m a] -> a -> ProofT s m a
 first [] _ = mzeroM
 first (a:alternatives) p = FreeT $ do
                            x <- unFreeT (a p)
                            case x of
-                             Right MZero          -> unFreeT(first alternatives p)
-                             p@(Right DontKnow{}) -> unFreeT(first alternatives p)
-                             anything_else        -> P.return anything_else
--}
--- reducingP :: (a -> ProblemProofG id s f) -> a -> ProblemProofG id s f
-reducingP solver p = solver p >>= \p' -> guard (length (rules p') <= length (rules p)) >> return p'
+                             Right MZero      -> unFreeT(first alternatives p)
+                             Right DontKnow{} -> unFreeT(first alternatives p)
+                             anything_else    -> P.return anything_else
+
+
+reducingP ::  (P.MonadPlus m, TRS t id f, Return m) => (t -> m t) -> t -> m t
+reducingP solver p =  do
+  p' <- solver p
+  guard (length (rules p') <=length (rules p))
+  returnM p'
 
 --runSolver :: (TRS Cf, Hole :<: f, Monoid out) => Solver id out IO f -> ProblemProofG id out f -> IO (ProblemProofG id out f)
 --runSolver solver p = runProofT (p >>= solver)
 infixl 3 <|>
 (<|>) = liftM2 mplus
+msumF  = foldr (<|>) (const P.mzero)
+msumParF = foldr (liftM2 mplusPar) (const P.mzero)

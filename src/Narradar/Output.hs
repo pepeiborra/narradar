@@ -84,7 +84,7 @@ instance HTML SomeProblem where
 instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
 
 instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
-   toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work . simplify where
+   toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work where
     work MZero = toHtml  "Don't know"
     work DontKnow{} = toHtml  "Don't know"
     work Success{..} =

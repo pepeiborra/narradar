@@ -1,6 +1,7 @@
 #!/usr/bin/env runhaskell
 
 import Narradar
+import Narradar.Proof
 import Strats
 
 main = narradarMain prologSolver

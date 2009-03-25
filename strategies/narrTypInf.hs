@@ -3,9 +3,9 @@
 import Narradar
 import Strats
 
-main = narradarMain prologSolver
+main = narradarMain solveMain
 
-prologSolver txt = do
+solveMain txt = do
   (typ,pl)  <- parseProlog txt
   prologSolverInf (typeHeu typ) pl
 

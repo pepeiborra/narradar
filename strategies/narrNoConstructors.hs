@@ -6,8 +6,8 @@ import Narradar.ArgumentFiltering
 
 main = narradarMain prologSolver
 
-prologSolver txt = do
+prologSolver opts txt = do
   (typ,pl)  <- parseProlog txt
-  prologSolverAll (simpleHeu' $ \p -> Heuristic (predHeuOne allInner (noConstructors (getSignature p))) False) 
+  prologSolverAll opts (simpleHeu' $ \p -> Heuristic (predHeuOne allInner (noConstructors (getSignature p))) False) 
                   (typeHeu typ)
                   pl

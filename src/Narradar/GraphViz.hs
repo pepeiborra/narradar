@@ -29,6 +29,7 @@ import qualified Language.Prolog.Syntax as Prolog
 -- ----------------------------
 sliceWorkDone = foldFree return (Impure . f) where
     f (Or p pi pp) = (Or p pi $ takeWhileAndOneMore (not . isSuccess) pp)
+    f MPlusPar{}   = MZero
     f x = x
     takeWhileAndOneMore f []     = []
     takeWhileAndOneMore f (x:xs) = if f x then x : takeWhileAndOneMore f xs else [x]

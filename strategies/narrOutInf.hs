@@ -6,6 +6,6 @@ import Narradar
 
 main = narradarMain prologSolver
 
-prologSolver txt = do
+prologSolver opts txt = do
   (typ,pl)  <- parseProlog txt
-  prologSolverInf (simpleHeu outermost) pl
+  prologSolverInf opts (simpleHeu outermost) pl

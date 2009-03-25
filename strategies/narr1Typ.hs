@@ -3,6 +3,6 @@
 import Narradar
 import Strats
 
-main = narradarMain $ \input -> do
+main = narradarMain $ \opts input -> do
   (typ,pl)  <- parseProlog input
-  prologSolverOne (typeHeu typ) (typeHeu typ) pl
+  prologSolverOne opts (typeHeu typ) (typeHeu typ) pl

@@ -9,6 +9,7 @@ module Narradar.ReductionPair where
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Free
+import Control.Monad.Identity
 import Control.RMonad.AsMonad
 --import "monad-param" Control.Monad.Parameterized
 import Data.Foldable (toList)
@@ -19,6 +20,7 @@ import Text.ParserCombinators.Parsec
 import Text.PrettyPrint (parens, text, int, hcat, punctuate, comma, (<>), (<+>))
 import Text.XHtml (Html, toHtml)
 import Text.HTML.TagSoup
+import System.IO.Unsafe
 import Prelude -- hiding (Monad(..), (=<<))
 import qualified Prelude as P
 
@@ -40,7 +42,7 @@ import Narradar.RewritingProblem
 aproveXML :: forall f id. (Ord id, Show id, T id :<: f, DPMark f, TRSC f, Lattice (AF_ id)) => ProblemG id f -> IO String
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
-reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> PPT id f Html IO
+reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> ProblemProofG id Html f -- PPT id f Html IO
 reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowing typ = msum orProblems where
  afs = unEmbed $ do
     af0 <- embed $ Set.fromList
@@ -50,7 +52,7 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
     let utrs' = tRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
     return (af1, utrs')
  orProblems =
-    [ wrap' $ do
+     [ unsafePerformIO $ do
         let rp = AF.apply af $ mkProblem InnermostRewriting trs' dps
         xml <- aproveXML rp
         return (proofU >>= \p' ->
