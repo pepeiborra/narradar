@@ -27,16 +27,14 @@ import Narradar.UsableRules
 
 import qualified TRS
 
-{-# SPECIALIZE narrowing      :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE narrowing      :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-{-# SPECIALIZE instantiation  :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE instantiation  :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-{-# SPECIALIZE finstantiation :: Problem BBasicId       -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE finstantiation :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
 
-narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, Hole :<: f, T id :<: f, Show id, id ~ Identifier a, Ord a) => ProblemG id f -> ProblemProofG id Html f
+{-# SPECIALIZE narrowing      :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
+{-# SPECIALIZE instantiation  :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
+{-# SPECIALIZE finstantiation :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
+
+narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, Hole :<: f, T id :<: f, Show id, id ~ Identifier a, Ord a) => ProblemG id f -> [ProblemProofG id Html f]
 narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA gr sig))
-   = msum [ step (NarrowingP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+   = [ step (NarrowingP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
                      | (i,dps') <- dpss
                      , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
                      , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
@@ -63,7 +61,7 @@ narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA
                                   | ((r',p),theta) <- observeAll (narrow1P (rules trs) r)
                                   ]
 
-narrowing p = return p
+narrowing p = [return p]
 
 -- I should teach myself about comonads
 -- http://sigfpe.blogspot.com/2008/03/comonadic-arrays.html
@@ -81,7 +79,7 @@ propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -
 
 instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr sig))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | otherwise = msum [ step (InstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+  | otherwise = [ step (InstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
                      | (i,dps') <- dpss
                      , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
                      , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
@@ -98,11 +96,11 @@ instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr sig))
                                       , sigma <- w' `unify` s]
          mbren = if (isBNarrowing .|. isGNarrowing) typ then id else ren
 
-instantiation p = return p
+instantiation p = [return p]
 
 finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | otherwise = msum [ step (FInstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+  | otherwise = [ step (FInstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
                      | (i, dps') <- dpss
                      , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
                      , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
@@ -120,7 +118,7 @@ finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr sig))
          mbUsableRules trs t = if isBNarrowing typ || isGNarrowing typ
                                  then iUsableRules trs Nothing [t]
                                  else rules trs
-finstantiation p = return p
+finstantiation p = [return p]
 
 capInv :: forall id f. (Ord id, T id :<: f, TRSC f) => NarradarTRS id f -> Term f -> Term f
 capInv trs t
