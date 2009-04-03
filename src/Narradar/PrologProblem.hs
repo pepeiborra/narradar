@@ -72,7 +72,7 @@ prologP_sk mkHeu p@(Problem Prolog{..} _ _) =
          , let pi = AF.mapSymbols InId goal :: AF_ PS
          , p <- mkGoalProblem mkHeu GNarrowingModes{pi,goal=pi} trs]
   where trs   = skTransform program
-
+{-
 encodeToSat :: forall f id trs . (TRS trs id f, T id :<: f) => trs -> [Goal id] -> Formula (id, Int)
 encodeToSat trs gg = encProb where
   encGoals        = Prop.and [ Prop.var (f,i) | T f mm <- gg, (i,G) <- zip [1..] mm]
@@ -86,7 +86,7 @@ encodeToSat trs gg = encProb where
             (i:p) `inside` (open -> Just(T (f::id) tt)) = Prop.var (f,i) /\ p `inside` (tt!!i)
             [] `inside` _ = Prop.true
             _ `inside` _  = Prop.false
-
+-}
 skTransform :: [Clause] -> NarradarTRS PS BasicPS
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        sig = getSignature clauses

@@ -151,19 +151,7 @@ class WithGoalAF t id where
 instance (WithGoalAF (ProblemType id) id) => WithGoalAF (ProblemG id f) id where
   type T' (ProblemG id f) id = ProblemG id f
   withGoalAF(Problem typ trs dps) goal = Problem (withGoalAF typ goal) trs dps
-{-
-instance (Convert id id', Ord id', Show id) =>  WithGoalAF (ProblemType id) id' where
-  type T' (ProblemType id) id' = ProblemType id'
-  withGoalAF pt@NarrowingModes{..}   pi' = pt{pi=pi', goal = convert goal :: AF_ id'}
-  withGoalAF pt@BNarrowingModes{..}  pi' = pt{pi=pi', goal = convert goal :: AF_ id'}
-  withGoalAF pt@LBNarrowingModes{..} pi' = pt{pi=pi', goal = convert goal :: AF_ id'}
-  withGoalAF Narrowing   pi = narrowingModes0{pi, goal=pi}
-  withGoalAF BNarrowing  pi = bnarrowingModes0{pi,goal=pi}
-  withGoalAF LBNarrowing pi = lbnarrowingModes0{pi,goal=pi}
-  withGoalAF Rewriting   _  = Rewriting
---  withGoalAF typ@Prolog{} _ =
-  withGoalAF typ _ = error ("withGoalAF - error: " ++ show typ)
--}
+
 instance (Show id) =>  WithGoalAF (ProblemType id) id where
   type T' (ProblemType id) id = ProblemType id
   withGoalAF pt@NarrowingModes{..}   pi' = pt{pi=pi'}
@@ -257,11 +245,12 @@ data ExternalProc = MuTerm | Aprove String | Other String   deriving Eq
 instance Show ExternalProc where
     show (Aprove msg) = "Aprove " ++ msg
     show (Other  msg) = msg
+
 -- ------
 -- Modes
 -- ------
+type Goal = AF_ String
 data Mode = G | V deriving (Eq, Bounded)
-type Goal id = T id Mode
 instance Show Mode where show G = "b"; show V = "f"
 
 goalP =do
@@ -273,16 +262,19 @@ goalP =do
 modesP = parens (modeP `sepBy` char ',') where parens= between (char '(') (char ')')
 modeP = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
 
-parseGoal :: String -> Either ParseError (AF_ String)
+parseGoal :: String -> Either ParseError Goal
 parseGoal = parse goalP ""
-
-pprGoal :: (Goal String) -> Doc
-pprGoal (T id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)
 
 pprGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
 pprGoalAF sig pi = vcat [ pprGoal (T f mm) | (f,pp) <- AF.toList pi
                                            , f `Set.member` allSymbols sig
                                            , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
+
+--type Goal id = T id Mode
+pprGoal :: T String Mode -> Doc
+pprGoal (T id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)
+
+
 
 -- --------------------------
 -- Parsing Prolog problems
