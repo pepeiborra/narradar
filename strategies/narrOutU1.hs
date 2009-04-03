@@ -11,9 +11,9 @@ import Narradar
 import Narradar.ArgumentFiltering as AF
 import Strats
 
-main = narradarMain $ \input -> do
+main = narradarMain $ \opts input -> do
   (typ,pl)  <- parseProlog input
-  prologSolverAll noU1sHeu (typeHeu typ) pl
+  prologSolverAll opts noU1sHeu (typeHeu typ) pl
 
 -- No U1s Heuristic
 -- ----------------

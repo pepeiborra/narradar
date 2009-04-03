@@ -4,7 +4,7 @@
 import Narradar
 import Strats
 
-main = narradarMain $ \input -> do
+main = narradarMain $ \opts input -> do
   (typ,pl)  <- parseProlog input
-  prologSolverOne (simpleHeu outermost) (typeHeu typ) pl
+  prologSolverOne opts (simpleHeu outermost) (typeHeu typ) pl
 

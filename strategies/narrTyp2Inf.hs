@@ -5,6 +5,6 @@ import Strats
 
 main = narradarMain prologSolver
 
-prologSolver txt = do
+prologSolver opts txt = do
   (typ,pl)  <- parseProlog txt
-  prologSolverInf (typeHeu2 typ) pl
+  prologSolverInf opts (typeHeu2 typ) pl
