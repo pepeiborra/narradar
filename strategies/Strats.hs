@@ -1,12 +1,13 @@
 {-# LANGUAGE NoMonomorphismRestriction, RecordWildCards #-}
 module Strats where
 
+import FBackTrack
+import Control.Monad.Logic (observeMany)
+import Data.Foldable (toList)
 import Data.Maybe
 import Prelude as P
 import Narradar hiding (refineNarrowing, refineNarrowing', reducingP, pSolver)
 import Narradar.Proof
-
-prologSolverOne opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverOne h2)
 {-
 pSolver Options{..} solver p = do
   (b,sol,log) <- runAndPruneProofT (verbose>0) (solver p)
@@ -15,14 +16,16 @@ pSolver Options{..} solver p = do
 -}
 pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe prob sol, "") where
     prob = solver p
-    (sol) = runProof prob
+--    sol  = runProof prob
+--    (sol) = listToMaybe $ runM Nothing (runProof prob)
+    (sol) = listToMaybe $ observeMany 1 (runProof prob)
 
+prologSolverOne opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverOne h2)
 prologSolverAll opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverAll h2)
+prologSolverInf opts h1    = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverInf)
 
-prologSolverInf opts  h1 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverInf)
-
-narrowingSolverOne heu = refineBy 30 (solve (reductionPair heu 20 >=> sccProcessor))
-                                     refineNarrowing
+narrowingSolverOne heu = refineBy 10 (stage . solve (reductionPair heu 20 >=> sccProcessor))
+                                     refineNarrowingPar
 
 narrowingSolverOne' heu = solveB 12 (solve (reductionPair heu 20 >=> sccProcessor) <|>
                                       refineNarrowing)
@@ -30,8 +33,8 @@ narrowingSolverOne' heu = solveB 12 (solve (reductionPair heu 20 >=> sccProcesso
 narrowingSolverAll heu = refineBy 12 ((uGroundRhsAllP heu >=> aproveSrvP 15))
                                     refineNarrowing
 
-narrowingSolverInf = refineBy 1 (safeAFP >=> aproveSrvP defaultTimeout)
-                                    refineNarrowing
+narrowingSolverInf = refineBy 12 (safeAFP >=> aproveSrvP defaultTimeout)
+                                  refineNarrowing
 
 
 refineNarrowing = firstP [ msum . instantiation

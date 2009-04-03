@@ -17,12 +17,13 @@ module Narradar.Proof where
 
 import Control.Applicative
 import Control.Arrow
+import Control.Exception (assert)
 import Control.Monad as M
+import Control.Monad.Logic.Class as M
 import Control.Monad.State as M
 import Control.Monad.RWS
 import qualified  "monad-param" Control.Monad.Parameterized as MonadP
 import qualified  "monad-param" Control.Monad.MonadPlus.Parameterized as MonadP
-import Control.Parallel
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
@@ -56,6 +57,7 @@ data ProofF s k =
     And     {procInfo::SomeInfo, problem::SomeProblem, subProblems::[k]}
   | Or      {procInfo::SomeInfo, problem::SomeProblem, subProblems::[k]}
   | Step    {procInfo::SomeInfo, problem::SomeProblem, subProblem::k}
+  | Stage k
   | Success {procInfo::SomeInfo, problem::SomeProblem, res::s}
   | Fail    {procInfo::SomeInfo, problem::SomeProblem, res::s}
   | DontKnow{procInfo::SomeInfo, problem::SomeProblem}
@@ -92,6 +94,7 @@ mdone            = jail $ htmlProofF MDone
 mall             = foldr mand mdone
 mplusPar p1 p2   = jail $ htmlProofF (MPlusPar p1 p2)
 msumPar          = foldr mplusPar mzero
+stage            = jail . htmlProofF . Stage
 
 htmlProofF :: ProofF Html a -> ProofF Html a
 htmlProofF = id
@@ -192,9 +195,32 @@ instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT (ProofF s) m) (Free 
 -- ------------
 -- * Evaluators
 -- ------------
+{-
+mixinProof super self = f where
+   f (
+-}
 
-runProof :: forall s m a b. (Monoid s, Functor m, MonadPlus m) => Proof s a -> m (Proof s b)
-runProof t = msum (foldFree (const mzero) evalF <$> tt) where
+type StagedProof s a  = Proof s (Proof s a)
+--newtype StagedProof' s = StagedProof (Proof s (StagedProof' s))
+
+stageProof :: forall a s. Proof s a -> StagedProof s a
+stageProof = foldFree (return . return) f where
+  f (Stage p) = return (unstageProof p)
+  f x = Impure x
+
+unstageProof :: StagedProof s a -> Proof s a
+unstageProof = join
+
+runProof :: forall s m a b. (Monoid s, Functor m, MonadLogic m) => Proof s a -> m (Proof s b)
+runProof p = do
+  sol <- foldFree return evalF (stageProof p)
+--  let sol' = unstageProof sol
+  runProofDirect sol
+ where
+  runProofDirect = foldFree (const mzero) evalF
+
+runProofBFS :: forall s m a b. (Monoid s, Functor m, MonadLogic m) => Proof s a -> m (Proof s b)
+runProofBFS t = msum (foldFree (const mzero) evalF <$> tt) where
   tt = map fst $ takeWhile (not.snd) $ map (`cutProof` ann_t) [1..]
   cutProof depth = (`runState` True)
                   . foldFreeM (return . Pure)
@@ -202,27 +228,47 @@ runProof t = msum (foldFree (const mzero) evalF <$> tt) where
                                                                 else put False >> return mzero)
   ann_t = annotateLevel t
 
-evalF :: forall mp mf s a. (Functor mp, MonadPlus mp, MonadFree (ProofF s) mf) => ProofF s (mp (mf a)) -> mp (mf a)
+--evalF :: forall mp mf s a. (Functor mp, MonadPlus mp, MonadFree (ProofF s) mf) => ProofF s (mp (mf a)) -> mp (mf a)
+evalF :: forall mp s a. (Functor mp, MonadLogic mp) => ProofF s (mp (Proof s a)) -> mp (Proof s a)
 evalF Fail{}         = mzero
 evalF DontKnow{}     = mzero
 evalF MZero          = mzero
-evalF Success{..}    = return (jail $ fixS Success{..})                where fixS :: ProofF s x -> ProofF s x;fixS = id
+evalF Success{..}    = return (jail (fixS Success{..}))                where fixS :: ProofF s x -> ProofF s x;fixS = id
 evalF MDone          = return (jail (fixS MDone))                      where fixS :: ProofF s x -> ProofF s x;fixS = id
 evalF (MPlus p1 p2)  = p1 `M.mplus` p2
-evalF (MPlusPar p1 p2) = p1 `M.mplus` p2
-evalF (And pi pb ll) = (jail . fixS . And pi pb) <$> P.sequence ll     where fixS :: ProofF s x -> ProofF s x;fixS = id
-evalF (Or  pi pb ll) = (jail . fixS . Step pi pb) <$> msum ll          where fixS :: ProofF s x -> ProofF s x;fixS = id
+evalF (MPlusPar p1 p2) = p1 `M.interleave` p2
+evalF (And pi pb ll) = (jail . fixS . And  pi pb) <$> P.sequence ll    where fixS :: ProofF s x -> ProofF s x;fixS = id;
+evalF (Or  pi pb ll) = (jail . fixS . Step pi pb) <$> msum ll       where fixS :: ProofF s x -> ProofF s x;fixS = id
 evalF (MAnd  p1 p2)  = p1 >>= \s1 -> p2 >>= \s2 ->
                        return (jail $ fixS $ MAnd s1 s2)               where fixS :: ProofF s x -> ProofF s x;fixS = id
 evalF (Step pi pb p) = (jail . fixS . Step pi pb) <$> p                where fixS :: ProofF s x -> ProofF s x;fixS = id
+evalF (Stage  p) = p
+
+sequencePar []     = return []
+sequencePar (x:xx) = x >>- \x' -> (x':) `liftM` sequencePar xx
 
 unsafeUnwrapIO :: Functor f => FreeT f IO a -> Free f a
 unsafeUnwrapIO (FreeT m) = go (unsafePerformIO m) where
   go (Left  a) = Pure a
   go (Right f) = Impure (unsafeUnwrapIO <$> f)
 
+
 isSuccess :: Monoid s => Proof s k -> Bool
-isSuccess  = isJust . runProof
+isSuccess t = let res =foldFree (return False) isSuccessF t in res -- assert (res == isSuccess' t) res
+--isSuccess' = isJust . runProof -- OOPS not working, but why ?
+
+isSuccessF :: ProofF s Bool -> Bool
+isSuccessF Fail{}         = False
+isSuccessF Success{}      = True
+isSuccessF DontKnow{}     = False
+isSuccessF (And _ _ ll)   = and ll
+isSuccessF (Or  _ _ [])   = True  -- HEADS UP unstandard
+isSuccessF (Or  _ _ ll)   = or ll
+isSuccessF (MPlus p1 p2)  = p1 || p2
+isSuccessF MZero          = False
+isSuccessF (MAnd  p1 p2)  = p1 && p2
+isSuccessF MDone          = True
+isSuccessF (Step _ _ p)   = p
 
 -- isSuccessT = foldFreeT (const $ returnM False) (returnM.isSuccessF)
 
