@@ -9,8 +9,9 @@
 {-# LANGUAGE GADTs #-}
 
 module Narradar ( narradarMain, Options(..)
+                , module Control.Monad
                 , module Control.Monad.Free
-                , module Control.Monad.MonadPlus.Parameterized
+--                , module Control.Monad.MonadPlus.Parameterized
                 , module Narradar.Solver
                 , module Narradar.ArgumentFiltering
                 , module Narradar.DPairs
@@ -64,7 +65,7 @@ narradarMain solver = do
   ~(yes, sol, log) <- (solver flags input)
   when (verbose > 0) (  hSetBuffering stdout NoBuffering P.>> putStrLn log)
   putStrLn$ if yes then "YES" else "NO"
-  when diagrams $ withTempFile "." "narradar.dot" $ \fp h -> do
+  when (diagrams && (yes || verbose > 1)) $ withTempFile "." "narradar.dot" $ \fp h -> do
         hPutStrLn h (pprDot sol)
         hFlush h
 #ifdef DEBUG
