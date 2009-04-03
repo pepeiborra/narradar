@@ -116,7 +116,7 @@ filterSEDG (Problem typ trs (rulesArray->dps)) gr =
                        , let _:->t = dps A.! i
                        , let u:->_ = dps A.! j
                        , inChain t u]
-    where inChain t@(In in_t) u | [t'] <- variant' [ren $ In (icap (trs' t) <$> in_t)] [u] = isJust (unify u t')
+    where inChain t@(In in_t) u = unifies' u (ren $ hIn (icap (trs' t) <$> in_t))
           trs'
              | isBNarrowing typ || isGNarrowing typ = \t -> tRS (swapRule <$> iUsableRules trs Nothing [t]) `asTypeOf` trs
              | otherwise = \_ -> mapRules swapRule trs

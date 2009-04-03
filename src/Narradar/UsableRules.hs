@@ -51,7 +51,7 @@ iUsableRules trs Nothing = F.toList . go mempty where
       | isVar t
       = go acc rest
       | rr   <- Set.fromList [r | r <- rules trs
-                                , In (icap trs <$> in_t) `unifies` lhs r ]
+                                , hIn (icap trs <$> in_t) `unifies` lhs r ]
       , new  <- Set.difference rr acc
       = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
 
@@ -63,7 +63,7 @@ iUsableRules trs (Just pi) = F.toList . go mempty . map(AF.apply pi) where
   go acc (t@(In in_t):rest)
       | isVar t = go acc rest
       | rr   <- Set.fromList [r | (pi_r, r) <- zip (rules pi_trs) (rules trs)
-                                , In (icap pi_trs <$> in_t) `unifies` lhs pi_r]
+                                , hIn (icap pi_trs <$> in_t) `unifies` lhs pi_r]
       , new  <- Set.difference rr acc
       = go (new `mappend` acc) (mconcat [AF.apply pi . rhs <$> F.toList new, directSubterms t, rest])
 
@@ -75,6 +75,6 @@ iUsableRules_correct trs (Just pi) = F.toList . go mempty where
       | isVar t = go acc rest
       | pi_t@(In in_t) <- AF.apply pi t
       , rr   <- Set.fromList [r | (pi_r, r) <- zip (rules pi_trs) (rules trs)
-                                , In (icap pi_trs <$> in_t) `unifies` lhs pi_r ]
+                                , hIn (icap pi_trs <$> in_t) `unifies` lhs pi_r ]
       , new  <- Set.difference rr acc
       = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
