@@ -65,6 +65,7 @@ Library
      Narradar.Utils,
      Control.Monad.Free
   other-modules:
+     Narradar.Unify,
      Narradar.Propositional,
      Lattice,
      TaskPoolSTM,

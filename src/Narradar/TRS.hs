@@ -23,10 +23,11 @@ import Data.Traversable (Traversable)
 import qualified Data.Traversable as T
 import Text.PrettyPrint
 
-import TRS hiding (Ppr, ppr)
+import TRS hiding (Ppr, ppr, unify, unifies, (!))
 import qualified TRS
 import Narradar.DPIdentifiers
 import Narradar.ProblemType
+import Narradar.Unify
 import Narradar.Utils
 import qualified Language.Prolog.Syntax as Prolog
 import Language.Prolog.Syntax (Ident)

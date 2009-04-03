@@ -19,6 +19,7 @@ module Narradar.Types ( module TRS
                       , module Narradar.PrologIdentifiers
                       , module Narradar.Labellings
                       , module Narradar.Convert
+                      , module Narradar.Unify
                       ) where
 
 import Data.DeriveTH
@@ -58,9 +59,10 @@ import Narradar.ProblemType
 import Narradar.TRS
 import Narradar.Convert
 import Narradar.Utils
+import Narradar.Unify
 
 import Lattice
-import TRS hiding (ppr, Ppr, apply)
+import TRS hiding (ppr, Ppr, apply, unify, unifies)
 import qualified TRS
 import TRS.FetchRules
 import TRS.Bottom as Bottom

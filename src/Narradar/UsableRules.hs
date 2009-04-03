@@ -17,7 +17,6 @@ import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Proof
 import Narradar.Types
 import Narradar.Utils
-import TRS
 
 usableRulesP, iUsableRulesP :: forall f id a. (DPMark f, Show id, T id :<: f, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
 usableRulesP p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
