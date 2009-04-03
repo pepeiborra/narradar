@@ -12,6 +12,7 @@ import Control.Monad.Free
 import Control.Monad.Identity
 import Control.RMonad.AsMonad
 --import "monad-param" Control.Monad.Parameterized
+import qualified Data.Array.IArray as A
 import Data.Foldable (toList)
 import Data.List
 import Data.Monoid
@@ -43,7 +44,7 @@ aproveXML :: forall f id. (Ord id, Show id, T id :<: f, DPMark f, TRSC f, Lattic
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
 reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> ProblemProofG id Html f -- PPT id f Html IO
-reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowing typ = msum orProblems where
+reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps@(DPTRS dps_a _ unifs _)) | isAnyNarrowing typ = msum orProblems where
  afs = unEmbed $ do
     af0 <- embed $ Set.fromList
             (findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p P.=<< rules dps)
@@ -63,11 +64,11 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
                          failP (External $ Aprove "SRV") p'' (toHtml "NO")
               Just basic_nonDecreasingDPs ->
                let text_nonDecreasingDPs = Set.fromList(show <$> (ppr <$$> basic_nonDecreasingDPs))
-                   nonDecreasingDPs      = Set.fromList [ dp | dp <- rules dps
+                   nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- A.assocs dps_a
                                                              , show (pprDP <$> AF.apply af dp) `Set.member` text_nonDecreasingDPs]
                in andP (ReductionPair (Just the_af)) p'
-                      [ return $ mkProblem typ trs (tRS $ Set.toList nonDecreasingDPs)
-                      , return $ mkProblem typ trs (tRS [ dp | dp <- rules dps, dp `Set.notMember` nonDecreasingDPs, not $ isGround $ rhs $ AF.apply pi' dp])])
+                      [ return $ mkProblem typ trs (restrictDPTRS dps (toList nonDecreasingDPs))
+                      , return $ mkProblem typ trs (restrictDPTRS dps [ i | (i,dp) <- A.assocs dps_a, i `Set.notMember` nonDecreasingDPs, not $ isGround $ rhs $ AF.apply pi' dp])])
     | (af,trs') <- sortBy (flip compare `on` (dpsSize.fst)) (Set.toList afs)
     , let proofU = step UsableRulesP p (mkProblem typ trs' dps)
     , let pi'    = AF.invert p pi_groundInfo `mappend` af

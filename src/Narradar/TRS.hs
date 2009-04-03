@@ -12,10 +12,12 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.MonadSupply
-import Data.Array.IArray
+import Data.Array.IArray as A
 import Data.Graph (Graph)
 import Data.Foldable (foldMap, toList)
 import Data.List ((\\))
+import Data.Maybe (catMaybes)
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Monoid
@@ -118,6 +120,18 @@ computeDPUnifiers typ trs dps | (isBNarrowing .|. isGNarrowing) typ
               | (x, _ :-> In in_r) <- zip [0..] dps
               , (y, l :-> _)       <- zip [0..] dps
               , let r = hIn(icap trs <$> in_r) ]
+
+restrictDPTRS (DPTRS dps gr unif sig) indexes = DPTRS dps' gr' unif' sig `const` dps `const` indexes
+  where
+   newIndexes = Map.fromList (zip indexes [0..])
+   nindexes   = length indexes
+   dps'       = extractIxx dps indexes
+   gr'        = A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
+   extractIxx arr nodes = A.listArray (0, length nodes - 1) [arr A.! n | n <- nodes]
+   unif' = A.array ( (0,0), (nindexes, nindexes) )
+                   [ ( (x',y'), sigma) | ((x,y),sigma) <- A.assocs unif
+                                       , Just x' <- [Map.lookup x newIndexes]
+                                       , Just y' <- [Map.lookup y newIndexes]]
 
 {-
 computeDPUnifier typ trs dps (r_i,l_i) | (isBNarrowing .|. isGNarrowing) typ
