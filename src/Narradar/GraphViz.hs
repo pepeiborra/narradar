@@ -40,10 +40,14 @@ data Parent = N NodeId | Cluster (NodeId, Parent)
 getParentNode (N n) = n
 getParentNode (Cluster (_,n)) = getParentNode n
 
-pprDot prb = showDot $ do
+data PprDot = PprDot { showFailedPaths :: Bool }
+
+pprDot = pprDot' PprDot{showFailedPaths=False}
+
+pprDot' PprDot{..} prb = showDot $ do
                attribute ("size", "100,100")
                attribute ("compound", "true")
-               foldFree problemNode' f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< (N <$> node [("label","0")])
+               foldFree (\_->return) f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< (N <$> node [("label","0")])
   where
     f (Annotated done Success{..})    par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "YES"), ("color","#29431C")] (doneEdge done)
     f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "NO"),("color","#60233E")] (doneEdge done)
@@ -66,7 +70,7 @@ pprDot prb = showDot $ do
     f (Annotated done And{subProblems=[p], procInfo = proc@(SomeInfo pi)}) par | isAFProc pi = procnode' proc done par >>= \me -> p me >> return me
     f (Annotated done And{subProblems=[p], ..}) par = f (Annotated done Or{subProblems = [p], ..}) par
     f (Annotated done And{..}) par = do
-                                trs <- if done then problemNode problem done par else return par
+                                trs <- if (done || showFailedPaths) then problemNode problem done par else return par
                                 cme <- cluster $ do
                                              attribute ("color", "#E56A90")
                                              me <- procnode done procInfo trs
@@ -75,64 +79,63 @@ pprDot prb = showDot $ do
                                 return (Cluster cme)
     f (Annotated done Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
     f (Annotated done Or{..})   par
-      | done      = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
+      | done || showFailedPaths = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
       | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
 
-problemLabel :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> (String, String)
-problemLabel p = ("label", pprTPDBdot p)
+    problemLabel :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> (String, String)
+    problemLabel p = ("label", pprTPDBdot p)
 
-problemColor :: ProblemG id f -> (String, String)
-problemColor p | isPrologProblem        p = ("color", "#F6D106")
-               | isFullNarrowingProblem p = ("color", "#4488C9")
-               | isBNarrowingProblem    p = ("color", "#FD6802")
-               | isGNarrowingProblem    p = ("color", "#FD6802")
-               | isRewritingProblem     p = ("color", "#EAAAFF")
-               | otherwise = error ("problemColor")
-problemAttrs :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> [(String,String)]
-problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
+    problemColor :: ProblemG id f -> (String, String)
+    problemColor p | isPrologProblem        p = ("color", "#F6D106")
+                   | isFullNarrowingProblem p = ("color", "#4488C9")
+                   | isBNarrowingProblem    p = ("color", "#FD6802")
+                   | isGNarrowingProblem    p = ("color", "#FD6802")
+                   | isRewritingProblem     p = ("color", "#EAAAFF")
+                   | otherwise = error ("problemColor")
+    problemAttrs :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> [(String,String)]
+    problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
-problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
+    problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
 --problemNode  (SomePrologProblem cc gg) done = childnode'(problemAttrs (mkPrologProblem cc gg :: Problem BasicId)) (doneEdge done)
-problemNode' p    = childnode (problemAttrs p)
-doneEdge True     = [("color", "green")]
-doneEdge False    = [("color", "red")]
+    problemNode' p    = childnode (problemAttrs p)
+    doneEdge True     = [("color", "green")]
+    doneEdge False    = [("color", "red")]
 
-procnode :: Bool -> SomeInfo -> Parent -> Dot Parent
-procnode done (SomeInfo (DependencyGraph gr)) par | done = do
-  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> pprGraph gr [])
-  case nn of
-    []   -> return par
-    me:_ -> do case par of
-                N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
-                Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
-               return (Cluster (cl, N me))
+    procnode :: Bool -> SomeInfo -> Parent -> Dot Parent
+    procnode done (SomeInfo (DependencyGraph gr)) par | done || showFailedPaths = do
+      (cl, nn) <- cluster (attribute ("shape", "ellipse") >> pprGraph gr [])
+      case nn of
+        []   -> return par
+        me:_ -> do case par of
+                     N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
+                     Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
+                   return (Cluster (cl, N me))
 
-procnode done (SomeInfo (SCCGraph gr sccs)) par = do
-  (cl, nn) <- cluster (
-                attribute ("shape", "ellipse") >>
-                pprGraph gr (zip sccs (cycle ["yellow","darkorange"
-                                             , "hotpink", "hotpink4", "purple", "brown","red","green"])))
-  case nn of
-    []   -> return par
-    me:_ -> do case par of
-                N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
-                Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
-               return (Cluster (cl, N me))
+    procnode done (SomeInfo (SCCGraph gr sccs)) par = do
+      (cl, nn) <- cluster (
+                    attribute ("shape", "ellipse") >>
+                    pprGraph gr (zip sccs (cycle ["yellow","darkorange"
+                                                 , "hotpink", "hotpink4", "purple", "brown","red","green"])))
+      case (nn,par) of
+        ([]  , _  )             -> return par
+        (me:_, N n)             -> edge n me ([("lhead", show cl)] ++ doneEdge done) >> return (Cluster (cl, N me))
+        (me:_, Cluster (cl',n)) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)] >> return (Cluster (cl, N me))
 
-procnode done (SomeInfo (UsableGraph gr reachable)) par = do
-  (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr [(reachable,"blue")]))
-  case nn of
-    []   -> return par
-    me:_ -> do case par of
-                N n             -> edge n me ([("lhead", show cl)] ++ doneEdge done)
-                Cluster (cl',n) -> edge (getParentNode n) me ([("ltail", show cl'), ("lhead", show cl)] ++ doneEdge done)
-               return (Cluster (cl, N me))
-procnode done  procInfo      par = childnode'  [("label", show procInfo),("fontsize","10")] (doneEdge done) par >>= \me -> return me
-procnode' procInfo done par = childnode' [("label", show procInfo)] (doneEdge done) par >>= \me -> return me
 
-childnode attrs = childnode' attrs []
-childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return (N n)
-childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
+    procnode done (SomeInfo (UsableGraph gr reachable)) par = do
+      (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr [(reachable,"blue")]))
+      case (nn,par) of
+        ([]  , _  )             -> return par
+        (me:_, N n)             -> edge n me ([("lhead", show cl)] ++ doneEdge done) >> return (Cluster (cl, N me))
+        (me:_, Cluster (cl',n)) -> edge (getParentNode n) me ([("ltail", show cl'), ("lhead", show cl)] ++ doneEdge done) >> return (Cluster (cl, N me))
+
+    procnode done  procInfo      par = childnode'  [("label", show procInfo),("fontsize","10")] (doneEdge done) par >>= \me -> return me
+
+    procnode' procInfo done par = childnode' [("label", show procInfo)] (doneEdge done) par >>= \me -> return me
+
+    childnode attrs = childnode' attrs []
+    childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return (N n)
+    childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 
 pprTPDBdot :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f  -> String
