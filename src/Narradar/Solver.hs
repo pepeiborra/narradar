@@ -8,15 +8,17 @@ module Narradar.Solver where
 
 import Control.Applicative hiding (Alternative(..))
 import Control.Arrow hiding (first)
-import qualified Control.Monad as P
+import Control.Monad as P
 import Control.Monad.Free
-import "monad-param" Control.Monad.Parameterized
-import "monad-param" Control.Monad.MonadPlus.Parameterized
+import Control.Monad.Logic
+--import "monad-param" Control.Monad.Parameterized
+--import "monad-param" Control.Monad.MonadPlus.Parameterized
 import Data.Foldable (toList)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Monoid
 import Data.Traversable
 import Language.Prolog.TypeChecker
+import System.IO.Unsafe
 import Text.ParserCombinators.Parsec (ParseError)
 import Text.XHtml (Html, primHtml)
 import TRS
@@ -49,9 +51,9 @@ defaultTimeout = 15
 -- --------------
 -- Aprove flavors
 -- --------------
-aproveSrvP timeout = trivialP >=> (wrap' . aproveSrvProc2 Default timeout)
-aproveWebP         = trivialP >=> (wrap' . aproveWebProc)
-aproveLocalP path  = trivialP >=> (wrap' . aproveProc path)
+aproveSrvP timeout = trivialP >=> (unsafePerformIO . aproveSrvProc2 Default timeout)
+aproveWebP         = trivialP >=> (unsafePerformIO . aproveWebProc)
+aproveLocalP path  = trivialP >=> (unsafePerformIO . aproveProc path)
 
 
 -- ----------------------
@@ -62,11 +64,10 @@ parseTRS :: ProblemType Id -> String -> PPT Id BasicId Html (Either ParseError)
 parseTRS typ txt = wrap' $ do
                       rules :: [Rule Basic] <- parseFile trsParser "" txt
                       let trs = mkTRS rules :: NarradarTRS String Basic'
-                      P.return $ msum (map returnM $ mkGoalProblem AF.bestHeu Narrowing trs)
+                      P.return $ msum (map return $ mkGoalProblem AF.bestHeu Narrowing trs)
 
 --parseProlog :: String -> PPT String Basic' Html IO
 parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
-
 -- ------------------
 -- Some Basic solvers
 -- ------------------
@@ -99,7 +100,7 @@ refineNarrowing' = reducingP ((msum.narrowing) >=> sccProcessor) <|>
 narradarSolver          = narradarSolver' aproveWebP
 narradarSolver' aproveS = cycleProcessor >=> groundRhsOneP bestHeu >=> aproveS
 
-narrowingSolver 0 _ = const mzeroM
+narrowingSolver 0 _ = const mzero
 narrowingSolver 1 k = cycleProcessor >=> iUsableRulesP >=> groundRhsOneP bestHeu >=> k
 narrowingSolver depth _ | depth < 0 = error "narrowingSolver: depth must be positive"
 narrowingSolver depth k =
@@ -137,7 +138,7 @@ solve f x = let fx = f x; in fromMaybe (solve f P.=<< fx) (runProof fx)
 solveB 0 f x = f x
 solveB b f x = let fx = f x in if isSuccess fx then fx else solveB (b-1) f P.=<< fx
 
-refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> (a -> m' a) -> a -> m a
+--refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> (a -> m' a) -> a -> m a
 refineBy maxDepth f refiner = loop maxDepth where
   loop 0 x = f x
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
@@ -150,7 +151,7 @@ firstP (a:alternatives) p = case a p of
                              anything_else     -> anything_else
 
 first :: P.Monad m => [a -> ProofT s m a] -> a -> ProofT s m a
-first [] _ = mzeroM
+first [] _ = mzero
 first (a:alternatives) p = FreeT $ do
                            x <- unFreeT (a p)
                            case x of
@@ -159,11 +160,11 @@ first (a:alternatives) p = FreeT $ do
                              anything_else    -> P.return anything_else
 
 
-reducingP ::  (P.MonadPlus m, TRS t id f, Return m) => (t -> m t) -> t -> m t
+--reducingP ::  (P.MonadPlus m, TRS t id f, Return m) => (t -> m t) -> t -> m t
 reducingP solver p =  do
   p' <- solver p
   guard (length (rules p') <=length (rules p))
-  returnM p'
+  return p'
 
 --runSolver :: (TRS Cf, Hole :<: f, Monoid out) => Solver id out IO f -> ProblemProofG id out f -> IO (ProblemProofG id out f)
 --runSolver solver p = runProofT (p >>= solver)
