@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Narradar.GraphViz where
 
 import Control.Applicative
