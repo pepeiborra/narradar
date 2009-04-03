@@ -33,7 +33,7 @@ usableRulesP p@(Problem typ trs dps@TRS{}) | (isBNarrowing .|. isGNarrowing) typ
 
 usableRulesP p = return p
 
-iUsableRulesP p@(Problem typ trs dps@TRS{})
+iUsableRulesP p@(Problem typ trs dps)
   | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)
   | otherwise = return p
  where
