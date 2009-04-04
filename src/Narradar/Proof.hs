@@ -54,13 +54,13 @@ import qualified Prelude as P
 -- ---------
 
 data ProofF s k =
-    And     {procInfo::SomeInfo, problem::SomeProblem, subProblems::[k]}
-  | Or      {procInfo::SomeInfo, problem::SomeProblem, subProblems::[k]}
-  | Step    {procInfo::SomeInfo, problem::SomeProblem, subProblem::k}
+    And     {procInfo :: !(SomeInfo), problem :: !(SomeProblem), subProblems::[k]}
+  | Or      {procInfo :: !(SomeInfo), problem :: !(SomeProblem), subProblems::[k]}
+  | Step    {procInfo :: !(SomeInfo), problem :: !(SomeProblem), subProblem::k}
   | Stage k
-  | Success {procInfo::SomeInfo, problem::SomeProblem, res::s}
-  | Fail    {procInfo::SomeInfo, problem::SomeProblem, res::s}
-  | DontKnow{procInfo::SomeInfo, problem::SomeProblem}
+  | Success {procInfo :: !(SomeInfo), problem :: !(SomeProblem), res::s}
+  | Fail    {procInfo :: !(SomeInfo), problem :: !(SomeProblem), res::s}
+  | DontKnow{procInfo :: !(SomeInfo), problem :: !(SomeProblem)}
   | MPlus k k
   | MPlusPar k k
   | MZero
@@ -105,7 +105,7 @@ htmlProof = id
 deriving instance (Show s, Show k) => Show (ProofF s k)
 
 data SomeProblem where
-    SomeProblem       :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
+    SomeProblem       :: (TRSC f, T id :<: f, Ord id, Show id) => !(ProblemG id f) -> SomeProblem
 --    SomePrologProblem :: [Goal] -> Prolog.Program -> SomeProblem
 
 instance Show SomeProblem where
@@ -117,11 +117,12 @@ instance Ppr SomeProblem where
 --  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc)
 
 someProblem :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
-someProblem p@Problem{}      = SomeProblem p
+someProblem p@Problem{}      = SomeProblem (trimProblem p)
 --someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
+trimProblem (Problem typ trs dps) = Problem typ trs (tRS $ rules dps)
 
 
-data SomeInfo where SomeInfo :: Show id => ProcInfo id -> SomeInfo
+data SomeInfo where SomeInfo :: Show id => !(ProcInfo id) -> SomeInfo
 instance Ppr SomeInfo where ppr (SomeInfo pi) = ppr pi
 instance Show SomeInfo where show = show . ppr
 
