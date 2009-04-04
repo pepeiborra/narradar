@@ -269,6 +269,7 @@ isSuccessF MZero          = False
 isSuccessF (MAnd  p1 p2)  = p1 && p2
 isSuccessF MDone          = True
 isSuccessF (Step _ _ p)   = p
+isSuccessF (Stage p)      = p
 
 -- isSuccessT = foldFreeT (const $ returnM False) (returnM.isSuccessF)
 

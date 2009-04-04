@@ -78,7 +78,8 @@ pprDot' PprDot{..} prb = showDot $ do
                                              forM_ subProblems ($ me)
                                              return me
                                 return (Cluster cme)
-    f (Annotated done Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
+    f (Annotated done  Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
+    f (Annotated done (Stage p)) par = p par
     f (Annotated done Or{..})   par
       | done || showFailedPaths = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
       | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
