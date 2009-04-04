@@ -111,9 +111,6 @@ narrowingSolver depth k =
 -- -------------
 -- Combinators
 -- -------------
--- Does not produce 'good-looking' proofs (the effect is only seen in failed searches)
-solve :: P.MonadPlus m => (a -> m a) -> a -> m a
-solve f x = let x' = f x in x' `P.mplus` (x' P.>>= solve f)
 
 {-
 DANGEROUS. solve and solveB become unsound if used with alternatives
@@ -132,7 +129,11 @@ solveBT b f x = do
   if isSuccess fx then wrap fx else solveBT (b-1) f P.=<< wrap fx
 -}
 
---solve f x = let fx = f x; in fromMaybe (solve f P.=<< fx) (fmap fst $ listToMaybe $ observeMany 1 $ runProof fx)
+solve' :: P.MonadPlus m => (a -> m a) -> a -> m a
+-- Does not produce 'good-looking' proofs (the effect is only seen in failed searches)
+solve' f x = let x' = f x in x' `P.mplus` (x' P.>>= solve' f)
+
+solve f x = let fx = f x in if isSuccess fx then fx else (fx P.>>= solve f)
 
 solveB 0 f x = f x
 solveB b f x = let fx = f x in if isSuccess fx then fx else solveB (b-1) f P.=<< fx

@@ -1,24 +1,15 @@
 {-# LANGUAGE NoMonomorphismRestriction, RecordWildCards #-}
 module Strats where
 
-import FBackTrack
-import Control.Monad.Logic (observeMany)
 import Data.Foldable (toList)
 import Data.Maybe
 import Prelude as P
 import Narradar hiding (refineNarrowing, refineNarrowing', reducingP, pSolver)
 import Narradar.Proof
-{-
-pSolver Options{..} solver p = do
-  (b,sol,log) <- runAndPruneProofT (verbose>0) (solver p)
-  sol' <- unwrap sol
-  P.return (b,sol',log)
--}
+
 pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe prob sol, "") where
     prob = solver p
---    sol  = runProof prob
---    (sol) = listToMaybe $ runM Nothing (runProof prob)
-    (sol) = listToMaybe $ observeMany 1 (runProof prob)
+    sol  = runProof prob
 
 prologSolverOne opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverOne h2)
 prologSolverAll opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverAll h2)

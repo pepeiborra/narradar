@@ -19,7 +19,7 @@ import Control.Applicative
 import Control.Arrow
 import Control.Exception (assert)
 import Control.Monad as M
-import Control.Monad.Logic.Class as M
+import Control.Monad.Logic as M
 import Control.Monad.State as M
 import Control.Monad.RWS
 import qualified  "monad-param" Control.Monad.Parameterized as MonadP
@@ -196,13 +196,8 @@ instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT (ProofF s) m) (Free 
 -- ------------
 -- * Evaluators
 -- ------------
-{-
-mixinProof super self = f where
-   f (
--}
 
 type StagedProof s a  = Proof s (Proof s a)
---newtype StagedProof' s = StagedProof (Proof s (StagedProof' s))
 
 stageProof :: forall a s. Proof s a -> StagedProof s a
 stageProof = foldFree (return . return) f where
@@ -212,23 +207,23 @@ stageProof = foldFree (return . return) f where
 unstageProof :: StagedProof s a -> Proof s a
 unstageProof = join
 
-runProof :: forall s m a b. (Monoid s, Functor m, MonadLogic m) => Proof s a -> m (Proof s b)
-runProof p = do
+runProof :: (Monoid s) => Proof s a -> Maybe (Proof s b)
+runProof p = listToMaybe $ observeMany 1 $ do
   sol <- foldFree return evalF (stageProof p)
 --  let sol' = unstageProof sol
   runProofDirect sol
  where
   runProofDirect = foldFree (const mzero) evalF
-
-runProofBFS :: forall s m a b. (Monoid s, Functor m, MonadLogic m) => Proof s a -> m (Proof s b)
-runProofBFS t = msum (foldFree (const mzero) evalF <$> tt) where
+{-
+runProofBFS :: (Monoid s) => Proof s a -> Maybe (Proof s b)
+runProofBFS t = listToMaybe $ observeMany 1 (msum (foldFree (const mzero) evalF <$> tt)) where
   tt = map fst $ takeWhile (not.snd) $ map (`cutProof` ann_t) [1..]
   cutProof depth = (`runState` True)
                   . foldFreeM (return . Pure)
                               (\(Annotated n u) -> if  n<=depth then return (Impure u)
                                                                 else put False >> return mzero)
   ann_t = annotateLevel t
-
+-}
 --evalF :: forall mp mf s a. (Functor mp, MonadPlus mp, MonadFree (ProofF s) mf) => ProofF s (mp (mf a)) -> mp (mf a)
 evalF :: forall mp s a. (Functor mp, MonadLogic mp) => ProofF s (mp (Proof s a)) -> mp (Proof s a)
 evalF Fail{}         = mzero
@@ -239,7 +234,7 @@ evalF MDone          = return (jail (fixS MDone))                      where fix
 evalF (MPlus p1 p2)  = p1 `M.mplus` p2
 evalF (MPlusPar p1 p2) = p1 `M.interleave` p2
 evalF (And pi pb ll) = (jail . fixS . And  pi pb) <$> P.sequence ll    where fixS :: ProofF s x -> ProofF s x;fixS = id;
-evalF (Or  pi pb ll) = (jail . fixS . Step pi pb) <$> msum ll       where fixS :: ProofF s x -> ProofF s x;fixS = id
+evalF (Or  pi pb ll) = (jail . fixS . Step pi pb) <$> msum ll          where fixS :: ProofF s x -> ProofF s x;fixS = id
 evalF (MAnd  p1 p2)  = p1 >>= \s1 -> p2 >>= \s2 ->
                        return (jail $ fixS $ MAnd s1 s2)               where fixS :: ProofF s x -> ProofF s x;fixS = id
 evalF (Step pi pb p) = (jail . fixS . Step pi pb) <$> p                where fixS :: ProofF s x -> ProofF s x;fixS = id
