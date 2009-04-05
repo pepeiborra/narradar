@@ -220,7 +220,7 @@ instance Show id => Ppr (ProcInfo id) where
                                    ppr dps'
     ppr (GroundOne (Just pi)) = text "ICLP08 AF Processor" $$ ppr pi
     ppr (GroundAll (Just pi)) = text "All Rhs's Ground AF Processor" $$ ppr pi
-    ppr (ReductionPair (Just pi)) = text "ICFP08 Reduction Pair Processor + Usable Rules" $$ ppr pi
+    ppr (ReductionPair (Just pi)) = text "ICLP08 Reduction Pair Processor + Usable Rules" $$ ppr pi
     ppr (SafeAFP   (Just pi)) =  text "Safe AF Processor (infinitary constructor rewriting)" $$ ppr pi
     ppr (EVProc pi)      = text "Eliminate Extra Vars \n" $$ ppr pi
     ppr (isAFProc -> True) = text "Argument Filtering"
