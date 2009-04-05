@@ -250,8 +250,9 @@ unsafeUnwrapIO (FreeT m) = go (unsafePerformIO m) where
 
 
 isSuccess :: Monoid s => Proof s k -> Bool
-isSuccess t = let res =foldFree (return False) isSuccessF t in res -- assert (res == isSuccess' t) res
---isSuccess' = isJust . runProof -- OOPS not working, but why ?
+isSuccess' t = let res =foldFree (return False) isSuccessF t in res -- assert (res == isSuccess' t) res
+isSuccess p = let res = isJust (runProof p)
+              in assert (res == isSuccess' p) res
 
 isSuccessF :: ProofF s Bool -> Bool
 isSuccessF Fail{}         = False
@@ -261,6 +262,7 @@ isSuccessF (And _ _ ll)   = and ll
 isSuccessF (Or  _ _ [])   = True  -- HEADS UP unstandard
 isSuccessF (Or  _ _ ll)   = or ll
 isSuccessF (MPlus p1 p2)  = p1 || p2
+--isSuccessF (MPlusPar p1 p2) = p1 || p2
 isSuccessF MZero          = False
 isSuccessF (MAnd  p1 p2)  = p1 && p2
 isSuccessF MDone          = True

@@ -34,7 +34,7 @@ refineNarrowing = firstP [ msum . instantiation
                   >=> sccProcessor
 
 refineNarrowingPar p
-  | length (rules $ dps p) > 1
+  | True -- length (rules $ dps p) > 1
   = (firstP [ msumPar . instantiation
             , msumPar . finstantiation
             , msumPar . narrowing ]
