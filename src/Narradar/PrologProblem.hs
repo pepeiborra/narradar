@@ -176,7 +176,7 @@ prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _)
   | null goals = success (LabellingSKP []) p (toHtml "There are no queries to analyze")
   | otherwise = mall problems
    where trs = skTransform program
-         problems = do goalAF <- AF.mapSymbols InId <$> goals
+         problems = do goalAF              <- AF.mapSymbols InId <$> goals
                        ((trs', pi), modes) <- toList $ labellingTrans mkHeu goalAF trs
                        let goal     = AF.mapSymbols' (flip Labelling) goalAF
                            pp'      = mkGoalProblem mkHeu GNarrowingModes{pi, goal} trs'
