@@ -82,6 +82,18 @@ invariantEV heu trs pi = let pi' = (selectBest . Set.toList . fix subinvariantEV
             | orig_poss <- note <$> extraVars (AF.apply af (annotateWithPos <$> rule))
             = cutWith heu af r orig_poss
 
+sortByDefinedness :: (Ord id, Size trs) => (AF_ id -> trs -> trs) -> trs -> [AF_ id] -> [AF_ id]
+sortByDefinedness apply dps = sortBy (flip compare `on` dpsSize)
+    where dpsSize af = size (apply af dps)
+
+selectBest = unfoldr findOne where
+          findOne [] = Nothing
+          findOne (m:xx)
+              | any (\x -> Just True == lt m x) xx = findOne xx
+              | otherwise = Just (m, filter (uncomparableTo m) xx)
+              where uncomparableTo x y = isNothing (lt x y)
+
+{-
 invariantEV_rhs heu p@Problem{trs,dps} = sortByDefinedness (AF.apply_rhs p)  dps . selectBest . Set.toList
                                         . fix (\f -> subinvariantEV trs f >=> subinvariantEV dps f)
   where
@@ -98,18 +110,8 @@ invariantEV_rhs heu p@Problem{trs,dps} = sortByDefinedness (AF.apply_rhs p)  dps
                          trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p ++ " rule: " ++ show rule) $
                          return$ AF.cut f p af'))
                                           af pp
+-}
 
-
-sortByDefinedness :: (Ord id, Size trs) => (AF_ id -> trs -> trs) -> trs -> [AF_ id] -> [AF_ id]
-sortByDefinedness apply dps = sortBy (flip compare `on` dpsSize)
-    where dpsSize af = size (apply af dps)
-
-selectBest = unfoldr findOne where
-          findOne [] = Nothing
-          findOne (m:xx)
-              | any (\x -> Just True == lt m x) xx = findOne xx
-              | otherwise = Just (m, filter (uncomparableTo m) xx)
-              where uncomparableTo x y = isNothing (lt x y)
 
 -- ----------
 -- Soundness

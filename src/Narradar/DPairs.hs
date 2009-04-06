@@ -98,15 +98,8 @@ getdirectEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
 getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) | (isBNarrowing .|. isGNarrowing) typ =
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
-filterSEDG :: (Ord id, T id :<: f, DPMark f {-, HasTrie (f(Term f))-}) => ProblemG id f -> G.Graph -> G.Graph
-filterSEDG (Problem typ trs (rulesArray->dps)) gr =
-    G.buildG (0, length (G.vertices gr) - 1)
+filterSEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph -> G.Graph
+filterSEDG (Problem typ trs dptrs@DPTRS{}) gr =
+    G.buildG (A.bounds gr)
                [ (i,j) | (i,j) <- G.edges gr
-                       , let _:->t = dps A.! i
-                       , let u:->_ = dps A.! j
-                       , inChain t u]
-    where inChain t@(In in_t) u = unifies' u (ren $ hIn (icap (trs' t) <$> in_t))
-          trs'
-             | isBNarrowing typ || isGNarrowing typ = \t -> tRS (swapRule <$> iUsableRules trs Nothing [t]) `asTypeOf` trs
-             | otherwise = \_ -> mapRules swapRule trs
-
+                       , isJust (dpUnifyInv dptrs j i)]

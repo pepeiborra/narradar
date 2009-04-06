@@ -14,7 +14,7 @@ import Text.PrettyPrint
 
 import Narradar.Utils
 
-import {-# SOURCE #-} Narradar.ArgumentFiltering
+import Narradar.ArgumentFiltering
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.TypeChecker as Prolog

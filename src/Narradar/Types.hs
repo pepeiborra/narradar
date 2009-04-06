@@ -50,7 +50,7 @@ import Prelude as P hiding (mapM, pi, sum)
 
 import Control.Monad.MonadSupply
 import Control.Monad.Free
-import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), ApplyAF_rhs(..), init)
+import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), init)
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
@@ -77,7 +77,6 @@ isGround = null . vars
 ---------------------------
 -- DP Problems
 ---------------------------
-type DP a = Rule a
 data ProblemF id a = Problem {typ::(ProblemType id), trs,dps::a}
      deriving (Eq,Show)
 
@@ -171,9 +170,6 @@ instance (Show id) =>  WithGoalAF (ProblemType id) id where
 instance (Ord id) => ApplyAF (ProblemG id f) id where
     {-# SPECIALIZE instance ApplyAF (Problem BBasicId) Id #-}
     apply pi p@(Problem typ trs dps) = Problem typ (apply pi trs) (apply pi dps)
-
-instance (Bottom.Bottom :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (ProblemG id f) sig id where
-    apply_rhs _ pi p@(Problem typ trs dps) = Problem typ (apply_rhs p pi trs) (apply_rhs p pi dps)
 
 -- ------------
 -- Processors

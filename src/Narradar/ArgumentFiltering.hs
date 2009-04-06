@@ -33,7 +33,6 @@ import qualified Prelude as P
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
-import Narradar.TRS
 -- import Narradar.Convert
 import Narradar.Utils
 
@@ -141,13 +140,6 @@ instance (T id :<: f, Ord id) => ApplyAF (Term f) id where
     {-# SPECIALIZE instance ApplyAF (Term BBasicId) Id #-}
     apply = applyTerm
 
-instance (Ord id) => ApplyAF (NarradarTRS id f) id where
-    {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
-    {-# SPECIALIZE instance ApplyAF (NarradarTRS LId BBasicLId) LId #-}
-    apply af (PrologTRS  cc sig) = let trs' = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) (getSignature $ rules trs') in trs'
-    apply af trs@TRS{}           = tRS$ apply af <$$> rules trs
-    apply af trs@DPTRS{}         = tRS$ apply af <$$> rules trs
-
 {-# SPECIALIZE applyTerm :: AF -> Term BBasicId -> Term BBasicId #-}
 applyTerm :: forall t id f. (T id :<: f, Ord id) => AF_ id -> Term f -> Term f
 applyTerm af = foldTerm f
@@ -157,7 +149,7 @@ applyTerm af = foldTerm f
 
 instance ApplyAF a id => ApplyAF [a] id where apply af = fmap (apply af)
 instance (T id :<: f, Ord id) => ApplyAF (Rule f) id where apply af = fmap (apply af)
-
+{-
 -- --------------------------
 -- Custom rhs AF Application
 -- --------------------------
@@ -191,6 +183,10 @@ applyToRule sig af (lhs :-> rhs) = apply af lhs :-> applyToRhs af rhs
           Nothing -> term n (applyToRhs af <$> tt)
     applyToRhs af t = apply af t  -- we don't cut vars below defined symbols
 
+instance (Bottom.Bottom :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (ProblemG id f) sig id where
+    apply_rhs _ pi p@(Problem typ trs dps) = Problem typ (apply_rhs p pi trs) (apply_rhs p pi dps)
+
+-}
 
 -- -----------
 -- Heuristics

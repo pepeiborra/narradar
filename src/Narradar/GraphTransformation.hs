@@ -69,21 +69,7 @@ narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA
 
 narrowing p = [return p]
 
--- I should teach myself about comonads
--- http://sigfpe.blogspot.com/2008/03/comonadic-arrays.html
-maps, maps' :: Monad m => (a -> m a) -> [a] -> [[m a]]
-maps f xx = concat $ elems $ array (Pointer 1 (listArray (1, length xx) xx) =>> appF) where
-    appF (Pointer i a) = let a' = amap return a in  map elems [a' // [(i, f(a!i))] ]
-
-maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
-  updateAt 0 (x:rest) = f x      : map return rest
-  updateAt i (x:xx)   = return x : updateAt (i-1) xx
-
--- maps and maps' are equivalent
-propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -> [Bool])
-
-
-instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr unif sig))
+instantiation p@(Problem typ@(isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr _ _))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
   | otherwise = [ step (InstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i,dps') <- dpss
@@ -96,14 +82,12 @@ instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr unif sig)
          f  (i,olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
-            where newdps = [(i, s TRS.// sigma :-> t TRS.// sigma)
-                                      | v :-> w <- (dpsA !) <$> [ m | (m,n) <- Gr.edges gr, n == i]
-                                      , sigma <- unify' s (mbren $ icap trs w)]
-         mbren = if (isBNarrowing .|. isGNarrowing) typ then id else ren
+            where newdps = [ (i, s TRS.// sigma :-> t TRS.// sigma)
+                           | Just sigma <- [dpUnify dptrs m i | (m,n) <- Gr.edges gr, n == i]]
 
 instantiation p = [return p]
 
-finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr unif sig))
+finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr unif sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
   | otherwise = [ step (FInstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i, dps') <- dpss
@@ -116,38 +100,47 @@ finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr unif si
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i,  s TRS.// sigma :-> t TRS.// sigma)
-                                      | v :-> w <- (dpsA !) <$> gr ! i
-                                      , let trs' = tRS (swapRule <$> mbUsableRules trs t) `asTypeOf` trs
-                                      , sigma <- unify t (ren$ icap trs' v) ]
-         mbUsableRules trs t = if isBNarrowing typ || isGNarrowing typ
-                                 then iUsableRules trs Nothing [t]
-                                 else rules trs
+                                      | Just sigma <- [dpUnify dptrs i j | j <- gr ! i]]
 finstantiation p = [return p]
 
-expandDPair :: ProblemG id f -> Int -> [DP f] -> ProblemG id f
-expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps
-  | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
-expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps = Problem typ rules dptrs' where
-    dptrs' = DPTRS a_dps' gr unif' (getSignature dps')
+--expandDPair :: ProblemG id f -> Int -> [DP f] -> ProblemG id f
+--expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
+expandDPair (Problem typ rules (DPTRS dps gr (unif, unifInv) sig)) i newdps = Problem typ rules dptrs'
+  where
+    dptrs' = DPTRS a_dps' gr (mkUnif' unif unif_new, mkUnif' unifInv unifInv_new) sig -- (getSignature dps')
     a_dps' = A.listArray (0,length dps' - 1) dps'
     dps'   = dps1 ++  dps2 ++ refreshRules ids newdps
     (dps1,_:dps2) = splitAt i (elems dps)
-    unif' = A.array ((0,0), (length dps' - 1, length dps' - 1))
-                       ([((x',y'), sigma) | ((x,y), sigma) <- assocs unif
+    mkUnif' arr arr' =
+       A.array ((0,0), (length dps' - 1, length dps' - 1))
+                       ([((x',y'), sigma) | ((x,y), sigma) <- assocs arr
                                           , x /= i, y /= i
                                           , let x' = if x < i then x else x-1
                                           , let y' = if y < i then y else y-1] ++
-                        concat [ [(in1, unif_new ! in1), (in2, unif_new ! in2)]
+                        concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
 --                                 [ (in1, computeDPUnifier typ rules a_dps' in1)
 --                                 , (in2, computeDPUnifier typ rules a_dps' in2)]
                                  | j <- [0..length newdps -1], k <- [0..length dps'-1]
                                  , let in1 = (c0+j,k), let in2 = (k,c0+j)])
                       where (_,c0) = bounds dps
     ids = [0..] \\ [ i | v <- foldMap2 vars' dps, let Just i = uniqueId v]
-    unif_new = isArray (computeDPUnifiers typ rules dps')
+    (unif_new, unifInv_new) = computeDPUnifiers typ rules dps'
     isArray :: Array i e -> Array i e
     isArray = id
 
 expandDPair (Problem typ trs dps@TRS{}) i newdps = Problem typ trs (tRS dps' `asTypeOf` dps) where
     dps'          = dps1 ++ dps' ++ dps2
     (dps1,_:dps2) = splitAt i (rules dps)
+
+-- I should teach myself about comonads
+-- http://sigfpe.blogspot.com/2008/03/comonadic-arrays.html
+maps, maps' :: Monad m => (a -> m a) -> [a] -> [[m a]]
+maps f xx = concat $ elems $ array (Pointer 1 (listArray (1, length xx) xx) =>> appF) where
+    appF (Pointer i a) = let a' = amap return a in  map elems [a' // [(i, f(a!i))] ]
+
+maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
+  updateAt 0 (x:rest) = f x      : map return rest
+  updateAt i (x:xx)   = return x : updateAt (i-1) xx
+
+-- maps and maps' are equivalent
+propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -> [Bool])
