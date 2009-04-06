@@ -42,10 +42,24 @@ refineNarrowing = firstP [ msum . instantiation
                          , msum . narrowing ]
                   >=> sccProcessor
 
-refineNarrowingPar = firstP [ msumPar . instantiation
-                         , msumPar . finstantiation
-                         , msumPar . narrowing ]
-                  >=> sccProcessor
+refineNarrowingPar p
+  | length (rules $ dps p) > 1
+  = (firstP [ msumPar . instantiation
+            , msumPar . finstantiation
+            , msumPar . narrowing ]
+     >=> sccProcessor) p
+  | otherwise = mzero
 
 
 reducingP solver p = solver p P.>>= \p' -> guard (length (rules p') <= length (rules p)) P.>> P.return p'
+
+
+refineBy' maxDepth f refiner x = f x `mplus` loop maxDepth x where
+  loop 0 x = refiner x >>= f
+  loop i x = refiner x >>= \x' ->
+               if or [ length(pairs x') <= length(pairs x)
+                     , length (rr x') < length (rr x)]
+                  then f x' `mplus` loop (i-1) x'
+                  else loop (i-1) x'
+   where pairs = rules . dps
+         rr p  = let p' = head (toList $ iUsableRulesP p) in rules (trs p')
