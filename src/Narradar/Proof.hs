@@ -24,6 +24,7 @@ import Control.Monad.State as M
 import Control.Monad.RWS
 import qualified  "monad-param" Control.Monad.Parameterized as MonadP
 import qualified  "monad-param" Control.Monad.MonadPlus.Parameterized as MonadP
+import Data.Array.IArray as A
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
@@ -117,9 +118,11 @@ instance Ppr SomeProblem where
 --  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc)
 
 someProblem :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
-someProblem p@Problem{}      = SomeProblem (trimProblem p)
+someProblem p@(Problem typ trs _ ) = SomeProblem (trimProblem p)
 --someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
-trimProblem (Problem typ trs dps) = Problem typ trs (tRS $ rules dps)
+
+trimProblem (Problem typ trs (DPTRS dps_a _ _ _) ) = Problem typ trs (tRS$ A.elems dps_a)
+trimProblem p = p
 
 
 data SomeInfo where SomeInfo :: Show id => !(ProcInfo id) -> SomeInfo

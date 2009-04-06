@@ -48,7 +48,7 @@ import qualified Text.PrettyPrint as Ppr
 import Control.Monad.State hiding (mapM)
 import Prelude as P hiding (mapM, pi, sum)
 
-import Control.Monad.MonadSupply
+import Control.Monad.Supply
 import Control.Monad.Free
 import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), init)
 import qualified Narradar.ArgumentFiltering as AF
@@ -77,7 +77,7 @@ isGround = null . vars
 ---------------------------
 -- DP Problems
 ---------------------------
-data ProblemF id a = Problem {typ::(ProblemType id), trs,dps::a}
+data ProblemF id a = Problem {typ::(ProblemType id), trs::a ,dps :: !a}
      deriving (Eq,Show)
 
 instance Size a => Size (ProblemF id a) where size = sum . fmap size

@@ -38,7 +38,7 @@ Library
   build-Depends: base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
      TRS >= 0.21.20090311, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
-     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel
+     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel, strict
   exposed-modules:
      Narradar,
      Narradar.Solver,
@@ -63,14 +63,14 @@ Library
      Narradar.Output,
      Narradar.GraphViz,
      Narradar.Utils,
-     Control.Monad.Free
+     Control.Monad.Free,
+     Control.Monad.Supply
   other-modules:
      Narradar.Unify,
      Narradar.Propositional,
      Lattice,
      TaskPoolSTM,
      Paths_narradar
-     Control.Monad.MonadSupply,
      Control.Monad.Operad,
      Text.ParserCombinators.Parsec.Tag
 

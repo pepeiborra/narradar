@@ -15,6 +15,7 @@ import Data.List ((\\))
 import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Strict.Tuple ((:!:), Pair(..))
 import Data.Traversable as T
 import qualified Data.Tree as Tree
 import Text.XHtml (toHtml, Html)

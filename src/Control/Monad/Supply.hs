@@ -2,11 +2,11 @@
 {-# LANGUAGE UndecidableInstances, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Control.Monad.MonadSupply where
+module Control.Monad.Supply where
 
 import Control.Monad.State
 
-class MonadSupply i m | m -> i where next :: m i
+class Monad m => MonadSupply i m | m -> i where next :: m i
 
 newtype Supply i a = Supply {runSupply_ :: State [i] a}
   deriving (Functor, Monad, MonadSupply i)
