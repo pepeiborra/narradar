@@ -68,9 +68,9 @@ prologP_sk :: AF.PolyHeuristic heu PId BasicPId => MkHeu heu -> PrologProblem ->
 prologP_sk mkHeu p@(Problem Prolog{..} _ _) =
    andP PrologSKP p
      [ return p
-         | goal <- goals
-         , let pi = AF.mapSymbols InId goal :: AF_ PS
-         , p <- mkGoalProblem mkHeu GNarrowingModes{pi,goal=pi} trs]
+         | goal0 <- goals
+         , let goal = AF.mapSymbols InId goal0 :: AF_ PS
+         , p <- mkGoalProblem mkHeu GNarrowingModes{goal, pi= AF.init trs `mappend` goal} trs]
   where trs   = skTransform program
 {-
 encodeToSat :: forall f id trs . (TRS trs id f, T id :<: f) => trs -> [Goal id] -> Formula (id, Int)
