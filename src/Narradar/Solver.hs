@@ -101,10 +101,10 @@ narradarSolver          = narradarSolver' aproveWebP
 narradarSolver' aproveS = cycleProcessor >=> groundRhsOneP bestHeu >=> aproveS
 
 narrowingSolver 0 _ = const mzero
-narrowingSolver 1 k = cycleProcessor >=> iUsableRulesP >=> groundRhsOneP bestHeu >=> k
+narrowingSolver 1 k = cycleProcessor >=> usableRulesP >=> groundRhsOneP bestHeu >=> k
 narrowingSolver depth _ | depth < 0 = error "narrowingSolver: depth must be positive"
 narrowingSolver depth k =
-       cycleProcessor >=> iUsableRulesP >=>
+       cycleProcessor >=> usableRulesP >=>
        ((groundRhsOneP bestHeu >=> k)
         <|>
         (refineNarrowing >=> narrowingSolver (depth-1) k))
