@@ -10,6 +10,7 @@
 
 module Narradar.Labellings where
 
+import Control.Parallel.Strategies
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Utils
@@ -71,6 +72,11 @@ instance Show a => Show (Labelled a) where
 
 instance HashTerm (T LId) where
     hashF (T id tt)      = 15 * sum tt * hashId id
+
+instance NFData a => NFData (Labelled a) where
+    rnf (Plain a) = rnf a
+    rnf (Labelling ii a) = rnf ii `seq` rnf a
+
 {-
 instance Show id => DPSymbol (Labelled id) where
     markDPSymbol   (Labelling l id) = Labelling l (markDPSymbol id);   markDPSymbol   (Plain f) = Plain$ markDPSymbol f

@@ -35,10 +35,10 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
+  build-Depends: base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
      TRS >= 0.21.20090311, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
-     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell		 	 
+     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel
   exposed-modules:
      Narradar,
      Narradar.Solver,

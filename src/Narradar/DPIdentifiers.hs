@@ -13,6 +13,7 @@ module Narradar.DPIdentifiers where
 
 import Control.Applicative
 import Control.Arrow
+import Control.Parallel.Strategies
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
@@ -54,6 +55,11 @@ instance Show (Identifier String) where
 instance Show a => Show (Identifier a) where
     show (IdFunction f) = show f
     show (IdDP n) = show n ++ "#"
+
+instance NFData a => NFData (Identifier a) where
+    rnf (IdFunction f) = rnf f
+    rnf (IdDP f)       = rnf f
+    rnf AnyIdentifier  = ()
 
 $(derive makeFunctor     ''Identifier)
 $(derive makeFoldable    ''Identifier)
