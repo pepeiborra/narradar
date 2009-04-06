@@ -4,14 +4,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
 
 module Narradar.GraphTransformation (narrowing, instantiation, finstantiation) where
 
 import Control.Applicative
 import Data.Array.IArray hiding ( array )
-import Data.Foldable (toList)
+import Data.Array.Base (numElements)
+import qualified Data.Array.IArray as A
+import Data.Foldable (toList, foldMap)
 import qualified Data.Graph as Gr
-import Data.List (nub, foldl1', isPrefixOf)
+import Data.List (nub, foldl1', isPrefixOf, (\\))
 import Data.Maybe
 import qualified Data.Set as Set
 import Control.Comonad.Pointer
@@ -20,7 +23,7 @@ import Text.XHtml (Html)
 
 import Narradar.Types hiding ((//), (!))
 import TRS (open, EqModulo_(..))
-import Narradar.Utils ((<$$>), (.|.), snub)
+import Narradar.Utils ((<$$>), (.|.), snub, foldMap2, trace)
 import Narradar.Proof
 import Narradar.DPairs
 import Narradar.UsableRules
@@ -32,12 +35,12 @@ import qualified TRS
 {-# SPECIALIZE instantiation  :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
 {-# SPECIALIZE finstantiation :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
 
-narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, Hole :<: f, T id :<: f, Show id, id ~ Identifier a, Ord a) => ProblemG id f -> [ProblemProofG id Html f]
-narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA gr sig))
-   = [ step (NarrowingP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => ProblemG id f -> [ProblemProofG id Html f]
+narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA gr unif sig))
+    = [ step (NarrowingP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
-                     , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
+                     , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
+                     , let newdps = dps' !! i]
     where --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
           dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                          , all (not.null) dps]
@@ -46,14 +49,17 @@ narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA
               | otherwise = []
            where
              newdps
-              | (isBNarrowing .|. isGNarrowing) typ || isLinear t , isNothing (unify t `mapM` uu) =
-                  let new_dps = [(i,dp') | (dp',p) <- narrow1DP olddp
+              | (isBNarrowing .|. isGNarrowing) typ || isLinear t
+              , isNothing (unify' t `mapM` uu)
+              , new_dps <- [(i,dp') | (dp',p) <- narrow1DP olddp
                                          , let validPos = Set.toList(Set.fromList(positions (icap trs t)) `Set.intersection` pos_uu)
                                          , any (`isPrefixOf` p) validPos]
-                  in -- extra condition to avoid specializing to pairs whose rhs are variables
-                      -- (I don't recall having seen this in any paper but surely is common knowledge)
-                    if any (isVar.rhs.snd) new_dps then [] else new_dps
+              =  -- extra condition to avoid specializing to pairs whose rhs are variables
+                 -- (I don't recall having seen this in any paper but surely is common knowledge)
+                 if any (isVar.rhs.snd) new_dps then [] else new_dps
+
               | otherwise = []
+
                where uu     = map (lhs . (dpsA !)) (gr ! i)
                      pos_uu = if null uu then Set.empty else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
@@ -77,12 +83,12 @@ maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
 propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -> [Bool])
 
 
-instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr sig))
+instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr unif sig))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | otherwise = [ step (InstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+  | otherwise = [ step (InstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
-                     , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
+                     , let olddp  = tRS[dpsA ! i] `asTypeOf` trs
+                     , let newdps = dps' !! i ]
 
    where dps  = elems dpsA
          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
@@ -92,18 +98,17 @@ instantiation p@(Problem typ@(isAnyNarrowing->True) trs (DPTRS dpsA gr sig))
                   | otherwise = []
             where newdps = [(i, s TRS.// sigma :-> t TRS.// sigma)
                                       | v :-> w <- (dpsA !) <$> [ m | (m,n) <- Gr.edges gr, n == i]
-                                      , let [w'] = variant' [mbren$ icap trs w] [s]
-                                      , sigma <- w' `unify` s]
+                                      , sigma <- unify' s (mbren $ icap trs w)]
          mbren = if (isBNarrowing .|. isGNarrowing) typ then id else ren
 
 instantiation p = [return p]
 
-finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr sig))
+finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr unif sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | otherwise = [ step (FInstantiationP olddp newdps) p (Problem typ trs (tRS' (concat dps') sig))
+  | otherwise = [ step (FInstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i, dps') <- dpss
-                     , let olddp  = mkTRS[dpsA !  i] `asTypeOf` trs
-                     , let newdps = mkTRS(dps' !! i) `asTypeOf` trs]
+                     , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
+                     , let newdps = dps' !! i]
    where dps  = elems dpsA
          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                          , all (not.null) dps]
@@ -113,20 +118,36 @@ finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs (DPTRS dpsA gr sig))
               where newdps = [(i,  s TRS.// sigma :-> t TRS.// sigma)
                                       | v :-> w <- (dpsA !) <$> gr ! i
                                       , let trs' = tRS (swapRule <$> mbUsableRules trs t) `asTypeOf` trs
-                                      , let [v'] = variant' [ren$ icap trs' v] [t]
-                                      , sigma <- v' `unify` t]
+                                      , sigma <- unify t (ren$ icap trs' v) ]
          mbUsableRules trs t = if isBNarrowing typ || isGNarrowing typ
                                  then iUsableRules trs Nothing [t]
                                  else rules trs
 finstantiation p = [return p]
 
-capInv :: forall id f. (Ord id, T id :<: f, TRSC f) => NarradarTRS id f -> Term f -> Term f
-capInv trs t
-       | collapsing trs = var 0
-       | Just (T (s::id) tt) <- open t
-       = term s [if isDefined trs' t' then var i else t'
-                       | (i,t') <- [0..] `zip` tt]
-       | otherwise = t
-  where trs' = tRS (swapRule <$> rules trs) :: NarradarTRS id f
+expandDPair :: ProblemG id f -> Int -> [DP f] -> ProblemG id f
+expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps
+  | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
+expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps = Problem typ rules dptrs' where
+    dptrs' = DPTRS a_dps' gr unif' (getSignature dps')
+    a_dps' = A.listArray (0,length dps' - 1) dps'
+    dps'   = dps1 ++  dps2 ++ refreshRules ids newdps
+    (dps1,_:dps2) = splitAt i (elems dps)
+    unif' = A.array ((0,0), (length dps' - 1, length dps' - 1))
+                       ([((x',y'), sigma) | ((x,y), sigma) <- assocs unif
+                                          , x /= i, y /= i
+                                          , let x' = if x < i then x else x-1
+                                          , let y' = if y < i then y else y-1] ++
+                        concat [ [(in1, unif_new ! in1), (in2, unif_new ! in2)]
+--                                 [ (in1, computeDPUnifier typ rules a_dps' in1)
+--                                 , (in2, computeDPUnifier typ rules a_dps' in2)]
+                                 | j <- [0..length newdps -1], k <- [0..length dps'-1]
+                                 , let in1 = (c0+j,k), let in2 = (k,c0+j)])
+                      where (_,c0) = bounds dps
+    ids = [0..] \\ [ i | v <- foldMap2 vars' dps, let Just i = uniqueId v]
+    unif_new = isArray (computeDPUnifiers typ rules dps')
+    isArray :: Array i e -> Array i e
+    isArray = id
 
-collapsing trs = any (isVar.rhs) (rules trs)
+expandDPair (Problem typ trs dps@TRS{}) i newdps = Problem typ trs (tRS dps' `asTypeOf` dps) where
+    dps'          = dps1 ++ dps' ++ dps2
+    (dps1,_:dps2) = splitAt i (rules dps)

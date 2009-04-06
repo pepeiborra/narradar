@@ -19,3 +19,5 @@ instance MonadSupply e (State [e]) where
 
 runSupply :: (Num i, Bounded i, Enum i) => Supply i a -> a
 runSupply m = evalState (runSupply_ m) [0..]
+
+runSupply' m ids = evalState (runSupply_ m) ids

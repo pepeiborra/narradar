@@ -34,7 +34,7 @@ import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
 import Narradar.TRS
-import Narradar.Convert
+-- import Narradar.Convert
 import Narradar.Utils
 
 import TRS hiding (apply, ppr, Ppr)
@@ -132,9 +132,6 @@ restrictTo sig (AF af) =
 
 domain (AF pi) = Map.keysSet pi
 
---instance Convert (AF_ id) (AF_ id) where convert = id
-instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapSymbols convert
-
 -- ----------------------
 -- Regular AF Application
 -- ----------------------
@@ -147,9 +144,9 @@ instance (T id :<: f, Ord id) => ApplyAF (Term f) id where
 instance (Ord id) => ApplyAF (NarradarTRS id f) id where
     {-# SPECIALIZE instance ApplyAF (NarradarTRS Id BBasicId) Id #-}
     {-# SPECIALIZE instance ApplyAF (NarradarTRS LId BBasicLId) LId #-}
-    apply af trs@TRS{} = tRS$ apply af <$$> rules trs
     apply af (PrologTRS  cc sig) = let trs' = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) (getSignature $ rules trs') in trs'
-    apply af (DPTRS dpsA gr sig) = let trs' = DPTRS (A.amap (apply af) dpsA) gr (getSignature $ rules trs') in trs'
+    apply af trs@TRS{}           = tRS$ apply af <$$> rules trs
+    apply af trs@DPTRS{}         = tRS$ apply af <$$> rules trs
 
 {-# SPECIALIZE applyTerm :: AF -> Term BBasicId -> Term BBasicId #-}
 applyTerm :: forall t id f. (T id :<: f, Ord id) => AF_ id -> Term f -> Term f
@@ -215,8 +212,6 @@ simpleHeu' h = MkHeu (\sig -> WrapHeu (h sig))
 
 mkHeu :: (PolyHeuristic tag id f, HasSignature sig id) => MkHeu tag -> sig -> Heuristic id f
 mkHeu (MkHeu mkTag) sig = runPolyHeu (mkTag sig)
-
-convertHeu heu af t p = heu (convert af) (convert t) p
 
 --bestHeu, innermost, outermost, noConstructors, noUs, allPos :: sig -> Heuristic id f
 

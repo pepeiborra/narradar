@@ -50,6 +50,7 @@ Library
      Narradar.Proof,
      Narradar.DPairs,
      Narradar.TRS,
+     Narradar.ProblemType,
      Narradar.GraphTransformation,
      Narradar.ArgumentFiltering,
      Narradar.UsableRules,

@@ -7,12 +7,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs, TypeFamilies #-}
 
 
 module Narradar.Types ( module TRS
                       , module Narradar.Types
                       , module Narradar.TRS
+                      , module Narradar.ProblemType
                       , module Narradar.DPIdentifiers
                       , module Narradar.PrologIdentifiers
                       , module Narradar.Labellings
@@ -52,6 +54,7 @@ import qualified Narradar.ArgumentFiltering as AF
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
+import Narradar.ProblemType
 import Narradar.TRS
 import Narradar.Convert
 import Narradar.Utils
@@ -73,7 +76,6 @@ isGround = null . vars
 -- DP Problems
 ---------------------------
 type DP a = Rule a
-type ProblemType id = ProblemTypeF (AF_ id)
 data ProblemF id a = Problem {typ::(ProblemType id), trs,dps::a}
      deriving (Eq,Show)
 
@@ -92,19 +94,6 @@ instance (Ord (Term f), TRSC f, Ord id, T id :<: f) => Monoid (ProblemG id f) wh
 
 instance (Ord id, TRSC f, T id :<: f) => TRS (ProblemG id f) id f where
     rules (Problem _ trs dps) = rules trs `mappend` rules dps
-
-data ProblemTypeF pi   = Rewriting   | InnermostRewriting
-                       | Narrowing   | NarrowingModes   {pi, goal::pi}
-                       | GNarrowing  | GNarrowingModes  {pi, goal::pi}
-                       | BNarrowing  | BNarrowingModes  {pi, goal::pi}
-                       | LBNarrowing | LBNarrowingModes {pi, goal::pi}
-	               | Prolog {goals::[AF_ String], program::Prolog.Program}
-                    deriving (Eq, Show)
-
-narrowingModes0 =   NarrowingModes  {goal=error "narrowingModes0", pi=error "narrowingModes0"}
-bnarrowingModes0 =  BNarrowingModes {goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}
-gnarrowingModes0 =  GNarrowingModes {goal=error "gnarrowingModes0", pi=error "gnarrowingModes0"}
-lbnarrowingModes0 = LBNarrowingModes{goal=error "lbnarrowingModes0", pi=error "lbnarrowingModes0"}
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
 mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
@@ -125,14 +114,7 @@ instance TRS.Ppr f => Ppr (ProblemG id f) where
             text "TRS:" <+> ppr trs $$
             text "DPS:" <+> ppr dps
 
-instance Ppr (ProblemType id) where
-    ppr Prolog{}                  = text "Prolog"
-    ppr typ | isFullNarrowing typ = text "NDP"
-    ppr typ | isGNarrowing typ    = text "Ground NDP"
-    ppr typ | isBNarrowing typ    = text "BNDP"
-    ppr Rewriting                 = text "DP"
-
-data VoidF f; instance Functor VoidF; instance TRS.Ppr VoidF
+--data VoidF f; instance Functor VoidF; instance TRS.Ppr VoidF
 
 type PrologProblem = ProblemG String Basic'
 mkPrologProblem :: [AF_ String] -> Prolog.Program -> PrologProblem
@@ -144,36 +126,12 @@ isProlog Prolog{} = True ; isProlog _ = False
 --isPrologProblem PrologProblem{} = True
 isPrologProblem = isProlog . typ
 
-isFullNarrowing Narrowing{} = True
-isFullNarrowing NarrowingModes{} = True
-isFullNarrowing _ = False
 isFullNarrowingProblem = isFullNarrowing . typ
-
-isBNarrowing BNarrowing{}  = True
-isBNarrowing LBNarrowing{} = True
-isBNarrowing BNarrowingModes{} = True
-isBNarrowing LBNarrowingModes{} = True
-isBNarrowing _ = False
-isBNarrowingProblem = isBNarrowing . typ
-
-isGNarrowing GNarrowing{}  = True
-isGNarrowing GNarrowingModes{} = True
-isGNarrowing _ = False
-isGNarrowingProblem = isGNarrowing . typ
-
-isAnyNarrowing = isFullNarrowing .|. isBNarrowing .|. isGNarrowing
-isAnyNarrowingProblem = isAnyNarrowing . typ
-
-isRewriting Rewriting =True; isRewriting InnermostRewriting = True; isRewriting _ = False
-isRewritingProblem = isRewriting . typ
-
-isInnermostRewriting InnermostRewriting = True
-isInnermostRewriting _ = False
-
-isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
-
-isModed = isJust . getGoalAF
-isModedProblem = isModed . typ
+isBNarrowingProblem    = isBNarrowing . typ
+isGNarrowingProblem    = isGNarrowing . typ
+isAnyNarrowingProblem  = isAnyNarrowing . typ
+isRewritingProblem     = isRewriting . typ
+--isModedProblem         = isModed . typ
 
 getProblemAF = getGoalAF
 getGoalAF NarrowingModes{pi}   = Just pi
@@ -354,32 +312,6 @@ parsePrologProblem pgm = mapLeft show $ do
        mm <- parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
        return (AF.singleton f [i | (i,G) <- zip [1..] mm])
 
--- -----------------
--- Cap & friends
--- -----------------
-
-ren :: (Var :<: f, HashConsed f, Traversable f) => Term f -> Term f
-ren t = runSupply (foldTermM f t) where
-    f t | Just Var{} <- prj t = var <$> next
-        | otherwise           = return (inject t)
-
-cap, icap :: forall trs f id. (Ord id, TRSC f, TRS trs id f) => trs -> Term f -> Term f
-cap trs t = evalState (go t) freshvv where
-  freshvv = map var [0..] \\ vars' t
-  go (open -> Just (T (s::id) tt)) | isDefined trs t = next
-                                   | otherwise       = term s <$> mapM go tt
-  go v = return v
-
--- Use unification instead of just checking if it is a defined symbol
--- This is not the icap defined in Rene Thiemann. I.e. it does not integrate the REN function
-icap trs t = runSupply (go t) where
-  go t@(In in_t) | Just (T (f::id) tt) <- open t
-                 , f `Set.member` getDefinedSymbols trs = do
-      t' <- In <$> (go `T.mapM` in_t)
-      if  any (unifies t' . lhs) (rules trs) then var <$> next else return t'
-  go v = return v
-
-
 -- ------------------
 -- Functor Instances
 -- ------------------
@@ -387,6 +319,3 @@ icap trs t = runSupply (go t) where
 $(derive makeFunctor     ''ProblemF)
 $(derive makeFoldable    ''ProblemF)
 $(derive makeTraversable ''ProblemF)
-$(derive makeFunctor     ''ProblemTypeF)
-$(derive makeFoldable    ''ProblemTypeF)
-$(derive makeTraversable ''ProblemTypeF)

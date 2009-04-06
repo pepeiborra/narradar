@@ -11,6 +11,8 @@ import qualified Data.Set as Set
 
 import Data.Foldable (toList)
 
+import Narradar.ArgumentFiltering (AF_, mapSymbols)
+import Narradar.ProblemType
 import Narradar.TRS
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
@@ -125,6 +127,15 @@ instance Convert (Term Basic)    (Term BasicLId)  where convert = convertToId . 
 instance Convert (Term BasicPS)  (Term BasicLPS)  where convert = convertToLabelled
 instance Convert (Term BasicPId) (Term BasicLPId) where convert = convertToLabelled
 
+-- AFs
+-- ---
+instance (Convert id id', Ord id') => Convert (AF_ id) (AF_ id') where convert = mapSymbols convert
+-- convertHeu heu af t p = heu (convert af) (convert t) p
+
+-- ProblemType
+-- -----------
+
+instance (Convert id id', Ord id') => Convert (ProblemType id)  (ProblemType id') where convert = fmap convert
 
 -- TRSs
 -- ----

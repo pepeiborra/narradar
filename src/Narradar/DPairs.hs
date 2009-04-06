@@ -8,6 +8,7 @@ module Narradar.DPairs where
 
 import Control.Applicative
 import Control.Exception (assert)
+import Data.Array.Base (numElements)
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as G
 import Data.List ((\\))
@@ -18,7 +19,6 @@ import qualified Data.Tree as Tree
 import Text.XHtml (toHtml, Html)
 import Prelude as P hiding (pi)
 
-import TRS
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Utils
@@ -32,11 +32,11 @@ import Narradar.UsableRules
 
 --mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<: DPVersionOf f, Convert (Term f) (Term (DPVersionOf f)), TRSC (DPVersionOf f), Show (Identifier id), Ord id) => ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) (DPVersionOf f)
 mkDPProblem :: (DPMark (DPVersionOf f), TRSC f, T id :<: f, T (Identifier id) :<: f', Convert (Term f) (Term f'), TRSC f', Show (Identifier id), Ord id, DPMark f') => ProblemType id -> NarradarTRS id f -> ProblemG (Identifier id) f'
-mkDPProblem Rewriting   trs = let trs' = convert trs in mkProblem Rewriting   trs' (tRS $ getPairs trs')
-mkDPProblem Narrowing   trs = let trs' = convert trs in mkProblem Narrowing   trs' (tRS $ getNPairs trs')
-mkDPProblem BNarrowing  trs = let trs' = convert trs in mkProblem BNarrowing  trs' (tRS $ getPairs trs')
-mkDPProblem GNarrowing  trs = let trs' = convert trs in mkProblem GNarrowing  trs' (tRS $ getPairs trs')
-mkDPProblem LBNarrowing trs = let trs' = convert trs in mkProblem LBNarrowing trs' (tRS $ getPairs trs')
+mkDPProblem Narrowing trs = let trs' = convert trs in mkProblem Narrowing trs' (dpTRS Narrowing trs' (getNPairs trs') emptyArray)
+--mkDPProblem BNarrowing trs = let trs' = convert trs in mkProblem BNarrowing trs' (dpTRS BNarrowing trs' (getPairs  trs') emptyArray)
+mkDPProblem typ       trs = let trs' = convert trs; typ' = convert typ in mkProblem typ' trs' (dpTRS typ' trs' (getPairs  trs') emptyArray)
+
+emptyArray = A.listArray (20,20) [[]]
 
 getPairs :: (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> [DP f]
 getPairs trs =
@@ -59,7 +59,7 @@ usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps)
   | null cc   = success (UsableGraph gr reachable) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (UsableGraph gr reachable) problem
-                 [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo))
+                 [return $ Problem typ trs (dpTRS' typ trs (extractIxx dd ciclo) (restrictGt gr ciclo))
                       | ciclo <- cc, any (`Set.member` reachable) ciclo]
   where
    dd          = rulesArray dps
@@ -76,7 +76,7 @@ sccProcessor problem@(Problem typ trs dps)
   | null cc   = success (SCCGraph gr []) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (SCCGraph gr (map Set.fromList cc)) problem
-                 [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
+                 [return $ Problem typ trs (dpTRS' typ trs (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
     where dd = rulesArray dps
           gr = getEDG problem
           cc = filter isCycle (map Tree.flatten (G.scc gr))
@@ -87,29 +87,18 @@ cycleProcessor problem@(Problem typ trs dps)
   | null cc   = success (DependencyGraph gr) problem
                 (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
   | otherwise =  andP (DependencyGraph gr) problem
-                 [return $ Problem typ trs (dpTRS (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
+                 [return $ Problem typ trs (dpTRS' typ trs (extractIxx dd ciclo) (restrictGt gr ciclo)) | ciclo <- cc]
     where cc = cycles gr
           dd = rulesArray dps
           gr = getEDG problem
 
-getEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
-getEDG (Problem typ trs (rules->dps)) | (isBNarrowing .|. isGNarrowing) typ =
-    G.buildG (0, length dps - 1)
-               [ (i,j) | (i,_:->t) <- zip [0..] dps
-                       , (j,u:->_) <- zip [0..] dps
-                       , inChain t u]
-    where inChain (In in_t) u | [t'] <- variant' [In(icap trs <$> in_t)] [u] = isJust (unify t' u)
-
 getEDG p = filterSEDG p $ getdirectEDG p
 
-getdirectEDG (Problem typ trs (rules->dps)) =
-    G.buildG (0, length dps - 1)
-               [ (i,j) | (i,_:->t) <- zip [0..] dps
-                       , (j,u:->_) <- zip [0..] dps
-                       , inChain t u]
-    where inChain (In in_t) u | [t'] <- variant' [ren $ In (icap trs <$> in_t)] [u] = isJust (unify u t')
+getdirectEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
+getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) | (isBNarrowing .|. isGNarrowing) typ =
+    G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
-filterSEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph -> G.Graph
+filterSEDG :: (Ord id, T id :<: f, DPMark f {-, HasTrie (f(Term f))-}) => ProblemG id f -> G.Graph -> G.Graph
 filterSEDG (Problem typ trs (rulesArray->dps)) gr =
     G.buildG (0, length (G.vertices gr) - 1)
                [ (i,j) | (i,j) <- G.edges gr
@@ -124,3 +113,4 @@ filterSEDG (Problem typ trs (rulesArray->dps)) gr =
 extractIxx arr nodes = A.listArray (0, length nodes - 1) [arr A.! n | n <- nodes]
 restrictGt gr nodes  = A.amap (catMaybes . map (`lookup` newIndexes)) (extractIxx gr nodes)
   where newIndexes = zip nodes [0..]
+
