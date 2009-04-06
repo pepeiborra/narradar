@@ -29,8 +29,11 @@ import qualified Language.Prolog.Syntax as Prolog
 -- GraphViz logs
 -- ----------------------------
 sliceWorkDone = foldFree return (Impure . f) where
-    f (Or p pi pp) = (Or p pi $ takeWhileAndOneMore (not . isSuccess) pp)
-    f MPlusPar{}   = MZero
+    f (Or  p pi pp) = (Or  p pi $ takeWhileAndOneMore (not . isSuccess) pp)
+    f (And p pi pp) = (And p pi $ takeWhileAndOneMore isSuccess pp)
+    f (MPlusPar p1 p2) = if isSuccess p1 then Stage p1 else (MPlusPar p1 p2)  -- We use stage in lieu of return here
+    f (MPlus    p1 p2) = if isSuccess p1 then Stage p1 else (MPlus    p1 p2)
+    f (MAnd     p1 p2) = if not(isSuccess p1) then Stage p1 else (MPlus    p1 p2)
     f x = x
     takeWhileAndOneMore f []     = []
     takeWhileAndOneMore f (x:xs) = if f x then x : takeWhileAndOneMore f xs else [x]
@@ -63,6 +66,7 @@ pprDot' PprDot{..} prb = showDot $ do
                                              p2 par
                                              return par
                                 return (Cluster cme)
+    f (Annotated done (MPlusPar p1 p2))  par = f (Annotated done (MPlus p1 p2)) par
     f (Annotated done (MPlus p1 p2))  par = do
         dis <- childnode' [("shape","point"),("label","")] (doneEdge done) par
         p1 dis
