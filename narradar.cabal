@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.2
-version:             0.2.20090404
+version:             0.2.20090406
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -89,7 +89,7 @@ Executable narradar
   hs-source-dirs:         src
   build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-     TRS >= 0.21.20090318, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
+     TRS >= 0.21.20090406, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
      parsec, prolog, prolog-tools, regex-posix, unix
   other-modules: 
 
