@@ -289,12 +289,14 @@ iUsableRules trs Nothing = F.toList . go mempty where
 
 
 iUsableRules trs (Just pi) = F.toList . go mempty . map(AF.apply pi) where
-  pi_trs = AF.apply pi trs
+  pi_rules = [(AF.apply pi r, r) | r <- rules trs]
+  pi_trs   = AF.apply pi trs
 --  usableRules acc (AF.apply pi -> t) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
   go acc [] = acc
+--  go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined 
   go acc (t@(In in_t):rest)
       | isVar t = go acc rest
-      | rr   <- Set.fromList [r | (pi_r, r) <- zip (rules pi_trs) (rules trs)
+      | rr   <- Set.fromList [r | (pi_r, r) <- pi_rules
                                 , hIn (runSupply' (icap pi_trs `T.mapM` in_t) ids) `unifies` lhs pi_r]
       , new  <- Set.difference rr acc
       = go (new `mappend` acc) (mconcat [AF.apply pi . rhs <$> F.toList new, directSubterms t, rest])
@@ -303,13 +305,13 @@ iUsableRules trs (Just pi) = F.toList . go mempty . map(AF.apply pi) where
 
 iUsableRules_correct trs (Just pi) = F.toList . go mempty where
   pi_trs = AF.apply pi trs
---  usableRules acc (AF.apply pi -> t) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
+  --go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
   go acc [] = acc
   go acc (t:rest)
       | isVar t = go acc rest
-      | t <- AF.apply pi t
+      | t@(In in_t) <- AF.apply pi t
       , rr   <- Set.fromList [r | (pi_r, r) <- zip (rules pi_trs) (rules trs)
-                                , runSupply' (icap pi_trs t) ids `unifies` lhs pi_r ]
+                                , hIn(runSupply' (icap pi_trs `T.mapM` in_t) ids) `unifies` lhs pi_r ]
       , new  <- Set.difference rr acc
       = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
   ids = [0..] \\ (concatMap.concatMap) collectVars (rules trs)
