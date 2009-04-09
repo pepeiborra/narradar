@@ -60,11 +60,11 @@ aproveLocalP path  = trivialP >=> (unsafePerformIO . aproveProc path)
 -- Processor-like Parsers
 -- ----------------------
 -- TODO Allow for goals in Narrowing problems
-parseTRS :: ProblemType Id -> String -> PPT Id BasicId Html (Either ParseError)
-parseTRS typ txt = wrap' $ do
-                      rules :: [Rule Basic] <- parseFile trsParser "" txt
-                      let trs = mkTRS rules :: NarradarTRS String Basic'
-                      P.return $ msum (map return $ mkGoalProblem AF.bestHeu Narrowing trs)
+--parseTRS :: ProblemType id -> String -> ProblemProofG (Identifier id) Html f
+parseTRS typ txt = eitherM $ do
+                      rules :: [Rule Basic'] <- parseFile trsParser "" txt
+                      let trs = tRS rules :: NarradarTRS String Basic'
+                      msum (map return $ mkGoalProblem AF.bestHeu typ trs)
 
 --parseProlog :: String -> PPT String Basic' Html IO
 parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
@@ -72,16 +72,12 @@ parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
 -- Some Basic solvers
 -- ------------------
 prologSolver opts typ = prologSolver' opts (typeHeu2 typ) (typeHeu typ)
+prologSolver' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
+  where narrowingSolver = refineBy 4 (solve (uGroundRhsAllP h2 >=> aproveWebP))
+                                     refineNarrowing
 
-{-
-prologSolver' h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver h2
-  where
-   narrowingSolver heu = solveBT 3 (((reductionPair heu 20) >=> sccProcessor) <|>                                    refineNarrowing)
--}
-
-prologSolver' opts h1 h2 = pSolver opts
-                           (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver)
-  where narrowingSolver = refineBy 20 (solve (reductionPair h2 20 >=> sccProcessor))
+prologSolverOne' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
+  where narrowingSolver = refineBy 4 (solve (reductionPair h2 20 >=> sccProcessor))
                                      refineNarrowing
 
 pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe prob sol, "") where

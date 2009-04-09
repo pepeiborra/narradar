@@ -8,7 +8,7 @@
 {-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 
-module Narradar ( narradarMain, Options(..)
+module Narradar ( narradarMain, Options(..), defOpts
                 , module Control.Monad
                 , module Control.Monad.Free
 --                , module Control.Monad.MonadPlus.Parameterized

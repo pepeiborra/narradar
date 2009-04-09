@@ -85,17 +85,17 @@ instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
 
 instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
    toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work where
-    work MZero = toHtml  "Don't know"
-    work DontKnow{} = toHtml  "Don't know"
+    work MZero       = toHtml  "Don't know"
+    work DontKnow{}  = toHtml  "Don't know"
     work Success{..} =
        p
         << problem  +++ br +++
            procInfo +++ br +++
-           divyes +++ thickbox res << spani "seeproof" << "(see proof)"
+           divyes   +++ thickbox res << spani "seeproof" << "(see proof)"
 
     work Fail{..} =
         p
-        << problem +++ br +++
+        << problem  +++ br +++
            procInfo +++ br +++
            divmaybe +++ thickbox res << spani "seeproof" << "(see failure)"
 
@@ -110,7 +110,13 @@ instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
            proc +++ br +++
 --           "Problem was divided in " +++ show(length sub) +++ " subproblems" +++ br +++
            H.unordList sub
-    work (MPlus p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work (MAnd p1 p2) =
+        p
+        << H.unordList [p1,p2]
+    work MDone = noHtml -- toHtml "RESULT: D"
+    work (MPlus    p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work (MPlusPar p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work (Stage p)= p
     work Step{..} = p
                     << problem +++ br +++ procInfo +++ br +++ subProblem
 
@@ -134,7 +140,7 @@ instance HTML Prolog.Atom where
 typClass typ | isFullNarrowing typ = theclass "NDP"
 typClass typ | isBNarrowing typ = theclass "BNDP"
 typClass typ | isGNarrowing typ = theclass "GNDP"
-typClass Rewriting = theclass "DP"
+typClass typ | isRewriting typ  = theclass "DP"
 typClass Prolog{}  = theclass "Prolog"
 
 divi ident = H.thediv ! [H.theclass ident]

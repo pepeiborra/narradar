@@ -33,9 +33,9 @@ data ProblemTypeF pi   = Rewriting   | InnermostRewriting
 instance Ppr (ProblemType id) where
     ppr Prolog{}                  = text "Prolog"
     ppr typ | isFullNarrowing typ = text "NDP"
-    ppr typ | isGNarrowing typ    = text "Ground NDP"
-    ppr typ | isBNarrowing typ    = text "BNDP"
-    ppr Rewriting                 = text "DP"
+    ppr typ | isGNarrowing    typ = text "Ground NDP"
+    ppr typ | isBNarrowing    typ = text "BNDP"
+    ppr typ | isRewriting     typ = text "DP"
 
 isAnyNarrowing = isFullNarrowing .|. isBNarrowing .|. isGNarrowing
 
