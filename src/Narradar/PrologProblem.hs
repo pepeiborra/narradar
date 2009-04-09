@@ -91,9 +91,7 @@ skTransform :: [Clause] -> NarradarTRS PS BasicPS
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        sig = getSignature clauses
 
-       findFreeSymbol :: String -> String
-       findFreeSymbol pre = fromJust $ find (`Set.notMember` allSymbols sig) (pre : [pre ++ show i | i <- [0..]])
-       [equalF] = map findFreeSymbol ["equal"]
+       [equalF, commaF] = map (findFreeSymbol sig) ["equal", "comma"]
 
        clauseRules :: [(Ident, Rule BasicPS)] = concat $ (`evalState` [0..]) $
          -- The counter is global, the list of vars is local to each clause
@@ -133,7 +131,7 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        toTerm = foldInM f where
 --         f :: (MonadFresh m, TRSC f, T PS :<: f) => TermF (TRS.Term f) -> m (TRS.Term f)
          f(Term id tt) = return $ term (FunctorId id) tt
-         f(Tuple   tt) = return $ term (FunctorId "','") tt
+         f(Tuple   tt) = return $ term (FunctorId commaF) tt
          f Wildcard    = var   <$>fresh
          f (Int i)
             |i>0       = return (iterate (TRS.term1 (FunctorId "succ")) (constant (FunctorId "zero")) !! fromInteger i)
@@ -148,6 +146,7 @@ Right preludePl = $(do
                      pgm <- runIO (readFile "prelude.pl")
                      either (error.show) (\_ ->[| parse Prolog.program "prelude.pl" pgm|]) (parse Prolog.program "prelude.pl" pgm)
                    )
+
 preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
 addMissingPredicates cc
   | Set.null undefinedPreds = cc
@@ -161,13 +160,14 @@ addMissingPredicates cc
          insertPrelude  = not $ Set.null (Set.intersection undefinedPreds preludePreds)
          sig            = getSignature cc
          definedPredicates = Set.fromList [ f | Pred f _ :- _ <- cc]
-         findFreeName pre  = fromJust $ find (`Set.notMember` allSymbols sig)
-                                              (pre : [pre ++ show i | i <- [0..]])
          cc' = foldr renamePred (cc `mappend` preludePl) (toList repeatedIdentifiers)
          repeatedIdentifiers = preludePreds `Set.intersection` definedPredicates
-         renamePred f = fmap2 (rename (findFreeName f))
+         renamePred f = fmap2 (rename (findFreeSymbol sig f))
          rename f' (Pred f tt) | f == f' = Pred f' tt
          rename _ x = x
+
+findFreeSymbol sig prefix = fromJust $ find (`Set.notMember` getAllSymbols sig)
+                                              (prefix : [prefix ++ show i | i <- [0..]])
 
 {-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
 
