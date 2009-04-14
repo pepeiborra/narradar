@@ -62,9 +62,9 @@ inferType (Problem Prolog{..} _ _) = infer program
 -- Transformations
 -- ----------------
 
-{-# off SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# pff SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
-prologP_sk :: AF.PolyHeuristic heu PId BasicPId => MkHeu heu -> PrologProblem -> ProblemProofG PId Html BasicPId
+{-# off SPECIALIZE prologP_sk :: Problem BBasicId -> ProblemProof BBasicId #-}
+{-# pff SPECIALIZE prologP_sk :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
+prologP_sk :: AF.PolyHeuristic heu PId BasicPId => MkHeu heu -> PrologProblem -> ProblemProofG PId BasicPId
 prologP_sk mkHeu p@(Problem Prolog{..} _ _) =
    andP PrologSKP p
      [ return p
@@ -169,11 +169,11 @@ addMissingPredicates cc
 findFreeSymbol sig prefix = fromJust $ find (`Set.notMember` getAllSymbols sig)
                                               (prefix : [prefix ++ show i | i <- [0..]])
 
-{-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId Html BBasicLId #-}
+{-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId BBasicLId #-}
 
-prologP_labelling_sk :: (AF.PolyHeuristic heu LPS BasicLPS, AF.PolyHeuristic heu LPId BasicLPId) => MkHeu heu -> PrologProblem -> ProblemProofG LPId Html BasicLPId
+prologP_labelling_sk :: (AF.PolyHeuristic heu LPS BasicLPS, AF.PolyHeuristic heu LPId BasicLPId) => MkHeu heu -> PrologProblem -> ProblemProofG LPId BasicLPId
 prologP_labelling_sk mkHeu p@(Problem Prolog{..} _ _)
-  | null goals = success (LabellingSKP []) p (toHtml "There are no queries to analyze")
+  | null goals = success (LabellingSKP []) p
   | otherwise = mall problems
    where trs = skTransform program
          problems = do goalAF              <- AF.mapSymbols InId <$> goals
