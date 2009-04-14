@@ -98,12 +98,14 @@ mapLabel f l0 (Plain i)        = Labelling l0 i
 mapLabelT f l0 = mapTerm (mapLabelTF f l0)
 
 class MapLabelT' f f => MapLabelT f; instance MapLabelT' f f => MapLabelT f
-class (f :<: g) => MapLabelT' f g where mapLabelTF :: ([Int] -> [Int]) -> [Int] -> f (Term g) -> Term g
+class (f :<: g) => MapLabelT' f g where mapLabelTF :: ([Int] -> [Int]) -> [Int] -> f (Term g) -> Term g; mapLabelTF _ _ = inject
 
 instance (T (Labelled id) :<: g) => MapLabelT' (T (Labelled id)) g where mapLabelTF f l0 (T id tt) = inject (T (mapLabel f l0 id) tt)
 instance (MapLabelT' f g, MapLabelT' f' g, (f:+:f') :<: g) => MapLabelT' (f :+: f') g where
     mapLabelTF f l0 (Inr x) = mapLabelTF f l0 x; mapLabelTF f l0 (Inl x) = mapLabelTF f l0 x
-instance (f :<: g) => MapLabelT' f g where mapLabelTF _ _ = inject
+--instance (T id :<: g) => MapLabelT' (T id) g
+instance (Hole :<: g) => MapLabelT' Hole   g
+instance (Var  :<: g) => MapLabelT' Var    g
 
 --setLabel,appendLabel :: forall f id. (T (Labelled id) :<: f, HashConsed f) => Term f -> [Int] -> Term f
 setLabel t ll = mapLabelT (const ll) ll t
