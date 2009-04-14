@@ -137,17 +137,18 @@ refreshRules ids  = (`runSupply'` ids) . mapM doRule where
 computeDPUnifiers :: (DPMark f, TRS trs id f, ApplyAF trs id, MonadPlus m, unif ~ Array (Int,Int) (m(Subst f)))=> ProblemType id -> trs -> [DP f] -> unif :!: unif
 computeDPUnifiers typ trs dps = unif :!: unifInv where
    unif = array ( (0,0), (length dps -1 , length dps - 1) )
-           [((x,y), unify' l (if x/=y then r' else head(variant' [r'] [l])))
+           [((x,y), unify l (if x/=y then r' else rename r'))
               | (x, _ :-> r) <- zip [0..] dps
               , (y, l :-> _) <- zip [0..] dps
               , let r' = runSupply' (icap trs r >>= mbren) ids ]
    unifInv = array ( (0,0), (length dps -1 , length dps - 1) )
-           [((x,y), unify' r (if x/=y then l' else head(variant' [l'] [r])))
+           [((x,y), unify r (if x/=y then l' else rename l'))
               | (x, _ :-> r) <- zip [0..] dps
               , (y, l :-> _) <- zip [0..] dps
               , let trs' = tRS (swapRule <$> mbUsableRules [r]) `asTypeOf` trs
               , let l' = runSupply' (icap trs' l >>= ren) ids ]
 
+   rename t = head $ runSupply' (variant [t]) ids
    ids = [0..] \\ (concatMap.concatMap) collectVars dps
    (mbren, mbUsableRules) = if (isBNarrowing .|. isGNarrowing) typ
                               then (return,iUsableRules trs Nothing)
@@ -176,13 +177,13 @@ dpUnifyInv (DPTRS _ _ (_ :!: unifs) _) l r = unifs ! (r,l)
 expandDPair typ trs (DPTRS dps gr (unif :!: unifInv) sig) i newdps =
     dptrs' `demanding` rnf unif' `demanding` rnf unifInv'
   where
-    dptrs' = dpTRS'' a_dps' gr' (unif' :!: unifInv')
-    unif'  = mkUnif' unif unif_new          `asTypeOf` unif
+    dptrs'   = dpTRS'' a_dps' gr' (unif' :!: unifInv')
+    unif'    = mkUnif' unif    unif_new     `asTypeOf` unif
     unifInv' = mkUnif' unifInv unifInv_new  `asTypeOf` unif
-    a_dps' = A.listArray (0,length dps' - 1) dps'
-    dps'   = dps1 ++  dps2 ++ refreshRules ids newdps
+    a_dps'   = A.listArray (0,length dps' - 1) dps'
+    dps'     = dps1 ++  dps2 ++ refreshRules ids newdps
+    ids      = [0..] \\ (concatMap.concatMap) collectVars dps
     (dps1,_:dps2) = splitAt i (elems dps)
-    ids = [0..] \\ (concatMap.concatMap) collectVars dps
 
     gr' = buildG (0, l_dps' - 1)
                    ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
