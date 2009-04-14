@@ -51,15 +51,14 @@ getLPairs :: (Ord id, T id :<: f, DPMark f) => NarradarTRS id f -> [DP f]
 getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isDefined trs lp]
 
 
-{-# SPECIALIZE cycleProcessor :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# SPECIALIZE sccProcessor   :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-cycleProcessor, sccProcessor :: (T id :<: f, DPMark f, Show id, Ord id) => ProblemG id f -> ProblemProofG id Html f
-usableSCCsProcessor :: forall f id. (T LPId :<: f, DPMark f) => ProblemG LPId f -> ProblemProofG LPId Html f
+{-# SPECIALIZE cycleProcessor :: Problem BBasicId -> ProblemProofG Id BBasicId #-}
+{-# SPECIALIZE sccProcessor   :: Problem BBasicId -> ProblemProofG Id BBasicId #-}
+cycleProcessor, sccProcessor :: (T id :<: f, DPMark f, Show id, Ord id) => ProblemG id f -> ProblemProofG id f
+usableSCCsProcessor :: forall f id. (T LPId :<: f, DPMark f) => ProblemG LPId f -> ProblemProofG LPId f
 
 usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps@(DPTRS dd _ unif sig))
   | assert (isSoundAF pi problem) False = undefined
-  | null cc   = success (UsableGraph gr reachable) problem
-                (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
+  | null cc   = success NoCycles problem
   | otherwise =  andP (UsableGraph gr reachable) problem
                  [return $ Problem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo)
                       | ciclo <- cc, any (`Set.member` reachable) ciclo]
@@ -75,8 +74,7 @@ usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps@(DPTRS
 usableSCCsProcessor p = sccProcessor p
 
 sccProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
-  | null cc   = success (SCCGraph gr []) problem
-                (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
+  | null cc   = success NoCycles problem
   | otherwise =  andP (SCCGraph gr (map Set.fromList cc)) problem
                  [return $ Problem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
     where dd = rulesArray dps
@@ -86,8 +84,7 @@ sccProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
           isCycle _   = True
 
 cycleProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
-  | null cc   = success (DependencyGraph gr) problem
-                (toHtml "We need to prove termination for all the cycles. There are no cycles, so the system is terminating")
+  | null cc   = success NoCycles problem
   | otherwise =  andP (DependencyGraph gr) problem
                  [return $ Problem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
     where cc = cycles gr
@@ -96,7 +93,7 @@ cycleProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
 getEDG p = filterSEDG p $ getdirectEDG p
 
 getdirectEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph
-getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) | (isBNarrowing .|. isGNarrowing) typ =
+getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) =
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
 filterSEDG :: (Ord id, T id :<: f, DPMark f) => ProblemG id f -> G.Graph -> G.Graph

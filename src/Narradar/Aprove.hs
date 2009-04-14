@@ -3,6 +3,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Rank2Types #-}
 module Narradar.Aprove where
 
 import Control.Applicative hiding ((<|>), many)
@@ -31,12 +32,15 @@ import Text.ParserCombinators.Parsec.Tag
 import Paths_narradar
 
 import TRS
+import Control.Monad.Free
 import Narradar.Types
 import Narradar.Output
 import Narradar.Proof
 import Narradar.Utils
 
-aproveWebProc :: (Ord id, Show id, TRSC f, T id :<: f) => ProblemG id f -> IO (ProblemProofG id Html f)
+type ExternalProcTyp proof id f = (Ord id, Show id, TRSC f, T id :<: f, MonadFree ProofF proof) => ProblemG id f -> IO (proof(ProblemG id f))
+
+aproveWebProc :: ExternalProcTyp m id f
 aproveWebProc = memoExternalProc go where
   go prob@(Problem  (isRewriting -> True) trs dps) = do
     curl <- initialize
@@ -55,7 +59,7 @@ aproveWebProc = memoExternalProc go where
     response :: CurlResponse <- perform_with_response curl
     let output = respBody response
     return$ (if isTerminating output then success else failP)
-            (External$ Aprove "WEB") prob (primHtml output)
+            (External (Aprove "WEB") [OutputHtml  (primHtml output)]) prob
 
 isTerminating (canonicalizeTags.parseTags -> tags) = let
      ww = words $ map toLower $ innerText $ takeWhile ((~/= "<br>") .&. (~/= "</p>")) $ dropWhile (~/= "<b>") $ dropWhile (~/= "<body>") tags
@@ -63,7 +67,7 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
      any ("proven" `isPrefixOf`) ww && ("not" `notElem` ww)
 
 
-aproveProc :: (Ord id, Show id, TRSC f, T id :<: f) => FilePath -> ProblemG id f -> IO (ProblemProofG id Html f)
+aproveProc :: FilePath -> ExternalProcTyp m id f
 aproveProc path = go where
    go prob@(Problem (isRewriting -> True) trs dps) =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
@@ -76,13 +80,13 @@ aproveProc path = go where
               errors            <- hGetContents err
               unless (null errors) (error ("Aprove failed with the following error: \n" ++ errors))
               return$ (if take 3 output == "YES" then success else failP)
-                        (External $ Aprove path) prob (massage output)
+                        (External (Aprove path) [OutputHtml(massage output)] ) prob
 
 aproveSrvPort    = 5250
-
+{-
 aproveSrvProc :: (Ord id, Show id,TRSC f, T id :<: f) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
-aproveSrvProc timeout = memoExternalProc go where
+aproveSrvProc timeout =  go where
   go prob@(Problem  (isRewriting -> True) trs dps) = unsafeInterleaveIO $
                                                  withSocketsDo $
                                                  withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
@@ -114,23 +118,25 @@ aproveSrvProc timeout = memoExternalProc go where
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
 
-
-data Strat = Default | OnlyReductionPair deriving Eq
+-}
+data Strat = Default | OnlyReductionPair deriving (Show, Eq)
 
 strats = [ (Default,           "aproveStrats/narradar.strategy")
          , (OnlyReductionPair, "aproveStrats/reductionPair.strategy")]
 
-aproveSrvXML strat (timeout :: Int) prob@(Problem  (isRewriting -> True) trs dps) =
-  withSocketsDo $ withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
-    let trs = pprTPDB prob
+callAproveSrv s t p = memoCallAproveSrv'(s,t,p)
+{-# NOINLINE memoCallAproveSrv' #-}
+memoCallAproveSrv' = unsafePerformIO (memoIO (hashString . show) callAproveSrv')
+
+callAproveSrv' :: (Strat,Int, String) -> IO String
+callAproveSrv' (strat, timeout, p) = withSocketsDo $ withTempFile "/tmp" "ntt.trs" $ \fp0 h_problem_file -> do
     let fp = "/tmp" </> fp0
 #ifdef DEBUG
-    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ trs)
+    hPutStrLn stderr ("solving the following problem with Aprove:\n" ++ p)
 #endif
-    hPutStr h_problem_file trs
+    hPutStr h_problem_file p
     hFlush  h_problem_file
     hClose  h_problem_file
-
     hAprove <- connectTo "127.0.0.1" (PortNumber aproveSrvPort)
 
     hPutStrLn hAprove "3"                     -- Saying hello
@@ -146,13 +152,16 @@ aproveSrvXML strat (timeout :: Int) prob@(Problem  (isRewriting -> True) trs dps
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
 
+aproveSrvXML strat (timeout :: Int) prob@(Problem  (isRewriting -> True) trs dps) =
+    let p = pprTPDB prob in callAproveSrv strat timeout p
+
 aproveSrvProc2 strat (timeout :: Int) =  go where
   go prob@(Problem  (isRewriting -> True) trs dps) = do
     res <- aproveSrvXML strat timeout prob
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
               _     -> failP
-    return (k (External $ Aprove "SRV") prob $ primHtml $ tail $ dropWhile (/= '\n') res)
+    return (k (External (Aprove "SRV") [OutputXml (tail $ dropWhile (/= '\n') res)]) prob)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
 
@@ -176,16 +185,12 @@ pprTPDB p@(Problem typ trs dps) =
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprTerm = foldTerm f
-        f (prj -> Just (Var i n))       = text "v" <> int n
-        f (prj -> Just (T (id::id) [])) = text (show id)
-        f (prj -> Just (T (id::id) tt)) =
-            text (show id) <> parens (hcat$ punctuate comma tt)
+        f (prj -> Just (Var _ n))       = text "v" <> int n
+--        f (prj -> Just (T (id::id) [])) = text (show id)
+        f (prj -> Just (T (id::id) tt))
+          | show id == "','" = text "comma" <> parens (hcat$ punctuate comma tt) -- TODO Fix this HACK
+          | otherwise        = text (show id) <> parens (hcat$ punctuate comma tt)
         f t = pprF t
-{-
-        f (prj -> Just Bottom) =  -- TODO Cache the obtained representation on first call
-            text $ fromJust $ find (not . flip Set.member (allSymbols$getSignature p) . functionSymbol)
-                                   ("_|_":["_|_"++show i | i <- [0..]])
--}
 
 -- ----------------
 -- Parse XML

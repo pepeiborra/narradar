@@ -9,7 +9,7 @@ import Control.Monad.State
 class Monad m => MonadSupply i m | m -> i where next :: m i
 
 newtype Supply i a = Supply {runSupply_ :: State [i] a}
-  deriving (Functor, Monad, MonadSupply i)
+  deriving (Functor, Monad, MonadState [i], MonadSupply i)
 
 instance MonadSupply e (State [e]) where
   next = do

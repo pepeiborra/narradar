@@ -1,4 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, TemplateHaskell #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE CPP #-}
 module Narradar.ProblemType where
 
 import Control.Applicative
@@ -13,12 +15,15 @@ import Prelude hiding (pi)
 import Text.PrettyPrint
 
 import Narradar.Utils
-
 import Narradar.ArgumentFiltering
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.TypeChecker as Prolog
 import qualified Language.Prolog.Parser as Prolog
+
+#ifdef HOOD
+import Debug.Observe
+#endif
 
 type ProblemType id = ProblemTypeF (AF_ id)
 
@@ -61,6 +66,13 @@ isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 
 --isModed = isJust . getGoalAF
 
+getProblemAF = getGoalAF
+getGoalAF NarrowingModes{pi}   = Just pi
+getGoalAF BNarrowingModes{pi}  = Just pi
+getGoalAF GNarrowingModes{pi}  = Just pi
+getGoalAF LBNarrowingModes{pi} = Just pi
+getGoalAF _ = Nothing
+
 narrowingModes0 =   NarrowingModes  {goal=error "narrowingModes0", pi=error "narrowingModes0"}
 bnarrowingModes0 =  BNarrowingModes {goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}
 gnarrowingModes0 =  GNarrowingModes {goal=error "gnarrowingModes0", pi=error "gnarrowingModes0"}
@@ -69,3 +81,7 @@ lbnarrowingModes0 = LBNarrowingModes{goal=error "lbnarrowingModes0", pi=error "l
 $(derive makeFunctor     ''ProblemTypeF)
 $(derive makeFoldable    ''ProblemTypeF)
 $(derive makeTraversable ''ProblemTypeF)
+
+#ifdef HOOD
+instance Show a => Observable (ProblemTypeF a) where observer = observeBase
+#endif

@@ -5,6 +5,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 
 module Narradar.GraphTransformation (narrowing, instantiation, finstantiation) where
 
@@ -24,6 +26,7 @@ import Control.Comonad.Pointer
 import Control.Monad.Logic
 import Text.XHtml (Html)
 
+import Control.Monad.Free
 import Narradar.Types hiding ((//), (!))
 import TRS (open, EqModulo_(..))
 import Narradar.Utils ((<$$>), (.|.), snub, foldMap2, trace)
@@ -34,11 +37,11 @@ import Narradar.UsableRules
 import qualified TRS
 
 
-{-# SPECIALIZE narrowing      :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
-{-# SPECIALIZE instantiation  :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
-{-# SPECIALIZE finstantiation :: ProblemG LId BasicLId -> [ProblemProofG LId Html BasicLId] #-}
+{-# SPECIALIZE narrowing      :: MonadFree ProofF mf => ProblemG LId BasicLId -> [mf(ProblemG LId BasicLId)] #-}
+{-# SPECIALIZE instantiation  :: MonadFree ProofF mf => ProblemG LId BasicLId -> [mf(ProblemG LId BasicLId)] #-}
+{-# SPECIALIZE finstantiation :: MonadFree ProofF mf => ProblemG LId BasicLId -> [mf(ProblemG LId BasicLId)] #-}
 
-narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => ProblemG id f -> [ProblemProofG id Html f]
+--narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => ProblemG id f -> [ProblemProofG id f]
 narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPTRS dpsA gr unif sig))
     = [ step (NarrowingP olddp (tRS newdps)) p (Problem typ trs (expandDPair typ trs dptrs i newdps))
                      | (i,dps') <- dpss

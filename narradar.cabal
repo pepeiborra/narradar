@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.2
-version:             0.2.20090406
+version:             0.2.20090412
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -21,6 +21,8 @@ Flag web
    default: False
 Flag debug
    default: False
+Flag hood
+   default: False
 
 Library
   if flag(base4)
@@ -30,6 +32,8 @@ Library
      build-depends:     base < 4
   if flag(debug)
      cpp-options: -DDEBUG
+  if flag(hood)
+     cpp-options: -DHOOD
      build-depends: GHood
   buildable: True
 --  cpp-options: -DGHCI
@@ -50,6 +54,7 @@ Library
      Narradar.Proof,
      Narradar.DPairs,
      Narradar.TRS,
+     Narradar.Problem
      Narradar.ProblemType,
      Narradar.GraphTransformation,
      Narradar.ArgumentFiltering,
@@ -82,7 +87,7 @@ Executable narradar
   else
      build-depends:     base < 4
   if flag(debug)
-     cpp-options: -DDEBUG
+     cpp-options: -DDEBUG -DHOOD
      build-depends: GHood
   main-is:             Main.hs
   ghc-options:         

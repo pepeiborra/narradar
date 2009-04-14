@@ -51,7 +51,7 @@ instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
 evProcessor _ p | not (isAnyNarrowingProblem p) = P.return p
 evProcessor mkH p@(Problem typ@(getProblemAF -> Just af) trs dps)
      | null extra      = P.return p
-     | null orProblems = failP (EVProc mempty :: ProcInfo ()) p (toHtml "Could not find a EV-eliminating AF")
+     | null orProblems = failP EVProcFail p
      | otherwise = P.msum (map P.return orProblems)
   where extra = extraVars p
         heu = mkHeu mkH p

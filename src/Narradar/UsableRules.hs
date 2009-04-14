@@ -18,7 +18,7 @@ import Narradar.Proof
 import Narradar.Types
 import Narradar.Utils
 
-usableRulesP :: forall f id a. (DPMark f, Show id, T id :<: f, Ord a, id ~ Identifier a) => ProblemG id f -> ProblemProofG id Html f
+usableRulesP :: forall f id a. (DPMark f, Show id, T id :<: f, Ord a, id ~ Identifier a) => ProblemG id f -> ProblemProofG id f
 
 usableRulesP p@(Problem typ trs dps)
   | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)

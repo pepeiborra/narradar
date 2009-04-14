@@ -12,6 +12,8 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Narradar.Proof where
 
@@ -30,13 +32,13 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable (Foldable(..), toList, maximum, sum)
 import Data.IORef
-import Data.List (unfoldr)
+import Data.List (unfoldr, find)
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import Data.Traversable as T
-import Text.PrettyPrint hiding ()
-import Text.XHtml (Html, toHtml)
+import Text.PrettyPrint as Doc
+import Text.XHtml (Html, toHtml, noHtml)
 import System.IO.Unsafe
 
 import qualified Language.Prolog.Syntax as Prolog (Program)
@@ -54,13 +56,13 @@ import qualified Prelude as P
 -- Proofs
 -- ---------
 
-data ProofF s k =
+data ProofF k =
     And     {procInfo :: !(SomeInfo), problem :: !(SomeProblem), subProblems::[k]}
   | Or      {procInfo :: !(SomeInfo), problem :: !(SomeProblem), subProblems::[k]}
   | Step    {procInfo :: !(SomeInfo), problem :: !(SomeProblem), subProblem::k}
   | Stage k
-  | Success {procInfo :: !(SomeInfo), problem :: !(SomeProblem), res::s}
-  | Fail    {procInfo :: !(SomeInfo), problem :: !(SomeProblem), res::s}
+  | Success {procInfo :: !(SomeInfo), problem :: !(SomeProblem)}
+  | Fail    {procInfo :: !(SomeInfo), problem :: !(SomeProblem)}
   | DontKnow{procInfo :: !(SomeInfo), problem :: !(SomeProblem)}
   | MPlus k k
   | MPlusPar k k
@@ -68,42 +70,41 @@ data ProofF s k =
   | MAnd  k k
   | MDone
 
-type Proof s a            = Free (ProofF s) a
-type ProblemProof     s f = Proof s (Problem f)
-type ProblemProofG id s f = Proof s (ProblemG id f)
+-- Unfortunately, GHC does not interpret type class constraints in type synonyms
+-- in a useful way, at least here. In Proof and ProblemProofG we would wish that
+-- the constraints are floated out to top, or at least to the nearest binding occurrence,
+-- but instead they are kept, which means we cannot have these types in an impredicative position.
+type ProofC a           = Free ProofF a
+type Proof  a           = (MonadPlus m, MonadFree ProofF m) => m a
+type ProblemProof  id f = ProofC (ProblemG id f)
+type ProblemProofG id f = (MonadPlus m, MonadFree ProofF m) => m (ProblemG id f)
+type ProblemProofC id f = ProofC (ProblemG id f)
 
-
-success  pi p0 s = jail $ htmlProofF (Success (someInfo pi) (someProblem p0) s)
-success' pi p0 s = jail $ htmlProofF (Success pi p0 s)
-failP    pi p0 s = jail $ htmlProofF (Fail (someInfo pi) (someProblem p0) s)
-failP'   pi p0 s = jail $ htmlProofF (Fail pi p0 s)
-choiceP  p1 p2   = jail $ htmlProofF (MPlus p1 p2)
-dontKnow pi p0   = jail $ htmlProofF (DontKnow (someInfo pi) (someProblem p0))
-dontKnow' pi p0  = jail $ htmlProofF (DontKnow pi p0)
-andP pi p0 []    = success pi p0 mempty
-andP pi p0 pp    = jail $ htmlProofF (And (someInfo pi) (someProblem p0) pp)
-andP' pi p0 []   = success' pi p0 mempty
-andP' pi p0 pp   = jail $ htmlProofF (And pi p0 pp)
-orP  pi p0 []    = success pi p0 mempty
-orP  pi p0 pp    = jail $ htmlProofF (Or (someInfo pi) (someProblem p0) pp)
-orP' pi p0 []    = success' pi p0 mempty
-orP' pi p0 pp    = jail $ htmlProofF (Or pi p0 pp)
-step pi p0 p     = jail $ htmlProofF (Step (someInfo pi) (someProblem p0) (return p))
-step' pi p0 p    = jail $ htmlProofF (Step pi p0 p)
-mand p1 p2       = jail $ htmlProofF (MAnd p1 p2)
-mdone            = jail $ htmlProofF MDone
+success  pi p0 = jail (Success (someInfo pi) (someProblem p0))
+success' pi p0 = jail (Success pi p0)
+failP    pi p0 = jail (Fail (someInfo pi) (someProblem p0))
+failP'   pi p0 = jail (Fail pi p0)
+choiceP  p1 p2   = jail (MPlus p1 p2)
+dontKnow pi p0   = jail (DontKnow (someInfo pi) (someProblem p0))
+dontKnow' pi p0  = jail (DontKnow pi p0)
+andP pi p0 []    = success pi p0
+andP pi p0 pp    = jail (And (someInfo pi) (someProblem p0) pp)
+andP' pi p0 []   = success' pi p0
+andP' pi p0 pp   = jail (And pi p0 pp)
+orP  pi p0 []    = success pi p0
+orP  pi p0 pp    = jail (Or (someInfo pi) (someProblem p0) pp)
+orP' pi p0 []    = success' pi p0
+orP' pi p0 pp    = jail (Or pi p0 pp)
+step pi p0 p     = jail (Step (someInfo pi) (someProblem p0) (return p))
+step' pi p0 p    = jail (Step pi p0 p)
+mand p1 p2       = jail (MAnd p1 p2)
+mdone            = jail MDone
 mall             = foldr mand mdone
-mplusPar p1 p2   = jail $ htmlProofF (MPlusPar p1 p2)
+mplusPar p1 p2   = jail (MPlusPar p1 p2)
 msumPar          = foldr mplusPar mzero
-stage            = jail . htmlProofF . Stage
+stage            = jail . Stage
 
-htmlProofF :: ProofF Html a -> ProofF Html a
-htmlProofF = id
-
-htmlProof :: Proof Html a -> Proof Html a
-htmlProof = id
-
-deriving instance (Show s, Show k) => Show (ProofF s k)
+deriving instance (Show k) => Show (ProofF k)
 
 data SomeProblem where
     SomeProblem       :: (TRSC f, T id :<: f, Ord id, Show id) => !(ProblemG id f) -> SomeProblem
@@ -128,10 +129,9 @@ trimProblem p = p
 data SomeInfo where SomeInfo :: Show id => !(ProcInfo id) -> SomeInfo
 instance Ppr SomeInfo where ppr (SomeInfo pi) = ppr pi
 instance Show SomeInfo where show = show . ppr
-
 someInfo = SomeInfo
 
-instance TRS.Ppr a => Ppr (ProblemProof String a) where
+instance TRS.Ppr f => Ppr (ProblemProofC id f) where
     ppr = foldFree leaf f where
       leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
       f MZero = text "don't know"
@@ -139,12 +139,12 @@ instance TRS.Ppr a => Ppr (ProblemProof String a) where
         ppr problem $$
         text "PROCESSOR: " <> ppr procInfo $$
         text ("RESULT: Problem solved succesfully") $$
-        text ("Output: ") <>  (vcat . map text . lines) res
+        proofTail procInfo
       f Fail{..} =
         ppr problem $$
         text "PROCESSOR: " <> ppr procInfo  $$
         text ("RESULT: Problem could not be solved.") $$
-        text ("Output: ") <> (vcat . map text . lines) res
+        proofTail procInfo
       f p@(Or proc prob sub) =
         ppr prob $$
         text "PROCESSOR: " <> ppr proc $$
@@ -165,60 +165,71 @@ instance TRS.Ppr a => Ppr (ProblemProof String a) where
         text "PROCESSOR: " <> ppr procInfo $$
         nest 8 subProblem
 
+      proofTail :: SomeInfo -> Doc
+      proofTail (SomeInfo (External _ (find isOutputTxt -> Just (OutputTxt txt))))
+                  = text ("Output: ") <> (vcat . map text . lines) txt
+      proofTail _ = Doc.empty
+
 -- -------------------
 -- MonadPlus instances
 -- -------------------
 
-instance MonadP.MonadZero (Free (ProofF s)) where mzeroM = Impure MZero
-instance MonadP.MPlus (Free (ProofF s)) (Free (ProofF s)) (Free (ProofF s))  where
-    mplus p1 p2 = Impure (MPlus p1 p2) -- if isSuccess p1 then p1 else choiceP p1 p2
+instance MonadP.MonadZero (Free ProofF) where mzeroM = jail MZero
+instance MonadP.MPlus (Free ProofF) (Free ProofF ) (Free ProofF )  where
+    mplus p1 p2 = jail $ MPlus p1 p2 -- if isSuccess p1 then p1 else choiceP p1 p2
 
+instance MonadPlus (C (Free ProofF)) where
+    mplus p1 p2 = jail $ MPlus p1 p2
+    mzero       = jail MZero
 
 -- ------------------
 -- Monad Transformer
 -- ------------------
 -- we are going to need a monad transformer (for the Aprove proc)
 
-type ProofT   s m a = FreeT (ProofF s) m a
-type PPT id f s m   = ProofT s m (ProblemG id f)
+type ProofT   m a = FreeT ProofF m a
+type PPT id f m   = ProofT m (ProblemG id f)
 
-liftProofT :: P.Monad m => Proof s a -> ProofT s m a
+liftProofT :: P.Monad m => ProofC a -> ProofT m a
 liftProofT = wrap
 
-instance P.Monad m => MonadP.MonadZero (FreeT (ProofF s) m) where mzeroM = wrap(Impure MZero)
-instance Monad m => MonadP.MPlus (FreeT (ProofF s) m) (FreeT (ProofF s) m) (FreeT (ProofF s) m) where
+instance P.Monad m => MonadP.MonadZero (FreeT ProofF m) where mzeroM = wrap(Impure MZero)
+instance Monad m => MonadP.MPlus (FreeT ProofF m) (FreeT ProofF m) (FreeT ProofF m) where
     mplus m1 m2 = FreeT $ return $ Right (MPlus m1 m2)
 
 -- Additional parameterized instances between the Proof and ProofT
-instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (Free (ProofF s)) (FreeT (ProofF s) m) (FreeT (ProofF s) m) where
+instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (Free ProofF) (FreeT ProofF m) (FreeT ProofF m) where
     mplus m1 m2 = FreeT $ return $ Right (MPlus (wrap m1) m2)
 
-instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT (ProofF s) m) (Free (ProofF s)) (FreeT (ProofF s) m) where
+instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT ProofF m) (Free ProofF) (FreeT ProofF m) where
     mplus m1 m2 = FreeT $ return $ Right (MPlus  m1 (wrap m2))
 
 -- ------------
 -- * Evaluators
 -- ------------
 
-type StagedProof s a  = Proof s (Proof s a)
+--type StagedProof a  = Proof (Proof a)
 
-stageProof :: forall a s. Proof s a -> StagedProof s a
+--stageProof :: forall a s. Proof a -> StagedProof a
 stageProof = foldFree (return . return) f where
   f (Stage p) = return (unstageProof p)
-  f x = Impure x
+  f x = jail x
 
-unstageProof :: StagedProof s a -> Proof s a
+--unstageProof :: StagedProof a -> Proof a
 unstageProof = join
 
-runProof :: (Monoid s) => Proof s a -> Maybe (Proof s b)
-runProof p = listToMaybe $ observeMany 1 $ do
-  sol <- foldFree return evalF (stageProof p)
+runProof = runProof' . improve
+--runProof' :: (Monoid s, MonadFree (ProofF s) proof) => ProofC a -> Maybe (proof b)
+runProof' p = listToMaybe $ observeMany 1 search where
+  p'     = stageProof p
+  search = do
+    sol <- foldFree return evalF p'
 --  let sol' = unstageProof sol
-  runProofDirect sol
- where
-  runProofDirect = foldFree (const mzero) evalF
+    runProofDirect (sol `asTypeOf` p)
+
+  runProofDirect p = foldFree (const mzero) evalF p `asTypeOf` search
 {-
-runProofBFS :: (Monoid s) => Proof s a -> Maybe (Proof s b)
+runProofBFS :: (Monoid s) => Proof a -> Maybe (Proof b)
 runProofBFS t = listToMaybe $ observeMany 1 (msum (foldFree (const mzero) evalF <$> tt)) where
   tt = map fst $ takeWhile (not.snd) $ map (`cutProof` ann_t) [1..]
   cutProof depth = (`runState` True)
@@ -227,20 +238,20 @@ runProofBFS t = listToMaybe $ observeMany 1 (msum (foldFree (const mzero) evalF 
                                                                 else put False >> return mzero)
   ann_t = annotateLevel t
 -}
---evalF :: forall mp mf s a. (Functor mp, MonadPlus mp, MonadFree (ProofF s) mf) => ProofF s (mp (mf a)) -> mp (mf a)
-evalF :: forall mp s a. (Functor mp, MonadLogic mp) => ProofF s (mp (Proof s a)) -> mp (Proof s a)
+--evalF :: forall mp mf a. (Functor mp, MonadPlus mp, MonadFree (ProofF s) mf) => ProofF (mp (mf a)) -> mp (mf a)
+evalF :: forall mp a proof. (Functor mp, MonadLogic mp, MonadFree ProofF proof) => ProofF (mp (proof a)) -> mp (proof a)
 evalF Fail{}         = mzero
 evalF DontKnow{}     = mzero
 evalF MZero          = mzero
-evalF Success{..}    = return (jail (fixS Success{..}))                where fixS :: ProofF s x -> ProofF s x;fixS = id
-evalF MDone          = return (jail (fixS MDone))                      where fixS :: ProofF s x -> ProofF s x;fixS = id
+evalF Success{..}    = return (jail Success{..})
+evalF MDone          = return (jail MDone)
 evalF (MPlus p1 p2)  = p1 `M.mplus` p2
 evalF (MPlusPar p1 p2) = p1 `M.interleave` p2
-evalF (And pi pb ll) = (jail . fixS . And  pi pb) <$> P.sequence ll    where fixS :: ProofF s x -> ProofF s x;fixS = id;
-evalF (Or  pi pb ll) = (jail . fixS . Step pi pb) <$> msum ll          where fixS :: ProofF s x -> ProofF s x;fixS = id
+evalF (And pi pb ll) = (jail . And  pi pb) <$> P.sequence ll
+evalF (Or  pi pb ll) = (jail . Step pi pb) <$> msum ll
 evalF (MAnd  p1 p2)  = p1 >>= \s1 -> p2 >>= \s2 ->
-                       return (jail $ fixS $ MAnd s1 s2)               where fixS :: ProofF s x -> ProofF s x;fixS = id
-evalF (Step pi pb p) = (jail . fixS . Step pi pb) <$> p                where fixS :: ProofF s x -> ProofF s x;fixS = id
+                       return (jail $ MAnd s1 s2)
+evalF (Step pi pb p) = (jail . Step pi pb) <$> p
 evalF (Stage  p) = p
 
 sequencePar []     = return []
@@ -248,16 +259,15 @@ sequencePar (x:xx) = x >>- \x' -> (x':) `liftM` sequencePar xx
 
 unsafeUnwrapIO :: Functor f => FreeT f IO a -> Free f a
 unsafeUnwrapIO (FreeT m) = go (unsafePerformIO m) where
-  go (Left  a) = Pure a
-  go (Right f) = Impure (unsafeUnwrapIO <$> f)
+  go (Left  a) = return a
+  go (Right f) = jail (unsafeUnwrapIO <$> f)
 
 
-isSuccess :: Monoid s => Proof s k -> Bool
+--isSuccess :: Monoid s => ProofCk -> Bool
 isSuccess' t = let res =foldFree (return False) isSuccessF t in res -- assert (res == isSuccess' t) res
-isSuccess p = let res = isJust (runProof p)
-              in assert (res == isSuccess' p) res
+isSuccess p = isJust (runProof' p `asTypeOf` Just p)
 
-isSuccessF :: ProofF s Bool -> Bool
+isSuccessF :: ProofF Bool -> Bool
 isSuccessF Fail{}         = False
 isSuccessF Success{}      = True
 isSuccessF DontKnow{}     = False
@@ -265,7 +275,7 @@ isSuccessF (And _ _ ll)   = and ll
 isSuccessF (Or  _ _ [])   = True  -- HEADS UP unstandard
 isSuccessF (Or  _ _ ll)   = or ll
 isSuccessF (MPlus p1 p2)  = p1 || p2
---isSuccessF (MPlusPar p1 p2) = p1 || p2
+isSuccessF (MPlusPar p1 p2) = p1 || p2
 isSuccessF MZero          = False
 isSuccessF (MAnd  p1 p2)  = p1 && p2
 isSuccessF MDone          = True
@@ -274,17 +284,14 @@ isSuccessF (Stage p)      = p
 
 -- isSuccessT = foldFreeT (const $ returnM False) (returnM.isSuccessF)
 
-logLegacy proc prob Nothing    = failP proc prob (toHtml "Failed")
-logLegacy proc prob (Just msg) = success proc prob msg
-
 annotateLevel :: forall f a. (Functor f) => Free f a -> Free (AnnotatedF Int f) a
 annotateLevel = go 0 where
-  go i (Pure  x) = Pure x
+  go i (Pure  x) = return x
   go i (Impure x) = Impure (Annotated i $ fmap (go (succ i)) x)
 
 -- -----------------
 -- Functor instances
 -- -----------------
-instance Foldable (ProofF s) where foldMap = T.foldMapDefault
+instance Foldable ProofF where foldMap = T.foldMapDefault
 $(derive makeFunctor     ''ProofF)
 $(derive makeTraversable ''ProofF)

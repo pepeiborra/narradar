@@ -50,13 +50,13 @@ instance Show id => HTML (ProcInfo id) where
     toHtml (ReductionPair af)= "PROCESSOR: " +++ "ICLP'08 AF Processor for SCCs" +++ maybe noHtml toHtml af
     toHtml (EVProc af)    = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
-    toHtml Polynomial      = "PROCESSOR: " +++ "Polynomial Interpretation"
-    toHtml (External e)    = "PROCESSOR: " +++ "External - " +++ show e
+    toHtml NoPairs{}      = "PROCESSOR: " +++ "Dependency Graph"
+    toHtml (External e _) = "PROCESSOR: " +++ "External - " +++ show e
 --    toHtml InstantiationP{}  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
 --    toHtml FInstantiationP{} = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
 --    toHtml NarrowingP{}      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
-    toHtml Trivial         = "PROCESSOR: " +++ "Trivial non-termination"
-    toHtml p               = "PROCESSOR: " +++ show (ppr p)
+    toHtml NonTerminationLooping = "PROCESSOR: " +++ "Trivial non-termination"
+    toHtml p                     = "PROCESSOR: " +++ show (ppr p)
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
 instance TRS.Ppr f => HTML (ProblemG id f) where
@@ -83,7 +83,7 @@ instance HTML SomeProblem where
 
 instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
 
-instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
+instance TRS.Ppr f => HTML (ProblemProof id f) where
    toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work where
     work MZero       = toHtml  "Don't know"
     work DontKnow{}  = toHtml  "Don't know"
@@ -91,13 +91,14 @@ instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
        p
         << problem  +++ br +++
            procInfo +++ br +++
-           divyes   +++ thickbox res << spani "seeproof" << "(see proof)"
+           divyes +++ detailResult procInfo
 
     work Fail{..} =
         p
         << problem  +++ br +++
            procInfo +++ br +++
-           divmaybe +++ thickbox res << spani "seeproof" << "(see failure)"
+           divmaybe +++ detailResult procInfo
+--           divmaybe +++ thickbox res << spani "seeproof" << "(see failure)"
 
     work pr@Or{..} = p
                       << problem +++ br +++
@@ -119,6 +120,12 @@ instance TRS.Ppr f => HTML (ProblemProofG id Html f) where
     work (Stage p)= p
     work Step{..} = p
                     << problem +++ br +++ procInfo +++ br +++ subProblem
+
+    detailResult :: SomeInfo -> Html
+    detailResult (SomeInfo (External _ (find isOutputHtml -> Just (OutputHtml output)))) =
+       thickbox output << spani "seeproof" << "(see proof)"
+    detailResult _ = noHtml
+
 
 instance (HashConsed f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
     cell (lhs :-> rhs ) = td ! [theclass "lhs"]   << show lhs <->

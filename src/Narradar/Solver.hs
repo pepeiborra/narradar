@@ -43,8 +43,8 @@ import Narradar.Utils
 import qualified Prelude
 import Prelude hiding (Monad(..))
 
-type Solver id f s m = ProblemG id f -> PPT id f s m
-type Solver' id f id' f' s m = ProblemG id f -> PPT id' f' s m
+type Solver id f m = ProblemG id f -> PPT id f m
+type Solver' id f id' f' m = ProblemG id f -> PPT id' f' m
 
 defaultTimeout = 15
 
@@ -73,16 +73,18 @@ parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
 -- ------------------
 prologSolver opts typ = prologSolver' opts (typeHeu2 typ) (typeHeu typ)
 prologSolver' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
-  where narrowingSolver = refineBy 4 (solve (uGroundRhsAllP h2 >=> aproveWebP))
+  where narrowingSolver = refineBy 4 (solve' (uGroundRhsAllP h2 >=> aproveWebP))
                                      refineNarrowing
 
 prologSolverOne' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
-  where narrowingSolver = refineBy 4 (solve (reductionPair h2 20 >=> sccProcessor))
+  where narrowingSolver = refineBy 4 (solve' (reductionPair h2 20 >=> sccProcessor))
                                      refineNarrowing
 
-pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe prob sol, "") where
-    prob = solver p
-    sol = runProof prob
+pSolver :: Monad m => options -> (prob -> C (Free ProofF) a) -> prob -> m (Bool, ProofC a, String)
+pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe iprob sol, "") where
+    prob  = solver p
+    iprob = improve prob
+    sol   = runProof' iprob `asTypeOf` Just iprob
 
 refineNarrowing = firstP [ msumPar . instantiation
                          , msumPar . finstantiation
@@ -126,7 +128,7 @@ solveBT b f x = do
 -}
 
 solve' :: P.MonadPlus m => (a -> m a) -> a -> m a
--- Does not produce 'good-looking' proofs (the effect is only seen in failed searches)
+-- Does not produce 'good-looking' proofs
 solve' f x = let x' = f x in x' `P.mplus` (x' P.>>= solve' f)
 
 solve f x = let fx = f x in if isSuccess fx then fx else (fx P.>>= solve f)
@@ -139,14 +141,21 @@ refineBy maxDepth f refiner = loop maxDepth where
   loop 0 x = f x
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
 
-firstP :: [a -> Proof s a] -> a -> Proof s a
+--firstP :: [a -> Proof s a] -> a -> Proof s a
 firstP [] _ = P.mzero
+firstP (a:alternatives) p = do
+  ei_free <- free (a p)
+  case ei_free of
+    Right MZero -> firstP alternatives p
+    Right x     -> jail x
+    Left  z     -> return z
+{-
 firstP (a:alternatives) p = case a p of
                              Impure MZero      -> firstP alternatives p
                              Impure DontKnow{} -> firstP alternatives p
                              anything_else     -> anything_else
-
-first :: P.Monad m => [a -> ProofT s m a] -> a -> ProofT s m a
+-}
+first :: P.Monad m => [a -> ProofT m a] -> a -> ProofT m a
 first [] _ = mzero
 first (a:alternatives) p = FreeT $ do
                            x <- unFreeT (a p)

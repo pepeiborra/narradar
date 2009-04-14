@@ -61,7 +61,7 @@ mkGoalProblem' typGoal typ heu trs | const True (typGoal `asTypeOf` typ) =
         extendedPi = AF.extendAFToTupleSymbols (pi typGoal)
         goal'      = AF.mapSymbols functionSymbol (goal typGoal)
         orProblems = case (mkHeu heu p) of
---                       heu | isSafeOnDPs heu -> [Problem typGoal{pi=extendedPi,goal=goal'} trs' dps]
+                       heu | isSafeOnDPs heu -> [Problem typGoal{pi=extendedPi,goal=goal'} trs' dps]
                        heu -> [assert (isSoundAF pi' p) $
                                Problem typGoal{pi=pi', goal=goal'} trs' dps
                                    | pi' <- invariantEV heu (rules p) extendedPi]
@@ -70,13 +70,13 @@ mkGoalProblem' typGoal typ heu trs | const True (typGoal `asTypeOf` typ) =
 -- ------------------------------------------------------------------------
 -- This is the AF processor described in our Dependency Pairs for Narrowing
 -- ------------------------------------------------------------------------
-{-# off SPECIALIZE groundRhsOneP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# off SPECIALIZE groundRhsOneP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
--- groundRhsOneP :: (Lattice (AF_ id), Show id, Ord id, T id :<: f, DPMark f) => ProblemG id f -> ProblemProofG id Html f
+{-# off SPECIALIZE groundRhsOneP :: Problem BBasicId -> ProblemProof BBasicId #-}
+{-# off SPECIALIZE groundRhsOneP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
+-- groundRhsOneP :: (Lattice (AF_ id), Show id, Ord id, T id :<: f, DPMark f) => ProblemG id f -> ProblemProofG id f
 groundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps)
   | isAnyNarrowingProblem p =
     if null orProblems
-      then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      then failP EVProcFail p
       else msum orProblems
     where heu        = mkHeu mk p
           afs        = findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p =<< rules dps
@@ -100,12 +100,12 @@ findGroundAF heu pi_groundInfo af0 p (_:->r)
 -- ------------------------------------------------------------------------
 -- A variation for use with SCCs
 -- ------------------------------------------------------------------------
-{-# off SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# off SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+{-# off SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof BBasicId #-}
+{-# off SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
 -- groundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id Html f
 groundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
-      then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      then failP EVProcFail p
       else msum orProblems
     where heu        = mkHeu mk p
           afs        = foldM (\af -> findGroundAF heu pi_groundInfo af p)
@@ -122,15 +122,15 @@ groundRhsAllP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps)
 -- ------------------------------------------------------------------------
 -- A variation for use with SCCs, incorporate usable rules
 -- ------------------------------------------------------------------------
-{-# pff SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof Html BBasicId #-}
-{-# pff SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId Html BBasicLId #-}
+{-# pff SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof BBasicId #-}
+{-# pff SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
 
---uGroundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id Html f
+--uGroundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id f
 uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
-      then failP (GroundAll Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      then failP EVProcFail p
       else msum orProblems
-    where heu        = mkHeu mk p
+    where heu     = mkHeu mk p
           results = unEmbed $ do
                   af0 <- embed $ Set.fromList $
                           foldM (\af -> findGroundAF heu pi_groundInfo af dps)
@@ -153,7 +153,7 @@ uGroundRhsAllP _ p = return p
 
 uGroundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
-      then failP (GroundOne Nothing :: ProcInfo ()) p (toHtml "Could not find a grounding AF")
+      then failP EVProcFail p
       else msum orProblems
     where heu     = mkHeu mk p
           results = unEmbed $ do
@@ -181,8 +181,8 @@ uGroundRhsOneP _ p = return p
 -- "Termination of Logic Programs ..." (Schneider-Kamp et al)
 -- ------------------------------------------------------------------
 
---safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id Html f
-safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = htmlProof $ assert (isSoundAF af p) $
+--safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id f
+safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
   step (SafeAFP (Just af)) p (AF.apply af $ Problem InnermostRewriting trs dps)
 safeAFP p = return p
 

@@ -43,8 +43,9 @@ import Narradar.RewritingProblem
 aproveXML :: forall f id. (Ord id, Show id, T id :<: f, DPMark f, TRSC f, Lattice (AF_ id)) => ProblemG id f -> IO String
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
-reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> ProblemProofG id Html f -- PPT id f Html IO
+reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> ProblemProofG id f -- PPT id f Html IO
 reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps@(DPTRS dps_a _ unifs _)) | isAnyNarrowing typ = msum orProblems where
+
  afs = unEmbed $ do
     af0 <- embed $ Set.fromList
             (findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p P.=<< rules dps)
@@ -52,6 +53,7 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
     af1 <- let rr = dps `mappend` utrs in embed $ Set.fromList $ invariantEV heu rr (AF.restrictTo (getAllSymbols rr) af0)
     let utrs' = tRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
     return (af1, utrs')
+
  orProblems =
      [ unsafePerformIO $ do
         let rp = AF.apply af $ mkProblem InnermostRewriting trs' dps
@@ -61,7 +63,7 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
              the_af = AF.restrictTo (getAllSymbols p') af
          in case mb_nonDecreasingDPs of
               Nothing -> step (ReductionPair (Just the_af)) p' rp P.>>= \p'' ->
-                         failP (External $ Aprove "SRV") p'' (toHtml "NO")
+                         failP (External (Aprove "SRV") [OutputXml xml]) p''
               Just basic_nonDecreasingDPs ->
                let text_nonDecreasingDPs = Set.fromList(show <$> (ppr <$$> basic_nonDecreasingDPs))
                    nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- A.assocs dps_a
@@ -73,6 +75,7 @@ reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs d
     , let proofU = step UsableRulesP p (mkProblem typ trs' dps)
     , let pi'    = AF.invert p pi_groundInfo `mappend` af
     ]
+
  heu        = AF.mkHeu mkH p
  dpsSize af = size (AF.apply af dps)
  pprDP      = foldTerm f where

@@ -38,8 +38,8 @@ cgiMain = do
        (success, dotsol, htmlsol) <- liftIO $  case typ of
                        "PROLOG" -> let input' = maybe input ((input ++) .( "\n%query: " ++)) mb_goal
                                    in  process(parseProlog input' >>= uncurry (stratSolver mb_strat))
-                       "BASIC"  -> process(parseTRS BNarrowing input >>= narradarSolver :: ProblemProof Html BasicId)
-                       "FULL"   -> process(parseTRS  Narrowing input >>= narradarSolver :: ProblemProof Html BasicId)
+                       "BASIC"  -> process(parseTRS BNarrowing input >>= narradarSolver :: ProblemProofG Id BasicId)
+                       "FULL"   -> process(parseTRS  Narrowing input >>= narradarSolver :: ProblemProofG Id BasicId)
        proof_log <- liftIO$ withTempFile "/tmp" "narradar-log-" $ \fp h -> do
                       let fn = takeBaseName fp ++ ".pdf"
                       hPutStrLn h dotsol
@@ -55,8 +55,9 @@ cgiMain = do
 
 --process :: (Ord id, Show id, T id :<: f, TRSC f) => ProblemProofG id Html f -> IO (Bool, ProblemProof id f, Html)
 process p = return (isJust mb_sol, pprDot sol, toHtml sol) where
-    mb_sol = runProof p
-    sol    = fromMaybe p mb_sol
+    mb_sol = runProof' iprob  `asTypeOf` Just iprob
+    iprob  = improve p
+    sol    = fromMaybe iprob mb_sol
 
 --stratSolver :: () => Maybe String ->
 stratSolver Nothing              typ = prologSolver  defOpts typ

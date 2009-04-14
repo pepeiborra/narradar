@@ -1,7 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Narradar.GraphViz where
 
@@ -17,7 +19,10 @@ import Data.Maybe
 import Text.Dot
 import Text.PrettyPrint
 import Prelude hiding (unlines)
-
+#ifdef DEBUG
+import System.Process
+import Text.Printf
+#endif
 import Narradar.ArgumentFiltering (fromAF)
 import Narradar.Proof
 import Narradar.Types
@@ -144,7 +149,7 @@ pprDot' PprDot{..} prb = showDot $ do
     childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 
-pprTPDBdot :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f  -> String
+pprTPDBdot :: forall id f. (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f  -> String
 {-# SPECIALIZE pprTPDBdot :: Problem BBasicId -> String #-}
 pprTPDBdot p@(Problem Prolog{..} _ _) =
     show (Prolog.ppr program) ++ "\\l" ++
@@ -152,9 +157,16 @@ pprTPDBdot p@(Problem Prolog{..} _ _) =
 
 pprTPDBdot p@(Problem typ trs dps) = unlines $
     [ "(VAR " ++ (unwords $ map show $ snub $ foldMap3 vars' (rules <$> p)) ++ ")"
-    , "(PAIRS\\l" ++ (unlines (map ((' ':).show) (rules dps))) ++ ")"
-    , "(RULES\\l" ++ (unlines (map ((' ':).show) (rules trs))) ++ ")"] ++
+    , "(PAIRS\\l" ++ (unlines (map ((' ':).show.pprRule) (rules dps))) ++ ")"
+    , "(RULES\\l" ++ (unlines (map ((' ':).show.pprRule) (rules trs))) ++ ")"] ++
     maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getGoalAF typ)) ++ ["\\l"]
+
+  where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
+        pprTerm = foldTerm f
+        f (prj -> Just (T (id::id) [])) = text (show id)
+        f (prj -> Just (T (id::id) tt)) =
+            text (show id) <> parens (hcat$ punctuate comma tt)
+        f t = pprF t
 
 pprAF af = unlines [ ' ' : unwords (intersperse ","
                           [ show f ++ ": " ++ show (toList aa) | (f, aa) <- xx])
@@ -177,3 +189,6 @@ pprGraph g specials = do
         | c1 == c2  = c1
         | otherwise = "black"
            where c1 = getColor n1; c2 = getColor n2
+#ifdef DEBUG
+debugDot x = let t = "temp" in writeFile (t ++ ".dot") (pprDot' (PprDot True) x) >> system (printf "dot %s.dot -O -Tpdf && open %s.dot.pdf" t t)
+#endif

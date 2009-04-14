@@ -15,7 +15,7 @@ import TRS
 trivialP p@(Problem Rewriting{} trs (TRS.rules -> dps))
     | any (\(l:->r) -> show l == show r) dps ||
       all (null.properSubterms.rhs) dps
-    = failP Trivial p (primHtml "loop")
-    | null dps = success NoPairs p (primHtml "The set of dependency pairs is empty")
+    = failP NonTerminationLooping p
+    | null dps = success NoPairs p
     | otherwise = return p
 trivialP  p = return p

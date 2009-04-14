@@ -8,6 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 
 module Narradar.ArgumentFiltering where
@@ -42,11 +43,9 @@ import Lattice
 import Language.Prolog.Syntax      (Ident)
 import Language.Prolog.TypeChecker (TypeAssignment)
 
-#ifdef DEBUG
-import Debug.Trace
-#else
-trace _ x = x
-#endif
+#ifdef HOOD
+import Debug.Observe
+#endif HOOD
 
 extendAFToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
@@ -149,44 +148,6 @@ applyTerm af = foldTerm f
 
 instance ApplyAF a id => ApplyAF [a] id where apply af = fmap (apply af)
 instance (T id :<: f, Ord id) => ApplyAF (Rule f) id where apply af = fmap (apply af)
-{-
--- --------------------------
--- Custom rhs AF Application
--- --------------------------
-class Ord id => ApplyAF_rhs t sig id | t -> id where apply_rhs :: sig -> AF_ id -> t -> t
-
-instance (T id :<: f, Ord id) => ApplyAF_rhs (Term f) sig id where
-    {-# off SPECIALIZE instance ApplyAF_rhs (Term BBasicId) (Problem BBasicId) Id #-}
-    apply_rhs _ = applyTerm
-
-instance (Bottom :<: f, Ord id) => ApplyAF_rhs (NarradarTRS id f) sig id where
-    {-# SPECIALIZE instance ApplyAF_rhs (NarradarTRS Id  BBasicId)  (NarradarTRS Id  BBasicId)  Id #-}
-    {-# SPECIALIZE instance ApplyAF_rhs (NarradarTRS LId BBasicLId) (NarradarTRS LId BBasicLId) LId #-}
-    apply_rhs _ af trs@TRS{} = tRS$ applyToRule (getSignature trs) af <$> rules trs
-    apply_rhs _ af (PrologTRS cc sig) = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, applyToRule sig af r)) cc) sig
-
-instance (Bottom :<: f, Var :<: f, T id :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (Rule f) sig id where
-    apply_rhs sig = applyToRule (getSignature sig)
-
-instance ApplyAF_rhs a sig id => ApplyAF_rhs [a] sig id where apply_rhs sig af = fmap (apply_rhs sig af)
-
-{-# SPECIALIZE applyToRule :: Signature Id -> AF -> Rule BBasicId -> Rule BBasicId #-}
-applyToRule :: (Bottom :<: f, Var :<: f, Ord id, T id :<: f) => Signature id -> AF_ id -> Rule f -> Rule f
-applyToRule sig af (lhs :-> rhs) = apply af lhs :-> applyToRhs af rhs
-  where
-    -- applyToRhs cuts vars to bottoms
-    applyToRhs _ (open -> Just Var{}) = Bottom.bottom
-    applyToRhs af t@(open -> Just (T n tt))
-      | n `Set.member` constructorSymbols sig
-      = case lookup n af of
-          Just ii -> term n (applyToRhs af <$> select tt (pred <$> ii))
-          Nothing -> term n (applyToRhs af <$> tt)
-    applyToRhs af t = apply af t  -- we don't cut vars below defined symbols
-
-instance (Bottom.Bottom :<: f, Ord id, HasSignature sig id) => ApplyAF_rhs (ProblemG id f) sig id where
-    apply_rhs _ pi p@(Problem typ trs dps) = Problem typ (apply_rhs p pi trs) (apply_rhs p pi dps)
-
--}
 
 -- -----------
 -- Heuristics
@@ -315,3 +276,12 @@ cond f _ x = f x
 
 f ==> g = ((not.). f) ..|.. g
 infixr 2 ==>
+
+-- ------------
+-- debug stuff
+-- ------------
+
+#ifdef HOOD
+--instance Observable id => Observable (AF_ id) where observer (AF m) = observer m
+deriving instance (Show id, Observable id) => Observable (AF_ id)
+#endif

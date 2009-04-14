@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 
 module Narradar.TRS where
 
@@ -42,6 +43,10 @@ import Narradar.Unify
 import Narradar.Utils
 import qualified Language.Prolog.Syntax as Prolog
 import Language.Prolog.Syntax (Ident)
+
+#ifdef HOOD
+import Debug.Observe
+#endif
 
 type DP a = Rule a
 
@@ -122,8 +127,8 @@ refreshRules ids  = (`runSupply'` ids) . mapM doRule where
           newvv <- replicateM (length vv) next
           return (replace (Prelude.zipWith leftName vv newvv) <$> r)
 
---        leftName v1 i2 = (v1, var' (varName v1) i2)
-        leftName v1 i2 = (v1, var i2)
+        leftName v1 i2 = (v1, var' (varName v1) i2)
+--        leftName v1 i2 = (v1, var i2)
 
         varName (open -> Just (Var n _)) = n
         varName _ = Nothing
@@ -322,3 +327,10 @@ iUsableRules_correct trs (Just pi) = F.toList . go mempty where
 
 collectVars :: (Foldable f, IsVar f) => Term f -> [Int]
 collectVars = catMaybes . map uniqueId . subterms
+
+
+#ifdef HOOD
+instance (Show id, TRSC f, Ord id, T id :<: f, TRS.Ppr f) => Observable (NarradarTRS id f) where
+  observer (DPTRS dps gr (unif :!: unifInv) sig) = send "DPTRS" (return (\dps unif -> DPTRS dps gr (unif :!: unifInv) sig) << dps << unif)
+  observer x = observeBase x
+#endif
