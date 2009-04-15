@@ -183,7 +183,7 @@ uGroundRhsOneP _ p = return p
 
 --safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id f
 safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
-  step (SafeAFP (Just af)) p (AF.apply af $ Problem InnermostRewriting trs dps)
+  step (SafeAFP (Just af)) p (AF.apply af $ Problem InnermostRewriting (tRS $ iUsableRules trs (Just af) (rhs <$> rules dps)) dps)
 safeAFP p = return p
 
 -- -----------
