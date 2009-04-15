@@ -228,6 +228,8 @@ runProof' p = listToMaybe $ observeMany 1 search where
     runProofDirect (sol `asTypeOf` p)
 
   runProofDirect p = foldFree (const mzero) evalF p `asTypeOf` search
+
+runProofDFS = listToMaybe . observeMany 1 . foldFree (const mzero) evalF
 {-
 runProofBFS :: (Monoid s) => Proof a -> Maybe (Proof b)
 runProofBFS t = listToMaybe $ observeMany 1 (msum (foldFree (const mzero) evalF <$> tt)) where
