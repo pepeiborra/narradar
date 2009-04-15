@@ -20,6 +20,7 @@ import Control.Monad.State
 import Control.Monad.Writer
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
+import Data.Char (isSpace)
 import Data.HashTable (hashString)
 import Data.List (partition, isSuffixOf, isPrefixOf, delete, sort, groupBy, find)
 import Data.Maybe
@@ -91,7 +92,7 @@ skTransform :: [Clause] -> NarradarTRS PS BasicPS
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        sig = getSignature clauses
 
-       [equalF, commaF] = map (findFreeSymbol sig) ["equal", "comma"]
+       (equalF, commaF) = ("=", findFreeSymbol sig "comma")
 
        clauseRules :: [(Ident, Rule BasicPS)] = concat $ (`evalState` [0..]) $
          -- The counter is global, the list of vars is local to each clause
@@ -101,6 +102,8 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        toRule (Pred id tt :- []) = return$
          let tt' = evalState(mapM toTerm tt) [0..] in  -- This evalState is for the MonadFresh in toTerm
           [(id, term (InId id) tt' :-> term (OutId id) tt')]
+       toRule (t1 :=: t2  :- cc) = toRule (Pred equalF [t1,t2] :- cc)
+       toRule (Is  t1 t2  :- cc) = toRule (Pred equalF [t1,t2] :- cc)
        toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
          let tt' = evalState(mapM toTerm tt) [0..]
          modify (Set.fromList(concatMap vars' tt') `mappend`)
@@ -130,9 +133,11 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
 
        toTerm = foldInM f where
 --         f :: (MonadFresh m, TRSC f, T PS :<: f) => TermF (TRS.Term f) -> m (TRS.Term f)
-         f(Term id tt) = return $ term (FunctorId id) tt
+         f(Term id tt) = return $ term (FunctorId id') tt where
+            id' = map (\c -> if isSpace c then '_' else c) id
          f(Tuple   tt) = return $ term (FunctorId commaF) tt
          f Wildcard    = var   <$>fresh
+         f (String s)  = fresh >>= \i -> return (constant (FunctorId ("string" ++ show i)))
          f (Int i)
             |i>0       = return (iterate (TRS.term1 (FunctorId "succ")) (constant (FunctorId "zero")) !! fromInteger i)
             |otherwise = return (iterate (TRS.term1 (FunctorId "pred")) (constant (FunctorId "zero")) !! fromInteger i)
@@ -148,23 +153,24 @@ Right preludePl = $(do
                    )
 
 preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
-addMissingPredicates cc
-  | Set.null undefinedPreds = cc
-  | otherwise
-  = (if insertPrelude then cc' else cc)  `mappend`
-    [Pred f (take (getArity sig f) vars) :- []
-     | f <- toList undefinedPreds, f `Set.notMember` preludePreds]
+addMissingPredicates cc0
+  | Set.null undefined_cc0 = cc0
+  | otherwise = insertDummy $ insertEqual $ insertPrelude $ cc0
 
-   where vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
-         undefinedPreds = Set.fromList [ f | f <- toList (definedSymbols sig `Set.difference` definedPredicates)]
-         insertPrelude  = not $ Set.null (Set.intersection undefinedPreds preludePreds)
-         sig            = getSignature cc
-         definedPredicates = Set.fromList [ f | Pred f _ :- _ <- cc]
-         cc' = foldr renamePred (cc `mappend` preludePl) (toList repeatedIdentifiers)
-         repeatedIdentifiers = preludePreds `Set.intersection` definedPredicates
-         renamePred f = fmap2 (rename (findFreeSymbol sig f))
-         rename f' (Pred f tt) | f == f' = Pred f' tt
-         rename _ x = x
+   where undefined_cc0 = undefinedPreds cc0
+         vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
+         undefinedPreds cc    = Set.fromList [ f | f <- toList (getDefinedSymbols cc `Set.difference` definedPredicates cc)]
+         definedPredicates cc = Set.fromList [ f | Pred f _ :- _ <- cc]
+         insertEqual   cc = if getAny $ foldMap2 (Any . isEqual) cc then eqclause `mappend` cc else cc
+           where eqclause = let x = Prolog.var "X" in [x :=: x :- []]
+                 isEqual (Is _ _ ) = True; isEqual (_ :=: _) = True; isEqual _ = False
+         insertPrelude cc = if not (Set.null (Set.intersection (undefinedPreds cc) preludePreds)) then cc' `mappend` cc else cc
+           where cc' = foldr renamePred (cc `mappend` preludePl) (toList repeatedIdentifiers)
+                 repeatedIdentifiers = preludePreds `Set.intersection` definedPredicates cc0
+         insertDummy cc =  [ Pred f (take (getArity cc f) vars) :- [] | f <- toList (undefinedPreds cc)] ++ cc
+         renamePred f = fmap2 (rename (findFreeSymbol cc0 f))
+           where rename f' (Pred f tt) | f == f' = Pred f' tt
+                 rename _ x = x
 
 findFreeSymbol sig prefix = fromJust $ find (`Set.notMember` getAllSymbols sig)
                                               (prefix : [prefix ++ show i | i <- [0..]])
