@@ -60,7 +60,7 @@ mkGoalProblem' typGoal typ heu trs | const True (typGoal `asTypeOf` typ) =
         extendedPi = AF.extendAFToTupleSymbols (pi typGoal)
         goal'      = AF.mapSymbols functionSymbol (goal typGoal)
         orProblems = case (mkHeu heu p) of
-                       heu | isSafeOnDPs heu -> [Problem typGoal{pi=extendedPi,goal=goal'} trs' dps]
+--                       heu | isSafeOnDPs heu -> [Problem typGoal{pi=extendedPi,goal=goal'} trs' dps]
                        heu -> [assert (isSoundAF pi' p) $
                                Problem typGoal{pi=pi', goal=goal'} trs' dps
                                    | pi' <- invariantEV heu (rules p) extendedPi]
