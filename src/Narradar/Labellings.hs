@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies, TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Narradar.Labellings where
 
@@ -54,7 +55,8 @@ instance HashConsed BBasicLId
 -- -----------
 -- Labellings
 -- -----------
-data Labelled a = Labelling {labelling::[Int], unlabel::a} | Plain {unlabel::a} deriving (Eq)
+type Label = [Int]
+data Labelled a = Labelling {labelling::Label, unlabel::a} | Plain {unlabel::a} deriving (Eq)
 
 instance Ord a => Ord (Labelled a) where
     compare (Labelling i1 f1) (Labelling i2 f2) = compare (f1,i1) (f2,i2)
@@ -77,28 +79,15 @@ instance NFData a => NFData (Labelled a) where
     rnf (Plain a) = rnf a
     rnf (Labelling ii a) = rnf ii `seq` rnf a
 
-{-
-instance Show id => DPSymbol (Labelled id) where
-    markDPSymbol   (Labelling l id) = Labelling l (markDPSymbol id);   markDPSymbol   (Plain f) = Plain$ markDPSymbol f
-    unmarkDPSymbol (Labelling l id) = Labelling l (unmarkDPSymbol id); unmarkDPSymbol (Plain f) = Plain$ unmarkDPSymbol f
-    functionSymbol = Plain . functionSymbol
-    dpSymbol       = Plain . dpSymbol
---    symbol (Plain f) = symbol f; symbol (Labelling _ f) = symbol f
--}
+mapLabel :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Labelled id -> Labelled id
+mapLabel f _  (Labelling ll i) = f ll i
+mapLabel f l0 (Plain i)        = l0 i
 
---labelWith (open -> Just (T (id::Identifier) tt)) labelling = term (Labelling labelling id) tt
---labelWith :: Term BBasicId -> [Int] -> Term BBasicLId -- (LabelledVersionOf f)
---labelWith :: forall f f' id. (ConvertT f f', T (Labelled id) :<: f', Var :<: f, HashConsed f, HashConsed f') => Term f -> [Int] -> Term f'
-labelWith t= setLabel t
-
-mapLabel f _  (Labelling ll i) = Labelling (f ll) i
-mapLabel f l0 (Plain i)        = Labelling l0 i
-
-
+mapLabelT :: MapLabelT f => (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Term f -> Term f
 mapLabelT f l0 = mapTerm (mapLabelTF f l0)
 
 class MapLabelT' f f => MapLabelT f; instance MapLabelT' f f => MapLabelT f
-class (f :<: g) => MapLabelT' f g where mapLabelTF :: ([Int] -> [Int]) -> [Int] -> f (Term g) -> Term g; mapLabelTF _ _ = inject
+class (f :<: g) => MapLabelT' f g where mapLabelTF :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> f (Term g) -> Term g; mapLabelTF _ _ = inject
 
 instance (T (Labelled id) :<: g) => MapLabelT' (T (Labelled id)) g where mapLabelTF f l0 (T id tt) = inject (T (mapLabel f l0 id) tt)
 instance (MapLabelT' f g, MapLabelT' f' g, (f:+:f') :<: g) => MapLabelT' (f :+: f') g where
@@ -107,15 +96,9 @@ instance (MapLabelT' f g, MapLabelT' f' g, (f:+:f') :<: g) => MapLabelT' (f :+: 
 instance (Hole :<: g) => MapLabelT' Hole   g
 instance (Var  :<: g) => MapLabelT' Var    g
 
---setLabel,appendLabel :: forall f id. (T (Labelled id) :<: f, HashConsed f) => Term f -> [Int] -> Term f
-setLabel t ll = mapLabelT (const ll) ll t
-appendLabel t ll = mapLabelT (++ ll) ll t
-
-setLabelling (Labelling ll i) ll' = Labelling ll' i
-setLabelling (Plain i)        ll' = Labelling ll' i
-extendLabelling (Labelling ll i) ll' = Labelling (ll ++ ll') i
-extendLabelling (Plain i)        ll' = Labelling ll' i
-
+setLabel ::  (MapLabelT f, HashConsed f) => Term f -> (forall id. id -> Labelled id) -> Term f
+setLabel t l = mapLabelT (\_ -> l) l t
+appendLabel t ll = mapLabelT (Labelling . (++ ll)) (Labelling ll) t
 
 type family   LabelledVersionOf (f :: * -> *) :: * -> *
 type instance LabelledVersionOf (T id)    = T (Labelled id)
