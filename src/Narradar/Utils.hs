@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PackageImports #-}
-{-# LANGUAGE OverlappingInstances, FlexibleInstances, FlexibleContexts, TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances, FlexibleInstances, FlexibleContexts, TypeSynonymInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -13,8 +13,9 @@ module Narradar.Utils (module Narradar.Utils, module TRS.Utils, HT.hashInt, HT.h
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad (join, liftM, liftM2, replicateM, ap)
+import Control.Monad.List (lift, ListT)
 import Control.Monad.State (State,StateT)
-import Control.Monad.Writer (Writer, WriterT)
+import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
 import qualified "monad-param" Control.Monad.Parameterized as P
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
@@ -199,3 +200,9 @@ instance Applicative (State s) where pure = return; (<*>) = ap
 
 instance (Monoid s, Monad m) => Applicative (WriterT s m) where pure = return; (<*>) = ap
 --instance Applicative (Writer s) where pure = return; (<*>) = ap
+
+-- -----------------------------------
+-- Missing useful monadic instances
+-- -----------------------------------
+
+instance (Monoid w, MonadWriter w m) => MonadWriter w (ListT m) where tell = lift.tell
