@@ -68,7 +68,7 @@ narradarMain solver = do
         hPutStrLn h (pprDot' PprDot{showFailedPaths = verbose > 1} sol)
         hFlush h
 #ifdef DEBUG
-        writeFile (problemFile ++ ".dot") (pprDot sol)
+        when (verbose > 1) $ writeFile (problemFile ++ ".dot") (pprDot sol)
 #endif
         system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
         -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
@@ -82,10 +82,13 @@ usage = "Narradar - Automated Narrowing Termination Proofs"
 getOptions = do
   args <- getArgs
   let (actions, nonOptions, errors) = getOpt Permute opts args
-  opts <- foldl (P.>>=) (P.return defOpts) actions
-  let problemFile = fromMaybe "INPUT" (listToMaybe nonOptions)
-  input <- maybe getContents readFile (listToMaybe nonOptions)
-  P.return (opts{problemFile,input}, nonOptions, errors)
+  case errors of
+    [] -> do
+      opts <- foldl (P.>>=) (P.return defOpts) actions
+      let problemFile = fromMaybe "INPUT" (listToMaybe nonOptions)
+      input <- maybe getContents readFile (listToMaybe nonOptions)
+      P.return (opts{problemFile,input}, nonOptions, errors)
+    _  -> putStrLn ("Error: " ++ unwords errors) >> putStrLn (usageInfo usage opts) >> exitWith (ExitFailure (-1))
 
 -- data Options where Options :: (TRSC f, Ppr f) => FilePath -> PPT id f Html IO -> Bool -> Options
 

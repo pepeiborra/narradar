@@ -203,7 +203,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
 --    trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
     fix invariantEV (trs0, af0)
  where
-  heuristic = mkHeu mkH trs' --innermost af t p -- typeHeu assig af t p
+  heuristic = mkHeu mkH trs'
 
   trs'@(PrologTRS rr sig) = convert trs
 

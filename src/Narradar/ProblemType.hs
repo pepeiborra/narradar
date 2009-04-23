@@ -60,6 +60,8 @@ isGNarrowing GNarrowing{}  = True
 isGNarrowing GNarrowingModes{} = True
 isGNarrowing _ = False
 
+isProlog Prolog{} = True ; isProlog _ = False
+
 isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 
 --isModed = isJust . getGoalAF

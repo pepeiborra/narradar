@@ -17,12 +17,13 @@ module Narradar.Types ( module TRS
 import Data.DeriveTH
 import Data.Derive.Is
 
-import Control.Applicative ((<$>))
+import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.Monad.State (get)
 import Data.Graph (Graph, Vertex)
-import Data.List ((\\), groupBy, sort)
+import Data.List ((\\), groupBy, sort, partition)
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable as T
@@ -139,38 +140,38 @@ $(derive makeIs ''Output)
 -- ------
 -- Modes
 -- ------
-type Goal = AF_ String
+type Goal = (String, [Mode])
 data Mode = G | V deriving (Eq, Bounded)
 instance Show Mode where show G = "b"; show V = "f"
 
 goalP =do
-      spaces
       id <- Prolog.ident
       modes <- modesP
-      return (AF.singleton id [i | (i,G) <- zip [1..] modes])
+      optional (char '.')
+      return (id, modes)
 
 modesP = parens (modeP `sepBy` char ',') where parens= between (char '(') (char ')')
 modeP = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
 
-parseGoal :: String -> Either ParseError Goal
-parseGoal = parse goalP ""
+parseGoal :: String -> Either ParseError [Goal]
+parseGoal = parse (Prolog.whiteSpace >> many (goalP <* Prolog.whiteSpace)) ""
 
 mkGoalAF (T f tt) = AF.singleton f [ i | (i,G) <- zip [1..] tt]
 
 pprGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
-pprGoalAF sig pi = vcat [ pprGoal (T f mm) | (f,pp) <- AF.toList pi
+pprGoalAF sig pi = vcat [ pprGoal (f, mm) | (f,pp) <- AF.toList pi
                                            , f `Set.member` allSymbols sig
                                            , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
 
 --type Goal id = T id Mode
-pprGoal :: T String Mode -> Doc
-pprGoal (T id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)
+pprGoal :: Goal -> Doc
+pprGoal (id, modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)
 
 
 -- --------------------------
 -- Parsing Prolog problems
 -- --------------------------
-data PrologSection = Query [Prolog.Atom] | Clause Prolog.Clause | QueryString String
+data PrologSection = Query [Prolog.Atom String] | Clause (Prolog.Clause String) | QueryString String
 
 problemParser = do
   txt <- getInput
@@ -182,18 +183,23 @@ problemParser = do
         f _ = Nothing
 
 --mkPrologProblem = (return.) . mkPrologProblem
-parsePrologProblem pgm = mapLeft show $ do
+parsePrologProblem pgm = do
      things <- parse problemParser "input" pgm
      let cc      = [c | Clause      c <- things]
          gg1     = [q | Query       q <- things]
          gg_txt  = [q | QueryString q <- things]
-     gg2    <- mapM parseGoal gg_txt
+     gg2    <- concat <$> mapM parseGoal gg_txt
      gg1'   <- mapM atomToGoal (concat gg1)
-     return (mkPrologProblem (gg1' ++ gg2) cc)
+     let sig   = getSignature cc
+         (constructor_goals, defined_goals) = partition ((`Set.member` constructorSymbols sig) . fst) (gg1' ++ gg2)
+         constructor_af = AF.fromList [(f, ii) | (f, mm) <- constructor_goals, let ii = [ i | (i,G) <- zip [1..] mm]]
+         goals = [constructor_af `mappend`
+                  AF.singleton f ii | (f, mm) <- defined_goals, let ii = [ i | (i,G) <- zip [1..] mm]]
+     return (mkPrologProblem goals cc)
  where
      atomToGoal (Prolog.Pred f tt) = do
        mm <- parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
-       return (AF.singleton f [i | (i,G) <- zip [1..] mm])
+       return (f,mm)
 
 -- ----------------------------------
 -- TRS.MonadFresh instance for Supply

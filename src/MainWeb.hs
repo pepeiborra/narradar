@@ -31,7 +31,7 @@ cgiMain = do
   mb_input  <- getInput "TRS"
   mb_visual <- getInput "LOG"
   mb_type   <- getInput "TYPE"
-  mb_goal   <- getInput "GOAL" >>= \mb_g -> return(mb_g >>= \g -> let g' = filter (/= ' ') g in if null g' then Nothing else return g')
+  mb_goal   <- getInput "GOAL" >>= \mb_g -> return(mb_g >>= \g -> let g' = takeWhile (/= ' ') g in if null g' then Nothing else return g')
   mb_strat  <- getInput "STRAT"
   case (mb_input, mb_type) of
     (Just input, Just typ) -> do

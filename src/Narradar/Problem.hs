@@ -73,7 +73,6 @@ mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
 
 instance (ConvertT f f', Convert id id', Ord id, Ord id', T id :<: f, T id' :<: f', TRSC f, TRSC f' ) => Convert (ProblemG id f) (ProblemG id' f') where
   convert p@Problem{..} = (fmap convert p){typ = fmap convert typ}
---  convert (PrologProblem typ gg cc) = PrologProblem (fmap convert typ) gg cc
 
 instance TRS.Ppr f => Ppr (ProblemG id f) where
     ppr (Problem typ trs dps) =
@@ -81,14 +80,10 @@ instance TRS.Ppr f => Ppr (ProblemG id f) where
             text "TRS:" <+> ppr trs $$
             text "DPS:" <+> ppr dps
 
---data VoidF f; instance Functor VoidF; instance TRS.Ppr VoidF
-
 type PrologProblem = ProblemG String Basic'
 mkPrologProblem :: [AF_ String] -> Prolog.Program String -> PrologProblem
 mkPrologProblem gg pgm = mkProblem (Prolog gg pgm) mempty mempty
 
-isProlog Prolog{} = True ; isProlog _ = False
---isPrologProblem PrologProblem{} = True
 isPrologProblem = isProlog . typ
 
 isFullNarrowingProblem = isFullNarrowing . typ
@@ -96,7 +91,6 @@ isBNarrowingProblem    = isBNarrowing . typ
 isGNarrowingProblem    = isGNarrowing . typ
 isAnyNarrowingProblem  = isAnyNarrowing . typ
 isRewritingProblem     = isRewriting . typ
---isModedProblem         = isModed . typ
 
 -- -------------
 -- AF Problems
