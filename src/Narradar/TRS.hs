@@ -32,7 +32,7 @@ import qualified Data.Traversable as T
 import Text.PrettyPrint
 import Prelude hiding (concatMap)
 
-import TRS hiding (Ppr, ppr, unify, unifies, apply, (!))
+import TRS hiding (Ppr, ppr, unify, unifies, (!))
 import qualified TRS
 import Narradar.ArgumentFiltering (apply, ApplyAF(..))
 import qualified Narradar.ArgumentFiltering as AF
@@ -42,7 +42,6 @@ import Narradar.ProblemType
 import Narradar.Unify
 import Narradar.Utils
 import qualified Language.Prolog.Syntax as Prolog
-import Language.Prolog.Syntax (Ident)
 
 #ifdef HOOD
 import Debug.Observe
@@ -72,8 +71,8 @@ pair2|_____|_____|
 -}
 
 data NarradarTRS id f where
-    TRS       :: (Ord id, TRSC f, T id :<: f) => Set (Rule f)                                 -> Signature id -> NarradarTRS id f
-    PrologTRS :: (Ord id, TRSC f, T id :<: f) => Set (Ident, Rule f)                          -> Signature id -> NarradarTRS id f
+    TRS       :: (Ord id, TRSC f, T id :<: f) => Set (Rule f)                                  -> Signature id -> NarradarTRS id f
+    PrologTRS :: (Ord id, TRSC f, T id :<: f) => Set (String, Rule f)                          -> Signature id -> NarradarTRS id f
     DPTRS     :: (Ord id, TRSC f, T id :<: f) => Array Int (Rule f) -> !Graph -> Unifiers f :!: Unifiers f -> Signature id -> NarradarTRS id f
 
 type Unifiers        f = Array (Int,Int) (Maybe (Subst f))
@@ -101,10 +100,10 @@ instance (Ord id, T id :<: f, TRSC f) => TRS (NarradarTRS id f) id f where
 
 tRS' rr sig  = TRS (Set.fromList rr) sig
 
-prologTRS :: forall id f. (Ord id, TRSC f, T id :<: f) => [(Ident, Rule f)] -> NarradarTRS id f
+prologTRS :: forall id f. (Ord id, TRSC f, T id :<: f) => [(String, Rule f)] -> NarradarTRS id f
 prologTRS rr = prologTRS' (Set.fromList rr)
 
-prologTRS' :: forall id f. (Ord id, TRSC f, T id :<: f) => Set(Ident, Rule f) -> NarradarTRS id f
+prologTRS' :: forall id f. (Ord id, TRSC f, T id :<: f) => Set(String, Rule f) -> NarradarTRS id f
 prologTRS' rr = PrologTRS rr (getSignature (snd <$> toList rr))
 
 {-# SPECIALIZE narradarTRS ::  [Rule BBasicId] -> NarradarTRS Id BBasicId #-}

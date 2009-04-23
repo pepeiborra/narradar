@@ -48,7 +48,7 @@ import Narradar.Types hiding (dropNote)
 import Narradar.Utils
 import qualified Narradar.ArgumentFiltering as AF
 
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 
 import Prelude hiding (maximum, sum, log, mapM, foldr, concatMap)
 import qualified Prelude as P
@@ -80,47 +80,43 @@ type ProblemProof  id f = ProofC (ProblemG id f)
 type ProblemProofG id f = (MonadPlus m, MonadFree ProofF m) => m (ProblemG id f)
 type ProblemProofC id f = ProofC (ProblemG id f)
 
-success  pi p0 = jail (Success (someInfo pi) (someProblem p0))
-success' pi p0 = jail (Success pi p0)
-failP    pi p0 = jail (Fail (someInfo pi) (someProblem p0))
-failP'   pi p0 = jail (Fail pi p0)
-choiceP  p1 p2   = jail (MPlus p1 p2)
-dontKnow pi p0   = jail (DontKnow (someInfo pi) (someProblem p0))
-dontKnow' pi p0  = jail (DontKnow pi p0)
+success  pi p0 = wrap (Success (someInfo pi) (someProblem p0))
+success' pi p0 = wrap (Success pi p0)
+failP    pi p0 = wrap (Fail (someInfo pi) (someProblem p0))
+failP'   pi p0 = wrap (Fail pi p0)
+choiceP  p1 p2   = wrap (MPlus p1 p2)
+dontKnow pi p0   = wrap (DontKnow (someInfo pi) (someProblem p0))
+dontKnow' pi p0  = wrap (DontKnow pi p0)
 andP pi p0 []    = success pi p0
-andP pi p0 pp    = jail (And (someInfo pi) (someProblem p0) pp)
+andP pi p0 pp    = wrap (And (someInfo pi) (someProblem p0) pp)
 andP' pi p0 []   = success' pi p0
-andP' pi p0 pp   = jail (And pi p0 pp)
+andP' pi p0 pp   = wrap (And pi p0 pp)
 orP  pi p0 []    = success pi p0
-orP  pi p0 pp    = jail (Or (someInfo pi) (someProblem p0) pp)
+orP  pi p0 pp    = wrap (Or (someInfo pi) (someProblem p0) pp)
 orP' pi p0 []    = success' pi p0
-orP' pi p0 pp    = jail (Or pi p0 pp)
-step pi p0 p     = jail (Step (someInfo pi) (someProblem p0) (return p))
-step' pi p0 p    = jail (Step pi p0 p)
-mand p1 p2       = jail (MAnd p1 p2)
-mdone            = jail MDone
+orP' pi p0 pp    = wrap (Or pi p0 pp)
+step pi p0 p     = wrap (Step (someInfo pi) (someProblem p0) (return p))
+step' pi p0 p    = wrap (Step pi p0 p)
+mand p1 p2       = wrap (MAnd p1 p2)
+mdone            = wrap MDone
 mall             = foldr mand mdone
-mplusPar p1 p2   = jail (MPlusPar p1 p2)
+mplusPar p1 p2   = wrap (MPlusPar p1 p2)
 msumPar          = foldr mplusPar mzero
-stage            = jail . Stage
+stage            = wrap . Stage
 
 deriving instance (Show k) => Show (ProofF k)
 
 data SomeProblem where
     SomeProblem       :: (TRSC f, T id :<: f, Ord id, Show id) => !(ProblemG id f) -> SomeProblem
---    SomePrologProblem :: [Goal] -> Prolog.Program -> SomeProblem
 
 instance Show SomeProblem where
     show (SomeProblem p) = "<some problem>"
---    show (SomePrologProblem gg pgm) = show (PrologProblem Prolog gg pgm :: Problem BasicId)
 
 instance Ppr SomeProblem where
   ppr (SomeProblem p@(Problem typ TRS{} _)) = ppr p
---  ppr (SomePrologProblem gg cc) = ppr (mkPrologProblem gg cc)
 
 someProblem :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
 someProblem p@(Problem typ trs _ ) = SomeProblem (trimProblem p)
---someProblem (PrologProblem typ gg pgm) = SomePrologProblem gg pgm
 
 trimProblem (Problem typ trs (DPTRS dps_a _ _ _) ) = Problem typ trs (tRS$ A.elems dps_a)
 trimProblem p = p
@@ -174,13 +170,13 @@ instance TRS.Ppr f => Ppr (ProblemProofC id f) where
 -- MonadPlus instances
 -- -------------------
 
-instance MonadP.MonadZero (Free ProofF) where mzeroM = jail MZero
+instance MonadP.MonadZero (Free ProofF) where mzeroM = wrap MZero
 instance MonadP.MPlus (Free ProofF) (Free ProofF ) (Free ProofF )  where
-    mplus p1 p2 = jail $ MPlus p1 p2 -- if isSuccess p1 then p1 else choiceP p1 p2
+    mplus p1 p2 = wrap $ MPlus p1 p2 -- if isSuccess p1 then p1 else choiceP p1 p2
 
 instance MonadPlus (C (Free ProofF)) where
-    mplus p1 p2 = jail $ MPlus p1 p2
-    mzero       = jail MZero
+    mplus p1 p2 = wrap $ MPlus p1 p2
+    mzero       = wrap MZero
 
 -- ------------------
 -- Monad Transformer
@@ -191,18 +187,18 @@ type ProofT   m a = FreeT ProofF m a
 type PPT id f m   = ProofT m (ProblemG id f)
 
 liftProofT :: P.Monad m => ProofC a -> ProofT m a
-liftProofT = wrap
+liftProofT = trans
 
-instance P.Monad m => MonadP.MonadZero (FreeT ProofF m) where mzeroM = wrap(Impure MZero)
+instance P.Monad m => MonadP.MonadZero (FreeT ProofF m) where mzeroM = trans(Impure MZero)
 instance Monad m => MonadP.MPlus (FreeT ProofF m) (FreeT ProofF m) (FreeT ProofF m) where
     mplus m1 m2 = FreeT $ return $ Right (MPlus m1 m2)
 
 -- Additional parameterized instances between the Proof and ProofT
 instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (Free ProofF) (FreeT ProofF m) (FreeT ProofF m) where
-    mplus m1 m2 = FreeT $ return $ Right (MPlus (wrap m1) m2)
+    mplus m1 m2 = FreeT $ return $ Right (MPlus (trans m1) m2)
 
 instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT ProofF m) (Free ProofF) (FreeT ProofF m) where
-    mplus m1 m2 = FreeT $ return $ Right (MPlus  m1 (wrap m2))
+    mplus m1 m2 = FreeT $ return $ Right (MPlus  m1 (trans m2))
 
 -- ------------
 -- * Evaluators
@@ -213,7 +209,7 @@ instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT ProofF m) (Free Proo
 --stageProof :: forall a s. Proof a -> StagedProof a
 stageProof = foldFree (return . return) f where
   f (Stage p) = return (unstageProof p)
-  f x = jail x
+  f x = wrap x
 
 --unstageProof :: StagedProof a -> Proof a
 unstageProof = join
@@ -245,15 +241,15 @@ evalF :: forall mp a proof. (Functor mp, MonadLogic mp, MonadFree ProofF proof) 
 evalF Fail{}         = mzero
 evalF DontKnow{}     = mzero
 evalF MZero          = mzero
-evalF Success{..}    = return (jail Success{..})
-evalF MDone          = return (jail MDone)
+evalF Success{..}    = return (wrap Success{..})
+evalF MDone          = return (wrap MDone)
 evalF (MPlus p1 p2)  = p1 `M.mplus` p2
 evalF (MPlusPar p1 p2) = p1 `M.interleave` p2
-evalF (And pi pb ll) = (jail . And  pi pb) <$> P.sequence ll
-evalF (Or  pi pb ll) = (jail . Step pi pb) <$> msum ll
+evalF (And pi pb ll) = (wrap . And  pi pb) <$> P.sequence ll
+evalF (Or  pi pb ll) = (wrap . Step pi pb) <$> msum ll
 evalF (MAnd  p1 p2)  = p1 >>= \s1 -> p2 >>= \s2 ->
-                       return (jail $ MAnd s1 s2)
-evalF (Step pi pb p) = (jail . Step pi pb) <$> p
+                       return (wrap $ MAnd s1 s2)
+evalF (Step pi pb p) = (wrap . Step pi pb) <$> p
 evalF (Stage  p) = p
 
 sequencePar []     = return []
@@ -262,7 +258,7 @@ sequencePar (x:xx) = x >>- \x' -> (x':) `liftM` sequencePar xx
 unsafeUnwrapIO :: Functor f => FreeT f IO a -> Free f a
 unsafeUnwrapIO (FreeT m) = go (unsafePerformIO m) where
   go (Left  a) = return a
-  go (Right f) = jail (unsafeUnwrapIO <$> f)
+  go (Right f) = wrap (unsafeUnwrapIO <$> f)
 
 
 --isSuccess :: Monoid s => ProofCk -> Bool

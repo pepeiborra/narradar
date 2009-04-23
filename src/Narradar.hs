@@ -9,8 +9,7 @@
 {-# LANGUAGE GADTs #-}
 
 module Narradar ( narradarMain, Options(..), defOpts
-                , module Control.Monad
-                , module Control.Monad.Free
+                , module Control.Monad.Free.Narradar
 --                , module Control.Monad.MonadPlus.Parameterized
                 , module Narradar.Solver
                 , module Narradar.ArgumentFiltering
@@ -25,9 +24,9 @@ module Narradar ( narradarMain, Options(..), defOpts
                 ) where
 
 import Control.Monad
-import Control.Monad.Free
-import "monad-param" Control.Monad.Parameterized
-import "monad-param" Control.Monad.MonadPlus.Parameterized
+import Control.Monad.Free.Narradar
+--import "monad-param" Control.Monad.Parameterized
+--import "monad-param" Control.Monad.MonadPlus.Parameterized
 import Data.Maybe
 import System.Cmd
 import System.Environment

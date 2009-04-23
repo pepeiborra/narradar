@@ -7,7 +7,7 @@
 module Narradar.Output where
 
 import Control.Applicative
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 import Data.HashTable (hashString)
 import Data.Foldable
 import Data.Maybe
@@ -133,7 +133,7 @@ instance (HashConsed f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
                           td ! [theclass "rhs"]   << show rhs
 
 
-instance HTMLTABLE Prolog.Clause where
+instance (Prolog.Ppr id) => HTMLTABLE (Prolog.Clause id) where
     cell = cell . (td <<) .  show . Prolog.ppr
 {-
     cell (h :- bb) = td ! [theclass "head"]  << show h <->
@@ -141,7 +141,7 @@ instance HTMLTABLE Prolog.Clause where
                      td ! [theclass "body"]   << bb
 -}
 
-instance HTML Prolog.Atom where
+instance (Prolog.Ppr id) => HTML (Prolog.Atom id) where
     toHtml = toHtml . show . Prolog.ppr
 
 typClass typ | isFullNarrowing typ = theclass "NDP"

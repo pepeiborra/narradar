@@ -45,7 +45,8 @@ import Narradar.Convert
 import Narradar.Utils
 import Narradar.Unify
 
-import TRS hiding (ppr, Ppr, apply, unify, unifies)
+import TRS hiding (ppr, Ppr, unify, unifies)
+import qualified TRS.MonadFresh as TRS
 import TRS.FetchRules ()
 --import TRS.MonadFresh
 import qualified TRS

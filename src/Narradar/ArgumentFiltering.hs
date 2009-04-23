@@ -37,11 +37,10 @@ import Narradar.Labellings
 -- import Narradar.Convert
 import Narradar.Utils
 
-import TRS hiding (apply, ppr, Ppr)
+import TRS hiding (ppr, Ppr)
 import TRS.Bottom as Bottom
 import Lattice
-import Language.Prolog.Syntax      (Ident)
-import Language.Prolog.TypeChecker (TypeAssignment)
+import Language.Prolog.SharingAnalysis (SharingAssignment)
 
 #ifdef HOOD
 import Debug.Observe
@@ -210,10 +209,12 @@ allOuter af t pos =  [(root, last sub_p)
 
 typeHeu assig = MkHeu $ \_ -> (TypeHeu assig)
 
-data TypeHeu id (f :: * -> *) = TypeHeu TypeAssignment
+data TypeHeu id (f :: * -> *) = TypeHeu (SharingAssignment String)
+
 instance (T String :<: f, Foldable f) => PolyHeuristic TypeHeu String f
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
+
 instance (T id :<: f, Show id, Ord id, Foldable f) => PolyHeuristic TypeHeu id f
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (show -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
@@ -232,7 +233,7 @@ typeHeu_f assig isUnbounded  = Heuristic (predHeuOne allInner (const f) `or` run
                             , any (`Set.member` uu) (zip (repeat g) [1..getArity g])]
         reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
         getArity g | Just i <- Map.lookup g arities = i
-        arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
+        arities = Map.fromListWith max (concatMap F.toList assig) -- :: Map Ident Int
 
 --typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
 typeHeu2 assig = simpleHeu $ Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
@@ -249,7 +250,7 @@ typeHeu2 assig = simpleHeu $ Heuristic (predHeuOne allInner (const f) `or` runHe
                             , any (`Set.member` uu) (zip (repeat g) [1..getArity g])]
         reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
         getArity g | Just i <- Map.lookup g arities = i
-        arities = Map.fromListWith max (concatMap F.toList assig) :: Map Ident Int
+        arities = Map.fromListWith max (concatMap F.toList assig) -- :: Map Ident Int
 
 -- Predicates
 -- ----------

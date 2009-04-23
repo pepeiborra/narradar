@@ -26,7 +26,7 @@ import Control.Comonad.Pointer
 import Control.Monad.Logic
 import Text.XHtml (Html)
 
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 import Narradar.Types hiding ((//), (!))
 import TRS (open, EqModulo_(..))
 import Narradar.Utils ((<$$>), (.|.), snub, foldMap2, trace)

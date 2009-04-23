@@ -32,7 +32,7 @@ import Text.ParserCombinators.Parsec.Tag
 import Paths_narradar
 
 import TRS
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 import Narradar.Types
 import Narradar.Output
 import Narradar.Proof

@@ -9,7 +9,7 @@ module Narradar.Solver where
 import Control.Applicative hiding (Alternative(..))
 import Control.Arrow hiding (first)
 import Control.Monad as P
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 import Control.Monad.Logic
 --import "monad-param" Control.Monad.Parameterized
 --import "monad-param" Control.Monad.MonadPlus.Parameterized
@@ -17,7 +17,6 @@ import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Monoid
 import Data.Traversable
-import Language.Prolog.TypeChecker
 import System.IO.Unsafe
 import Text.ParserCombinators.Parsec (ParseError)
 import Text.XHtml (Html, primHtml)
@@ -147,7 +146,7 @@ firstP (a:alternatives) p = do
   ei_free <- free (a p)
   case ei_free of
     Right MZero -> firstP alternatives p
-    Right x     -> jail x
+    Right x     -> wrap x
     Left  z     -> return z
 {-
 firstP (a:alternatives) p = case a p of

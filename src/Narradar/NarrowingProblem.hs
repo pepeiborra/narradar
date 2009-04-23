@@ -17,7 +17,7 @@ module Narradar.NarrowingProblem (
 import Control.Applicative
 import Control.Exception
 import Control.Monad hiding (join, mapM)
-import Control.Monad.Free hiding (note)
+import Control.Monad.Free.Narradar
 import Control.Monad.Writer(execWriter, execWriterT, MonadWriter(..), lift)
 import Control.Monad.State (evalState, evalStateT, modify, MonadState(..))
 import Control.RMonad.AsMonad
@@ -44,7 +44,6 @@ import Narradar.UsableRules
 import Narradar.Aprove
 import TRS
 import Lattice
-import Language.Prolog.TypeChecker
 
 #ifdef DEBUG
 import Debug.Observe

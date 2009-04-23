@@ -18,8 +18,6 @@ import Narradar.Utils
 import Narradar.ArgumentFiltering
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
-import qualified Language.Prolog.TypeChecker as Prolog
-import qualified Language.Prolog.Parser as Prolog
 
 #ifdef HOOD
 import Debug.Observe
@@ -32,7 +30,7 @@ data ProblemTypeF pi   = Rewriting   | InnermostRewriting
                        | GNarrowing  | GNarrowingModes  {pi, goal::pi}
                        | BNarrowing  | BNarrowingModes  {pi, goal::pi}
                        | LBNarrowing | LBNarrowingModes {pi, goal::pi}
-	               | Prolog {goals::[AF_ String], program::Prolog.Program}
+	               | Prolog {goals::[AF_ String], program::Prolog.Program String}
                     deriving (Eq, Show)
 
 instance Ppr (ProblemType id) where

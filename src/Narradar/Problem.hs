@@ -36,7 +36,7 @@ import Narradar.TRS
 import Narradar.Convert
 import Narradar.Utils
 
-import TRS hiding (ppr, Ppr, apply, unify, unifies)
+import TRS hiding (ppr, Ppr, unify, unifies)
 import qualified TRS
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 
@@ -84,7 +84,7 @@ instance TRS.Ppr f => Ppr (ProblemG id f) where
 --data VoidF f; instance Functor VoidF; instance TRS.Ppr VoidF
 
 type PrologProblem = ProblemG String Basic'
-mkPrologProblem :: [AF_ String] -> Prolog.Program -> PrologProblem
+mkPrologProblem :: [AF_ String] -> Prolog.Program String -> PrologProblem
 mkPrologProblem gg pgm = mkProblem (Prolog gg pgm) mempty mempty
 
 isProlog Prolog{} = True ; isProlog _ = False

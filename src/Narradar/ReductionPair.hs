@@ -8,10 +8,9 @@ module Narradar.ReductionPair where
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 import Control.Monad.Identity
 import Control.RMonad.AsMonad
---import "monad-param" Control.Monad.Parameterized
 import qualified Data.Array.IArray as A
 import Data.Foldable (toList)
 import Data.List

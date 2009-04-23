@@ -39,10 +39,11 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends: base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
-     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-     TRS >= 0.21.20090311, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
-     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel, strict
+  build-Depends: base, pretty, containers, process, directory, bytestring, array, QuickCheck,
+     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, 
+     TRS >= 0.21.20090311, alacarte, fetchrules, fetchrules-trs, 
+     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel, strict,
+     mtl, control-monad-free >= 0.4.1,logict, category-extras, rmonad, monad-param >= 0.0.3
   exposed-modules:
      Narradar,
      Narradar.Solver,
@@ -68,7 +69,7 @@ Library
      Narradar.Output,
      Narradar.GraphViz,
      Narradar.Utils,
-     Control.Monad.Free,
+     Control.Monad.Free.Narradar,
      Control.Monad.Supply
   other-modules:
      Narradar.Unify,

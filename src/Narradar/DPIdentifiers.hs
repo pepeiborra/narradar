@@ -26,7 +26,6 @@ import Data.Monoid
 import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Traversable (Traversable(..))
-import Language.Prolog.Syntax (Ident)
 import Prelude
 
 import TRS

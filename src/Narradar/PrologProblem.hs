@@ -16,13 +16,17 @@ import Control.Applicative
 import Control.Arrow
 import Control.Exception (assert)
 import Control.Monad.Error (Error)
+import Control.Monad.Free.Narradar (foldFreeM)
 import Control.Monad.State
 import Control.Monad.Writer
+import Control.Monad.Supply
+import Control.RMonad (Suitable(..))
+import Data.Suitable
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import Data.Char (isSpace)
 import Data.HashTable (hashString)
-import Data.List (partition, isSuffixOf, isPrefixOf, delete, sort, groupBy, find)
+import Data.List (partition, isSuffixOf, isPrefixOf, delete, (\\), sort, groupBy, find)
 import Data.Maybe
 import Data.Monoid
 import Data.Foldable (toList, notElem)
@@ -34,27 +38,23 @@ import Language.Haskell.TH (runIO)
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
 import Text.XHtml (Html, toHtml)
 
-import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Ident, Term, In(..), Atom, foldInM)
+import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Term(..))
 import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.Parser as Prolog (program, clause, query, whiteSpace, ident)
-import Language.Prolog.TypeChecker (infer, TypeAssignment)
+import Language.Prolog.SharingAnalysis (infer)
 
 import Lattice (Lattice)
 import TRS.FetchRules -- for the Error ParseError instance
-import TRS (Var)
 
 import Narradar.ArgumentFiltering (AF_, AF, typeHeu, innermost, MkHeu, mkHeu, Heuristic(..))
 import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Propositional ((\/), (/\), (-->), Formula)
-import qualified Narradar.Propositional as Prop
 import Narradar.DPairs
 import Narradar.Types hiding (Var,Term,In, program)
 import qualified Narradar.Types as TRS
 import Narradar.NarrowingProblem
 import Narradar.Proof
 import Narradar.ExtraVars
-import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2, trace)
-
+import Narradar.Utils ((<$$>),(..&..), mapLeft, on, fmap2, foldMap2, trace)
 import Prelude hiding (and,or,notElem,pi)
 
 inferType (Problem Prolog{..} _ _) = infer program
@@ -88,24 +88,24 @@ encodeToSat trs gg = encProb where
             [] `inside` _ = Prop.true
             _ `inside` _  = Prop.false
 -}
-skTransform :: [Clause] -> NarradarTRS PS BasicPS
+skTransform :: [Clause String] -> NarradarTRS PS BasicPS
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        sig = getSignature clauses
 
        (equalF, commaF) = ("=", findFreeSymbol sig "comma")
 
-       clauseRules :: [(Ident, Rule BasicPS)] = concat $ (`evalState` [0..]) $
+       clauseRules :: [(String, Rule BasicPS)] = concat $ (`evalState` [0..]) $
          -- The counter is global, the list of vars is local to each clause
          -- We use a State Transformer on top of a state monad.
          -- Several StateT computations are run inside one single State computation
          evalStateT (mapM toRule clauses) mempty
        toRule (Pred id tt :- []) = return$
-         let tt' = evalState(mapM toTerm tt) [0..] in  -- This evalState is for the MonadFresh in toTerm
+         let tt' = runSupply(mapM toTerm tt) in
           [(id, term (InId id) tt' :-> term (OutId id) tt')]
        toRule (t1 :=: t2  :- cc) = toRule (Pred equalF [t1,t2] :- cc)
        toRule (Is  t1 t2  :- cc) = toRule (Pred equalF [t1,t2] :- cc)
        toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
-         let tt' = evalState(mapM toTerm tt) [0..]
+         let tt' = runSupply(mapM toTerm tt)
          modify (Set.fromList(concatMap vars' tt') `mappend`)
          rhs_0  <- mkRhs (head gg)
          mid_r  <- forM (gg `zip` tail gg) $ \(c,sc) -> (:->) <$> mkLhs c <*> mkRhs sc
@@ -116,33 +116,33 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
 
        mkRhs (Pred id tt) = do
          vv <- toList <$> get
-         let tt' = evalState(mapM toTerm tt) [0..]
-         i <- lift fresh
+         let tt' = runSupply(mapM toTerm tt)
+         i <- lift next
          return (term (UId i :: PS) (term (InId id) tt' : vv))
        mkRhs (f :=: g) = mkRhs (Pred equalF [f,g])
        mkRhs (Is f  g) = mkRhs (Pred equalF [f,g])
 
        mkLhs (Pred id tt) = do
          vv <- toList <$> get
-         let tt' = evalState(mapM toTerm tt) [50..]
+         let tt' = runSupply'(mapM toTerm tt) [50..]
          modify(Set.fromList(concatMap vars' tt') `mappend`)
          i <- lift current
          return (term (UId i :: PS) (term (OutId id) tt' : vv))
        mkLhs (f :=: g) = mkLhs (Pred equalF [f,g])
        mkLhs (Is f  g) = mkLhs (Pred equalF [f,g])
 
-       toTerm = foldInM f where
---         f :: (MonadFresh m, TRSC f, T PS :<: f) => TermF (TRS.Term f) -> m (TRS.Term f)
+       toTerm = foldFreeM vf f where
+--         f :: (MonadNext m, TRSC f, T PS :<: f) => TermF (TRS.Term f) -> m (TRS.Term f)
          f(Term id tt) = return $ term (FunctorId id') tt where
             id' = map (\c -> if isSpace c then '_' else c) id
          f(Tuple   tt) = return $ term (FunctorId commaF) tt
-         f Wildcard    = var   <$>fresh
-         f (String s)  = fresh >>= \i -> return (constant (FunctorId ("string" ++ show i)))
+         f Wildcard    = var   <$>next
+         f (String s)  = next >>= \i -> return (constant (FunctorId ("string" ++ show i)))
          f (Int i)
             |i>0       = return (iterate (TRS.term1 (FunctorId "succ")) (constant (FunctorId "zero")) !! fromInteger i)
             |otherwise = return (iterate (TRS.term1 (FunctorId "pred")) (constant (FunctorId "zero")) !! fromInteger i)
          f (Float f)   = return $ constant (FunctorId $ show f)
-         f(Var v)      = return $ toVar v
+         vf            = return . toVar
          toVar (VName id)    = var' (Just id) (abs$ fromIntegral $ hashString id)
          toVar (Auto  id)    = var id
 
@@ -200,8 +200,8 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
                                                       , pp /= iFun trs (InId f)])
     let af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList goalAF] `mappend` AF.init trs0
     -- ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
-    trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
-     fix invariantEV (trs0, af0)
+--    trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
+    fix invariantEV (trs0, af0)
  where
   heuristic = mkHeu mkH trs' --innermost af t p -- typeHeu assig af t p
 
@@ -209,7 +209,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
 
 --  insertNewMode :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
   insertNewMode (id, pp) = tell [Labelling pp id] >>
-                           return (Set.fromList [ (pred, l  `setLabel` pp :-> r `setLabel` pp)
+                           return (Set.fromList [ (pred, l  `setLabel` Labelling pp :-> r `setLabel` Labelling pp)
                                                  | (pred, l :-> r) <- toList rr
                                                  ,  pred == id])
   invariantEV f (trs@(PrologTRS rr _), af)
@@ -225,7 +225,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
       case unlabel f of
         InId f_pred -> do
          let (open -> Just (T u@(unlabel -> UId{} :: PS) ( (open -> Just (T g@(unlabel -> InId{}) vv2)) : vv1))) = r
-             f'  = assert (f==g) $ mapLabel (delete i) (delete i $ iFun trs g) g
+             f'  = assert (f==g) $ mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs g)) g
              r' = term u (term f' vv2 : vv1)
              changes1 =  Set.insert (pred, l:->r') . Set.delete (pred,rule)
              changes2 x = if f' `notElem` (getDefinedSymbols trs) then  (mappend x) <$> insertNewMode (f_pred, labelling f') else return x
@@ -234,7 +234,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
                                 | (pred', outrule@(l :-> r)) <- toList rr
                                 , (open -> Just (T u' ( (open -> Just (T p_out@(unlabel -> OutId h) vv2)) : vv1))) <- [l]
                                 , u == u', h == f_pred
-                                , let outrule' = term u (term (mapLabel (delete i) (delete i $ iFun trs p_out)  p_out) vv2 : vv1) :-> r]
+                                , let outrule' = term u (term (mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs p_out))  p_out) vv2 : vv1) :-> r]
          trs'@(PrologTRS rr' _) <- (prologTRS' .changes1 . changes3) <$> changes2 rr
          let af' = af `mappend` AF.singleton f' (labelling f') `mappend` AF.init trs'
              common = Set.intersection rr' rr; added = rr' `Set.difference` common; deleted = rr `Set.difference` common
@@ -251,7 +251,7 @@ iFun sig f = [1.. getArity sig f]
 -- --------------------------
 
 instance (Monoid s) => R.Suitable (WriterT s m) a where
-   data R.Constraints (WriterT s m) a = WriterTConstraints
+   data Constraints (WriterT s m) a = WriterTConstraints
    constraints _ = WriterTConstraints
 
 instance (Monad m, Monoid s) => R.RFunctor (WriterT s m) where

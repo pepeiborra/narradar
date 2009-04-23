@@ -9,7 +9,7 @@ module Narradar.GraphViz where
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Free
+import Control.Monad.Free.Narradar
 import Data.Graph
 import Data.Foldable (foldMap, toList)
 import qualified Data.Map as Map
