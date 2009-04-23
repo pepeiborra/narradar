@@ -107,7 +107,6 @@ pprDot' PprDot{..} prb = showDot $ do
     problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
     problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
---problemNode  (SomePrologProblem cc gg) done = childnode'(problemAttrs (mkPrologProblem cc gg :: Problem BasicId)) (doneEdge done)
     problemNode' p    = childnode (problemAttrs p)
     doneEdge True     = [("color", "green")]
     doneEdge False    = [("color", "red")]
@@ -156,7 +155,7 @@ pprTPDBdot p@(Problem Prolog{..} _ _) =
     unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
 
 pprTPDBdot p@(Problem typ trs dps) = unlines $
-    [ "(VAR " ++ (unwords $ map show $ snub $ foldMap3 vars' (rules <$> p)) ++ ")"
+    [ "(VAR " ++ (unwords $ snub $ map show $ foldMap3 vars' (rules <$> p)) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show.pprRule) (rules dps))) ++ ")"
     , "(RULES\\l" ++ (unlines (map ((' ':).show.pprRule) (rules trs))) ++ ")"] ++
     maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getGoalAF typ)) ++ ["\\l"]
