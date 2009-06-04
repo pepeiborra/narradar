@@ -63,19 +63,22 @@ instance TRS.Ppr f => HTML (ProblemG id f) where
     toHtml (Problem typ@Prolog{..} _ _) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
-            H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves program)
+            H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves' program)
     toHtml (Problem typ trs dps@TRS{}) | null $ rules dps =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
-            H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves (rules trs) </>
+            H.td ! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves' (rules trs) </>
                  "Dependency Pairs: none")
     toHtml (Problem typ trs dps@TRS{}) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Rules" </>
-                 aboves (rules trs) </>
+                 aboves' (rules trs) </>
             H.td ! [H.theclass "DPS" ] << "Dependency Pairs" </>
-                 aboves (rules dps))
+                 aboves' (rules dps))
+
+aboves' [] = cell noHtml
+aboves' xx = aboves xx
 
 instance HTML SomeProblem where
     toHtml (SomeProblem p@Problem{}) = toHtml p
