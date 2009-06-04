@@ -67,7 +67,7 @@ mkGoalProblem' typGoal typ heu trs | const True (typGoal `asTypeOf` typ) =
     in assert (not $ null orProblems) orProblems
 
 -- ------------------------------------------------------------------------
--- This is the AF processor described in our Dependency Pairs for Narrowing
+-- This is the AF processor described in our ICLP'08 paper
 -- ------------------------------------------------------------------------
 {-# off SPECIALIZE groundRhsOneP :: Problem BBasicId -> ProblemProof BBasicId #-}
 {-# off SPECIALIZE groundRhsOneP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
@@ -80,12 +80,18 @@ groundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps)
     where heu        = mkHeu mk p
           afs        = findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p =<< rules dps
           orProblems = [ step (GroundOne (Just af)) p $
-                                AF.apply af (mkProblem InnermostRewriting trs dps)
+                                AF.apply af (mkProblem (correspondingRewritingStrategy typ) trs dps)
                         | af <- afs]
 
 groundRhsOneP mk p@(Problem typ@(getAF -> Nothing) trs dps)
-  | isAnyNarrowingProblem p = groundRhsOneP mkHeu (p `withGoalAF` AF.init p)
+  | isAnyNarrowingProblem p =
+    if null orProblems then failP EVProcFail p else msum orProblems
   | otherwise = return p
+    where heu        = mkHeu mk p
+          afs        = findGroundAF heu (AF.empty p) (AF.init p) p =<< rules dps
+          orProblems = [ step (GroundOne (Just af)) p $
+                                AF.apply af (mkProblem (correspondingRewritingStrategy typ) trs dps)
+                        | af <- afs]
 
 findGroundAF heu pi_groundInfo af0 p (_:->r)
   | isVar r   = mzero
@@ -95,6 +101,10 @@ findGroundAF heu pi_groundInfo af0 p (_:->r)
               mkGround t = cutWith heu af0 t varsp -- TODO Fix: cut one at a time
                   where varsp = [TRS.note v | v <- vars' (annotateWithPos t)] \\\
                                 [TRS.note v | v <- subterms (AF.apply pi_groundInfo $ annotateWithPos t)]
+
+correspondingRewritingStrategy Narrowing = Rewriting
+correspondingRewritingStrategy GNarrowing = InnermostRewriting
+correspondingRewritingStrategy BNarrowing = Rewriting
 
 -- ------------------------------------------------------------------------
 -- A variation for use with SCCs
