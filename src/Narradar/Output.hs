@@ -39,7 +39,8 @@ import Prelude hiding (concat)
 instance HTML a => HTMLTABLE a where cell = cell . toHtml
 
 instance Show id => HTML (AF.AF_ id) where
-    toHtml (AF.AF af) = H.unordList [ pi +++ "(" +++ show k +++ ") = " +++ show ii  | (k,ii) <- Map.toList af]
+    toHtml (AF.AF af) = H.unordList [ pi +++ "(" +++ show k +++ ") = " +++ show (Set.toList ii)
+                                          | (k,ii) <- Map.toList af]
         where pi = H.primHtmlChar "pi"
 
 instance HTML Doc where toHtml = toHtml . show
