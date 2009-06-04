@@ -95,7 +95,7 @@ fromList  :: Ord id => [(id,[Int])] -> AF_ id
 toList    :: AF_ id -> [(id,[Int])]
 singleton :: Ord id => id -> [Int] -> AF_ id
 init      :: (HasSignature sig id, Show id) => sig -> AF_ id
-initBottom:: (HasSignature sig id, Show id) => sig -> AF_ id
+empty     :: (HasSignature sig id, Show id) => sig -> AF_ id
 map       :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
 mapSymbols':: Ord id' => (id -> [Int] -> id') -> AF_ id -> AF_ id'
@@ -122,7 +122,7 @@ init t | sig <- getSignature t = fromList
     [ (d, [1 .. getArity sig d])
           | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)
           , getArity sig d > 0]
-initBottom t | sig <- getSignature t = fromList
+empty t | sig <- getSignature t = fromList
     [ (d, []) | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)]
 restrictTo sig (AF af) =
     AF (Map.filterWithKey (\k _ -> k `Set.member` sig) af)
