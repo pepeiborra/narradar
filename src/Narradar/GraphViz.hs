@@ -158,7 +158,7 @@ pprTPDBdot p@(Problem typ trs dps) = unlines $
     [ "(VAR " ++ (unwords $ snub $ map show $ foldMap3 vars' (rules <$> p)) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show.pprRule) (rules dps))) ++ ")"
     , "(RULES\\l" ++ (unlines (map ((' ':).show.pprRule) (rules trs))) ++ ")"] ++
-    maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getGoalAF typ)) ++ ["\\l"]
+    maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getAF typ)) ++ ["\\l"]
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprTerm = foldTerm f

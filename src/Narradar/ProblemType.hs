@@ -64,13 +64,19 @@ isProlog Prolog{} = True ; isProlog _ = False
 
 isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 
---isModed = isJust . getGoalAF
+--isModed = isJust . getAF
 
-getProblemAF = getGoalAF
-getGoalAF NarrowingModes{pi}   = Just pi
-getGoalAF BNarrowingModes{pi}  = Just pi
-getGoalAF GNarrowingModes{pi}  = Just pi
-getGoalAF LBNarrowingModes{pi} = Just pi
+getProblemAF = getAF
+getAF NarrowingModes{pi}   = Just pi
+getAF BNarrowingModes{pi}  = Just pi
+getAF GNarrowingModes{pi}  = Just pi
+getAF LBNarrowingModes{pi} = Just pi
+getAF _ = Nothing
+
+getGoalAF NarrowingModes{goal}   = Just pi
+getGoalAF BNarrowingModes{goal}  = Just pi
+getGoalAF GNarrowingModes{goal}  = Just pi
+getGoalAF LBNarrowingModes{goal} = Just pi
 getGoalAF _ = Nothing
 
 narrowingModes0 =   NarrowingModes  {goal=error "narrowingModes0", pi=error "narrowingModes0"}

@@ -24,6 +24,6 @@ usableRulesP p@(Problem typ trs dps)
   | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)
   | otherwise = return p
  where
-  pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getGoalAF typ
+  pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getAF typ
   trs' = mkTRS(iUsableRules trs pi' (rhs <$> rules dps)) `asTypeOf` trs
 

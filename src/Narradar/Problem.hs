@@ -63,7 +63,7 @@ instance (Ord id, TRSC f, T id :<: f) => TRS (ProblemG id f) id f where
     rules (Problem _ trs dps) = rules trs `mappend` rules dps
 
 mkProblem :: (Show id, Ord id) => ProblemType id -> NarradarTRS id f -> NarradarTRS id f -> ProblemG id f
-mkProblem typ@(getGoalAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
+mkProblem typ@(getAF -> Just pi) trs dps = let p = Problem (typ `withGoalAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
 mkProblem typ trs dps = Problem typ trs dps
 
 mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =

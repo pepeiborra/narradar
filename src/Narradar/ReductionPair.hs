@@ -43,7 +43,7 @@ aproveXML :: forall f id. (Ord id, Show id, T id :<: f, DPMark f, TRSC f, Lattic
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
 reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> ProblemProofG id f -- PPT id f Html IO
-reductionPair mkH timeout p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps@(DPTRS dps_a _ unifs _)) | isAnyNarrowing typ = msum orProblems where
+reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps@(DPTRS dps_a _ unifs _)) | isAnyNarrowing typ = msum orProblems where
 
  afs = unEmbed $ do
     af0 <- embed $ Set.fromList

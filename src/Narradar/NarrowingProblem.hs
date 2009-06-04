@@ -72,7 +72,7 @@ mkGoalProblem' typGoal typ heu trs | const True (typGoal `asTypeOf` typ) =
 {-# off SPECIALIZE groundRhsOneP :: Problem BBasicId -> ProblemProof BBasicId #-}
 {-# off SPECIALIZE groundRhsOneP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
 -- groundRhsOneP :: (Lattice (AF_ id), Show id, Ord id, T id :<: f, DPMark f) => ProblemG id f -> ProblemProofG id f
-groundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps)
+groundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps)
   | isAnyNarrowingProblem p =
     if null orProblems
       then failP EVProcFail p
@@ -83,7 +83,7 @@ groundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps)
                                 AF.apply af (mkProblem InnermostRewriting trs dps)
                         | af <- afs]
 
-groundRhsOneP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps)
+groundRhsOneP mk p@(Problem typ@(getAF -> Nothing) trs dps)
   | isAnyNarrowingProblem p = groundRhsOneP mkHeu (p `withGoalAF` AF.init p)
   | otherwise = return p
 
@@ -102,7 +102,7 @@ findGroundAF heu pi_groundInfo af0 p (_:->r)
 {-# off SPECIALIZE groundRhsAllP :: Problem BBasicId -> ProblemProof BBasicId #-}
 {-# off SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
 -- groundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id Html f
-groundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
+groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then failP EVProcFail p
       else msum orProblems
@@ -114,7 +114,7 @@ groundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isA
                                 AF.apply af (mkProblem InnermostRewriting trs dps)
                         | af <- afs]
 
-groundRhsAllP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps)
+groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps)
   | isAnyNarrowingProblem p = groundRhsAllP mkHeu (p `withGoalAF` AF.init p)
   | otherwise = return p
 
@@ -125,7 +125,7 @@ groundRhsAllP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps)
 {-# pff SPECIALIZE groundRhsAllP :: ProblemG LId BBasicLId -> ProblemProofG LId BBasicLId #-}
 
 --uGroundRhsAllP :: (Lattice (AF_ id), Show id, T id :<: f, Ord id, DPMark f) => ProblemG id f -> ProblemProofG id f
-uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
+uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then failP EVProcFail p
       else msum orProblems
@@ -146,11 +146,11 @@ uGroundRhsAllP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
                         , let proofU = step UsableRulesP p (mkProblem typ trs dps)]
           dpsSize af = size (AF.apply af dps)
 
-uGroundRhsAllP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowingProblem p
+uGroundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps) | isAnyNarrowingProblem p
   = uGroundRhsAllP mkHeu (p `withGoalAF` AF.init p)
 uGroundRhsAllP _ p = return p
 
-uGroundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
+uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then failP EVProcFail p
       else msum orProblems
@@ -171,7 +171,7 @@ uGroundRhsOneP mk p@(Problem typ@(getGoalAF -> Just pi_groundInfo) trs dps) | is
           dpsSize af = size (AF.apply af dps)
 
 
-uGroundRhsOneP mkHeu p@(Problem (getGoalAF -> Nothing) trs dps) | isAnyNarrowingProblem p
+uGroundRhsOneP mkHeu p@(Problem (getAF -> Nothing) trs dps) | isAnyNarrowingProblem p
   = uGroundRhsOneP mkHeu (p `withGoalAF` AF.init p)
 uGroundRhsOneP _ p = return p
 
@@ -181,7 +181,7 @@ uGroundRhsOneP _ p = return p
 -- ------------------------------------------------------------------
 
 --safeAFP :: (Show id) => ProblemG id f -> ProblemProofG id f
-safeAFP p@(Problem (getGoalAF -> Just af) trs dps) = assert (isSoundAF af p) $
+safeAFP p@(Problem (getAF -> Just af) trs dps) = assert (isSoundAF af p) $
   step (SafeAFP (Just af)) p (AF.apply af $ Problem InnermostRewriting (tRS $ iUsableRules trs (Just af) (rhs <$> rules dps)) dps)
 safeAFP p = return p
 
