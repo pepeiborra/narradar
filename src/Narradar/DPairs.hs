@@ -64,7 +64,7 @@ usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps@(DPTRS
                       | ciclo <- cc, any (`Set.member` reachable) ciclo]
   where
    gr          = getEDG problem
-   cc          = filter isCycle (map Tree.flatten (G.scc gr))
+   cc          = filter isCycle (map Tree.flatten (G.scc gr)) --TODO Use the faster GraphSCC package
    reachable   = Set.fromList (G.reachable gr =<< goal_pairs)
    goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, Just f <- [rootSymbol (lhs r)], unmarkDPSymbol f `Set.member` AF.domain goal]
    isCycle [n] = n `elem` gr A.! n
