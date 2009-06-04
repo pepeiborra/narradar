@@ -14,7 +14,7 @@ import Control.Monad.Logic
 --import "monad-param" Control.Monad.Parameterized
 --import "monad-param" Control.Monad.MonadPlus.Parameterized
 import Data.Foldable (toList)
-import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, maybeToList)
 import Data.Monoid
 import Data.Traversable
 import System.IO.Unsafe
@@ -60,13 +60,13 @@ aproveLocalP path  = trivialP >=> (unsafePerformIO . aproveProc path)
 -- ----------------------
 -- TODO Allow for goals in Narrowing problems
 --parseTRS :: ProblemType id -> String -> ProblemProofG (Identifier id) Html f
-parseTRS typ txt = eitherM $ do
-                      rules :: [Rule Basic'] <- parseFile trsParser "" txt
-                      let trs = tRS rules :: NarradarTRS String Basic'
-                      msum (map return $ mkGoalProblem AF.bestHeu typ trs)
+parseTRS typ txt = eitherM $ toEither $ do
+        rules :: [Rule Basic'] <- fromEither $ parseFile trsParser "" txt
+        let trs = tRS rules :: NarradarTRS String Basic'
+        msum (map return $ mkGoalProblem AF.bestHeu typ trs)
 
 --parseProlog :: String -> PPT String Basic' Html IO
-parseProlog = eitherM . fmap (inferType &&& id) . parsePrologProblem
+parseProlog = eitherM . fmap (inferType &&& id) . toEither . parsePrologProblem
 -- ------------------
 -- Some Basic solvers
 -- ------------------

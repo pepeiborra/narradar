@@ -17,11 +17,14 @@ source-repository head
 
 
 Flag base4
+   default: True
 Flag web
    default: False
 Flag debug
    default: False
 Flag hood
+   default: False
+Flag transformers
    default: False
 
 Library
@@ -35,15 +38,19 @@ Library
   if flag(hood)
      cpp-options: -DHOOD
      build-depends: GHood
+  if flag(transformers)
+     build-depends: transformers, monads-fd
+  else
+     build-depends: mtl
   buildable: True
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends: base, pretty, containers, process, directory, bytestring, array, QuickCheck,
-     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, 
-     TRS >= 0.21.20090311, alacarte, fetchrules, fetchrules-trs, 
+  build-Depends: base, pretty, containers, process, directory, bytestring, array,
+     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen,
+     TRS >= 0.21.20090311, term, alacarte, fetchrules, fetchrules-trs, 
      parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel, strict,
-     mtl, control-monad-free >= 0.4.1,logict, category-extras, rmonad, monad-param >= 0.0.3
+     control-monad-free >= 0.4.1,logict, category-extras, rmonad, monad-param >= 0.0.3
   exposed-modules:
      Narradar,
      Narradar.Solver,
@@ -93,7 +100,7 @@ Executable narradar
   main-is:             Main.hs
   ghc-options:         
   hs-source-dirs:         src
-  build-Depends:     base, mtl, pretty, containers, process, directory, bytestring, array, QuickCheck,
+  build-Depends:     base, pretty, containers, process, directory, bytestring, array, QuickCheck,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
      TRS >= 0.21.20090406, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
      parsec, prolog, prolog-tools, regex-posix, unix

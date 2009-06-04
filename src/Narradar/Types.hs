@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PackageImports #-}
 
 module Narradar.Types ( module TRS
                       , module Narradar.Types
@@ -18,7 +19,8 @@ import Data.DeriveTH
 import Data.Derive.Is
 
 import Control.Applicative hiding (Alternative(..), many, optional)
-import Control.Monad.State (get)
+import Control.Monad.Error (Error(..), noMsg)
+import Control.Monad (MonadPlus(..))
 import Data.Graph (Graph, Vertex)
 import Data.List ((\\), groupBy, sort, partition)
 import qualified Data.Map as Map
@@ -33,7 +35,6 @@ import qualified Text.PrettyPrint as Ppr
 import Text.XHtml (Html)
 import Prelude as P hiding (mapM, pi, sum)
 
-import Control.Monad.Supply
 import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), init)
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.DPIdentifiers
@@ -47,9 +48,7 @@ import Narradar.Utils
 import Narradar.Unify
 
 import TRS hiding (ppr, Ppr, unify, unifies)
-import qualified TRS.MonadFresh as TRS
 import TRS.FetchRules ()
---import TRS.MonadFresh
 import qualified TRS
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.Parser as Prolog
@@ -156,7 +155,7 @@ modeP = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
 parseGoal :: String -> Either ParseError [Goal]
 parseGoal = parse (Prolog.whiteSpace >> many (goalP <* Prolog.whiteSpace)) ""
 
-mkGoalAF (T f tt) = AF.singleton f [ i | (i,G) <- zip [1..] tt]
+mkGoalAF (f, tt) = AF.singleton f [ i | (i,G) <- zip [1..] tt]
 
 pprGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
 pprGoalAF sig pi = vcat [ pprGoal (f, mm) | (f,pp) <- AF.toList pi
@@ -171,7 +170,7 @@ pprGoal (id, modes) = text id <> parens(sep$ punctuate comma $ map (text.show) m
 -- --------------------------
 -- Parsing Prolog problems
 -- --------------------------
-data PrologSection = Query [Prolog.Atom String] | Clause (Prolog.Clause String) | QueryString String
+data PrologSection = Query [Prolog.Goal String] | Clause (Prolog.Clause String) | QueryString String
 
 problemParser = do
   txt <- getInput
@@ -182,13 +181,34 @@ problemParser = do
         f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
         f _ = Nothing
 
+data ErrorM e a = L e | R a
+
+instance Monad (ErrorM e) where
+  return = R
+  L e >>= f = L e
+  R a >>= f = f a
+
+instance Error e => MonadPlus (ErrorM e) where
+  mzero = L noMsg
+  mplus (R x) _ = R x
+  mplus _     r = r
+
+instance Error ParseError
+
+instance Functor (ErrorM e) where fmap _ (L e) = L e; fmap f (R x) = R (f x)
+
+-- Workaround an inability of GHC to hide instances
+-- MonadError Instances for Either from mtl and monads-fd clash
+fromEither = either L R
+toEither (L l) = Left l; toEither (R r) = Right r
+
 --mkPrologProblem = (return.) . mkPrologProblem
 parsePrologProblem pgm = do
-     things <- parse problemParser "input" pgm
+     things <- fromEither $ parse problemParser "input" pgm
      let cc      = [c | Clause      c <- things]
          gg1     = [q | Query       q <- things]
          gg_txt  = [q | QueryString q <- things]
-     gg2    <- concat <$> mapM parseGoal gg_txt
+     gg2    <- concat <$> mapM (fromEither.parseGoal) gg_txt
      gg1'   <- mapM atomToGoal (concat gg1)
      let sig   = getSignature cc
          (constructor_goals, defined_goals) = partition ((`Set.member` constructorSymbols sig) . fst) (gg1' ++ gg2)
@@ -198,12 +218,5 @@ parsePrologProblem pgm = do
      return (mkPrologProblem goals cc)
  where
      atomToGoal (Prolog.Pred f tt) = do
-       mm <- parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
+       mm <- fromEither $ parse modesP "" $ unwords $ map (show . Prolog.ppr) $ tt
        return (f,mm)
-
--- ----------------------------------
--- TRS.MonadFresh instance for Supply
--- ----------------------------------
-instance TRS.MonadFresh (Supply Int) where
-  fresh   = next
-  current = head <$> get

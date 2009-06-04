@@ -1,14 +1,16 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances, GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE PackageImports #-}
 
 module Control.Monad.Supply where
 
 import Control.Applicative
 import Control.Monad.List
-import Control.Monad.RWS
+import Control.Monad.RWS (RWS(..))
 import Control.Monad.State
 import Control.Monad.Writer
+import qualified TRS.MonadFresh as TRS
 
 class Monad m => MonadSupply i m | m -> i where next :: m i; current :: m i
 
@@ -35,3 +37,11 @@ runSupply :: (Num i, Bounded i, Enum i) => Supply i a -> a
 runSupply m = evalState (runSupply_ m) [0..]
 
 runSupply' m ids = evalState (runSupply_ m) ids
+
+
+-- ----------------------------------
+-- TRS.MonadFresh instance for Supply
+-- ----------------------------------
+instance TRS.MonadFresh (Supply Int) where
+  fresh   = next
+  current = head <$> get

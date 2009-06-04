@@ -38,10 +38,11 @@ import Language.Haskell.TH (runIO)
 import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
 import Text.XHtml (Html, toHtml)
 
-import Language.Prolog.Syntax (TermF(..), VName(..), Clause, ClauseF(..), Program, AtomF(..), Atom, Term(..))
+import Language.Prolog.Syntax (TermF(..), Clause, ClauseF(..), Program, GoalF(..), Goal, Term(..))
 import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.Parser as Prolog (program, clause, query, whiteSpace, ident)
 import Language.Prolog.SharingAnalysis (infer)
+import Data.Term.Var (Var(..))
 
 import Lattice (Lattice)
 import TRS.FetchRules -- for the Error ParseError instance
@@ -92,7 +93,7 @@ skTransform :: [Clause String] -> NarradarTRS PS BasicPS
 skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        sig = getSignature clauses
 
-       (equalF, commaF) = ("=", findFreeSymbol sig "comma")
+       [equalF, commaF, consF, nilF] = "=" : map (findFreeSymbol sig) ["comma", "cons","nil"]
 
        clauseRules :: [(String, Rule BasicPS)] = concat $ (`evalState` [0..]) $
          -- The counter is global, the list of vars is local to each clause
@@ -136,6 +137,8 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
          f(Term id tt) = return $ term (FunctorId id') tt where
             id' = map (\c -> if isSpace c then '_' else c) id
          f(Tuple   tt) = return $ term (FunctorId commaF) tt
+         f(Cons h t)   = return $ term2 (FunctorId consF) h t
+         f Nil         = return $ constant (FunctorId nilF)
          f Wildcard    = var   <$>next
          f (String s)  = next >>= \i -> return (constant (FunctorId ("string" ++ show i)))
          f (Int i)
@@ -144,7 +147,7 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
          f (Float f)   = return $ constant (FunctorId $ show f)
          vf            = return . toVar
          toVar (VName id)    = var' (Just id) (abs$ fromIntegral $ hashString id)
-         toVar (Auto  id)    = var id
+         toVar (VAuto  id)    = var id
 
 
 Right preludePl = $(do
@@ -155,7 +158,7 @@ Right preludePl = $(do
 preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
 addMissingPredicates cc0
   | Set.null undefined_cc0 = cc0
-  | otherwise = insertDummy $ insertEqual $ insertPrelude $ cc0
+  | otherwise = (insertDummy . insertEqual . insertPrelude) cc0
 
    where undefined_cc0 = undefinedPreds cc0
          vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
@@ -172,8 +175,8 @@ addMissingPredicates cc0
            where rename f' (Pred f tt) | f == f' = Pred f' tt
                  rename _ x = x
 
-findFreeSymbol sig prefix = fromJust $ find (`Set.notMember` getAllSymbols sig)
-                                              (prefix : [prefix ++ show i | i <- [0..]])
+
+findFreeSymbol sig pre = fromJust $ find (`Set.notMember` getAllSymbols sig) (pre : [pre ++ show i | i <- [0..]])
 
 {-# off SPECIALIZE prologP_labelling_sk :: Problem BBasicId -> ProblemProofG LId BBasicLId #-}
 
@@ -193,15 +196,15 @@ labellingTrans :: AF.PolyHeuristic heu LPS BasicLPS => MkHeu heu -> AF_ PS -> Na
 labellingTrans _ _ (rules -> []) = Set.singleton mempty
 labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
 --    let trs0 :: NarradarTRS LPS BasicLPS
-    trs0 <- (prologTRS' . mconcat) <$> (
-             (++) <$> sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList (AF.init trs)]
-                  <*> sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList goalAF
-                                                      , InId f `Set.member` allSymbols(getSignature trs)
-                                                      , pp /= iFun trs (InId f)])
+    trs0 <- (prologTRS' . mconcat) `liftM` (
+             liftM2 (++) (sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList (AF.init trs)])
+                         (sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList goalAF
+                                   , InId f `Set.member` allSymbols(getSignature trs)
+                                   , pp /= iFun trs (InId f)]))
     let af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList goalAF] `mappend` AF.init trs0
     -- ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
---    trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
-    fix invariantEV (trs0, af0)
+    trace (unlines(map show $ rules trs0) ++ "\n" ++ show af0) $
+     fix invariantEV (trs0, af0)
  where
   heuristic = mkHeu mkH trs'
 
@@ -217,7 +220,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
       | otherwise  = return (trs, af)
       where extra = [(pred, r, note (head ev))
                              | (pred,r) <- toList rr
-                             , let ev = extraVars (AF.apply af (annotateWithPos <$> r))
+                             , let ev = extraVars (AF.apply af (annotateWithPos `fmap` r))
                              , not (null ev)]
   cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = do
       (f, i) <- lift $ embed $ runHeu heuristic af r pos
@@ -228,14 +231,14 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
              f'  = assert (f==g) $ mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs g)) g
              r' = term u (term f' vv2 : vv1)
              changes1 =  Set.insert (pred, l:->r') . Set.delete (pred,rule)
-             changes2 x = if f' `notElem` (getDefinedSymbols trs) then  (mappend x) <$> insertNewMode (f_pred, labelling f') else return x
+             changes2 x = if f' `notElem` (getDefinedSymbols trs) then  (mappend x) `liftM`insertNewMode (f_pred, labelling f') else return x
              changes3 = foldr (.) id
                         [ Set.insert (pred',outrule') . Set.delete (pred',outrule)
                                 | (pred', outrule@(l :-> r)) <- toList rr
                                 , (open -> Just (T u' ( (open -> Just (T p_out@(unlabel -> OutId h) vv2)) : vv1))) <- [l]
                                 , u == u', h == f_pred
                                 , let outrule' = term u (term (mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs p_out))  p_out) vv2 : vv1) :-> r]
-         trs'@(PrologTRS rr' _) <- (prologTRS' .changes1 . changes3) <$> changes2 rr
+         trs'@(PrologTRS rr' _) <- (prologTRS' .changes1 . changes3) `liftM` changes2 rr
          let af' = af `mappend` AF.singleton f' (labelling f') `mappend` AF.init trs'
              common = Set.intersection rr' rr; added = rr' `Set.difference` common; deleted = rr `Set.difference` common
          trace ("Added " ++ show (Set.size added) ++ " rules and deleted " ++ show (Set.size deleted) ++"\n" ++
@@ -255,7 +258,7 @@ instance (Monoid s) => R.Suitable (WriterT s m) a where
    constraints _ = WriterTConstraints
 
 instance (Monad m, Monoid s) => R.RFunctor (WriterT s m) where
-   fmap = fmap
+   fmap = liftM
 
 instance (Monoid s, Monad m) => R.RMonad (WriterT s m) where
    return = return

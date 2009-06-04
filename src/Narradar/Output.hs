@@ -145,7 +145,7 @@ instance (Prolog.Ppr id) => HTMLTABLE (Prolog.Clause id) where
                      td ! [theclass "body"]   << bb
 -}
 
-instance (Prolog.Ppr id) => HTML (Prolog.Atom id) where
+instance (Prolog.Ppr id) => HTML (Prolog.Goal id) where
     toHtml = toHtml . show . Prolog.ppr
 
 typClass typ | isFullNarrowing typ = theclass "NDP"
