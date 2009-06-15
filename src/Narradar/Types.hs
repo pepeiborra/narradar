@@ -25,7 +25,7 @@ import Data.Derive.Is
 
 import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.Monad.Error (Error(..), noMsg)
-import "control-monad-free" Control.Monad.Free (MonadFree(..))
+import Control.Monad.Free (MonadFree(..))
 import Control.Monad (MonadPlus(..))
 import Data.Graph (Graph, Vertex)
 import Data.List ((\\), groupBy, sort, partition)
