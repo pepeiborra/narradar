@@ -27,7 +27,6 @@ import Narradar.ArgumentFiltering (fromAF)
 import Narradar.Proof
 import Narradar.Types
 import Narradar.Utils
-import TRS
 import qualified Language.Prolog.Syntax as Prolog
 
 -- ----------------------------
@@ -38,7 +37,7 @@ sliceWorkDone = foldFree return (Impure . f) where
     f (And p pi pp) = (And p pi $ takeWhileAndOneMore isSuccess pp)
     f (MPlusPar p1 p2) = if isSuccess p1 then Stage p1 else (MPlusPar p1 p2)  -- We use stage in lieu of return here
     f (MPlus    p1 p2) = if isSuccess p1 then Stage p1 else (MPlus    p1 p2)
-    f (MAnd     p1 p2) = if not(isSuccess p1) then Stage p1 else (MPlus    p1 p2)
+    f (MAnd     p1 p2) = if not(isSuccess p1) then Stage p1 else (MAnd p1 p2)
     f x = x
     takeWhileAndOneMore f []     = []
     takeWhileAndOneMore f (x:xs) = if f x then x : takeWhileAndOneMore f xs else [x]
@@ -93,17 +92,17 @@ pprDot' PprDot{..} prb = showDot $ do
       | done || showFailedPaths = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
       | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
 
-    problemLabel :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> (String, String)
+--    problemLabel :: (Ord v, Ppr v, Ord id, Ppr id) => ProblemG id v -> (String, String)
     problemLabel p = ("label", pprTPDBdot p)
 
-    problemColor :: ProblemG id f -> (String, String)
+--    problemColor :: ProblemG id v -> (String, String)
     problemColor p | isPrologProblem        p = ("color", "#F6D106")
                    | isFullNarrowingProblem p = ("color", "#4488C9")
                    | isBNarrowingProblem    p = ("color", "#FD6802")
                    | isGNarrowingProblem    p = ("color", "#FD6802")
                    | isRewritingProblem     p = ("color", "#EAAAFF")
                    | otherwise = error ("problemColor")
-    problemAttrs :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> [(String,String)]
+--    problemAttrs :: (Ord v, Ppr v, Ord id, Show id) => ProblemG id v -> [(String,String)]
     problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
     problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
@@ -148,27 +147,26 @@ pprDot' PprDot{..} prb = showDot $ do
     childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 
-pprTPDBdot :: forall id f. (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f  -> String
-{-# SPECIALIZE pprTPDBdot :: Problem BBasicId -> String #-}
+pprTPDBdot :: (Ord v, Ppr v, Ord id, Ppr id) => ProblemG id v -> String
 pprTPDBdot p@(Problem Prolog{..} _ _) =
-    show (Prolog.ppr program) ++ "\\l" ++
+    showPpr program ++ "\\l" ++
     unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
 
 pprTPDBdot p@(Problem typ trs dps) = unlines $
-    [ "(VAR " ++ (unwords $ snub $ map show $ foldMap3 vars' (rules <$> p)) ++ ")"
+    [ "(VAR " ++ (unwords $ map showPpr $ getVars p) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show.pprRule) (rules dps))) ++ ")"
     , "(RULES\\l" ++ (unlines (map ((' ':).show.pprRule) (rules trs))) ++ ")"] ++
     maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getAF typ)) ++ ["\\l"]
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
-        pprTerm = foldTerm f
-        f (prj -> Just (T (id::id) [])) = text (show id)
-        f (prj -> Just (T (id::id) tt)) =
-            text (show id) <> parens (hcat$ punctuate comma tt)
-        f t = pprF t
+        pprTerm = foldTerm ppr f
+        f t@(getId -> Just id)
+            | null tt = ppr id
+            | otherwise = ppr id <> parens (hcat$ punctuate comma tt)
+         where tt = toList t
 
 pprAF af = unlines [ ' ' : unwords (intersperse ","
-                          [ show f ++ ": " ++ show (toList aa) | (f, aa) <- xx])
+                          [ showPpr f ++ ": " ++ showPpr (toList aa) | (f, aa) <- xx])
                       | xx <- chunks 4 $ Map.toList $ fromAF af]
 
 unlines = concat . intersperse "\\l"

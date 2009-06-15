@@ -25,8 +25,8 @@ import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Proof
 import Narradar.Types hiding ((!))
 import qualified Narradar.Types as TRS
-import Narradar.Utils (snub, foldMap3, Ppr(..))
-import qualified TRS
+import Narradar.Utils (snub, foldMap3)
+import Data.Term.Ppr
 
 import qualified Language.Prolog.Syntax as Prolog
 
@@ -38,29 +38,29 @@ import Prelude hiding (concat)
 
 instance HTML a => HTMLTABLE a where cell = cell . toHtml
 
-instance Show id => HTML (AF.AF_ id) where
-    toHtml (AF.AF af) = H.unordList [ pi +++ "(" +++ show k +++ ") = " +++ show (Set.toList ii)
+instance Ppr id => HTML (AF.AF_ id) where
+    toHtml (AF.AF af) = H.unordList [ pi +++ "(" +++ show(ppr k) +++ ") = " +++ show (Set.toList ii)
                                           | (k,ii) <- Map.toList af]
         where pi = H.primHtmlChar "pi"
 
 instance HTML Doc where toHtml = toHtml . show
 
-instance Show id => HTML (ProcInfo id) where
-    toHtml (GroundOne af) = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
-    toHtml (GroundAll af) = "PROCESSOR: " +++ "ICLP'08 AF Processor (dumb SCC version) " +++ maybe noHtml toHtml af
+instance Ppr id => HTML (ProcInfo id) where
+    toHtml (GroundOne af)    = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
+    toHtml (GroundAll af)    = "PROCESSOR: " +++ "ICLP'08 AF Processor (dumb SCC version) " +++ maybe noHtml toHtml af
     toHtml (ReductionPair af)= "PROCESSOR: " +++ "ICLP'08 AF Processor for SCCs" +++ maybe noHtml toHtml af
-    toHtml (EVProc af)    = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
+    toHtml (EVProc af)       = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
-    toHtml NoPairs{}      = "PROCESSOR: " +++ "Dependency Graph"
-    toHtml (External e _) = "PROCESSOR: " +++ "External - " +++ show e
---    toHtml InstantiationP{}  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
---    toHtml FInstantiationP{} = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
---    toHtml NarrowingP{}      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
+    toHtml NoPairs{}         = "PROCESSOR: " +++ "Dependency Graph"
+    toHtml (External e _)    = "PROCESSOR: " +++ "External - " +++ show e
+    toHtml InstantiationP{}  = "PROCESSOR: " +++ "Graph Transformation via Instantiation"
+    toHtml FInstantiationP{} = "PROCESSOR: " +++ "Graph Transformation via Forward Instantiation"
+    toHtml NarrowingP{}      = "PROCESSOR: " +++ "Graph Transformation via Narrowing"
     toHtml NonTerminationLooping = "PROCESSOR: " +++ "Trivial non-termination"
     toHtml p                     = "PROCESSOR: " +++ show (ppr p)
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
-instance TRS.Ppr f => HTML (ProblemG id f) where
+instance (Ord v, Ord id, Ppr v, Ppr id) => HTML (ProblemG id v) where
     toHtml (Problem typ@Prolog{..} _ _) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
@@ -87,7 +87,7 @@ instance HTML SomeProblem where
 
 instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
 
-instance TRS.Ppr f => HTML (ProblemProof id f) where
+instance (Ppr id, Ppr v, Ord v) => HTML (ProblemProof id v) where
    toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work where
     work MZero       = toHtml  "Don't know"
     work DontKnow{}  = toHtml  "Don't know"
@@ -131,22 +131,22 @@ instance TRS.Ppr f => HTML (ProblemProof id f) where
     detailResult _ = noHtml
 
 
-instance (HashConsed f, TRS.Ppr f) =>  HTMLTABLE (Rule f) where
-    cell (lhs :-> rhs ) = td ! [theclass "lhs"]   << show lhs <->
+instance (Ppr (Term t v)) =>  HTMLTABLE (Rule t v) where
+    cell (lhs :-> rhs ) = td ! [theclass "lhs"]   << show (ppr lhs) <->
                           td ! [theclass "arrow"] << (" " +++ H.primHtmlChar "#x2192" +++ " ") <->
-                          td ! [theclass "rhs"]   << show rhs
+                          td ! [theclass "rhs"]   << show (ppr rhs)
 
 
-instance (Prolog.Ppr id) => HTMLTABLE (Prolog.Clause id) where
-    cell = cell . (td <<) .  show . Prolog.ppr
+instance (Ppr id) => HTMLTABLE (Prolog.Clause id) where
+    cell = cell . (td <<) .  show . ppr
 {-
     cell (h :- bb) = td ! [theclass "head"]  << show h <->
                      td ! [theclass "arrow"] << " :- " <->
                      td ! [theclass "body"]   << bb
 -}
 
-instance (Prolog.Ppr id) => HTML (Prolog.Goal id) where
-    toHtml = toHtml . show . Prolog.ppr
+instance (Ppr id) => HTML (Prolog.Goal id) where
+    toHtml = toHtml . show . ppr
 
 typClass typ | isFullNarrowing typ = theclass "NDP"
 typClass typ | isBNarrowing typ = theclass "BNDP"

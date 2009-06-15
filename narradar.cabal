@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.2
-version:             0.2.20090412
+version:             0.2.20090610
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -47,10 +47,9 @@ Library
   ghc-prof-options: -auto
   hs-source-dirs: src
   build-Depends: base, pretty, containers, process, directory, bytestring, array,
-     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen,
-     TRS >= 0.21.20090311, term, alacarte, fetchrules, fetchrules-trs, 
-     parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell, parallel, strict,
-     control-monad-free >= 0.4.1,logict, category-extras, rmonad, monad-param >= 0.0.3
+     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, parallel, strict,
+     term, TRSParser, parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell,
+     control-monad-free >= 0.4.1,logict, rmonad
   exposed-modules:
      Narradar,
      Narradar.Solver,
@@ -58,6 +57,7 @@ Library
      Narradar.DPIdentifiers,
      Narradar.PrologIdentifiers
      Narradar.Labellings,
+     Narradar.Goal,
      Narradar.Convert,
      Narradar.Proof,
      Narradar.DPairs,
@@ -74,17 +74,17 @@ Library
      Narradar.RewritingProblem,
      Narradar.Aprove,
      Narradar.Output,
+     Narradar.Ppr,
      Narradar.GraphViz,
      Narradar.Utils,
+     Narradar.Term,
+     Narradar.Var,
      Control.Monad.Free.Narradar,
      Control.Monad.Supply
   other-modules:
      Narradar.Unify,
-     Narradar.Propositional,
      Lattice,
-     TaskPoolSTM,
      Paths_narradar
-     Control.Monad.Operad,
      Text.ParserCombinators.Parsec.Tag
 
 Executable narradar
@@ -100,11 +100,6 @@ Executable narradar
   main-is:             Main.hs
   ghc-options:         
   hs-source-dirs:         src
-  build-Depends:     base, pretty, containers, process, directory, bytestring, array, QuickCheck,
-     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, monad-param >= 0.0.3,
-     TRS >= 0.21.20090406, alacarte, fetchrules, fetchrules-trs, logict, category-extras, rmonad, 
-     parsec, prolog, prolog-tools, regex-posix, unix
-  other-modules: 
 
 
 Executable narradarCgi

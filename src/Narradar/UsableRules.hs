@@ -18,12 +18,12 @@ import Narradar.Proof
 import Narradar.Types
 import Narradar.Utils
 
-usableRulesP :: forall f id a. (DPMark f, Show id, T id :<: f, Ord a, id ~ Identifier a) => ProblemG id f -> ProblemProofG id f
+usableRulesP :: (Ppr v, Ppr id, Ord v, Ord a, Enum v, id ~ Identifier a) => ProblemG id v -> ProblemProofG id v
 
 usableRulesP p@(Problem typ trs dps)
   | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)
   | otherwise = return p
  where
   pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getAF typ
-  trs' = mkTRS(iUsableRules trs pi' (rhs <$> rules dps)) `asTypeOf` trs
+  trs' = tRS(iUsableRules trs pi' (rhs <$> rules dps)) `asTypeOf` trs
 

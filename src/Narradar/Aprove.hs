@@ -12,6 +12,7 @@ import Control.Exception
 import Control.Monad
 import qualified Data.ByteString as B
 import Data.Char
+import Data.Foldable  (toList)
 import Data.HashTable (hashString)
 import Data.List
 import Data.Maybe
@@ -31,16 +32,17 @@ import Text.ParserCombinators.Parsec.Tag
 
 import Paths_narradar
 
-import TRS
 import Control.Monad.Free.Narradar
 import Narradar.Types
 import Narradar.Output
 import Narradar.Proof
 import Narradar.Utils
+import Narradar.Term
+import Narradar.Var
 
-type ExternalProcTyp proof id f = (Ord id, Show id, TRSC f, T id :<: f, MonadFree ProofF proof) => ProblemG id f -> IO (proof(ProblemG id f))
+type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => ProblemG id v -> IO (proof(ProblemG id v))
 
-aproveWebProc :: ExternalProcTyp m id f
+aproveWebProc :: ExternalProcTyp m id v
 aproveWebProc = memoExternalProc go where
   go prob@(Problem  (isRewriting -> True) trs dps) = do
     curl <- initialize
@@ -67,7 +69,7 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
      any ("proven" `isPrefixOf`) ww && ("not" `notElem` ww)
 
 
-aproveProc :: FilePath -> ExternalProcTyp m id f
+aproveProc :: FilePath -> ExternalProcTyp m id v
 aproveProc path = go where
    go prob@(Problem (isRewriting -> True) trs dps) =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
@@ -176,21 +178,23 @@ massage     = primHtml . unlines . drop 8  . lines
 -- TPDB
 -- ----
 
-pprTPDB :: forall f id. (Show id, Ord id, TRSC f, T id :<: f) => ProblemG id f -> String
+pprTPDB :: (Ppr id, Ord id, Ppr v, Enum v, Ord v) => ProblemG id v -> String
 pprTPDB p@(Problem typ trs dps) =
-  unlines ([ printf "(VAR %s)" (unwords $ map (show . pprTerm) $ snub $ foldMap3 vars' ( rules <$> p))
+  unlines ([ printf "(VAR %s)" (unwords $ map (show . pprVar) $ getVars p)
            , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
            , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))
            ] ++ if (isInnermostRewriting typ) then ["(STRATEGY INNERMOST)"] else [])
 
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
-        pprTerm = foldTerm f
-        f (prj -> Just (Var _ n))       = text "v" <> int n
+        pprVar v = text "v" <> int(fromEnum v)
+        pprTerm  = foldTerm pprVar f
 --        f (prj -> Just (T (id::id) [])) = text (show id)
-        f (prj -> Just (T (id::id) tt))
-          | show id == "','" = text "comma" <> parens (hcat$ punctuate comma tt) -- TODO Fix this HACK
-          | otherwise        = text (show id) <> parens (hcat$ punctuate comma tt)
-        f t = pprF t
+        f t | Just id <- getId t
+            , show (ppr id) == "','"
+            = text "comma" <> parens (hcat$ punctuate comma $ toList t) -- TODO Fix this HACK
+            | Just id <- getId t
+            = ppr id <> parens (hcat$ punctuate comma $ toList t)
+
 
 -- ----------------
 -- Parse XML

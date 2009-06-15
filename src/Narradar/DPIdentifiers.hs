@@ -27,14 +27,18 @@ import qualified Data.Set as Set
 import Data.Set (Set)
 import Data.Traversable (Traversable(..))
 import Prelude
+import Text.PrettyPrint
 
-import TRS
-import TRS.Bottom
 import qualified Language.Prolog.Syntax as Prolog
 
+import Narradar.Term
 import Narradar.Utils
+import Data.Term
+import Data.Term.Rules
+import Data.Term.Ppr
 
 type Id = Identifier String
+type DP a v = RuleN (Identifier a) v
 
 -- -----------------------
 -- Concrete DP Identifiers
@@ -47,13 +51,15 @@ instance Eq a => Eq (Identifier a) where
     _             == AnyIdentifier = True
     _             == _             = False
 
-instance Show (Identifier String) where
-    show (IdFunction f) = f
-    show (IdDP n) = n ++ "#"
+instance Ppr (Identifier a) => Show (Identifier a) where show = show . ppr
 
-instance Show a => Show (Identifier a) where
-    show (IdFunction f) = show f
-    show (IdDP n) = show n ++ "#"
+instance Ppr (Identifier String) where
+    ppr (IdFunction f) = text f
+    ppr (IdDP n) = text n <> text "#"
+
+instance Ppr a => Ppr (Identifier a) where
+    ppr (IdFunction f) = ppr f
+    ppr (IdDP n) = ppr n <> text "#"
 
 instance NFData a => NFData (Identifier a) where
     rnf (IdFunction f) = rnf f
@@ -64,17 +70,6 @@ $(derive makeFunctor     ''Identifier)
 $(derive makeFoldable    ''Identifier)
 $(derive makeTraversable ''Identifier)
 
--- -----------------------
--- Named Term Signatures
--- -----------------------
-
-type Basic'   = Var :+: T String :+: Hole
-type BasicId  = Var :+: T Id :+: Hole
-type BBasicId = Var :+: T Id :+: Hole :+: Bottom
-instance HashConsed BBasicId
-instance HashConsed BasicId
-instance HashConsed Basic'
-instance HashConsed (T Id)
 
 -- ------------
 -- DP Symbols
@@ -85,40 +80,16 @@ markDPSymbol (IdFunction f) = IdDP f
 markDPSymbol f = f
 unmarkDPSymbol (IdDP n) = IdFunction n
 unmarkDPSymbol n = n
+
 functionSymbol = IdFunction; dpSymbol = IdDP
 symbol (IdFunction f) = f; symbol(IdDP f) = f
 
-markDP = mapTerm markDPF; unmarkDP = mapTerm unmarkDPF
-class (TRSC f, DPMark' f f) => DPMark f; instance (TRSC f, DPMark' f f) => DPMark f
-class (f :<: g) => DPMark' f g where markDPF, unmarkDPF :: f(Term g) -> Term g; markDPF = inject; unmarkDPF = inject
+markDP, unmarkDP :: (MapId f, Functor (f (Identifier id))) => Term (f (Identifier id)) v -> Term (f (Identifier id)) v
+markDP   = evalTerm return (Impure . mapId markDPSymbol)
+unmarkDP = evalTerm return (Impure . mapId unmarkDPSymbol)
+returnDP = foldTerm return (Impure . mapId IdFunction)
 
-instance (T (Identifier id) :<: g) => DPMark' (T (Identifier id)) g where
-    markDPF   (T n tt) = term (markDPSymbol n) tt
-    unmarkDPF (T n tt) = term (unmarkDPSymbol n) tt
-instance (DPMark' a g, DPMark' b g, (a:+:b) :<: g) => DPMark' (a:+:b) g where
-    markDPF (Inl x) = markDPF x; markDPF(Inr x) = markDPF x
-    unmarkDPF (Inl x) = unmarkDPF x; unmarkDPF(Inr x) = unmarkDPF x
-instance (T id   :<: g) => DPMark' (T id) g
-instance (Var    :<: g) => DPMark' Var    g
-instance (Hole   :<: g) => DPMark' Hole   g
-instance (Bottom :<: g) => DPMark' Bottom g
-
---instance (t :<: g) => DPMark' t g where markDPF = inject; unmarkDPF = inject
-
-unmarkDPRule, markDPRule :: DPMark f => Rule f -> Rule f
+--unmarkDPRule, markDPRule :: Rule t v -> Rule t v
 markDPRule   = fmap markDP
 unmarkDPRule = fmap unmarkDP
-
--- -------------------
--- Various stuff
--- -------------------
-
-instance Show id => HashTerm (T id) where hashF (T id tt) = 14 * sum tt * hashId id
-
-type family   DPVersionOf (f :: * -> *) :: * -> *
-type instance DPVersionOf (T id)    = T (Identifier id)
-type instance DPVersionOf Var       = Var
-type instance DPVersionOf (a :+: b) = (DPVersionOf a :+: DPVersionOf b)
-type instance DPVersionOf Bottom    = Bottom
-type instance DPVersionOf Hole      = Hole
 

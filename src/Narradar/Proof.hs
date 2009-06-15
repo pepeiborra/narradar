@@ -4,7 +4,6 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, StandaloneDeriving #-}
 {-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
@@ -24,8 +23,6 @@ import Control.Monad as M
 import Control.Monad.Logic as M
 import Control.Monad.State as M
 import Control.Monad.RWS
-import qualified  "monad-param" Control.Monad.Parameterized as MonadP
-import qualified  "monad-param" Control.Monad.MonadPlus.Parameterized as MonadP
 import Data.Array.IArray as A
 import Data.DeriveTH
 import Data.Derive.Functor
@@ -42,9 +39,8 @@ import Text.XHtml (Html, toHtml, noHtml)
 import System.IO.Unsafe
 
 import qualified Language.Prolog.Syntax as Prolog (Program)
-import qualified TRS as TRS
 
-import Narradar.Types hiding (dropNote)
+import Narradar.Types
 import Narradar.Utils
 import qualified Narradar.ArgumentFiltering as AF
 
@@ -76,9 +72,9 @@ data ProofF k =
 -- but instead they are kept, which means we cannot have these types in an impredicative position.
 type ProofC a           = Free ProofF a
 type Proof  a           = (MonadPlus m, MonadFree ProofF m) => m a
-type ProblemProof  id f = ProofC (ProblemG id f)
-type ProblemProofG id f = (MonadPlus m, MonadFree ProofF m) => m (ProblemG id f)
-type ProblemProofC id f = ProofC (ProblemG id f)
+type ProblemProof  id v = ProofC (ProblemG id v)
+type ProblemProofG id v = (MonadPlus m, MonadFree ProofF m) => m (ProblemG id v)
+type ProblemProofC id v = ProofC (ProblemG id v)
 
 success  pi p0 = wrap (Success (someInfo pi) (someProblem p0))
 success' pi p0 = wrap (Success pi p0)
@@ -107,29 +103,32 @@ stage            = wrap . Stage
 deriving instance (Show k) => Show (ProofF k)
 
 data SomeProblem where
-    SomeProblem       :: (TRSC f, T id :<: f, Ord id, Show id) => !(ProblemG id f) -> SomeProblem
+    SomeProblem       :: (Ord id, Ppr id, Ord v, Ppr v) => !(ProblemG id v) -> SomeProblem
 
 instance Show SomeProblem where
     show (SomeProblem p) = "<some problem>"
 
 instance Ppr SomeProblem where
-  ppr (SomeProblem p@(Problem typ TRS{} _)) = ppr p
+  ppr (SomeProblem p) = ppr p
 
-someProblem :: (TRSC f, T id :<: f, Ord id, Show id) => ProblemG id f -> SomeProblem
-someProblem p@(Problem typ trs _ ) = SomeProblem (trimProblem p)
+someProblem :: (Ord id, Ppr id, Ord v, Ppr v) => ProblemG id v -> SomeProblem
+someProblem p@Problem{} = SomeProblem (trimProblem p)
 
-trimProblem (Problem typ trs (DPTRS dps_a _ _ _) ) = Problem typ trs (tRS$ A.elems dps_a)
+-- trimProblem (Problem typ trs (DPTRS dps_a _ _ _) ) = Problem typ trs (tRS$ A.elems dps_a)
+-- ^^ DISABLED. The problem is that the pairs get stored in a Set and thus reordered, which breaks the representation of DP graphs later
 trimProblem p = p
 
-
-data SomeInfo where SomeInfo :: Show id => !(ProcInfo id) -> SomeInfo
+data SomeInfo where SomeInfo :: (Ord id, Ppr id) => !(ProcInfo id) -> SomeInfo
 instance Ppr SomeInfo where ppr (SomeInfo pi) = ppr pi
 instance Show SomeInfo where show = show . ppr
 someInfo = SomeInfo
 
-instance TRS.Ppr f => Ppr (ProblemProofC id f) where
-    ppr = foldFree leaf f where
-      leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
+instance (Ord v, Ppr v, Ppr id, Ppr v) => Ppr (ProblemProofC id v) where ppr = pprProof
+pprProof = foldFree (const Doc.empty) ppr -- where leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
+
+
+instance (Ppr a) => Ppr (ProofF a) where ppr = pprProofF
+pprProofF = f where
       f MZero = text "don't know"
       f Success{..} =
         ppr problem $$
@@ -141,42 +140,46 @@ instance TRS.Ppr f => Ppr (ProblemProofC id f) where
         text "PROCESSOR: " <> ppr procInfo  $$
         text ("RESULT: Problem could not be solved.") $$
         proofTail procInfo
+      f DontKnow{..} =
+        ppr problem $$
+        text "PROCESSOR: " <> ppr procInfo  $$
+        text ("RESULT: Don't know.") $$
+        proofTail procInfo
       f p@(Or proc prob sub) =
         ppr prob $$
         text "PROCESSOR: " <> ppr proc $$
         text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
-        nest 8 (vcat $ punctuate (text "\n") sub)
+        nest 8 (vcat $ punctuate (text "\n") $ map ppr sub)
       f (And proc prob sub)
        | length sub > 1 =
-          ppr prob $$
+        ppr prob $$
         text "PROCESSOR: " <> ppr proc $$
-        text ("Problem was divided to " ++ show (length sub) ++ " subproblems.") $$
-        nest 8 (vcat $ punctuate (text "\n") sub)
+        text ("Problem was divided in " ++ show (length sub) ++ " subproblems.") $$
+        nest 8 (vcat $ punctuate (text "\n") $ map ppr sub)
        | otherwise =
-          ppr prob $$
+        ppr prob $$
         text "PROCESSOR: " <> ppr proc $$
-        nest 8 (vcat $ punctuate (text "\n") sub)
+        nest 8 (vcat $ punctuate (text "\n") $ map ppr sub)
       f (Step{..}) =
-          ppr problem $$
+        ppr problem $$
         text "PROCESSOR: " <> ppr procInfo $$
-        nest 8 subProblem
+        nest 8 (ppr subProblem)
+      f p@(MPlus p1 p2) =
+        text ("There is a choice.") $$
+        nest 8 (vcat $ punctuate (text "\n") $ map ppr [p1,p2])
+      f p@(MPlusPar p1 p2) =
+        text ("There is a choice.") $$
+        nest 8 (vcat $ punctuate (text "\n") $ map ppr [p1,p2])
+      f p@(MAnd p1 p2) =
+        text ("Problem was divided in 2 subproblems.") $$
+        nest 8 (vcat $ punctuate (text "\n") $ map ppr [p1,p2])
+      f MDone = text "Done"
+      f (Stage p) = ppr p
 
       proofTail :: SomeInfo -> Doc
       proofTail (SomeInfo (External _ (find isOutputTxt -> Just (OutputTxt txt))))
                   = text ("Output: ") <> (vcat . map text . lines) txt
       proofTail _ = Doc.empty
-
--- -------------------
--- MonadPlus instances
--- -------------------
-
-instance MonadP.MonadZero (Free ProofF) where mzeroM = wrap MZero
-instance MonadP.MPlus (Free ProofF) (Free ProofF ) (Free ProofF )  where
-    mplus p1 p2 = wrap $ MPlus p1 p2 -- if isSuccess p1 then p1 else choiceP p1 p2
-
-instance MonadPlus (C (Free ProofF)) where
-    mplus p1 p2 = wrap $ MPlus p1 p2
-    mzero       = wrap MZero
 
 -- ------------------
 -- Monad Transformer
@@ -189,33 +192,24 @@ type PPT id f m   = ProofT m (ProblemG id f)
 liftProofT :: P.Monad m => ProofC a -> ProofT m a
 liftProofT = trans
 
-instance P.Monad m => MonadP.MonadZero (FreeT ProofF m) where mzeroM = trans(Impure MZero)
-instance Monad m => MonadP.MPlus (FreeT ProofF m) (FreeT ProofF m) (FreeT ProofF m) where
+instance (Monad m, Functor ProofF) => MonadPlus (FreeT ProofF m) where
     mplus m1 m2 = FreeT $ return $ Right (MPlus m1 m2)
-
--- Additional parameterized instances between the Proof and ProofT
-instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (Free ProofF) (FreeT ProofF m) (FreeT ProofF m) where
-    mplus m1 m2 = FreeT $ return $ Right (MPlus (trans m1) m2)
-
-instance (P.Monad m, MonadP.Monad m) => MonadP.MPlus (FreeT ProofF m) (Free ProofF) (FreeT ProofF m) where
-    mplus m1 m2 = FreeT $ return $ Right (MPlus  m1 (trans m2))
+    mzero       = FreeT $ return $ Right MZero
 
 -- ------------
 -- * Evaluators
 -- ------------
 
---type StagedProof a  = Proof (Proof a)
-
---stageProof :: forall a s. Proof a -> StagedProof a
+stageProof :: MonadFree ProofF m => ProofC a -> m (m a)
 stageProof = foldFree (return . return) f where
   f (Stage p) = return (unstageProof p)
   f x = wrap x
+  unstageProof = join
 
---unstageProof :: StagedProof a -> Proof a
-unstageProof = join
-
+runProof :: C (Free ProofF) a -> Maybe (ProofC ())
 runProof = runProof' . improve
---runProof' :: (Monoid s, MonadFree (ProofF s) proof) => ProofC a -> Maybe (proof b)
+
+runProof' :: (MonadFree ProofF proof) => ProofC a -> Maybe (proof b)
 runProof' p = listToMaybe $ observeMany 1 search where
   p'     = stageProof p
   search = do
@@ -293,3 +287,16 @@ annotateLevel = go 0 where
 instance Foldable ProofF where foldMap = T.foldMapDefault
 $(derive makeFunctor     ''ProofF)
 $(derive makeTraversable ''ProofF)
+
+
+-- -------------------
+-- MonadPlus instances
+-- -------------------
+
+instance MonadPlus (Free ProofF) where
+    mplus p1 p2 = wrap (MPlus p1 p2)
+    mzero       = wrap MZero
+
+instance MonadPlus (C (Free ProofF)) where
+    mplus p1 p2 = wrap $ MPlus p1 p2
+    mzero       = wrap MZero

@@ -13,20 +13,20 @@ import Strats
 
 main = narradarMain $ \opts input -> do
   (typ,pl)  <- parseProlog input
-  prologSolverAll opts noU1sHeu (typeHeu typ) pl
+  prologSolverAll opts noOutsHeu (typeHeu typ) pl
 
 
 
 
 -- No U1s Heuristic
 -- ----------------
-noU1sHeu = MkHeu (IsU1 . getSignature)
+noOutsHeu = MkHeu (NoOuts . getSignature)
 
-data IsU1 id (f :: * -> *) = IsU1 (Signature id)
-instance (IsPrologId id, Ord id, HasId f id, Foldable f) => PolyHeuristic IsU1 id f where
-  runPolyHeu (IsU1 sig) =
-      Heuristic (predHeuOne allOuter noU1s `AF.or`
+data NoOuts id (f :: * -> *) = NoOuts (Signature id)
+instance (IsPrologId id, Ord id, HasId f id, Foldable f) => PolyHeuristic NoOuts id f where
+  runPolyHeu (NoOuts sig) =
+      Heuristic (predHeuOne allOuter noOuts `AF.or`
                  predHeuOne allOuter (noConstructors sig))
                 False
-    where noU1s _af (t, 1) = not$ isUId t
-          noU1s _ _ = True
+    where noOuts _af (t, 1) = not (isOutId t) && not (isUId t)
+          noOuts _af (t, _) = not (isOutId t)

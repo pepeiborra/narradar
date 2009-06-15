@@ -12,51 +12,38 @@
 module Narradar.Labellings where
 
 import Control.Parallel.Strategies
+import Data.Foldable (Foldable(..))
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Utils
-import TRS.Bottom
-import TRS
+import Text.PrettyPrint
+
+import Data.Term
+import Data.Term.Simple
+import Data.Term.Ppr
 
 -- -----------------------
 -- Named Term Signatures
 -- -----------------------
---instance HashTerm (T PId) where hashF (T id tt) = 14 * sum tt * hashString (convert id)
---instance HashTerm (T PS)  where hashF (T id tt) = 14 * sum tt * hashString (convert id)
---instance HashTerm (T LPId) where hashF (T id tt) = 14 * sum tt * hashString (convert id)
 
-
+type LS   = Labelled String
 type LPS  = Labelled PS
 type LPId = Identifier LPS
-type LId  = Identifier (Labelled String)
-
-type BasicL     = Var :+: T (Labelled String) :+: Hole
-type BBasicL    = Var :+: T (Labelled String) :+: Hole :+: Bottom
-type BasicLId   = Var :+: T LId :+: Hole
-type BBasicLId  = Var :+: T LId :+: Hole :+: Bottom
-type BBasicLPId = Var :+: T LPId :+: Hole :+: Bottom
-type BasicLPS   = Var :+: T LPS  :+: Hole
-type BasicLPId  = Var :+: T LPId :+: Hole
-
-
-instance HashConsed BasicL
-instance HashConsed BBasicL
-instance HashConsed BasicLId
-instance HashConsed BBasicLPId
-instance HashConsed BasicLPId
-instance HashConsed BasicLPS
-instance HashConsed BBasicLId
-
---instance DPMark BasicPId   PId
---instance DPMark BBasicPId  PId
---instance DPMark BBasicLPId LPId
---instance DPMark BBasicLId LId
+type LId  = Identifier LS
 
 -- -----------
 -- Labellings
 -- -----------
 type Label = [Int]
 data Labelled a = Labelling {labelling::Label, unlabel::a} | Plain {unlabel::a} deriving (Eq)
+
+instance Functor Labelled where
+  fmap f (Plain a)      = Plain (f a)
+  fmap f (Labelling l a) = Labelling l (f a)
+
+instance Foldable Labelled where
+  foldMap f (Plain a)      = f a
+  foldMap f (Labelling n a) = f a
 
 instance Ord a => Ord (Labelled a) where
     compare (Labelling i1 f1) (Labelling i2 f2) = compare (f1,i1) (f2,i2)
@@ -72,8 +59,9 @@ instance Show a => Show (Labelled a) where
     show (Labelling l a) = show a ++ "_" ++ (concatMap show l)
     show (Plain a)       = show a
 
-instance HashTerm (T LId) where
-    hashF (T id tt)      = 15 * sum tt * hashId id
+instance Ppr a => Ppr (Labelled a) where
+    ppr (Labelling l a) = ppr a <> text "_" <> (hcat $ map ppr l)
+    ppr (Plain a)       = ppr a
 
 instance NFData a => NFData (Labelled a) where
     rnf (Plain a) = rnf a
@@ -83,30 +71,11 @@ mapLabel :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelle
 mapLabel f _  (Labelling ll i) = f ll i
 mapLabel f l0 (Plain i)        = l0 i
 
-mapLabelT :: MapLabelT f => (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Term f -> Term f
-mapLabelT f l0 = mapTerm (mapLabelTF f l0)
+mapLabelT :: (Functor (f (Labelled id)), MapId f) => (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Term (f (Labelled id)) v -> Term (f (Labelled id)) v
+mapLabelT f l0 = evalTerm return (Impure . mapId (mapLabel f l0))
 
-class MapLabelT' f f => MapLabelT f; instance MapLabelT' f f => MapLabelT f
-class (f :<: g) => MapLabelT' f g where mapLabelTF :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> f (Term g) -> Term g; mapLabelTF _ _ = inject
-
-instance (T (Labelled id) :<: g) => MapLabelT' (T (Labelled id)) g where mapLabelTF f l0 (T id tt) = inject (T (mapLabel f l0 id) tt)
-instance (MapLabelT' f g, MapLabelT' f' g, (f:+:f') :<: g) => MapLabelT' (f :+: f') g where
-    mapLabelTF f l0 (Inr x) = mapLabelTF f l0 x; mapLabelTF f l0 (Inl x) = mapLabelTF f l0 x
---instance (T id :<: g) => MapLabelT' (T id) g
-instance (Hole :<: g) => MapLabelT' Hole   g
-instance (Var  :<: g) => MapLabelT' Var    g
-
-setLabel ::  (MapLabelT f, HashConsed f) => Term f -> (forall id. id -> Labelled id) -> Term f
+setLabel :: (MapId f, Functor (f (Labelled id))) => Term (f (Labelled id)) v -> (forall id. id -> Labelled id) -> Term (f (Labelled id)) v
 setLabel t l = mapLabelT (\_ -> l) l t
 appendLabel t ll = mapLabelT (Labelling . (++ ll)) (Labelling ll) t
-
-type family   LabelledVersionOf (f :: * -> *) :: * -> *
-type instance LabelledVersionOf (T id)    = T (Labelled id)
-type instance LabelledVersionOf Var       = Var
-type instance LabelledVersionOf (a :+: b) = (LabelledVersionOf a :+: LabelledVersionOf b)
-type instance LabelledVersionOf Bottom    = Bottom
-type instance LabelledVersionOf Hole      = Hole
-
---instance (f' ~ LabelledVersionOf f, DPMark f id) => DPMark f' (Labelled id) where
 
 

@@ -1,12 +1,15 @@
 {-# LANGUAGE NoMonomorphismRestriction, RecordWildCards #-}
 module Strats where
 
+import Control.Monad
 import Data.Foldable (toList)
 import Data.Maybe
 import Prelude as P
 import Narradar hiding (refineNarrowing, refineNarrowing', reducingP, pSolver)
 import Narradar.Proof
+import Narradar.ExtraVars
 
+--pSolver :: opts -> (problem -> C (Free ProofF) ()) -> 
 pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe iprob sol, "") where
     prob  = solver p
     iprob = improve prob
@@ -19,25 +22,27 @@ pSolver' _ solver p = P.return (maybe False (const True) sol, fromMaybe iprob so
 
 prologSolverOne opts h1 h2 = pSolver' opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverOne h2)
 prologSolverAll opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverAll h2)
-prologSolverInf opts h1    = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverInf)
+prologSolverInf' opts h1    = pSolver opts (prologP_sk h1 >=> sccProcessor >=> narrowingSolverInf h1)
+prologSolverInf opts h1    = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverInf h1)
 
-narrowingSolverOne heu = refineBy 0 (stage . solve' (reductionPair heu 20 >=> sccProcessor))
+narrowingSolverOne heu = refineBy 2 (stage . solve' (msum.reductionPair heu 20 >=> sccProcessor))
                                      refineNarrowingPar
 
-narrowingSolverOne' heu = solveB 4 (solve (reductionPair heu 20 >=> sccProcessor) <|>
+narrowingSolverOne' heu = solveB 2 (solve (msum.reductionPair heu 20 >=> sccProcessor) <|>
                                       refineNarrowing)
 
-narrowingSolverAll heu = refineBy 4 ((uGroundRhsAllP heu >=> aproveSrvP 15))
+narrowingSolverAll heu = refineBy 2 ((msum.uGroundRhsAllP heu >=> aproveSrvP 15))
                                     refineNarrowing
 
-narrowingSolverInf = refineBy 4 (safeAFP >=> aproveSrvP defaultTimeout)
-                                  refineNarrowing
+narrowingSolverInf heu = refineBy 2 (msum.safeAFP heu >=> aproveSrvP defaultTimeout)
+                                     refineNarrowing
 
 refineNarrowing p
   | length (rules $ dps p) > 1
   = (firstP [ msum . instantiation
             , msum . finstantiation
-            , msum . narrowing ]
+            , msum . narrowing
+            ]
      >=> sccProcessor) p
   | otherwise = (msum . narrowing >=> sccProcessor) p
 

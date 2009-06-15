@@ -16,58 +16,62 @@ import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
+import Data.Monoid
+import Text.PrettyPrint
 
 import Narradar.DPIdentifiers
-import TRS.Bottom
-import TRS
+import Data.Term.Ppr
 
-type PS   = PIdentifier String
+type PS   = PrologId String
 type PId  = Identifier PS
-
-type BasicPS    = Var :+: T PS   :+: Hole
-type BBasicPS   = Var :+: T PS   :+: Hole :+: Bottom
-type BasicPId   = Var :+: T PId  :+: Hole
-type BBasicPId  = Var :+: T PId  :+: Hole :+: Bottom
-instance HashConsed BBasicPId
-instance HashConsed BasicPId
-instance HashConsed BBasicPS
-instance HashConsed BasicPS
 
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
-data PIdentifier a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord)
+data PrologId a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord)
 
-instance Show (PIdentifier String) where
+class IsPrologId id where
+    isInId      :: id -> Bool
+    isOutId     :: id -> Bool
+    isUId       :: id -> Bool
+    isFunctorId :: id -> Bool
+
+instance IsPrologId (PrologId a) where
+    isOutId OutId{} = True; isOutId _ = False
+    isInId InId{}   = True; isInId _  = False
+    isUId UId{}     = True; isUId _   = False
+    isFunctorId FunctorId{} = True; isFunctorId _ = False
+
+instance (Foldable l, IsPrologId a) => IsPrologId (l a) where
+    isInId      = getAny . foldMap (Any . isInId)
+    isOutId     = getAny . foldMap (Any . isOutId)
+    isUId       = getAny . foldMap (Any . isUId)
+    isFunctorId = getAny . foldMap (Any . isFunctorId)
+
+instance Show (PrologId String) where
   showsPrec p (InId a)      = (a ++) . ("_in" ++)
   showsPrec p (OutId a)     = (a ++) . ("_out" ++)
   showsPrec p (UId i)       = ("u_" ++) . showsPrec p i
   showsPrec p (FunctorId f) = (f ++)
 
-instance Show a => Show (PIdentifier a) where
+instance Show a => Show (PrologId a) where
   showsPrec p (InId a)      = showsPrec p a . ("_in" ++)
   showsPrec p (OutId a)     = showsPrec p a .("_out" ++)
   showsPrec p (UId i)       = ("u_" ++) . showsPrec p i
   showsPrec p (FunctorId f) = showsPrec p f
 
-instance NFData a => NFData (PIdentifier a) where
+instance Ppr a => Ppr (PrologId a) where
+  ppr (InId a)  = ppr a <> text "_in"
+  ppr (OutId a) = ppr a <> text "_out"
+  ppr (UId i)   = text "u_" <> int i
+  ppr (FunctorId f) = ppr f
+
+instance NFData a => NFData (PrologId a) where
   rnf (InId a)  = rnf a
   rnf (OutId a) = rnf a
   rnf (UId   i) = rnf i
   rnf (FunctorId f) = rnf f
 
-{-
-instance DPSymbol PId where
-  markDPSymbol (IdFunction f) = IdDP f
-  markDPSymbol f = f
-  unmarkDPSymbol (IdDP n) = IdFunction n
-  unmarkDPSymbol n = n
-  functionSymbol = IdFunction . FunctorId; dpSymbol = IdDP . FunctorId
-  symbol (IdFunction (FunctorId f)) = f; symbol(IdDP (FunctorId f)) = f
-  symbol _ = error "instance DPSymbol PId: trying to get the symbol of a prolog predicate"
--}
-
-
-$(derive makeFunctor     ''PIdentifier)
-$(derive makeFoldable    ''PIdentifier)
-$(derive makeTraversable ''PIdentifier)
+$(derive makeFunctor     ''PrologId)
+$(derive makeFoldable    ''PrologId)
+$(derive makeTraversable ''PrologId)

@@ -5,6 +5,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Narradar.ExtraVars ( ExtraVars(..)
@@ -15,76 +16,79 @@ module Narradar.ExtraVars ( ExtraVars(..)
 
 import Control.Applicative
 import Control.Exception
-import Control.RMonad hiding (join)
 import qualified Control.Monad as P
-import Control.Monad.Fix
-import Data.Foldable (Foldable(..))
-import Data.List (sortBy, inits, unfoldr, isPrefixOf, isSuffixOf, intersect,(\\))
+import Control.RMonad hiding (fmap,join)
+import Control.Monad.Fix (fix)
+import Control.Monad.Writer (Writer(..), MonadWriter(..))
+import Data.Foldable (Foldable(..), toList)
+import Data.List (find, sortBy, inits, unfoldr, isPrefixOf, isSuffixOf, intersect,(\\))
 import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Text.XHtml (toHtml)
-import Prelude hiding (Monad(..), (=<<), or, and, mapM)
+import qualified Data.Map as Map
+import Data.Traversable (Traversable)
+import Text.PrettyPrint
+import Prelude hiding (Monad(..), (=<<), or, and, mapM, pi)
+import qualified Prelude as P
 
-import TRS
-import Narradar.Utils(on,snub)
 import Lattice
 import Narradar.ArgumentFiltering (AF, LabelledAF, AF_, Heuristic, bestHeu, typeHeu, mkHeu, Heuristic(..), MkHeu(..))
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Proof
+import Narradar.Utils(on,snub)
+import Narradar.Term
+import Narradar.Var
+
+import Data.Term.Rules
 
 trace _ = id
 
-class    ExtraVars t f | t -> f where extraVars :: t -> [Term f]
-instance (TRS trs id f) => ExtraVars trs f where
-    {-# SPECIALIZE instance ExtraVars (Problem BBasicId) BBasicId #-}
-    {-# SPECIALIZE instance ExtraVars (NarradarTRS Id BBasicId) BBasicId #-}
-    {-# off SPECIALIZE instance ExtraVars [Rule BBasicId] BBasicId #-}
+class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]
+instance (Ord v, Ord (Term t v), Functor t, Foldable t, HasRules t v trs) => ExtraVars v trs where
     extraVars = concatMap extraVars . rules
 
-instance (Ord (Term f), IsVar f, Foldable f) => ExtraVars (Rule f) f where
-    {-# SPECIALIZE instance ExtraVars (Rule BBasicId) BBasicId #-}
-    extraVars (l:->r) = snub (vars' r \\ vars' l)
+instance (Ord v, Functor t, Ord (Term t v), Foldable t) => ExtraVars v (Rule t v) where
+    extraVars (l:->r) = Set.toList (Set.fromList(vars r) `Set.difference` Set.fromList(vars l))
 
 evProcessor _ p | not (isAnyNarrowingProblem p) = P.return p
-evProcessor mkH p@(Problem typ@(getProblemAF -> Just af) trs dps)
+evProcessor mkH p@(Problem typ@(getAF -> Just af) trs dps)
      | null extra      = P.return p
      | null orProblems = failP EVProcFail p
      | otherwise = P.msum (map P.return orProblems)
   where extra = extraVars p
         heu = mkHeu mkH p
-        orProblems = [(p `withGoalAF` af') | af' <- invariantEV heu p af]
+        orProblems = [(p `withAF` af') | af' <- Set.toList $ invariantEV heu p af]
 
-evProcessor mkH p@(Problem typ trs dps) = evProcessor mkH (p `withGoalAF` AF.init p)
+evProcessor mkH p@(Problem typ trs dps) = evProcessor mkH (p `withAF` AF.init p)
 evProcessor _ p = P.return p
 
-{-# SPECIALIZE cutWith :: Heuristic Id BBasicId -> AF -> Term BBasicId -> [Position] -> Set.Set AF #-}
+--cutWith :: (Ppr id, Ord id) => Heuristic id t -> AF_ id -> TermN id v -> [Position] -> Set.Set (AF_ id)
 cutWith heu af t [] = return af
 cutWith heu af t pp = foldM (\af' pos -> (runHeu heu af' t pos >>= \(f,p) ->
-          trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p) $
-          return$ AF.cut f p af'))
+--                           trace ("term: " ++ show(ppr t) ++ ", pos: " ++ show pos ++ ", symbol:" ++ show (ppr f) ++ ", i: " ++ show p) $
+                             return$ AF.cut f p af'))
                             af pp
 --cutWith heu af t pp = mconcat `liftM` (mapM (heu af t >=> \(f,p) -> return$ AF.cut f p af) pp)
 
-{-# SPECIALIZE invariantEV :: Heuristic LId BBasicLId -> ProblemG LId BBasicLId -> LabelledAF -> [LabelledAF] #-}
-{-# SPECIALIZE invariantEV :: Heuristic Id  BBasicId  -> Problem BBasicId -> AF -> [AF] #-}
-invariantEV :: (Show id, Ord id, Lattice (AF_ id), T id :<: f, TRSC f, TRS trs id f, ExtraVars trs f, AF.ApplyAF trs id) => AF.Heuristic id f -> trs -> AF_ id -> [AF_ id]
-invariantEV heu trs pi = let pi' = (selectBest . Set.toList . fix subinvariantEV) pi in assert (all (`isSoundAF` trs) pi') pi'
+invariantEV :: ( Ppr id, Ord id, Lattice (AF_ id), HasRules (TermF id) Var trs
+               , ExtraVars v trs, AF.ApplyAF trs id) =>
+               AF.Heuristic id (TermF id) -> trs -> AF_ id -> Set (AF_ id)
+invariantEV heu trs pi = let pi' = (selectBest . Set.toList . fix subinvariantEV) pi
+                         in assert (all (`isSoundAF` trs) pi') (Set.fromList pi')
   where
---        subinvariantEV :: TRS Identifier f -> (AF -> Set AF) -> AF -> Set AF
         subinvariantEV f af
                 | null extra = return af
                 | otherwise  = foldM cutEV af (rules trs) >>= f
               where extra = extraVars (AF.apply af trs)
         cutEV af rule@(_:->r)
-            | orig_poss <- note <$> extraVars (AF.apply af (annotateWithPos <$> rule))
+            | orig_poss <- noteV <$> extraVars (AF.apply af (annotateWithPos <$> rule))
             = cutWith heu af r orig_poss
 
-sortByDefinedness :: (Ord id, Size trs) => (AF_ id -> trs -> trs) -> trs -> [AF_ id] -> [AF_ id]
+sortByDefinedness :: (Ord id, Foldable trs, Size (trs a)) => (AF_ id -> trs a -> trs a) -> trs a -> [AF_ id] -> [AF_ id]
 sortByDefinedness apply dps = sortBy (flip compare `on` dpsSize)
-    where dpsSize af = size (apply af dps)
+    where dpsSize af = size $ (apply af dps)
 
 selectBest = unfoldr findOne where
           findOne [] = Nothing
@@ -93,108 +97,8 @@ selectBest = unfoldr findOne where
               | otherwise = Just (m, filter (uncomparableTo m) xx)
               where uncomparableTo x y = isNothing (lt x y)
 
-{-
-invariantEV_rhs heu p@Problem{trs,dps} = sortByDefinedness (AF.apply_rhs p)  dps . selectBest . Set.toList
-                                        . fix (\f -> subinvariantEV trs f >=> subinvariantEV dps f)
-  where
---        subinvariantEV :: TRS Identifier f -> (AF -> Set AF) -> AF -> Set AF
-        subinvariantEV trs f af
-                | null extra = return af
-                | otherwise  = foldM cutEV af (rules trs) >>= f
-              where extra = extraVars (AF.apply_rhs p af trs)
-        cutEV af rule@(_:->r)
-            | orig_poss <- note <$> extraVars (AF.apply_rhs p af (annotateWithPos <$> rule))
-            = cutWith heu af r orig_poss where
-              cutWith heu af t [] = return af
-              cutWith heu af t pp = foldM (\af' pos -> (runHeu heu af' t pos >>= \(f,p) ->
-                         trace ("term: " ++ show t ++ ", pos: " ++ show pos ++ ", symbol:" ++ show f ++ ", i: " ++ show p ++ " rule: " ++ show rule) $
-                         return$ AF.cut f p af'))
-                                          af pp
--}
-
 
 -- ----------
 -- Soundness
 -- ----------
-isSoundAF     af trs = null (extraVars $ AF.apply     af trs)
---isSoundAF_rhs af trs = null (extraVars $ AF.apply_rhs af trs)
-
-{-
--- ----------------------
--- Binding Time Analysis
--- ----------------------
-
--- | Receives an initial goal (its modes) and a TRS and returns a Division
-computeDivision,computeDivisionL :: (Identifier ~ id, TRSC f, T id :<: f, DPMark f id) => NarradarTRS id f -> Goal -> Division id
-computeDivision  = computeDivision_ e
-computeDivisionL = computeDivision_ (observe "eL" eL)
-
--- | Receives an initial goal (its modes) and a TRS and returns a Division
---computeDivision :: (Identifier ~ id, TRSC f, T id :<: f) => T id Mode -> TRS id f -> Division id
-computeDivision_ e trs (T id_ tt) = Map.singleton id tt `meet` fixEq go div0
-  where
-    id = IdFunction id_
---    div0 :: Division Identifier
-    div0 = Map.fromList ((id,tt) : [(id,replicate ar G)
-                                    | id <- Set.toList(Set.delete id $ definedSymbols sig)
-                                    , let ar = getArity sig id])
-    sig  = getSignature trs
---    go :: Division Identifier -> Division Identifier
-    go = observe "iteration" go'
-    go' div = Map.mapWithKey (\f b ->
-             lub (b : [ bv trs f (e f rule div) div r
-                       | rule@(l:->r) <- rules trs])) div
-
-e _g ( (open -> Just(T (f::Identifier) tt)) :-> _r) div =
-        Map.fromListWith meet
-               [ (i, m) | (vv,m) <- map vars' tt `zip` mydiv, v <- vv, let Just i = uniqueId v]
-     where Just mydiv = Map.lookup f div
-
-eL g rule@( (open -> Just(T (f::Identifier) tt)) :-> r) div
-  | rootSymbol r == Just g = e g rule div
-  | otherwise = lhs_vars `meet` rhs_vars
- where
-  Just mydiv = Map.lookup f div
-  lhs_vars = Map.fromListWith meet [ (i, m) | (vv,m) <- map vars' tt `zip` mydiv
-                                            , v <- vv
-                                            , let Just i = uniqueId v]
-  rhs_vars = lub $ execWriter(evalStateT (mapM_ accumVars (properSubterms r)) Map.empty)
-  accumVars t
-   | rootSymbol t == Just g = do
-     modify(meet (Map.fromList[(i,m)
-                               | v <- vars' t, let Just i = uniqueId v
-                               , let m = fromMaybe V (Map.lookup i lhs_vars)]))
-     get >>= lift. tell.(:[])
-     modify(meet (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
-
-   | otherwise = modify(join (Map.fromList[(i,G) | v <- vars' t, let Just i = uniqueId v]))
-
-
-bv,bv' :: forall p id f . (Show id, Observable id, SignatureC p id, T id :<: f, TRSC f) =>
-          p -> id -> DivEnv -> Division id -> Term f -> [Mode]
-bv trs = observe "bv" (bv' trs)
-bv' trs g rho div (open -> Just Var{}) = replicate (getArity (getSignature trs) g) G
-bv' trs g rho div me@(open -> Just (T (f::id) tt))
---      | isConstructor trs me = bt
-      | f /= g    = bt
-      | otherwise = bt `join` (be <$> tt)
-     where
-       bt  = lub (bv trs g rho div <$> tt)
-       be  = observe "be" be'
-       be' (open -> Just (Var _ i)) | Just xrho <- Map.lookup i rho = xrho
-       be' me@(open -> Just (T (f::id) tt))
-                 -- note that this filters more than the algorithm in the paper
-        | In me' <- AF.apply (divToAFfilterOutputs trs div) me = lub $ toList (be <$> me')
-
-
--- | Returns an AF which filters ground arguments from the TRS and also from the DPs.
-divToAFfilterInputs p div = AF.init p `mappend`
-                            AF.fromList (concat [ [(f, outputs ), (markDPSymbol f, outputs)]
-                                                | (f,modes) <- Map.toList div
-                                                , let outputs = [ i | (i,m) <- zip [1..] modes, m == V]])
-
--- | Filter variables.
-divToAFfilterOutputs trs div = -- AF.init trs `mappend`
-                               AF.fromList [ (f,  [ i | (i,m) <- zip [1..] modes, m == G])
-                                        | (f,modes) <- Map.toList div]
--}
+isSoundAF     af trs = null (extraVars $ AF.apply af trs)

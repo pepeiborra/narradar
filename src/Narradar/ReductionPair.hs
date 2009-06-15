@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
@@ -10,6 +11,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Free.Narradar
 import Control.Monad.Identity
+import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import qualified Data.Array.IArray as A
 import Data.Foldable (toList)
@@ -17,19 +19,17 @@ import Data.List
 import Data.Monoid
 import qualified Data.Set as Set
 import Text.ParserCombinators.Parsec
-import Text.PrettyPrint (parens, text, int, hcat, punctuate, comma, (<>), (<+>))
+import Text.PrettyPrint (Doc,parens, text, int, hcat, punctuate, comma, (<>), (<+>))
 import Text.XHtml (Html, toHtml)
 import Text.HTML.TagSoup
 import System.IO.Unsafe
-import Prelude -- hiding (Monad(..), (=<<))
+import Prelude
 import qualified Prelude as P
 
 import Lattice
-import TRS hiding (Ppr, ppr)
-import qualified TRS
 import Narradar.Aprove
 import qualified Narradar.ArgumentFiltering as AF
-import Narradar.ArgumentFiltering (AF_, PolyHeuristic)
+import Narradar.ArgumentFiltering (AF_, PolyHeuristic, MkHeu(..))
 import Narradar.ExtraVars
 import Narradar.NarrowingProblem
 import Narradar.Proof
@@ -39,46 +39,54 @@ import Narradar.Types
 import Narradar.TRS
 import Narradar.RewritingProblem
 
-aproveXML :: forall f id. (Ord id, Show id, T id :<: f, DPMark f, TRSC f, Lattice (AF_ id)) => ProblemG id f -> IO String
+aproveXML :: (Ord v, Ppr v, Enum v, Ord id, Ppr id, Lattice (AF_ id)) => ProblemG id v -> IO String
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
-reductionPair :: forall f id heu. (Ord id, Show id, T id :<: f, PolyHeuristic heu id f, DPMark f, TRSC f, Lattice (AF_ id)) => MkHeu heu -> Int -> ProblemG id f -> ProblemProofG id f -- PPT id f Html IO
-reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_groundInfo) trs dps@(DPTRS dps_a _ unifs _)) | isAnyNarrowing typ = msum orProblems where
+newtype Tuple31 a b c = Tuple31 {tuple31::(a,b,c)}
+instance Eq  a => Eq  (Tuple31 a b c) where Tuple31 (a,_,_) == Tuple31 (a',_,_)  =  a == a'
+instance Ord a => Ord (Tuple31 a b c) where Tuple31 (a,_,_) `compare` Tuple31 (a',_,_)  =  compare a a'
 
+reductionPair :: (Ord id, Ppr id, Ppr (TermF id Doc), PolyHeuristic heu id (TermF id),
+                  MonadFree ProofF m, Lattice (AF_ id), v ~ Var) =>
+                 MkHeu heu -> Int -> ProblemG id v -> [m(ProblemG id v)]
+reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_g) trs dpsT@(DPTRS dps_a _ unifs _))
+    | isAnyNarrowing typ = orProblems where
+
+ (af_constructors, pi_groundInfo) = AF.splitCD p pi_g
+ af_init = AF.init p `mappend` af_constructors
  afs = unEmbed $ do
-    af0 <- embed $ Set.fromList
-            (findGroundAF heu pi_groundInfo (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo) p P.=<< rules dps)
-    let utrs = tRS(iUsableRules trs (Just af0) (rhs <$> rules dps))
-    af1 <- let rr = dps `mappend` utrs in embed $ Set.fromList $ invariantEV heu rr (AF.restrictTo (getAllSymbols rr) af0)
-    let utrs' = tRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
-    return (af1, utrs')
+    af0 <- embed (findGroundAF heu pi_groundInfo af_init p R.=<< Set.fromList (rules dpsT))
+    let utrs = tRS(iUsableRules trs (Just af0) (rhs <$> rules dpsT))
+    af1 <- let rr = dpsT `mappend` utrs in
+           embed $ invariantEV heu rr (AF.restrictTo (getAllSymbols rr) af0)
+    let utrs' = tRS(iUsableRules utrs (Just af1) (rhs <$> rules dpsT))
+        p'    = mkProblem typ utrs' dpsT
+        rp    = AF.apply af1 $ mkProblem (correspondingRewritingStrategy typ) utrs' dpsT
+    return (Tuple31 (rp, af1, p'))   -- forcing unicity of the rewriting problem
 
  orProblems =
      [ unsafePerformIO $ do
-        let rp = AF.apply af $ mkProblem InnermostRewriting trs' dps
         xml <- aproveXML rp
         return (proofU >>= \p' ->
-         let mb_nonDecreasingDPs :: Maybe [Rule Basic] = findResultingPairs xml
-             the_af = AF.restrictTo (getAllSymbols p') af
+         let mb_nonDecreasingDPs = findResultingPairs xml
          in case mb_nonDecreasingDPs of
               Nothing -> step (ReductionPair (Just the_af)) p' rp P.>>= \p'' ->
                          failP (External (Aprove "SRV") [OutputXml xml]) p''
               Just basic_nonDecreasingDPs ->
                let text_nonDecreasingDPs = Set.fromList(show <$> (ppr <$$> basic_nonDecreasingDPs))
                    nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- A.assocs dps_a
-                                                             , show (pprDP <$> AF.apply af dp) `Set.member` text_nonDecreasingDPs]
+                                                             , show (pprDP <$> AF.apply the_af dp) `Set.member` text_nonDecreasingDPs]
                in andP (ReductionPair (Just the_af)) p'
-                      [ return $ mkProblem typ trs (restrictDPTRS dps (toList nonDecreasingDPs))
-                      , return $ mkProblem typ trs (restrictDPTRS dps [ i | (i,dp) <- A.assocs dps_a, i `Set.notMember` nonDecreasingDPs, not $ isGround $ rhs $ AF.apply pi' dp])])
-    | (af,trs') <- sortBy (flip compare `on` (dpsSize.fst)) (Set.toList afs)
-    , let proofU = step UsableRulesP p (mkProblem typ trs' dps)
-    , let pi'    = AF.invert p pi_groundInfo `mappend` af
+                      [ return $ mkProblem typ trs (restrictDPTRS dpsT (toList nonDecreasingDPs))
+                      , return $ mkProblem typ trs (restrictDPTRS dpsT [ i | (i,dp) <- A.assocs dps_a
+                                                                          , i `Set.notMember` nonDecreasingDPs
+                                                                          , not $ isGround $ rhs $ AF.apply pi' dp])])
+     | (rp, the_af, up) <- sortBy (flip compare `on` (size . dps . fst3)) (tuple31 <$> Set.toList afs)
+     , let proofU = step UsableRulesP p up
+     , let pi'   = AF.invert p pi_groundInfo `mappend` the_af
     ]
 
  heu        = AF.mkHeu mkH p
- dpsSize af = size (AF.apply af dps)
- pprDP      = foldTerm f where
-     f (prj -> Just (Var i n)) = text "v" <> int n
-     f t = pprF t
+ pprDP      = foldTerm (\v -> text "v" <> int (fromEnum v)) ppr
 
-reductionPair _ _ p = error ("reductionPair " ++ show (typ p))
+reductionPair _ _ p = error ("reductionPair " ++ show(ppr (typ p)))

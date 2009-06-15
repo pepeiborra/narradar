@@ -1,9 +1,12 @@
 {-# LANGUAGE TypeSynonymInstances, TemplateHaskell #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 module Narradar.ProblemType where
 
 import Control.Applicative
+import qualified Control.RMonad as R
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
@@ -11,11 +14,19 @@ import Data.Derive.Traversable
 import Data.Foldable (Foldable(..))
 import Data.Traversable (Traversable(..))
 import Data.Maybe
+import Data.Monoid
 import Prelude hiding (pi)
 import Text.PrettyPrint
 
+import Data.Term.Rules
+
+import Narradar.ArgumentFiltering as AF
+import Narradar.Convert
+import Narradar.Goal
+import Narradar.DPIdentifiers
+import Narradar.Ppr
+import Narradar.Term
 import Narradar.Utils
-import Narradar.ArgumentFiltering
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 
@@ -31,7 +42,18 @@ data ProblemTypeF pi   = Rewriting   | InnermostRewriting
                        | BNarrowing  | BNarrowingModes  {pi, goal::pi}
                        | LBNarrowing | LBNarrowingModes {pi, goal::pi}
 	               | Prolog {goals::[AF_ String], program::Prolog.Program String}
-                    deriving (Eq, Show)
+                    deriving (Eq, Ord, Show)
+
+narrowingModes,bNarrowingModes,gNarrowingModes :: HasSignature sig String => sig -> Goal -> ProblemType Id
+narrowingModes sig goal  = NarrowingModes { goal = AF.extendToTupleSymbols afG
+                                          , pi   = AF.extendToTupleSymbols (AF.init sig `mappend` afG) }
+    where afG = mkGoalAF goal
+bNarrowingModes sig goal  = BNarrowingModes { goal = AF.extendToTupleSymbols afG
+                                          , pi   = AF.extendToTupleSymbols (AF.init sig `mappend` afG) }
+    where afG = mkGoalAF goal
+gNarrowingModes sig goal  = GNarrowingModes { goal = AF.extendToTupleSymbols afG
+                                          , pi   = AF.extendToTupleSymbols (AF.init sig `mappend` afG) }
+    where afG = mkGoalAF goal
 
 instance Ppr (ProblemType id) where
     ppr Prolog{}                  = text "Prolog"
@@ -39,6 +61,8 @@ instance Ppr (ProblemType id) where
     ppr typ | isGNarrowing    typ = text "Ground NDP"
     ppr typ | isBNarrowing    typ = text "BNDP"
     ppr typ | isRewriting     typ = text "DP"
+
+instance (Convert id id', Ord id') => Convert (ProblemType id)  (ProblemType id') where convert = fmap convert
 
 isAnyNarrowing = isFullNarrowing .|. isBNarrowing .|. isGNarrowing
 
@@ -64,20 +88,19 @@ isProlog Prolog{} = True ; isProlog _ = False
 
 isLeftStrategy LBNarrowingModes{} = True; isLeftStrategy _ = False
 
---isModed = isJust . getAF
-
-getProblemAF = getAF
 getAF NarrowingModes{pi}   = Just pi
 getAF BNarrowingModes{pi}  = Just pi
 getAF GNarrowingModes{pi}  = Just pi
 getAF LBNarrowingModes{pi} = Just pi
-getAF _ = Nothing
+getAF _                    = Nothing
 
-getGoalAF NarrowingModes{goal}   = Just pi
-getGoalAF BNarrowingModes{goal}  = Just pi
-getGoalAF GNarrowingModes{goal}  = Just pi
-getGoalAF LBNarrowingModes{goal} = Just pi
+getGoalAF NarrowingModes{goal}   = Just goal
+getGoalAF BNarrowingModes{goal}  = Just goal
+getGoalAF GNarrowingModes{goal}  = Just goal
+getGoalAF LBNarrowingModes{goal} = Just goal
 getGoalAF _ = Nothing
+
+isModed = isJust . getGoalAF
 
 narrowingModes0 =   NarrowingModes  {goal=error "narrowingModes0", pi=error "narrowingModes0"}
 bnarrowingModes0 =  BNarrowingModes {goal=error "bnarrowingModes0", pi=error "bnarrowingModes0"}

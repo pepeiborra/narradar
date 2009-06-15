@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Solver where
@@ -11,18 +10,13 @@ import Control.Arrow hiding (first)
 import Control.Monad as P
 import Control.Monad.Free.Narradar
 import Control.Monad.Logic
---import "monad-param" Control.Monad.Parameterized
---import "monad-param" Control.Monad.MonadPlus.Parameterized
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe, listToMaybe, maybeToList)
 import Data.Monoid
 import Data.Traversable
 import System.IO.Unsafe
-import Text.ParserCombinators.Parsec (ParseError)
+import Text.ParserCombinators.Parsec (ParseError, parse)
 import Text.XHtml (Html, primHtml)
-import TRS
-import TRS.FetchRules
-import TRS.FetchRules.TRS
 import Lattice
 
 import Narradar.ArgumentFiltering (typeHeu, typeHeu2, innermost, bestHeu, AF_)
@@ -38,6 +32,8 @@ import Narradar.ReductionPair
 import Narradar.GraphTransformation
 import Narradar.UsableRules
 import Narradar.Utils
+
+import Language.Prolog.SharingAnalysis (SharingAssignment)
 
 import qualified Prelude
 import Prelude hiding (Monad(..))
@@ -58,25 +54,19 @@ aproveLocalP path  = trivialP >=> (unsafePerformIO . aproveProc path)
 -- ----------------------
 -- Processor-like Parsers
 -- ----------------------
--- TODO Allow for goals in Narrowing problems
---parseTRS :: ProblemType id -> String -> ProblemProofG (Identifier id) Html f
-parseTRS typ txt = eitherM $ toEither $ do
-        rules :: [Rule Basic'] <- fromEither $ parseFile trsParser "" txt
-        let trs = tRS rules :: NarradarTRS String Basic'
-        msum (map return $ mkGoalProblem AF.bestHeu typ trs)
-
---parseProlog :: String -> PPT String Basic' Html IO
+parseProlog :: (Monad m) => String -> m (SharingAssignment String, ProblemG String Var)
 parseProlog = eitherM . fmap (inferType &&& id) . toEither . parsePrologProblem
+
 -- ------------------
 -- Some Basic solvers
 -- ------------------
 prologSolver opts typ = prologSolver' opts (typeHeu2 typ) (typeHeu typ)
 prologSolver' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
-  where narrowingSolver = refineBy 4 (solve' (uGroundRhsAllP h2 >=> aproveWebP))
+  where narrowingSolver = refineBy 4 (solve' (msum . uGroundRhsAllP h2 >=> aproveWebP))
                                      refineNarrowing
 
 prologSolverOne' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
-  where narrowingSolver = refineBy 4 (solve' (reductionPair h2 20 >=> sccProcessor))
+  where narrowingSolver = refineBy 4 (solve' (msum . reductionPair h2 20 >=> sccProcessor))
                                      refineNarrowing
 
 pSolver :: Monad m => options -> (prob -> C (Free ProofF) a) -> prob -> m (Bool, ProofC a, String)
@@ -95,14 +85,14 @@ refineNarrowing' = reducingP ((msum.narrowing) >=> sccProcessor) <|>
 
 -- narradar 1.0 main solving scheme
 narradarSolver          = narradarSolver' aproveWebP
-narradarSolver' aproveS = cycleProcessor >=> groundRhsOneP bestHeu >=> aproveS
+narradarSolver' aproveS = cycleProcessor >=> msum . groundRhsOneP bestHeu >=> aproveS
 
 narrowingSolver 0 _ = const mzero
-narrowingSolver 1 k = cycleProcessor >=> usableRulesP >=> groundRhsOneP bestHeu >=> k
+narrowingSolver 1 k = cycleProcessor >=> usableRulesP >=> msum . groundRhsOneP bestHeu >=> k
 narrowingSolver depth _ | depth < 0 = error "narrowingSolver: depth must be positive"
 narrowingSolver depth k =
        cycleProcessor >=> usableRulesP >=>
-       ((groundRhsOneP bestHeu >=> k)
+       ((msum . groundRhsOneP bestHeu >=> k)
         <|>
         (refineNarrowing >=> narrowingSolver (depth-1) k))
 -- -------------
@@ -148,12 +138,7 @@ firstP (a:alternatives) p = do
     Right MZero -> firstP alternatives p
     Right x     -> wrap x
     Left  z     -> return z
-{-
-firstP (a:alternatives) p = case a p of
-                             Impure MZero      -> firstP alternatives p
-                             Impure DontKnow{} -> firstP alternatives p
-                             anything_else     -> anything_else
--}
+
 first :: P.Monad m => [a -> ProofT m a] -> a -> ProofT m a
 first [] _ = mzero
 first (a:alternatives) p = FreeT $ do

@@ -10,16 +10,28 @@ import Control.Monad.List
 import Control.Monad.RWS (RWS(..))
 import Control.Monad.State
 import Control.Monad.Writer
-import qualified TRS.MonadFresh as TRS
 
 class Monad m => MonadSupply i m | m -> i where next :: m i; current :: m i
 
 newtype Supply i a = Supply {runSupply_ :: State [i] a}
-  deriving (Functor, Monad, MonadState [i], MonadSupply i)
-
+  deriving (Functor, Monad, MonadState [i])
+{-
 instance MonadSupply e (State [e]) where
   current = head <$> get
   next    = get >>= \(_:x':xs) -> put (x':xs) >> return x'
+
+instance Monad m => MonadSupply e (StateT [e] m) where
+  current = head <$> get
+  next    = get >>= \(_:x':xs) -> put (x':xs) >> return x'
+-}
+
+instance MonadSupply e (Supply e) where
+  current = Supply(head <$> get)
+  next    = Supply(get >>= \(_:x':xs) -> put (x':xs) >> return x')
+
+instance MonadSupply e m => MonadSupply e (StateT s m) where
+  current = lift current
+  next    = lift next
 
 instance (Monoid w, MonadSupply i m) => MonadSupply i (WriterT w m) where
   current = lift current
@@ -42,6 +54,8 @@ runSupply' m ids = evalState (runSupply_ m) ids
 -- ----------------------------------
 -- TRS.MonadFresh instance for Supply
 -- ----------------------------------
+{-
 instance TRS.MonadFresh (Supply Int) where
   fresh   = next
   current = head <$> get
+-}

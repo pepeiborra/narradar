@@ -7,16 +7,19 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 
-module Narradar.Utils (module Narradar.Utils, module TRS.Utils, HT.hashInt, HT.hashString) where
+module Narradar.Utils where
 
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad (join, liftM, liftM2, replicateM, ap)
+import Control.Monad.Identity(Identity(..))
 import Control.Monad.List (lift, ListT)
-import Control.Monad.State (State,StateT)
+import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
 import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
-import qualified "monad-param" Control.Monad.Parameterized as P
+import qualified Control.RMonad as R
+--import qualified "monad-param" Control.Monad.Parameterized as P
 import Data.Array.IArray
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
@@ -24,18 +27,20 @@ import qualified Data.HashTable as HT
 import Data.Int
 import Data.List (group, sort,nub)
 import Data.Monoid
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Sequence ((|>), singleton, viewl, viewr, ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
+import Data.Suitable
 import Data.Traversable
 import System.IO
 import System.Directory
-import Test.QuickCheck
+import Text.ParserCombinators.Parsec as P (GenParser, (<|>), pzero)
 import Text.PrettyPrint
 
-import TRS (Term, Rule)
-import qualified TRS (Ppr, ppr)
-import TRS.Utils hiding (size, parens, brackets, trace)
+import Data.Term.Rules as Term
+import Data.Term.Ppr as Term
+--import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
 
@@ -47,28 +52,54 @@ trace = Debug.Trace.trace
 trace _ x = x
 #endif
 
-
--------------------
--- Ppr
--------------------
-class Ppr a where ppr :: a -> Doc
-instance (Functor f, Foldable f, Ppr x) => Ppr (f x) where ppr = brackets . hcat . punctuate comma . toList . fmap ppr
-instance (Ppr a, Ppr b) => Ppr (a,b) where ppr (a,b) = parens (ppr a <> comma <> ppr b)
-instance Ppr Int where ppr = int
-instance Ppr () where ppr _ = Text.PrettyPrint.empty
-
-instance Show (Term a)  => Ppr (Rule a) where ppr = text . show
-instance TRS.Ppr f => Ppr (Term f) where ppr = TRS.ppr
-
-
 -- Type Constructor Composition
 -- ----------------------------
 newtype O f g x = O (f(g x))
 instance (Functor f, Functor g) => Functor (O f g) where fmap f (O fgx) = O (fmap2 f fgx)
 
+-- -------------
+-- fmap / mapM
+-- -------------
+fmap2  = fmap . fmap
+(<$$>) = fmap2
+
+mapM2  = mapM . mapM
+
+return2 = return . return
+
+-- ------------------------
+-- Foldables / Traversables
+-- ------------------------
+unsafeZipWithGM :: (Traversable t1, Traversable t2, Monad m) => (a -> b -> m c) -> t1 a -> t2 b -> m(t2 c)
+unsafeZipWithGM f t1 t2  = evalStateT (mapM zipG' t2) (toList t1)
+       where zipG' y = do (x:xx) <- get
+                          put xx
+                          lift (f x y)
+
+unsafeZipWithG :: (Traversable t1, Traversable t2) => (a -> b -> c) -> t1 a -> t2 b -> t2 c
+unsafeZipWithG f x y = runIdentity $ unsafeZipWithGM (\x y -> return (f x y)) x y
+
+--size = length . toList
+
+foldMap2 :: (Foldable t, Foldable t', Monoid m) => (a -> m) -> t(t' a) -> m
+foldMap3 :: (Foldable t, Foldable t', Foldable t'',Monoid m) => (a -> m) -> t(t'(t'' a)) -> m
+foldMap2 = foldMap . foldMap
+foldMap3 = foldMap . foldMap2
+
 -- --------------
 -- Various stuff
 -- --------------
+fst3 (a,b,c) = a
+fst4 (a,b,c,d) = a
+
+showPpr = show . ppr
+
+snub :: Ord a => [a] -> [a]
+snub = go Set.empty where
+  go _   []     = []
+  go acc (x:xx) = if x `Set.member` acc then go acc xx else x : go (Set.insert x acc) xx
+
+(cmp `on` f) a b = cmp (f a) (f b)
 
 hashId :: Show a => a -> Int32
 hashId = HT.hashString . show
@@ -77,21 +108,16 @@ isRight Right{} = True; isRight _ = False
 
 eitherM :: (Monad m, Show err) => Either err a -> m a
 eitherM = either (fail.show) return
-
+{-
 instance Show err => P.Bind (Either err) IO IO where
  m >>= f = eitherM m >>= f
-
+-}
 mapLeft :: (l -> l') -> Either l r -> Either l' r
 mapLeft f (Left x)  = Left(f x)
 mapLeft f (Right r) = Right r
 
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
-
-foldMap2 :: (Foldable t, Foldable t', Monoid m) => (a -> m) -> t(t' a) -> m
-foldMap3 :: (Foldable t, Foldable t', Foldable t'',Monoid m) => (a -> m) -> t(t'(t'' a)) -> m
-foldMap2 = foldMap . foldMap
-foldMap3 = foldMap . foldMap2
 
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
@@ -206,3 +232,54 @@ instance (Monoid s, Monad m) => Applicative (WriterT s m) where pure = return; (
 -- -----------------------------------
 
 instance (Monoid w, MonadWriter w m) => MonadWriter w (ListT m) where tell = lift.tell
+
+-- --------------------------------
+-- RFunctor instance for Signature
+-- --------------------------------
+instance R.RFunctor Signature where
+    fmap f sig@(Sig c d a) =
+        withConstraintsOf sig $ \SigConstraints -> withResConstraints $ \SigConstraints ->
+              Sig (Set.map f c) (Set.map f d) (Map.mapKeys f a)
+
+instance Ord id => Suitable Signature id where
+   data Constraints Signature id = Ord id => SigConstraints
+   constraints _ = SigConstraints
+
+-- --------------------------
+-- RMonad instance for WriterT
+-- --------------------------
+
+instance (Monoid s) => Suitable (WriterT s m) a where
+   data Constraints (WriterT s m) a = WriterTConstraints
+   constraints _ = WriterTConstraints
+
+instance (Monad m, Monoid s) => R.RFunctor (WriterT s m) where
+   fmap = fmap
+
+instance (Monoid s, Monad m) => R.RMonad (WriterT s m) where
+   return = return
+   (>>=) = (>>=)
+   fail = fail
+
+#ifndef TRANSFORMERS
+instance (Monoid s) => Suitable (Writer s) a where
+   data Constraints (Writer s) a = WriterConstraints
+   constraints _ = WriterConstraints
+
+instance (Monoid s) => R.RFunctor (Writer s) where
+   fmap = fmap
+
+instance (Monoid s) => R.RMonad (Writer s) where
+   return = return
+   (>>=) = (>>=)
+   fail = fail
+#endif
+
+-- Applicative instances for Parsec
+-- ---------------------------------
+instance Applicative (GenParser c st) where
+    pure = return
+    (<*>) = ap
+instance Alternative (GenParser c st) where
+    (<|>) = (P.<|>)
+    empty = pzero
