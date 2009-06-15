@@ -21,6 +21,7 @@ module Narradar ( narradarMain, Options(..), defOpts
                 , module Narradar.NarrowingProblem
                 , module Narradar.PrologProblem
                 , module Narradar.Types
+                , parseTRS
                 ) where
 
 import Control.Monad
@@ -64,6 +65,7 @@ narradarMain solver = do
   ~(yes, sol, log) <- (solver flags input)
   when (verbose > 0) (  hSetBuffering stdout NoBuffering P.>> putStrLn log)
   putStrLn$ if yes then "YES" else "NO"
+  when (verbose>0 && yes) $ print $ pprProof sol
   when (diagrams && (yes || verbose > 0)) $ withTempFile "." "narradar.dot" $ \fp h -> do
         hPutStrLn h (pprDot' PprDot{showFailedPaths = verbose > 1} sol)
         hFlush h
