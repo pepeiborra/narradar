@@ -1,18 +1,16 @@
-{-# LANGUAGE PackageImports, PatternGuards, ViewPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE PatternGuards, ViewPatterns, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 import Control.Applicative
+import Control.Monad
 import Control.OldException
-import qualified "monad-param" Control.Monad.Parameterized as P
 import Data.Foldable (Foldable,foldMap)
 import Data.Maybe
 import Data.Monoid
 import Network.CGI
-import TRS.FetchRules
-import TRS.FetchRules.TRS
 import Text.Printf
 import Text.XHtml
 import Text.ParserCombinators.Parsec (parse)
@@ -26,6 +24,7 @@ import Prelude
 
 import Narradar hiding ((!))
 import Narradar.ArgumentFiltering as AF
+import Narradar.PrologIdentifiers
 import Narradar.Solver
 import Narradar.Output
 import Narradar.Proof
@@ -51,8 +50,8 @@ cgiMain = do
        (success, dotsol, htmlsol) <- liftIO $  case typ of
                        "LOGIC" -> let input' = maybe input ((input ++) .( "\n%query: " ++)) mb_goal
                                    in  process(parseProlog input' >>= uncurry (stratSolver mb_strat))
-                       "NARROWING"  -> process(parseTRS (narrStrat strat mb_goal) input >>=
-                                       narradarSolver :: ProblemProofG Id BasicId)
+                       "NARROWING"  -> let input' = Prelude.unlines [input, narrStrat strat mb_goal]  in
+                                       process(parseTRS input' >>= narradarSolver)
        proof_log <- liftIO$ withTempFile "/tmp" "narradar-log-" $ \fp h -> do
                       let fn = takeBaseName fp ++ ".pdf"
                       hPutStrLn h dotsol
@@ -68,21 +67,14 @@ cgiMain = do
 
 --process :: (Ord id, Show id, T id :<: f, TRSC f) => ProblemProofG id Html f -> IO (Bool, ProblemProof id f, Html)
 process p = return (isJust mb_sol, pprDot sol, toHtml sol) where
-    mb_sol = runProof' iprob  `asTypeOf` Just iprob
+    mb_sol = runProof' iprob `asTypeOf` Just iprob
     iprob  = improve p
     sol    = fromMaybe iprob mb_sol
 
-narrStrat "FULL"  Nothing = Narrowing
-narrStrat "FULL" (Just g_) = let gg = either (error.show) id $ parseGoal g_
-                            in let g_af = foldMap mkGoalAF gg in NarrowingModes g_af g_af
-{-
-narrStrat "BASIC"  Nothing = BNarrowing
-narrStrat "BASIC" (Just g_) = let g = either (error.show) id $ parseT trsParser "<goal>" g_
-                            in BNarrowingModes g
-narrStrat "CONSTRUCTOR"  Nothing = GNarrowing
-narrStrat "CONSTRUCTOR" (Just g_) = let g = either (error.show) id $ parseT trsParser "<goal>" g_
-                            in GNarrowingModes g
--}
+narrStrat "FULL"  Nothing  = "(STRATEGY NARROWING)"
+narrStrat "FULL" (Just g_) = "(STRATEGY NARROWING " ++ g_ ++ ")"
+narrStrat "BASIC"  Nothing  = "(STRATEGY BASICNARROWING)"
+narrStrat "BASIC" (Just g_) = "(STRATEGY BASICNARROWING " ++ g_ ++ ")"
 
 --stratSolver :: () => Maybe String ->
 stratSolver Nothing              typ = prologSolver  defOpts typ
@@ -96,18 +88,16 @@ stratSolver (Just "OUTU1")       typ = prologSolver' defOpts noU1sHeu (typeHeu t
 --stratSolver (Just "INN")      typ = prologSolver' (simpleHeu innermost) (typeHeu typ)
 
 
+
 -- No U1s Heuristic
 -- ----------------
 noU1sHeu = MkHeu (IsU1 . getSignature)
 
 data IsU1 id (f :: * -> *) = IsU1 (Signature id)
-instance (T id :<: f, IsU1Id id, Ord id, Foldable f) => PolyHeuristic IsU1 id f where
-  runPolyHeu (IsU1 sig) =  Heuristic (predHeuOne allOuter noU1s `AF.or` predHeuOne allOuter (noConstructors sig)) False
-    where noU1s _af (t, 1) = not$ isU1Id t
+instance (IsPrologId id, Ord id, HasId f id, Foldable f) => PolyHeuristic IsU1 id f where
+  runPolyHeu (IsU1 sig) =
+      Heuristic (predHeuOne allOuter noU1s `AF.or`
+                 predHeuOne allOuter (noConstructors sig))
+                False
+    where noU1s _af (t, 1) = not$ isUId t
           noU1s _ _ = True
-
-class IsU1Id id where isU1Id :: id -> Bool
-instance IsU1Id PId where isU1Id (symbol -> UId{}) = True; isU1Id _ = False
-instance IsU1Id PS  where isU1Id (UId{}) = True; isU1Id _ = False
-instance IsU1Id LPS where isU1Id (unlabel -> UId{}) = True; isU1Id _ = False
-instance IsU1Id LPId where isU1Id (unlabel.symbol -> UId{}) = True; isU1Id _ = False
