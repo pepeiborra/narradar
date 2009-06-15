@@ -22,7 +22,6 @@ import Data.AlaCarte.Instances
 import Data.List (nub, foldl1', isPrefixOf, (\\))
 import Data.Maybe
 import qualified Data.Set as Set
-import Control.Comonad.Pointer
 import Control.Monad.Logic
 import Text.XHtml (Html)
 
@@ -111,6 +110,7 @@ finstantiation p = [return p]
 
 -- I should teach myself about comonads
 -- http://sigfpe.blogspot.com/2008/03/comonadic-arrays.html
+-- ---------------------------------------------------------
 maps, maps' :: Monad m => (a -> m a) -> [a] -> [[m a]]
 maps f xx = concat $ elems $ array (Pointer 1 (listArray (1, length xx) xx) =>> appF) where
     appF (Pointer i a) = let a' = amap return a in  map elems [a' // [(i, f(a!i))] ]
@@ -121,3 +121,38 @@ maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
 
 -- maps and maps' are equivalent
 propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -> [Bool])
+
+-- ------------------------------
+-- Extracted from category-extras
+-- ------------------------------
+data Pointer i a = Pointer { index :: i, array :: Array i a } deriving (Show,Read)
+
+instance Ix i => Functor (Pointer i) where
+    fmap f (Pointer i a) = Pointer i (fmap f a)
+
+instance Ix i => Copointed (Pointer i) where
+    extract (Pointer i a) = a ! i
+
+instance Ix i => Comonad (Pointer i) where
+    extend f (Pointer i a) = Pointer i . listArray bds $ fmap (f . flip Pointer a) (range bds) where
+                                     bds = bounds a
+
+
+class Copointed w => Comonad w where
+        duplicate :: w a -> w (w a)
+        extend :: (w a -> b) -> w a -> w b
+        extend f = fmap f . duplicate
+        duplicate = extend id
+
+-- | 'extend' with the arguments swapped. Dual to '>>=' for monads.
+(=>>) :: Comonad w => w a -> (w a -> b) -> w b
+(=>>) = flip extend
+
+class Functor f => Copointed f where
+        extract :: f a -> a -- Algebra f a
+
+instance Copointed Identity where
+        extract = runIdentity
+
+instance Copointed ((,)e) where
+    extract = snd
