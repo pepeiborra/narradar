@@ -90,11 +90,11 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        runClause = (`evalStateT` (toEnum <$> [0..]))
                  . (`evalStateT` (mempty :: Map String Term.Var))
                  . (`evalStateT` (mempty :: Set v))
-       toRule (Pred id tt :- []) = do
-         tt' <- mapM toTerm tt
-         return [(id, term (InId id) tt' :-> term (OutId id) tt')]
        toRule (t1 :=: t2  :- cc) = toRule (Pred equalF [t1,t2] :- cc)
        toRule (Is  t1 t2  :- cc) = toRule (Pred equalF [t1,t2] :- cc)
+       toRule (Pred id tt :- (filter (/= Cut) -> [])) = do
+         tt' <- mapM toTerm tt
+         return [(id, term (InId id) tt' :-> term (OutId id) tt')]
        toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
          tt'  <- mapM toTerm tt
          modify (Set.fromList(getVars tt') `mappend`)
