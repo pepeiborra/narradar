@@ -16,7 +16,6 @@ import Control.Applicative
 import qualified Control.Monad as Old
 import qualified Control.Monad.Identity (Identity(..))
 import qualified Control.Monad.Trans as Old
-import Control.Monad.Operad
 import Data.Foldable
 import Data.Monoid
 import Data.Traversable as T
