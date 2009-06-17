@@ -43,10 +43,10 @@ import Lattice
 -- -----------------
 -- Here to avoid introducing recursive module dependencies
 
-parseTRS :: Monad m => String -> m (ProblemG Id Var)
+parseTRS :: Monad m => String -> m (Problem Id Var)
 parseTRS = eitherM . runParser trsParser mempty "<input>"
 
-trsParser :: TRS.TRSParser (ProblemG Id Var)
+trsParser :: TRS.TRSParser (Problem Id Var)
 trsParser = do
   Spec spec <- TRS.trsParser
   let r = mkTRS $ concat [mkRules rr | Rules rr <- spec]
@@ -84,7 +84,7 @@ trsParser = do
 -- SO STAY AWAY FROM TYPE FUNCTIONS FOR NOW !!!!!!!!!!!!
 
 -- | Constructing DP problems. Do not construct a goal problem with this function, for that use 'mkGoalProblem'
-mkDPProblem :: (Ppr id, Ord a, id ~ Identifier a) => ProblemType id -> NarradarTRS a Var -> ProblemG id Var
+mkDPProblem :: (Ppr id, Ord a, id ~ Identifier a) => ProblemType id -> NarradarTRS a Var -> Problem id Var
 mkDPProblem typ _ | isModed typ = error "To create a goal problem use 'mkGoalProblem'"
 mkDPProblem typ trs = mkProblem typ trs' (mkDPs typ trs') where trs' = convert trs
 
@@ -99,7 +99,7 @@ mkDPs typ trs
 --   that P is indeed a TRS (no extra variables).
 --   I.e. we need to compute the filtering 'globally'
 mkGoalProblem :: (Ppr id, Ord a, PolyHeuristicN heu id, Lattice (AF_ id), id ~ Identifier a) =>
-                 MkHeu heu -> ProblemType a -> NarradarTRS a Var -> [ProblemG id Var]
+                 MkHeu heu -> ProblemType a -> NarradarTRS a Var -> [Problem id Var]
 mkGoalProblem heu typ trs =
     let trs'       = convert trs
         dps        = mkDPs typ' trs'
@@ -115,8 +115,8 @@ mkGoalProblem heu typ trs =
 -- -------------------------------------
 -- DP Processors transforming the graph
 -- -------------------------------------
-cycleProcessor, sccProcessor :: (Ppr v, Ord v, Ppr id, Ord id) => ProblemG id v -> ProblemProofG id v
-usableSCCsProcessor :: (Ppr v, Ord v) => ProblemG LPId v -> ProblemProofG LPId v
+cycleProcessor, sccProcessor :: (Ppr v, Ord v, Ppr id, Ord id) => Problem id v -> ProblemProofG id v
+usableSCCsProcessor :: (Ppr v, Ord v) => Problem LPId v -> ProblemProofG LPId v
 
 usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps@(DPTRS dd _ unif sig))
   | null cc   = success NoCycles problem
@@ -157,11 +157,11 @@ cycleProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
 
 getEDG p = getdirectEDG p
 
-getdirectEDG :: (Ord id) => ProblemG id v -> G.Graph
+getdirectEDG :: (Ord id) => Problem id v -> G.Graph
 getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) =
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
-filterSEDG :: (Ord id) => ProblemG id v -> G.Graph -> G.Graph
+filterSEDG :: (Ord id) => Problem id v -> G.Graph -> G.Graph
 filterSEDG (Problem typ trs dptrs@DPTRS{}) gr =
     G.buildG (A.bounds gr)
                [ (i,j) | (i,j) <- G.edges gr

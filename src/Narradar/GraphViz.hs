@@ -92,17 +92,17 @@ pprDot' PprDot{..} prb = showDot $ do
       | done || showFailedPaths = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
       | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
 
---    problemLabel :: (Ord v, Ppr v, Ord id, Ppr id) => ProblemG id v -> (String, String)
+--    problemLabel :: (Ord v, Ppr v, Ord id, Ppr id) => Problem id v -> (String, String)
     problemLabel p = ("label", pprTPDBdot p)
 
---    problemColor :: ProblemG id v -> (String, String)
+--    problemColor :: Problem id v -> (String, String)
     problemColor p | isPrologProblem        p = ("color", "#F6D106")
                    | isFullNarrowingProblem p = ("color", "#4488C9")
                    | isBNarrowingProblem    p = ("color", "#FD6802")
                    | isGNarrowingProblem    p = ("color", "#FD6802")
                    | isRewritingProblem     p = ("color", "#EAAAFF")
                    | otherwise = error ("problemColor")
---    problemAttrs :: (Ord v, Ppr v, Ord id, Show id) => ProblemG id v -> [(String,String)]
+--    problemAttrs :: (Ord v, Ppr v, Ord id, Show id) => Problem id v -> [(String,String)]
     problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
     problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
@@ -147,7 +147,7 @@ pprDot' PprDot{..} prb = showDot $ do
     childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 
-pprTPDBdot :: (Ord v, Ppr v, Ord id, Ppr id) => ProblemG id v -> String
+pprTPDBdot :: (Ord v, Ppr v, Ord id, Ppr id) => Problem id v -> String
 pprTPDBdot p@(Problem Prolog{..} _ _) =
     showPpr program ++ "\\l" ++
     unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]

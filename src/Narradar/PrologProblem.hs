@@ -64,7 +64,7 @@ inferType (Problem Prolog{..} _ _) = infer program
 -- ----------------
 
 prologP_sk :: (PolyHeuristicN heu PId, MonadPlus m, MonadFree ProofF m) =>
-              MkHeu heu -> PrologProblem Term.Var -> m (ProblemG PId Term.Var)
+              MkHeu heu -> PrologProblem Term.Var -> m (Problem PId Term.Var)
 prologP_sk heu p0@(Problem Prolog{..} _ _) =
    andP PrologSKP p0
      [ msum (map return pp)
@@ -176,8 +176,8 @@ addMissingPredicates cc0
 
 findFreeSymbol sig pre = fromJust $ find (`Set.notMember` getAllSymbols sig) (pre : [pre ++ show i | i <- [0..]])
 
-prologP_labelling_sk :: (PolyHeuristicN heu LPS, PolyHeuristicN heu LPId, v ~ Term.Var, MonadFree ProofF m) =>
-                        MkHeu heu -> PrologProblem v -> m (ProblemG LPId v)
+prologP_labelling_sk :: (PolyHeuristicN heu LPS, PolyHeuristicN heu LPId, MonadFree ProofF m, v ~ Term.Var) =>
+                        MkHeu heu -> PrologProblem v -> m (Problem LPId v)
 prologP_labelling_sk mkHeu p0@(Problem Prolog{..} _ _)
   | null goals = success (LabellingSKP []) p0
   | otherwise  = mall problems
@@ -193,7 +193,8 @@ prologP_labelling_sk mkHeu p0@(Problem Prolog{..} _ _)
                        return $ orP (LabellingSKP modes) p0 (map return pp')
 
 
-labellingTrans :: (Ord v, Ppr v) => PolyHeuristicN heu LPS => MkHeu heu -> AF_ PS -> NarradarTRS PS v -> Set((NarradarTRS LPS v, AF_ LPS), [LS])
+labellingTrans :: forall heu v. (Ord v, Ppr v, PolyHeuristicN heu LPS) =>
+                  MkHeu heu -> AF_ PS -> NarradarTRS PS v -> Set((NarradarTRS LPS v, AF_ LPS), [LS])
 labellingTrans _ _ (rules -> []) = Set.singleton mempty
 labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
 --    let trs0 :: NarradarTRS LPS BasicLPS

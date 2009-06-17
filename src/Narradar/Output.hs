@@ -60,7 +60,7 @@ instance Ppr id => HTML (ProcInfo id) where
     toHtml p                     = "PROCESSOR: " +++ show (ppr p)
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
-instance (Ord v, Ord id, Ppr v, Ppr id) => HTML (ProblemG id v) where
+instance (Ord v, Ord id, Ppr v, Ppr id) => HTML (Problem id v) where
     toHtml (Problem typ@Prolog{..} _ _) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
@@ -87,7 +87,7 @@ instance HTML SomeProblem where
 
 instance HTML SomeInfo where toHtml (SomeInfo pi) = toHtml pi
 
-instance (Ppr id, Ppr v, Ord v) => HTML (ProblemProof id v) where
+instance (Ord id, Ppr id, Ppr v, Ord v) => HTML (ProblemProof id v) where
    toHtml = foldFree (\prob -> p<<(ppr prob $$ text "RESULT: not solved yet")) work where
     work MZero       = toHtml  "Don't know"
     work DontKnow{}  = toHtml  "Don't know"

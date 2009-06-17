@@ -72,9 +72,9 @@ data ProofF k =
 -- but instead they are kept, which means we cannot have these types in an impredicative position.
 type ProofC a           = Free ProofF a
 type Proof  a           = (MonadPlus m, MonadFree ProofF m) => m a
-type ProblemProof  id v = ProofC (ProblemG id v)
-type ProblemProofG id v = (MonadPlus m, MonadFree ProofF m) => m (ProblemG id v)
-type ProblemProofC id v = ProofC (ProblemG id v)
+type ProblemProof  id v = ProofC (Problem id v)
+type ProblemProofG id v = (MonadPlus m, MonadFree ProofF m) => m (Problem id v)
+type ProblemProofC id v = ProofC (Problem id v)
 
 success  pi p0 = wrap (Success (someInfo pi) (someProblem p0))
 success' pi p0 = wrap (Success pi p0)
@@ -103,7 +103,7 @@ stage            = wrap . Stage
 deriving instance (Show k) => Show (ProofF k)
 
 data SomeProblem where
-    SomeProblem       :: (Ord id, Ppr id, Ord v, Ppr v) => !(ProblemG id v) -> SomeProblem
+    SomeProblem       :: (Ord id, Ppr id, Ord v, Ppr v) => !(Problem id v) -> SomeProblem
 
 instance Show SomeProblem where
     show (SomeProblem p) = "<some problem>"
@@ -111,7 +111,7 @@ instance Show SomeProblem where
 instance Ppr SomeProblem where
   ppr (SomeProblem p) = ppr p
 
-someProblem :: (Ord id, Ppr id, Ord v, Ppr v) => ProblemG id v -> SomeProblem
+someProblem :: (Ord id, Ppr id, Ord v, Ppr v) => Problem id v -> SomeProblem
 someProblem p@Problem{} = SomeProblem (trimProblem p)
 
 -- trimProblem (Problem typ trs (DPTRS dps_a _ _ _) ) = Problem typ trs (tRS$ A.elems dps_a)
@@ -187,7 +187,7 @@ pprProofF = f where
 -- we are going to need a monad transformer (for the Aprove proc)
 
 type ProofT   m a = FreeT ProofF m a
-type PPT id f m   = ProofT m (ProblemG id f)
+type PPT id f m   = ProofT m (Problem id f)
 
 liftProofT :: P.Monad m => ProofC a -> ProofT m a
 liftProofT = trans

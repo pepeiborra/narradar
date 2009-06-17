@@ -51,7 +51,7 @@ import Debug.Observe
 -- This is the AF processor described in our ICLP'08 paper
 -- ------------------------------------------------------------------------
 groundRhsOneP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> ProblemG id v -> [m(ProblemG id v)]
+                  MkHeu heu -> Problem id v -> [m(Problem id v)]
 groundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps)
   | isAnyNarrowingProblem p =
     if null orProblems
@@ -81,7 +81,7 @@ groundRhsOneP mk p@(Problem typ@(getAF -> Nothing) trs dps)
 -- A variation for use with SCCs
 -- ------------------------------------------------------------------------
 groundRhsAllP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> ProblemG id v -> [m(ProblemG id v)]
+                  MkHeu heu -> Problem id v -> [m(Problem id v)]
 groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then [failP EVProcFail p]
@@ -106,7 +106,7 @@ groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps)
 -- A variation for use with SCCs, incorporate usable rules
 -- ------------------------------------------------------------------------
 uGroundRhsAllP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> ProblemG id v -> [m(ProblemG id v)]
+                  MkHeu heu -> Problem id v -> [m(Problem id v)]
 uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then [failP EVProcFail p]
@@ -135,7 +135,7 @@ uGroundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps) | isAnyNarrowingProb
 uGroundRhsAllP _ p = [return p]
 
 uGroundRhsOneP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> ProblemG id v -> [m(ProblemG id v)]
+                  MkHeu heu -> Problem id v -> [m(Problem id v)]
 uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyNarrowingProblem p =
     if null orProblems
       then [failP EVProcFail p]
@@ -170,13 +170,13 @@ uGroundRhsOneP _ p = [return p]
 -- "Termination of Logic Programs ..." (Schneider-Kamp et al)
 -- ------------------------------------------------------------------
 
-safeAFP :: (Show id, Ord id, Ppr id, Lattice (AF_ id), PolyHeuristicN heu id, MonadFree ProofF m, v ~ Var) =>
-           MkHeu heu -> ProblemG id v -> [m(ProblemG id v)]
+safeAFP :: (Ord id, Ppr id, Lattice (AF_ id), PolyHeuristicN heu id, MonadFree ProofF m, v ~ Var) =>
+           MkHeu heu -> Problem id v -> [m(Problem id v)]
 safeAFP mk p@(Problem typ@(getAF -> Just af) trs dps) = do
        let heu = mkHeu mk p
-       af' <-  toList $ invariantEV heu (rules p) af
-       return $ step (SafeAFP (Just af')) p
-                  (AF.apply af' $ mkProblem typ' (tRS $ iUsableRules trs (Just af) (rhs <$> rules dps)) dps)
+       af' <-  toList $ invariantEV heu p af
+       let p' = iUsableRules (setTyp typ' p) (Just af) (rhs <$> rules dps)
+       return $ step (SafeAFP (Just af')) p (AF.apply af' p')
   where typ' = correspondingRewritingStrategy typ
 
 safeAFP _ p = [return p]
@@ -189,7 +189,7 @@ findGroundAF :: (Ord id, Ppr id, Lattice (AF_ id), v ~ Var) =>
                 HeuristicN id
              -> AF_ id         -- ^ Groundness information
              -> AF_ id         -- ^ the argument filtering to constrain
-             -> ProblemG id v
+             -> Problem id v
              -> RuleN id v     -- ^ the rule to make ground
              -> Set (AF_ id)
 findGroundAF heu pi_groundInfo af0 p@(Problem _ trs dps) (_:->r)

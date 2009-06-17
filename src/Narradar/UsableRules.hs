@@ -18,7 +18,7 @@ import Narradar.Proof
 import Narradar.Types
 import Narradar.Utils
 
-usableRulesP :: (Ppr v, Ppr id, Ord v, Ord a, Enum v, id ~ Identifier a) => ProblemG id v -> ProblemProofG id v
+usableRulesP :: (Ppr v, Ppr id, Ord v, Ord a, Enum v, id ~ Identifier a) => Problem id v -> ProblemProofG id v
 
 usableRulesP p@(Problem typ trs dps)
   | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (mkProblem typ trs' dps)

@@ -38,8 +38,8 @@ import Language.Prolog.SharingAnalysis (SharingAssignment)
 import qualified Prelude
 import Prelude hiding (Monad(..))
 
-type Solver id f m = ProblemG id f -> PPT id f m
-type Solver' id f id' f' m = ProblemG id f -> PPT id' f' m
+type Solver id f m = Problem id f -> PPT id f m
+type Solver' id f id' f' m = Problem id f -> PPT id' f' m
 
 defaultTimeout = 15
 
@@ -54,7 +54,7 @@ aproveLocalP path  = trivialP >=> (unsafePerformIO . aproveProc path)
 -- ----------------------
 -- Processor-like Parsers
 -- ----------------------
-parseProlog :: (Monad m) => String -> m (SharingAssignment String, ProblemG String Var)
+parseProlog :: (Monad m) => String -> m (SharingAssignment String, Problem String Var)
 parseProlog = eitherM . fmap (inferType &&& id) . toEither . parsePrologProblem
 
 -- ------------------

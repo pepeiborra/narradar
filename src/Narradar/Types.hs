@@ -201,7 +201,7 @@ fromEither = either L R
 toEither (L l) = Left l; toEither (R r) = Right r
 
 
-parsePrologProblem :: (Ord v) => String -> ErrorM ParseError (ProblemG String v)
+parsePrologProblem :: (Ord v) => String -> ErrorM ParseError (Problem String v)
 parsePrologProblem pgm = do
      things <- fromEither $ parse problemParser "input" pgm
      let cc      = [c | Clause      c <- things]

@@ -40,7 +40,7 @@ import Narradar.Utils
 import Narradar.Term
 import Narradar.Var
 
-type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => ProblemG id v -> IO (proof(ProblemG id v))
+type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => Problem id v -> IO (proof(Problem id v))
 
 aproveWebProc :: ExternalProcTyp m id v
 aproveWebProc = memoExternalProc go where
@@ -86,7 +86,7 @@ aproveProc path = go where
 
 aproveSrvPort    = 5250
 {-
-aproveSrvProc :: (Ord id, Show id,TRSC f, T id :<: f) => Int -> ProblemG id f -> IO (ProblemProofG id Html f)
+aproveSrvProc :: (Ord id, Show id,TRSC f, T id :<: f) => Int -> Problem id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
 aproveSrvProc timeout =  go where
   go prob@(Problem  (isRewriting -> True) trs dps) = unsafeInterleaveIO $
@@ -178,7 +178,7 @@ massage     = primHtml . unlines . drop 8  . lines
 -- TPDB
 -- ----
 
-pprTPDB :: (Ppr id, Ord id, Ppr v, Enum v, Ord v) => ProblemG id v -> String
+pprTPDB :: (Ppr id, Ord id, Ppr v, Enum v, Ord v) => Problem id v -> String
 pprTPDB p@(Problem typ trs dps) =
   unlines ([ printf "(VAR %s)" (unwords $ map (show . pprVar) $ toList $ getVars p)
            , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))

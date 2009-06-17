@@ -39,7 +39,7 @@ import Narradar.Types
 import Narradar.TRS
 import Narradar.RewritingProblem
 
-aproveXML :: (Ord v, Ppr v, Enum v, Ord id, Ppr id, Lattice (AF_ id)) => ProblemG id v -> IO String
+aproveXML :: (Ord v, Ppr v, Enum v, Ord id, Ppr id, Lattice (AF_ id)) => Problem id v -> IO String
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
 
 newtype Tuple31 a b c = Tuple31 {tuple31::(a,b,c)}
@@ -48,7 +48,7 @@ instance Ord a => Ord (Tuple31 a b c) where Tuple31 (a,_,_) `compare` Tuple31 (a
 
 reductionPair :: (Ord id, Ppr id, Ppr (TermF id Doc), PolyHeuristic heu id (TermF id),
                   MonadFree ProofF m, Lattice (AF_ id), v ~ Var) =>
-                 MkHeu heu -> Int -> ProblemG id v -> [m(ProblemG id v)]
+                 MkHeu heu -> Int -> Problem id v -> [m(Problem id v)]
 reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_g) trs dpsT@(DPTRS dps_a _ unifs _))
     | isAnyNarrowing typ = orProblems where
 
