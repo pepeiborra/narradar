@@ -97,7 +97,7 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
          return [(id, term (InId id) tt' :-> term (OutId id) tt')]
        toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
          tt'  <- mapM toTerm tt
-         modify (Set.fromList(getVars tt') `mappend`)
+         modify (getVars tt' `mappend`)
          rhs_0  <- mkRhs (head gg)
          mid_r  <- forM (gg `zip` tail gg) $ \(c,sc) -> (:->) <$> mkLhs c <*> mkRhs sc
          lhs_n  <- mkLhs (last gg)
@@ -116,7 +116,7 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
        mkLhs (Pred id tt) = do
          vv  <- toList <$> get
          tt' <- mapM toTerm tt
-         modify(Set.fromList(getVars tt') `mappend`)
+         modify(getVars tt' `mappend`)
          i   <- current
          return (term (UId i) (term (OutId id) tt' : map Pure vv))
        mkLhs (f :=: g) = mkLhs (Pred equalF [f,g])

@@ -71,7 +71,7 @@ trsParser = do
   mkDPs   rr = map markDPRule (convert $ mkRules rr)
   mkRules rr = [ toTerm l :-> toTerm r | Rule (l TRS.:-> r) _ <- rr] where
            toTerm = foldTerm toVar (Impure . fromSimple)
-           allvars = Map.fromList (getVars rr `zip` [0..])
+           allvars = Map.fromList (Set.toList(getVars rr) `zip` [0..])
            toVar v = var' (Just v) (fromJust $ Map.lookup v allvars)
 
 

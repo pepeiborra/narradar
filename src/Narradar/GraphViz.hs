@@ -153,7 +153,7 @@ pprTPDBdot p@(Problem Prolog{..} _ _) =
     unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
 
 pprTPDBdot p@(Problem typ trs dps) = unlines $
-    [ "(VAR " ++ (unwords $ map showPpr $ getVars p) ++ ")"
+    [ "(VAR " ++ (unwords $ map showPpr $ toList $ getVars p) ++ ")"
     , "(PAIRS\\l" ++ (unlines (map ((' ':).show.pprRule) (rules dps))) ++ ")"
     , "(RULES\\l" ++ (unlines (map ((' ':).show.pprRule) (rules trs))) ++ ")"] ++
     maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getAF typ)) ++ ["\\l"]

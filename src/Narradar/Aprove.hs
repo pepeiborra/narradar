@@ -180,7 +180,7 @@ massage     = primHtml . unlines . drop 8  . lines
 
 pprTPDB :: (Ppr id, Ord id, Ppr v, Enum v, Ord v) => ProblemG id v -> String
 pprTPDB p@(Problem typ trs dps) =
-  unlines ([ printf "(VAR %s)" (unwords $ map (show . pprVar) $ getVars p)
+  unlines ([ printf "(VAR %s)" (unwords $ map (show . pprVar) $ toList $ getVars p)
            , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
            , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))
            ] ++ if (isInnermostRewriting typ) then ["(STRATEGY INNERMOST)"] else [])
