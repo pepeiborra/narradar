@@ -27,9 +27,7 @@ import qualified Data.Set as Set
 import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
 import Data.Monoid
-import Data.Term hiding (find)
 import Data.Term.Rules
-import Data.Term.Ppr
 import Data.Traversable (Traversable,sequenceA)
 import Text.PrettyPrint
 import Prelude hiding (lookup, map, and, or)
@@ -38,6 +36,7 @@ import qualified Prelude as P
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers
 import Narradar.Labellings
+import Narradar.Ppr
 import Narradar.Utils
 import Narradar.Term
 
@@ -154,7 +153,7 @@ instance ApplyAF a id => ApplyAF [a] id where apply af = fmap (apply af)
 instance (Ord id, ApplyAF a id) => ApplyAF (RuleF a) id where apply af = fmap (apply af)
 instance (Functor f, ApplyAF t id) => ApplyAF (f t) id  where apply af = fmap (apply af)
 
-instance (Ord id) => ApplyAF (Free (WithNote1 n (TermF id)) v) id  where
+instance (Ord id) => ApplyAF (Term (WithNote1 n (TermF id)) v) id  where
     apply af = foldTerm return f where
       f t@(Note1 (n,Term id tt))
                | Just ii <- lookup id af = Impure (Note1 (n, Term id (select tt (pred <$> ii))))
@@ -168,7 +167,7 @@ data Heuristic id t = Heuristic { runHeu :: forall v. AF_ id -> Term t v -> Posi
 type HeuristicN id = Heuristic id (TermF id)
 
 -- | Heuristics with overloading
-class PolyHeuristic tag id f where runPolyHeu :: tag id f -> Heuristic id f
+class PolyHeuristic tag id t where runPolyHeu :: tag id t -> Heuristic id t
 class PolyHeuristic tag id (TermF id) => PolyHeuristicN tag id; instance PolyHeuristic tag id (TermF id) => PolyHeuristicN tag id
 
 -- | Wrapper for heuristics which depend on the problem signature
