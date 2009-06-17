@@ -211,7 +211,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
  where
   heuristic = mkHeu mkH trs'
 
-  trs'@(PrologTRS rr sig) = convert trs
+  trs'@(PrologTRS rr sig) = convert trs :: NarradarTRS LPS v
 
 --  insertNewMode :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
   insertNewMode (id,pp) | trace ("insertNewMode " ++ showPpr (id,pp)) False = undefined

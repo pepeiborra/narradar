@@ -95,7 +95,7 @@ groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyN
                                    (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
                                    (rules dps)
           orProblems = [ step (GroundAll (Just af)) p $
-                                AF.apply af (mkProblem typ' trs dps)
+                                AF.apply af (setTyp typ' p)
                         | af <- Set.toList afs]
 
 groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps)
@@ -119,15 +119,15 @@ uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAny
                           R.foldM (\af -> findGroundAF heu pi_groundInfo af p)
                                   (AF.init p)
                                   (rules dps)
-                  let utrs = mkTRS(iUsableRules trs (Just af0) (rhs <$> rules dps))
-                  af1 <- embed $ invariantEV heu (dps `mappend` utrs) af0
-                  let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
-                  return (af1, utrs')
+                  let u_p = iUsableRules p (Just af0) (rhs <$> rules dps)
+                  af1 <- embed $ invariantEV heu u_p af0
+                  let u_p' = iUsableRules u_p (Just af1) (rhs <$> rules dps)
+                  return (af1, u_p')
           orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundAll (Just (AF.restrictTo (getAllSymbols p') af))) p'
-                                (AF.apply af (mkProblem typ' trs dps))
-                        | (af,trs) <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
-                        , let proofU = step UsableRulesP p (mkProblem typ trs dps)]
+                                (AF.apply af (setTyp typ' p'))
+                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
+                        , let proofU = step UsableRulesP p p']
           dpsSize af = size (AF.apply af dps)
 
 uGroundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps) | isAnyNarrowingProblem p
@@ -147,17 +147,16 @@ uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAny
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
                   af0  <- embed $
                           findGroundAF heu af00 pi_groundInfo p R.=<< Set.fromList(rules dps)
-                  let utrs = mkTRS(iUsableRules trs (Just af0) (rhs <$> rules dps))
-                  af1 <- let rr = dps `mappend` utrs in
-                         embed $ invariantEV heu rr (AF.restrictTo (getAllSymbols rr) af0)
-                  let utrs' = mkTRS(iUsableRules utrs (Just af1) (rhs <$> rules dps))
-                  return (af1, utrs')
+                  let u_p  = iUsableRules p   (Just af0) (rhs <$> rules dps)
+                  af1 <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
+                  let u_p' = iUsableRules u_p (Just af1) (rhs <$> rules dps)
+                  return (af1, u_p')
 
           orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundOne (Just (AF.restrictTo (getAllSymbols p') af))) p'
-                                (AF.apply af (mkProblem typ' trs dps))
-                        | (af,trs) <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
-                        , let proofU = step UsableRulesP p (mkProblem typ trs dps)]
+                                (AF.apply af (setTyp typ' p'))
+                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
+                        , let proofU = step UsableRulesP p p']
           dpsSize af = size (AF.apply af dps)
 
 
@@ -204,5 +203,4 @@ findGroundAF heu pi_groundInfo af0 p@(Problem _ trs dps) (_:->r)
 
 #ifdef DEBUG
 instance Observable Id   where observer = observeBase
-instance Observable Mode where observer = observeBase
 #endif

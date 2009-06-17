@@ -65,7 +65,7 @@ trsParser = do
   strategy <- maybe (return Rewriting) mkStrat $ listToMaybe [s | Strategy s <- spec]
   return $ case p of
      [] -> mkDPProblem strategy r
-     _  -> mkProblem strategy (convert r) (dpTRS (convert strategy) (convert r) p emptyArray)
+     _  -> let r' = convert r in mkProblem strategy r' (dpTRS (Problem (convert strategy) r' (tRS p)) emptyArray)
           -- TODO Consider goal problems when the PAIRS set is not empty
  where
   mkDPs   rr = map markDPRule (convert $ mkRules rr)
@@ -91,8 +91,8 @@ mkDPProblem typ trs = mkProblem typ trs' (mkDPs typ trs') where trs' = convert t
 -- | Construct the set of pairs corresponding to a problem type and a TRS R of rules.
 mkDPs :: (Ord a, id ~ Identifier a) => ProblemType id -> NarradarTRS id Var -> NarradarTRS id Var
 mkDPs typ trs
-    | isFullNarrowing typ = dpTRS typ trs (getNPairs trs) emptyArray
-    | otherwise           = dpTRS typ trs (getPairs  trs) emptyArray
+    | isFullNarrowing typ = dpTRS (Problem typ trs (tRS $ getNPairs trs)) emptyArray
+    | otherwise           = dpTRS (Problem typ trs (tRS $ getPairs  trs)) emptyArray
 
 -- | Constructing NDP problems with as starting goal. This function takes an AF heuristic.
 --   This is necessary so early because before splitting P into SCCs we need to ensure
@@ -155,7 +155,7 @@ cycleProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
 -- Computing the estimated Dependency Graph
 -- ----------------------------------------
 
-getEDG p = getdirectEDG p
+getEDG p = filterSEDG p $ getdirectEDG p
 
 getdirectEDG :: (Ord id) => Problem id v -> G.Graph
 getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) =

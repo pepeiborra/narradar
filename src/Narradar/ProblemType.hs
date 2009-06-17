@@ -69,6 +69,8 @@ isAnyNarrowing = isFullNarrowing .|. isBNarrowing .|. isGNarrowing
 isRewriting Rewriting =True; isRewriting InnermostRewriting = True; isRewriting _ = False
 
 isInnermostRewriting InnermostRewriting = True; isInnermostRewriting _ = False
+isInnermostLike InnermostRewriting = True
+isInnermostLike x = isGNarrowing x
 
 isFullNarrowing Narrowing{} = True
 isFullNarrowing NarrowingModes{} = True

@@ -3,13 +3,17 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Narradar.Term (TermF(..), TermN, RuleN, constant, term, term1, termId, mapTermId, mapTermIdF, Size(..), fromSimple) where
+module Narradar.Term (TermF(..), TermN, RuleN, constant, term, term1
+                     ,termId, mapTermId, mapTermIdF, Size(..), fromSimple
+                     ,module Data.Term, MonadFree(..))
+    where
 
 import Control.Monad
+import Control.Monad.Free
 import Data.Char
 import Data.Foldable as F (Foldable(..),sum,msum)
 import Data.Traversable
-import Data.Term
+import Data.Term hiding (unify, unifies, find)
 import qualified Data.Term.Simple as Simple
 import Data.Term.Rules
 import Data.Term.Ppr

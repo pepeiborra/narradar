@@ -1,10 +1,10 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GADTs, TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Narradar.Types ( module Data.Term
-                      , module Data.Term.Rules
+module Narradar.Types ( module Data.Term.Rules
                       , module Narradar.Types
                       , module Narradar.TRS
                       , module Narradar.Problem
@@ -60,11 +60,15 @@ import Narradar.Unify
 import Narradar.Term
 import Narradar.Var
 
-import Data.Term hiding (find, unify, unifies)
 import Data.Term.Rules hiding (unifies')
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.Parser as Prolog
+
+#ifdef DEBUG
+import Debug.Observe
+#endif
+
 import Prelude as P hiding (sum, pi, mapM)
 
 isGround :: (Functor t, Foldable t) => Term t v -> Bool
@@ -219,3 +223,7 @@ parsePrologProblem pgm = do
      atomToGoal (Prolog.Pred f tt) = do
        mm <- fromEither $ parse TRSParser.modes "" $ unwords $ map (show . Prolog.ppr) $ tt
        return (f,mm)
+
+#ifdef DEBUG
+instance Observable Mode where observer = observeBase
+#endif

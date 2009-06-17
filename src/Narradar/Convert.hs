@@ -9,8 +9,6 @@ module Narradar.Convert where
 
 import qualified Data.Set as Set
 
-import Data.Foldable (toList)
-
 import Narradar.ArgumentFiltering (AF_, mapSymbols)
 import Narradar.DPIdentifiers
 import Narradar.PrologIdentifiers

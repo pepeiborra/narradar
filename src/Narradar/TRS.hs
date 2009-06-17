@@ -5,21 +5,23 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.TRS where
 
 import Control.Applicative
-import "control-monad-free" Control.Monad.Free (evalFree, wrap)
+import Control.Monad.Free (evalFree, wrap)
 import Control.Monad.List
-import Control.Monad.State
-import Control.Monad.Supply
 import Control.Parallel.Strategies
 import Data.Array.IArray as A
-import Data.Graph (Graph, edges, buildG)
+import Data.DeriveTH
+import Data.Derive.Foldable
+import Data.Derive.Functor
+import Data.Derive.Traversable
+import Data.Graph (Graph)
 import Data.Foldable as F (Foldable, foldMap, toList, concatMap, sum)
 import Data.List ((\\))
 import Data.Maybe (catMaybes)
@@ -33,21 +35,18 @@ import qualified Data.Traversable as T
 import Text.PrettyPrint
 import Prelude hiding (concatMap)
 
---import TRS hiding (Ppr, ppr, unify, unifies, (!))
---import qualified TRS
-import Data.Term hiding (unify,unifies, (!))
 import Data.Term.Rules
-import Data.Term.Ppr
 
 import Narradar.ArgumentFiltering (apply, ApplyAF(..))
 import qualified Narradar.ArgumentFiltering as AF
 import Narradar.Convert
 import Narradar.DPIdentifiers
 import Narradar.Labellings
+import Narradar.Ppr
 import Narradar.ProblemType
 import Narradar.Unify
 import Narradar.Utils
-import Narradar.Term
+import Narradar.Term hiding ((!))
 import Narradar.Var
 import qualified Language.Prolog.Syntax as Prolog
 
@@ -76,10 +75,12 @@ pair2|_____|_____|
 .....|     |     |
 -}
 
-data NarradarTRS id v where
-    TRS       :: (Ord id) => Set (RuleN id v)                                  -> Signature id -> NarradarTRS id v
-    PrologTRS :: (Ord id) => Set (String, RuleN id v)                          -> Signature id -> NarradarTRS id v
-    DPTRS     :: (Ord id) => Array Int (RuleN id v) -> !Graph -> Unifiers (TermF id) v :!: Unifiers (TermF id) v -> Signature id -> NarradarTRS id v
+data NarradarTRSF id t v a where
+    TRS       :: Set a                                                  -> Signature id -> NarradarTRSF id t v a
+    PrologTRS :: Set (String, a)                                        -> Signature id -> NarradarTRSF id t v a
+    DPTRS     :: Array Int a -> !Graph -> Unifiers t v :!: Unifiers t v -> Signature id -> NarradarTRSF id t v a
+
+type NarradarTRS id v = NarradarTRSF id (TermF id) v (RuleN id v)
 
 type Unifiers t v = Array (Int,Int) (Maybe (Substitution t v))
 
@@ -110,6 +111,14 @@ instance (Convert (TermN id v) (TermN id' v'), Ord id, Ord id', Ord v') =>
     convert(PrologTRS rr sig) = prologTRS' (Set.mapMonotonic convert rr)
     convert (TRS rr _)        = narradarTRS (map convert$ toList rr)
 
+instance (Ord id, Ord v) => GetFresh (TermF id) v (NarradarTRS id v) where
+    getFreshM (TRS rr sig) = getFresh (toList rr) >>= \rr' -> return (TRS (Set.fromDistinctAscList rr') sig)
+    getFreshM (PrologTRS (unzip.toList -> (ii, rr)) sig) =
+        getFresh (toList rr) >>= \rr' -> return (PrologTRS (Set.fromDistinctAscList (zip ii rr')) sig)
+    getFreshM (DPTRS dps_a g uu sig) = getFresh (elems dps_a) >>= \dps' ->
+                                       let dps_a' = listArray (bounds dps_a) dps'
+                                       in return (DPTRS dps_a' g uu sig)
+
 mkTRS :: (Ord id, Ord v) => [RuleN id v] -> NarradarTRS id v
 mkTRS = tRS
 
@@ -123,47 +132,10 @@ prologTRS' rr = PrologTRS rr (getSignature (snd <$> toList rr))
 
 narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 
-dpTRS :: (Ord id, id ~ Identifier a) => ProblemType id -> NarradarTRS id Var -> [DP a Var] -> Graph -> NarradarTRS id Var
-dpTRS typ trs dps edges = dpTRS' typ trs dps' edges
-  where dps' = listArray (0, length dps - 1) dps -- (refreshRules dps [])
-
--- | Assumes that the rules have already been renamed apart
-dpTRS' :: (Ord id, id ~ Identifier a, v~Var) => ProblemType id -> NarradarTRS id v -> Array Int (DP a v) -> Graph -> NarradarTRS id v
-dpTRS' typ trs dps edges = DPTRS dps edges (runIcap (rules trs `mappend` elems dps)
-                                                    (computeDPUnifiers typ trs $ elems dps))
-                                           (getSignature $ elems dps)
-
--- | Assumes that the rules have already been renamed apart
-dpTRS'' dps edges unifiers = DPTRS dps edges unifiers (getSignature $ elems dps)
-
 refreshRules :: (Traversable t, MonadEnv t (Either Var Var) m, MonadFresh v m, v ~ Var) => [Rule t v] -> m [Rule t v]
-refreshRules rr = mapM2 (freshWith leftName) rr where
-        leftName (Var n _) (Var _ i) = Var n i
+refreshRules rr = mapM2 (freshWith leftName) rr where leftName (Var n _) (Var _ i) = Var n i
 
-computeDPUnifiers :: ( Enum v, Ord v, Ord (Term t v), Unify t,  ApplyAF trs id, IsTRS t v trs
-                     , GetVars v trs, ApplyAF (Term t v) id, MonadFresh v m, unif ~ Unifiers t v) =>
-                     ProblemType id -> trs -> [Rule t v] -> m(unif :!: unif)
---computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
-computeDPUnifiers typ trs dps = do
-   unif <- runListT $ do
-                (x, _ :-> r) <- ListT $ return $ zip [0..] dps
-                (y, l :-> _) <- ListT $ return $ zip [0..] dps
-                r'  <- lift (icap trs r >>= mbren)
-                return ((x,y), unify l r')
-   unifInv <- runListT $ do
-                (x, _ :-> r) <- ListT $ return $ zip [0..] dps
-                (y, l :-> _) <- ListT $ return $ zip [0..] dps
-                let trs' = tRS (swapRule <$> mbUsableRules [r]) `asTypeOf` trs
-                l' <- lift (icap trs' l >>= ren)
-                return ((x,y), unify r l')
-   return(   array ( (0,0), (length dps -1 , length dps - 1) ) unif
-         :!: array ( (0,0), (length dps -1 , length dps - 1) ) unifInv)
- where
-   (mbren, mbUsableRules) = if (isBNarrowing .|. isGNarrowing) typ
-                              then (getFresh,iUsableRules trs Nothing)
-                              else (ren,const (rules trs))
-
-restrictDPTRS :: NarradarTRS t v -> [Int] -> NarradarTRS t v
+restrictDPTRS :: Ord id => NarradarTRS id v -> [Int] -> NarradarTRS id v
 restrictDPTRS (DPTRS dps gr (unif :!: unifInv) sig) indexes = DPTRS dps' gr' unif' (getSignature $ elems dps')
   where
    newIndexes = Map.fromList (zip indexes [0..])
@@ -180,48 +152,6 @@ restrictDPTRS (DPTRS dps gr (unif :!: unifInv) sig) indexes = DPTRS dps' gr' uni
 
 dpUnify    (DPTRS _ _ (unifs :!: _) _) l r = unifs ! (r,l)
 dpUnifyInv (DPTRS _ _ (_ :!: unifs) _) l r = unifs ! (r,l)
-
-expandDPair :: (AF.ApplyAF trs id, IsTRS t v trs, GetVars v trs, id ~ Identifier a, t ~ TermF id, v ~ Var) =>
-               ProblemType id -> trs -> NarradarTRS id v -> Int -> [DP a v] -> NarradarTRS id v
---expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
-expandDPair typ trs (DPTRS dps gr (unif :!: unifInv) sig) i newdps
- = runIcap (rules trs ++ elems dps ++ newdps) $ do
-    dps'  <- ((dps1 ++ dps2) ++) `liftM` refreshRules newdps
-    let a_dps'   = A.listArray (0,length dps' - 1) dps'
-        mkUnif' arr arr' =
-            A.array ((0,0), (length dps' - 1, length dps' - 1))
-                       ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
-                                                      , x /= i, y /= i] ++
-                        concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
---                                 [ (in1, computeDPUnifier typ rules a_dps' in1)
---                                 , (in2, computeDPUnifier typ rules a_dps' in2)]
-                                 | j <- new_nodes, k <- [0..l_dps'-1]
-                                 , let in1 = (j,k), let in2 = (k,j)])
-        adjust x = if x < i then x else x-1
-        l_dps'   = length dps'
-        gr'      = buildG (0, l_dps' - 1)
-                   ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
-                    [(n,n') | n' <- new_nodes
-                            , (n,m) <- edges gr, n/=i, m == i ] ++
-                    [(n',n) | n <- gr ! i, n' <- new_nodes] ++
-                    [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
-
-    (unif_new :!: unifInv_new) <- computeDPUnifiers typ trs dps'
-    let unif'    = mkUnif' unif    unif_new     `asTypeOf` unif
-        unifInv' = mkUnif' unifInv unifInv_new  `asTypeOf` unif
-        dptrs'   = dpTRS'' a_dps' gr' (unif' :!: unifInv')
-    return dptrs'
-
-  where
-    (dps1,_:dps2) = splitAt i (elems dps)
-    new_nodes= [l_dps - 1 .. l_dps + l_newdps - 2]
-    l_dps    = snd (bounds dps) + 1
-    l_newdps = length newdps
-
-expandDPair typ trs dps@TRS{} i newdps = tRS dps'
-  where
-    dps'          = dps1 ++ dps' ++ dps2
-    (dps1,_:dps2) = splitAt i (rules dps)
 
 rulesArray (DPTRS dps _ _ _) = dps
 rulesArray (TRS rules _)   = listArray (0, Set.size rules - 1) (Set.toList rules)
@@ -243,9 +173,9 @@ instance (Ord v, Ord id) => Monoid (NarradarTRS id v) where
     mappend trs emptytrs | null (rules emptytrs) = trs
     mappend x y = tRS (rules x `mappend` rules y)
 
-instance (Ord v, Ppr v, Ppr id) => Ppr (NarradarTRS id v) where
-    ppr trs@TRS{}   = vcat $ map ppr $ rules trs
-    ppr trs@DPTRS{} = vcat $ map ppr $ rules trs
+instance (Ord v, Ppr v, Ord id, Ppr id) => Ppr (NarradarTRS id v) where
+    ppr trs@TRS{}       = vcat $ map ppr $ rules trs
+    ppr trs@DPTRS{}     = vcat $ map ppr $ rules trs
     ppr trs@PrologTRS{} = vcat $ map ppr $ rules trs
 
 
@@ -253,85 +183,3 @@ instance (Ord id, Ord v) => ApplyAF (NarradarTRS id v) id where
     apply af (PrologTRS  cc sig) = let trs' = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) (getSignature $ rules trs') in trs'
     apply af trs@TRS{}           = tRS$ apply af <$$> rules trs
     apply af trs@DPTRS{}         = tRS$ apply af <$$> rules trs
-
--- -----------------
--- Cap & friends
--- -----------------
--- This should not live here, but it does to make GHC happy (avoid recursive module dependencies)
-
-ren :: (Enum v, Traversable t, MonadFresh v m) => Term t v -> m(Term t v)
-ren = foldTermM (\_ -> return `liftM` freshVar) (return . Impure)
-
--- Use unification instead of just checking if it is a defined symbol
--- This is not the icap defined in Rene Thiemann, as it does not integrate the REN function
-icap :: (Enum v, Ord v, Unify t, HasRules t v trs, MonadFresh v m) => trs -> Term t v -> m(Term t v)
-icap trs = foldTermM return2 go where
-  go t = if any (unifies (Impure t) . lhs) (rules trs) then return `liftM` freshVar else return (Impure t)
-                  -- In Rene Thiemann, icap inserts a fresh variable here in some cases
-                  -- but unfortunately we lack a good infrastructure for doing this
-
-collapsing trs = any (isVar.rhs) (rules trs)
-
--- ---------------------
--- Usable rules of a TRS
--- ---------------------
-
--- Assumes Innermost or Constructor Narrowing
--- TODO Extend to work with Q-narrowing to discharge those assumptions
-iUsableRulesM :: (Ord v, Enum v, Ord (Term t v), HasRules t v trs, AF.ApplyAF (Term t v) id, AF.ApplyAF trs id, Unify t, Traversable t, MonadFresh v m) =>
-                 trs -> Maybe (AF.AF_ id) -> [Term t v] -> m [Rule t v]
-iUsableRulesM trs Nothing = liftM F.toList . go mempty where
---  usableRules acc t | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  go acc [] = return acc
-  go acc (t:rest) = evalFree (\_ -> go acc rest) f t where
-      f in_t = do
-         t'  <- wrap `liftM` (icap trs `T.mapM` in_t)
-         let rr  = [ r | r <- rules trs, lhs r `unifies` t']
-             new = Set.difference (Set.fromList rr) acc
-         go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
-
-iUsableRulesM trs (Just pi) = liftM F.toList . go mempty . map(AF.apply pi) where
-  pi_rules = [(AF.apply pi r, r) | r <- rules trs]
-  pi_trs   = AF.apply pi trs
---  usableRules acc (AF.apply pi -> t) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  go acc [] = return acc
---  go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  go acc (t:rest) = evalFree (\_ -> go acc rest) f t where
-     f in_t = do
-        t' <- wrap `liftM` (icap pi_trs `T.mapM` in_t)
-        let rr = Set.fromList
-                [r | (pi_r, r) <- pi_rules
-                  , t' `unifies` lhs pi_r]
-            new = Set.difference rr acc
-        go (new `mappend` acc) (mconcat [AF.apply pi . rhs <$> F.toList new, directSubterms t, rest])
-
-iUsableRules :: (Ord v, Enum v, Ord (Term t v), HasRules t v trs, GetVars v trs, AF.ApplyAF (Term t v) id, AF.ApplyAF trs id, Unify t, Traversable t) =>
-                 trs -> Maybe (AF.AF_ id) -> [Term t v] -> [Rule t v]
-iUsableRules trs mb_pi = runIcap trs . iUsableRulesM trs mb_pi
-
-{-
-iUsableRules_correct trs (Just pi) = F.toList . go mempty where
-  pi_trs = AF.apply pi trs
-  --go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  go acc [] = acc
-  go acc (t:rest) = evalFree (\_ -> go acc rest) f t where
-    f t0
-      | t@(Impure in_t) <- AF.apply pi t0
-      , rr   <- Set.fromList [r | (pi_r, r) <- zip (rules pi_trs) (rules trs)
-                                , wrap(runSupply' (icap pi_trs `T.mapM` in_t) ids) `unifies` lhs pi_r ]
-      , new  <- Set.difference rr acc
-      = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
-  ids = [0..] \\ (concatMap.concatMap) collectVars (rules trs)
--}
--- -------------
--- Utils
--- -------------
-
-runIcap :: Enum v => GetVars v thing => thing -> State (Substitution t (Either v v), [v]) a -> a
-runIcap t m = evalState m (mempty, freshVars) where freshVars = map toEnum [maximum (map fromEnum (getVars t)).. ]
-
-#ifdef HOOD
-instance (Show id, Ord id, Show v, Ppr f) => Observable (NarradarTRS id v) where
-  observer (DPTRS dps gr (unif :!: unifInv) sig) = send "DPTRS" (return (\dps unif -> DPTRS dps gr (unif :!: unifInv) sig) << dps << unif)
-  observer x = observeBase x
-#endif

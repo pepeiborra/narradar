@@ -34,9 +34,9 @@ import Narradar.UsableRules
 
 import Data.Term.Narrowing
 
---narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => ProblemG id f -> [ProblemProofG id f]
-narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPTRS dpsA gr unif sig))
-    = [ step (NarrowingP olddp (tRS newdps)) p (mkProblem typ trs (expandDPair typ trs dptrs i newdps))
+--narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => Problem id f -> [ProblemProofG id f]
+narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPTRS dpsA gr unif sig))
+    = [ step (NarrowingP olddp (tRS newdps)) p0 (expandDPair p0 i newdps)
                      | (i,dps') <- dpss
                      , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
                      , let newdps = dps' !! i]
@@ -51,8 +51,9 @@ narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPTR
               | (isBNarrowing .|. isGNarrowing) typ || isLinear t
               , isNothing (unify' t `mapM` uu)
               , new_dps <- [(i,dp') | (dp',p) <- narrow1DP olddp
-                                         , let validPos = Set.toList(Set.fromList(positions (runIcap t (icap trs t))) `Set.intersection` pos_uu)
-                                         , any (`isPrefixOf` p) validPos]
+                              , let validPos = Set.toList(Set.fromList(positions (runIcap t (icap p0 t)))
+                                                          `Set.intersection` pos_uu)
+                              , any (`isPrefixOf` p) validPos]
               =  -- extra condition to avoid specializing to pairs whose rhs are variables
                  -- (I don't recall having seen this in any paper but surely is common knowledge)
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
@@ -60,7 +61,8 @@ narrowing p@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPTR
               | otherwise = []
 
                where uu     = map (lhs . (dpsA !)) (gr ! i)
-                     pos_uu = if null uu then Set.empty else foldl1' Set.intersection (Set.fromList . positions <$> uu)
+                     pos_uu = if null uu then Set.empty
+                                else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
           narrow1DP (l :-> r) = [ (applySubst theta l :-> r', p)
                                   | ((r',p),theta) <- observeAll (narrow1P (rules trs) r)
@@ -70,7 +72,7 @@ narrowing p = [return p]
 
 instantiation p@(Problem typ@(isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr unif _))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | otherwise = [ step (InstantiationP olddp (tRS newdps)) p (mkProblem typ trs (expandDPair typ trs dptrs i newdps))
+  | otherwise = [ step (InstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i,dps') <- dpss
                      , let olddp  = tRS[dpsA ! i] `asTypeOf` trs
                      , let newdps = dps' !! i ]
@@ -88,7 +90,8 @@ instantiation p = [return p]
 
 finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr unif sig))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | otherwise = [ step (FInstantiationP olddp (tRS newdps)) p (mkProblem typ trs (expandDPair typ trs dptrs i newdps))
+  | otherwise = [ step (FInstantiationP olddp (tRS newdps)) p
+                           (expandDPair p i newdps)
                      | (i, dps') <- dpss
                      , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
                      , let newdps = dps' !! i]
