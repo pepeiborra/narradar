@@ -214,7 +214,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
   trs'@(PrologTRS rr sig) = convert trs
 
 --  insertNewMode :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
-  insertNewMode (id,pp) | trace ("insertNewMode " ++ show (id,pp)) False = undefined
+  insertNewMode (id,pp) | trace ("insertNewMode " ++ showPpr (id,pp)) False = undefined
   insertNewMode (id, pp) = tell [Labelling pp id] >>
                            return (Set.fromList [ (pred, l `setLabel` Labelling pp :-> r `setLabel` Labelling pp)
                                                  | (pred, l :-> r) <- toList rr
