@@ -62,6 +62,7 @@ instance (Ord v, Ord id) => Monoid (Problem id v) where
 instance (Ord id, Ord v) => HasRules (TermF id) v (Problem id v) where
     rules (Problem _ dps trs) = rules dps `mappend` rules trs
 
+instance (Ord v, Ord id) => GetFresh (TermF id) v (Problem id v) where getFreshM = getFreshMdefault
 instance (Ord v, Ord id) => GetVars v (Problem id v) where getVars = foldMap getVars
 
 mkProblem :: (Ord id) => ProblemType id -> NarradarTRS id v -> NarradarTRS id v -> Problem id v
