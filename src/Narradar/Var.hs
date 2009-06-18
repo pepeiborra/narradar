@@ -3,7 +3,8 @@ module Narradar.Var where
 import Data.Term.Ppr
 import Text.PrettyPrint
 
-data Var = Var (Maybe String) Int deriving (Eq,Show)
+data Var = Var (Maybe String) Int deriving Show
+instance Eq  Var where Var _ i == Var _ j = i == j
 instance Ord Var where compare (Var _ i) (Var _ j) = compare i j
 
 instance Enum Var where
