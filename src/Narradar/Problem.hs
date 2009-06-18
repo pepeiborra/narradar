@@ -326,7 +326,7 @@ computeDPUnifiers p@(Problem typ _ dpsT@(rules -> the_dps)) = do
 
 runIcap :: Enum v => GetVars v thing => thing -> State (Substitution t (Either v v), [v]) a -> a
 runIcap t m = evalState m (mempty, freshVars) where
-    freshVars = map toEnum [1+maximum (map fromEnum (Set.toList $ getVars t)).. ]
+    freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
 
 -- ------------------
 -- Functor Instances
