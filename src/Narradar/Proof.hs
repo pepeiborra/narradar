@@ -211,10 +211,20 @@ runProof = runProof' . improve
 
 runProof' :: (MonadFree ProofF proof) => ProofC a -> Maybe (proof b)
 runProof' p = listToMaybe $ observeMany 1 search where
+  -- First turn the proof, i.e. a tree of problems, into a tree of proofs.
+  -- This is done by replacing stage nodes by leafs containing the staged subproof
   p'     = stageProof p
   search = do
+  -- Next we define the search, which is done using eval.
+  -- The search returns a mp list of (potentially) succesful proofs, i.e. tree of problems.
     sol <- foldFree return evalF p'
 --  let sol' = unstageProof sol
+    -- we search through these one by one
+    -- WE SHOULD SORT THEM FIRST
+    -- by whether they are a staged proof or not,
+    -- so that we look at the easy wins first.
+    -- Ultimately runProofDirect performs a good old search over every proof,
+    -- regarding any remaining unsolved problem as a failure
     runProofDirect (sol `asTypeOf` p)
 
   runProofDirect p = foldFree (const mzero) evalF p `asTypeOf` search
