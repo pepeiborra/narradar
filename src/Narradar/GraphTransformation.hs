@@ -78,13 +78,13 @@ instantiation p@(Problem typ@(isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr uni
                      , let newdps = dps' !! i ]
 
    where dps  = elems dpsA `const` unif
-         dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
-                                         , all (not.null) dps]
+         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                    , all (not.null) dps]
          f  (i,olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
             where newdps = [ (i, applySubst sigma s :-> applySubst sigma t)
-                           | Just sigma <- [dpUnify dptrs i m | (m,n) <- Gr.edges gr, n == i]]
+                           | Just sigma <- snub [dpUnify dptrs i m | (m,n) <- Gr.edges gr, n == i]]
 
 instantiation p = [return p]
 
@@ -96,13 +96,13 @@ finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr u
                      , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
                      , let newdps = dps' !! i]
    where dps  = elems dpsA
-         dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
-                                         , all (not.null) dps]
+         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                    , all (not.null) dps]
          f (i, olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i, applySubst sigma s :-> applySubst sigma t)
-                             | Just sigma <- [dpUnify dptrs j i | j <- gr ! i]]
+                             | Just sigma <- snub [dpUnify dptrs j i | j <- gr ! i]]
 finstantiation p = [return p]
 
 

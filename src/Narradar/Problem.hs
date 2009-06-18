@@ -251,22 +251,20 @@ dpTRS' dps edges unifiers = DPTRS dps edges unifiers (getSignature $ elems dps)
 expandDPair :: (Ord a, Ppr id, id ~ Identifier a, t ~ TermF id, v ~ Var) =>
                Problem id v -> Int -> [DP a v] -> Problem id v
 --expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
-expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i newdps
+expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i (filter (`notElem` elems dps) . snub -> newdps)
  = runIcap (rules p ++ newdps) $ do
-    dps' <- return $ ((dps1 ++ dps2) ++) newdps -- `liftM` refreshRules newdps
-    let a_dps'   = A.listArray (0,length dps' - 1) dps'
+    let dps'     = dps1 ++ dps2 ++ newdps
+        l_dps'   = length dps' - 1
+        a_dps'   = A.listArray (0,l_dps') dps'
         mkUnif' arr arr' =
-            A.array ((0,0), (length dps' - 1, length dps' - 1))
+            A.array ((0,0), (l_dps', l_dps'))
                        ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
                                                       , x /= i, y /= i] ++
                         concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
---                                 [ (in1, computeDPUnifier typ rules a_dps' in1)
---                                 , (in2, computeDPUnifier typ rules a_dps' in2)]
-                                 | j <- new_nodes, k <- [0..l_dps'-1]
+                                 | j <- new_nodes, k <- [0..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
         adjust x = if x < i then x else x-1
-        l_dps'   = length dps'
-        gr'      = buildG (0, l_dps' - 1)
+        gr'      = buildG (0, l_dps')
                    ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
                     [(n,n') | n' <- new_nodes
                             , (n,m) <- edges gr, n/=i, m == i ] ++
@@ -281,9 +279,9 @@ expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i newdps
 
   where
     (dps1,_:dps2) = splitAt i (elems dps)
-    new_nodes= [l_dps - 1 .. l_dps + l_newdps - 2]
-    l_dps    = snd (bounds dps) + 1
-    l_newdps = length newdps
+    new_nodes= [l_dps .. l_dps + l_newdps]
+    l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
+    l_newdps = length newdps - 1
 
 expandDPair (Problem typ trs dps) i newdps = mkProblem typ trs (tRS dps')
   where
