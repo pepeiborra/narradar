@@ -13,7 +13,7 @@ import Control.Monad.Free
 import Data.Char
 import Data.Foldable as F (Foldable(..),sum,msum)
 import Data.Traversable
-import Data.Term hiding (unify, unifies, find)
+import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
 import Data.Term.Rules
 import Data.Term.Ppr
