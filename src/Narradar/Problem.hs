@@ -180,11 +180,10 @@ collapsing trs = any (isVar.rhs) (rules trs)
 -- TODO Extend to work with Q-narrowing to cover more cases
 iUsableRulesM :: (Ord id, Ord v, Enum v, MonadFresh v m) =>
                  Problem id v -> Maybe (AF.AF_ id) -> [TermN id v] -> m(Problem id v)
-iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
-
+--iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
 iUsableRulesM p@(Problem typ trs dps) Nothing tt
   | isInnermostLike typ = do
-     rr <- go mempty tt
+     rr <- go mempty =<< getFresh tt
      return (mkProblem typ (tRS $ toList rr) dps)
  where
   go acc []       = return acc
@@ -199,7 +198,7 @@ iUsableRulesM p@(Problem typ trs dps) Nothing tt
 
 iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
   | isInnermostLike typ = do
-     rr <- go mempty tt
+     rr <- go mempty =<< getFresh tt
      return (mkProblem typ (tRS $ toList rr) dps)
  where
   pi_rules = [(AF.apply pi r, r) | r <- rules trs]
@@ -254,7 +253,7 @@ expandDPair :: (Ord a, Ppr id, id ~ Identifier a, t ~ TermF id, v ~ Var) =>
 --expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
 expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i newdps
  = runIcap (rules p ++ newdps) $ do
-    dps' <- ((dps1 ++ dps2) ++) `liftM` refreshRules newdps
+    dps' <- return $ ((dps1 ++ dps2) ++) newdps -- `liftM` refreshRules newdps
     let a_dps'   = A.listArray (0,length dps' - 1) dps'
         mkUnif' arr arr' =
             A.array ((0,0), (length dps' - 1, length dps' - 1))
