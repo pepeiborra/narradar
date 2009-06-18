@@ -166,6 +166,7 @@ aproveSrvProc2 strat (timeout :: Int) =  go where
     return (k (External (Aprove "SRV") [OutputXml (tail $ dropWhile (/= '\n') res)]) prob)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
+  go p = return $ return p
 
 {-# NOINLINE memoExternalProc #-}
 memoExternalProc go = unsafePerformIO (memoIO hashProb go)
