@@ -55,11 +55,12 @@ reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_g) trs dpsT@(DPTRS dp
  (af_constructors, pi_groundInfo) = AF.splitCD p pi_g
  af_init = AF.init p `mappend` af_constructors
  afs = unEmbed $ do
-    af0 <- embed (findGroundAF heu pi_groundInfo af_init p R.=<< Set.fromList (rules dpsT))
-    let u_p = iUsableRules p (Just af0) (rhs <$> rules dpsT)
-    af1 <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
-    let p' = setTyp  (correspondingRewritingStrategy typ) (iUsableRules u_p (Just af1) (rhs <$> rules dpsT))
-        rp = AF.apply af1 $ p'
+    let p_f = getVariant p dpsT
+    af0    <- embed (findGroundAF heu pi_groundInfo af_init p R.=<< Set.fromList (rules dpsT))
+    let u_p = iUsableRules p_f (Just af0) (rhs <$> rules dpsT)
+    af1    <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
+    let p'  = setTyp (correspondingRewritingStrategy typ) (iUsableRules u_p (Just af1) (rhs <$> rules dpsT))
+        rp  = AF.apply af1 p'
     return (Tuple31 (rp, af1, p'))   -- forcing unicity of the rewriting problem
 
  orProblems =
