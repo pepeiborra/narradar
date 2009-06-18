@@ -68,11 +68,11 @@ prologP_sk :: (PolyHeuristicN heu PId, MonadPlus m, MonadFree ProofF m) =>
 prologP_sk heu p0@(Problem Prolog{..} _ _) =
    andP PrologSKP p0
      [ msum (map return pp)
-         | goal0 <- goals
-         , let sk_p          = skTransform program
-               goal          = AF.mapSymbols InId goal0
+         | let sk_p          = skTransform program
+         , goal0            <- goals
+         , let goal          = skTransformAF goal0
                af_groundinfo = AF.init sk_p ` mappend` goal
-               pp            = mkGoalProblem heu (GNarrowingModes goal af_groundinfo) sk_p
+               pp            = mkGoalProblem heu GNarrowingModes{goal, pi=af_groundinfo} sk_p
      ]
 
 skTransform :: forall v. (v ~ Term.Var) => [Clause String] -> NarradarTRS PS v
