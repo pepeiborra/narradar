@@ -10,7 +10,7 @@ import Control.Applicative hiding ((<|>), many)
 import Control.Arrow ((>>>))
 import Control.Exception
 import Control.Monad
-import qualified Data.ByteString as B
+import Data.ByteString.Char8 (pack)
 import Data.Char
 import Data.Foldable  (toList)
 import Data.HashTable (hashString)
@@ -61,7 +61,7 @@ aproveWebProc = memoExternalProc go where
     response :: CurlResponse <- perform_with_response curl
     let output = respBody response
     return$ (if isTerminating output then success else failP)
-            (External (Aprove "WEB") [OutputHtml  (primHtml output)]) prob
+            (External (Aprove "WEB") [OutputHtml  (pack output)]) prob
 
 isTerminating (canonicalizeTags.parseTags -> tags) = let
      ww = words $ map toLower $ innerText $ takeWhile ((~/= "<br>") .&. (~/= "</p>")) $ dropWhile (~/= "<b>") $ dropWhile (~/= "<body>") tags
@@ -82,7 +82,7 @@ aproveProc path = go where
               errors            <- hGetContents err
               unless (null errors) (error ("Aprove failed with the following error: \n" ++ errors))
               return$ (if take 3 output == "YES" then success else failP)
-                        (External (Aprove path) [OutputHtml(massage output)] ) prob
+                        (External (Aprove path) [OutputHtml(pack $ massage output)] ) prob
 
 aproveSrvPort    = 5250
 {-
@@ -143,7 +143,7 @@ callAproveSrv' (strat, timeout, p) = withSocketsDo $ withTempFile "/tmp" "ntt.tr
 
     hPutStrLn hAprove "3"                     -- Saying hello
     hPutStrLn hAprove fp                      -- Sending the problem path
-    hPutStrLn hAprove =<< getDataFileName (Data.Maybe.fromJust (Prelude.lookup strat strats))
+    hPutStrLn hAprove =<< getDataFileName (Data.Maybe.fromJust (Prelude.lookup strat strats)) -- strategy file path
 
     hPutStrLn hAprove (show timeout) -- Sending the timeout
     hFlush hAprove
@@ -163,7 +163,7 @@ aproveSrvProc2 strat (timeout :: Int) =  go where
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
               _     -> failP
-    return (k (External (Aprove "SRV") [OutputXml (tail $ dropWhile (/= '\n') res)]) prob)
+    return (k (External (Aprove "SRV") [OutputXml (pack $ tail $ dropWhile (/= '\n') res)]) prob)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
   go p = return $ return p
@@ -173,7 +173,7 @@ memoExternalProc go = unsafePerformIO (memoIO hashProb go)
 
 
 hashProb prob = hashString (pprTPDB prob)
-massage     = primHtml . unlines . drop 8  . lines
+massage     = unlines . drop 8  . lines
 
 -- ----
 -- TPDB
@@ -200,7 +200,7 @@ pprTPDB p@(Problem typ trs dps) =
 -- ----------------
 -- Parse XML
 -- ----------------
-
+{-
 findResultingPairs x = (parseTags
                  >>> dropWhile (~/= "<qdp-reduction-pair-proof>")
                  >>> dropWhile (~/= "<implication value='equivalent'>")
@@ -208,8 +208,29 @@ findResultingPairs x = (parseTags
                  >>> (tailSafe >=> (eitherM . parse (many ruleP) ""))) x
   where tailSafe []     = Nothing
         tailSafe (_:xx) = Just xx
+-}
+findResultingPairs :: String -> Maybe [RuleN String Var]
+findResultingPairs x = (eitherM . parse proofP "" . parseTags . dropLine) x
+  where dropLine = tailSafe . dropWhile (/= '\n')
 
-ruleP = skipMany tagText >> tokenP(tagP "<rule>" ((:->) <$> (skipMany tagText >> termP) <*> termP))
+proofP = tag "<?xml>" >>
+       (
+         someTagP "<proof-obligation>" $
+         someTagP "<proposition>" $ do
+          skipTagNameP "<basic-obligation>"
+          tagP "<proof>" (skipTagNameP "<qdp-reduction-pair-proof>")
+          skipTagNameP "<implication value='equivalent'>"
+          tagP "<proof-obligation>" $
+           tagP "<proposition>" $
+           tagP "<basic-obligation>" $
+           tagP "<qdp-termination-obligation>" $
+           tagP "<qdp>" $
+           someTagP "<dps>" $ do
+                            dps <- many (do {r<-ruleP;return[r]} <|> do{skipTagP;return[]})
+                            return (concat dps)
+       )
+
+ruleP = tokenP(tagP "<rule>" ((:->) <$> (skipMany tagText >> termP) <*> termP))
 termP = tokenP(tagP "<term>" (skipMany tagText >> (funAppP <|> variableP)))
 funAppP = tokenP $ tagP "<fun-app>" $ do
             skipMany tagText

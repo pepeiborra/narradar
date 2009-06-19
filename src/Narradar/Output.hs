@@ -8,6 +8,7 @@ module Narradar.Output where
 
 import Control.Applicative
 import Control.Monad.Free.Narradar
+import Data.ByteString.Char8 (unpack)
 import Data.HashTable (hashString)
 import Data.Foldable
 import Data.Maybe
@@ -48,7 +49,7 @@ instance HTML Doc where toHtml = toHtml . show
 instance Ppr id => HTML (ProcInfo id) where
     toHtml (GroundOne af)    = "PROCESSOR: " +++ "ICLP'08 AF Processor " +++ maybe noHtml toHtml af
     toHtml (GroundAll af)    = "PROCESSOR: " +++ "ICLP'08 AF Processor (dumb SCC version) " +++ maybe noHtml toHtml af
-    toHtml (ReductionPair af)= "PROCESSOR: " +++ "ICLP'08 AF Processor for SCCs" +++ maybe noHtml toHtml af
+    toHtml (ReductionPair af _)= "PROCESSOR: " +++ "ICLP'08 AF Processor for SCCs" +++ maybe noHtml toHtml af
     toHtml (EVProc af)       = "PROCESSOR: " +++ "Eliminate Extra Vars " +++ af
     toHtml DependencyGraph{} = "PROCESSOR: " +++ "Dependency Graph (cycle)"
     toHtml NoPairs{}         = "PROCESSOR: " +++ "Dependency Graph"
@@ -126,7 +127,7 @@ instance (Ord id, Ppr id, Ppr v, Ord v) => HTML (ProblemProof id v) where
                     << problem +++ br +++ procInfo +++ br +++ subProblem
 
     detailResult :: SomeInfo -> Html
-    detailResult (SomeInfo (External _ (find isOutputHtml -> Just (OutputHtml output)))) =
+    detailResult (SomeInfo (External _ (find isOutputHtml -> Just (OutputHtml (unpack -> output))))) =
        thickbox output << spani "seeproof" << "(see proof)"
     detailResult _ = noHtml
 

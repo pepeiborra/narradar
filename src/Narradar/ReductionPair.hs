@@ -7,13 +7,16 @@
 
 module Narradar.ReductionPair where
 
+
 import Control.Applicative
+import Control.Exception
 import Control.Monad
 import Control.Monad.Free.Narradar
 import Control.Monad.Identity
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import qualified Data.Array.IArray as A
+import Data.ByteString.Char8 (pack)
 import Data.Foldable (toList)
 import Data.List
 import Data.Monoid
@@ -69,13 +72,14 @@ reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_g) trs dpsT@(DPTRS dp
         return (proofU >>= \p' ->
          let mb_nonDecreasingDPs = findResultingPairs xml
          in case mb_nonDecreasingDPs of
-              Nothing -> step (ReductionPair (Just the_af)) p' rp P.>>= \p'' ->
-                         failP (External (Aprove "SRV") [OutputXml xml]) p''
+              Nothing -> step (ReductionPair (Just the_af) (pack xml)) p' rp P.>>= \p'' ->
+                         failP (External (Aprove "SRV") [OutputXml (pack xml)]) p''
               Just basic_nonDecreasingDPs ->
                let text_nonDecreasingDPs = Set.fromList(show <$> (ppr <$$> basic_nonDecreasingDPs))
-                   nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- A.assocs dps_a
+                   nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- [0..] `zip` rules (dps up)
                                                              , show (pprDP <$> AF.apply the_af dp) `Set.member` text_nonDecreasingDPs]
-               in andP (ReductionPair (Just the_af)) p'
+               in assert (Set.size nonDecreasingDPs == length basic_nonDecreasingDPs) $
+                  andP (ReductionPair (Just the_af) (pack xml)) rp
                       [ return $ mkProblem typ trs (restrictDPTRS dpsT (toList nonDecreasingDPs))
                       , return $ mkProblem typ trs (restrictDPTRS dpsT [ i | (i,dp) <- A.assocs dps_a
                                                                           , i `Set.notMember` nonDecreasingDPs

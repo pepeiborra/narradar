@@ -1,11 +1,14 @@
 module Text.ParserCombinators.Parsec.Tag where
 
+import Control.Applicative
+import Control.Monad
 import Data.Char
 import Data.Maybe
 import Text.HTML.TagSoup
-import Text.ParserCombinators.Parsec.Prim
-import Text.ParserCombinators.Parsec.Combinator
+import Text.ParserCombinators.Parsec.Prim  hiding ((<|>), many)
+import Text.ParserCombinators.Parsec.Combinator (many1)
 import Text.ParserCombinators.Parsec.Pos
+import Text.ParserCombinators.Parsec.Applicative
 
 type TagParser st = GenParser Tag st
 
@@ -32,10 +35,11 @@ tagP t p = (do
   tag t
   result <- p
   skipMany tagText
-  let closing_tag = tail $ init $ head $ words t
+  let closing_tag = head $ words $ tail $ init t
   tag' (== TagClose closing_tag) <?> closing_tag
   return result
   ) <?> t
+
 anyTag :: TagParser st Tag
 anyTag = myTagToken Just
 
@@ -45,12 +49,25 @@ elemTag tag = any (tag ~==)
 oneOf ts  = satisfy (`elemTag` ts)
 noneOf ts = satisfy (not . (`elemTag` ts))
 
+skipTagP :: TagParser st Tag
+skipTagP = do
+  tag@(TagOpen name _) <- tagOpen
+  content <- skipMany ((tagText >> return ()) <|> (skipTagP >> return ()))
+  close <- tagCloseName name
+  return tag
+
+someTagP t k = (tagP t k <|> (skipTagP >> someTagP t k)) <* many skipTagP
+
+skipTagNameP :: String -> TagParser st ()
+skipTagNameP name = do
+  tag name
+  content <- skipMany ((tagText >> return ()) <|> (skipTagP >> return ()))
+  let closing_tag = head $ words $ tail $ init name
+  tag' (== TagClose closing_tag) <?> closing_tag
+  return ()
+
 childrenP = do
   open@(TagOpen name _) <- tagOpen
   content <- many (many1 tagText <|> childrenP)
   close <- tagCloseName name
   return (open : concat content ++ [close])
-
-skipTill :: GenParser Tag st a -> GenParser Tag st a
-skipTill end = go where
-    go = try end <|> (anyTag >> go)

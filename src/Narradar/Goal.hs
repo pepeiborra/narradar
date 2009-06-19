@@ -12,6 +12,7 @@ import qualified TRSParser
 import TRSTypes(Mode(..))
 import qualified TRSTypes (Goal, TermF(..))
 import Text.ParserCombinators.Parsec
+import Text.ParserCombinators.Parsec.Applicative
 import Text.PrettyPrint hiding (char, Mode)
 
 type Goal = (String, [Mode])

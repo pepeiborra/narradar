@@ -137,6 +137,9 @@ propSelect xx ii = map (xx!!) ii' == select xx ii'
 asTypeOf1 :: f a -> f b -> f a
 asTypeOf1 x _ = x
 
+tailSafe []     = []
+tailSafe (_:xx) = xx
+
 chunks n _ | n < 1 = error "chunks: zero or negative chunk size"
 chunks _ []   = []
 chunks n list = xx : chunks n rest  where (xx, rest) = (take n list, drop n list)
@@ -274,12 +277,3 @@ instance (Monoid s) => R.RMonad (Writer s) where
    (>>=) = (>>=)
    fail = fail
 #endif
-
--- Applicative instances for Parsec
--- ---------------------------------
-instance Applicative (GenParser c st) where
-    pure = return
-    (<*>) = ap
-instance Alternative (GenParser c st) where
-    (<|>) = (P.<|>)
-    empty = pzero

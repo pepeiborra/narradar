@@ -24,6 +24,7 @@ import Control.Monad.Logic as M
 import Control.Monad.State as M
 import Control.Monad.RWS
 import Data.Array.IArray as A
+import Data.ByteString.Char8 (unpack)
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
@@ -177,7 +178,7 @@ pprProofF = f where
       f (Stage p) = ppr p
 
       proofTail :: SomeInfo -> Doc
-      proofTail (SomeInfo (External _ (find isOutputTxt -> Just (OutputTxt txt))))
+      proofTail (SomeInfo (External _ (find isOutputTxt -> Just (OutputTxt (unpack -> txt)))))
                   = text ("Output: ") <> (vcat . map text . lines) txt
       proofTail _ = Doc.empty
 

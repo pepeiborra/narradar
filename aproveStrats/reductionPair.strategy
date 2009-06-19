@@ -5,8 +5,7 @@ main = WST07Heuristic
 otrs = OTRSToQTRS:qtrs
 
 
-qdp =Maybe(depgraph) \
-    : workOnDPs
+qdp = workOnDPs
 
 # TRS standard
 trs = TRSToQTRS:qtrs
@@ -24,26 +23,14 @@ qtrs = Repeat(0,*,Any( \
 
 workOnDPs = First( \
                  defaults, \
-                 QDPATransformation[BeComplete = True, KeepMinimality = True], \
 		  Any( \
                    Timer(3000, QDPReductionPair[Order = KBOPOLO]), \
 		    Timer(3000, QDPReductionPair[Active = True, Allstrict = False, Order = PMatroArcticInt[Range = 3, Engine = MINISAT, Dimension = 2], MergeMutual = True]) \
 		  ), \
-                 solver1, \
-                 decr, \
-                 solver2, \
-                 If[Condition=CONSTNARR07, Sub1="basicNI"], \
-                 If[Condition=CONSTNARR07, Sub1="advancedNI"], \
-                 incr, \
-                 Any( \
-                     Timer(5000, QDPNonMonReductionPair[Allstrict = False, PosRange = 1, NegRange = -1, Heuristic = CAND1, SatConverter = PLAIN[GTMode=DEEP, SumType=MINIMAL, PowersAsComb=False, UseIFFsInGT = True, NewTimes = True], Engine = MINISAT[Version = 2]]), \
-                     Timer(10000, QDPNonTerm[TotalLimit = 3, LeftLimit = 3, RightLimit = 3])), \
-                 solver3, \
-                 Timer(3000, QDPRootLabelingFC2[Heuristic=LabelAll]) \
+                 solver2 \
                 )
 
 defaults = First( \
-                depgraph, \
                 Timer(500, QDPMNOC[TestDepth = 2]), \
                 QDPUsableRules[BeComplete = True, UseApplicativeCeRules = True], \
                 QDPQReduction \

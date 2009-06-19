@@ -27,6 +27,7 @@ import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.Monad.Error (Error(..), noMsg)
 import Control.Monad.Free (MonadFree(..))
 import Control.Monad (MonadPlus(..))
+import Data.ByteString.Char8 (ByteString, pack, unpack)
 import Data.Graph (Graph, Vertex)
 import Data.List ((\\), groupBy, sort, partition)
 import Data.Foldable (Foldable(..))
@@ -97,7 +98,7 @@ data ProcInfo id where                    -- vv ignored vv
     LabellingSKP_rhs:: ProcInfo ()
     UsableRulesNaiveP :: ProcInfo ()
     UsableRulesP    :: ProcInfo ()
-    ReductionPair   :: Ppr id => Maybe (AF_ id) -> ProcInfo id
+    ReductionPair   :: Ppr id => Maybe (AF_ id) -> ByteString ->ProcInfo id
     NonTerminationLooping :: ProcInfo ()
     GenTransformation :: [RuleN id v] -> ProcInfo ()
     NoPairs         :: ProcInfo ()
@@ -126,7 +127,7 @@ instance Ppr id => Ppr (ProcInfo id) where
                                    ppr dps'
     ppr (GroundOne (Just pi)) = text "ICLP08 AF Processor" $$ ppr pi
     ppr (GroundAll (Just pi)) = text "All Rhs's Ground AF Processor" $$ ppr pi
-    ppr (ReductionPair (Just pi)) = text "ICLP08 Reduction Pair Processor + Usable Rules" $$ ppr pi
+    ppr (ReductionPair (Just pi) _) = text "ICLP08 Reduction Pair Processor + Usable Rules" $$ ppr pi
     ppr (SafeAFP   (Just pi)) =  text "Safe AF Processor (infinitary constructor rewriting) + Usable Rules" $$ ppr pi
     ppr (EVProc pi)           = text "Eliminate Extra Vars \n" $$ ppr pi
     ppr  EVProcFail           = text "There is no argument filtering which enforces the variable condition" -- impossible?
@@ -146,12 +147,12 @@ instance Ppr id => Ppr (ProcInfo id) where
 
 --pprLabellingAsMode (Labelled f mm) = text f <> parens (hsep $ punctuate comma [ if | m <- mm])
 
-data ExternalProc = MuTerm | Aprove String | Other String   deriving Eq
+data ExternalProc = MuTerm | Aprove String | Other String deriving Eq
 instance Show ExternalProc where
     show (Aprove msg) = "Aprove " ++ msg
     show (Other  msg) = msg
 
-data Output = OutputXml String | OutputHtml Html | OutputTxt String deriving Show
+data Output = OutputXml ByteString | OutputHtml ByteString | OutputTxt ByteString deriving Show
 --instance Monoid Output where
 
 $(derive makeIs ''Output)
