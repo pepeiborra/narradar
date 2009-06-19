@@ -12,6 +12,7 @@ import Control.Monad
 import Control.Monad.Free
 import Data.Char
 import Data.Foldable as F (Foldable(..),sum,msum)
+import qualified Data.Set as Set
 import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
@@ -51,9 +52,9 @@ instance Eq id => Unify (TermF id) where
     t' <- find' t
     s' <- find' s
     case (t', s') of
-      (Pure vt, Pure vs) -> if vt /= vs then varBind vt s' else return ()
-      (Pure vt, _)  -> {-if vt `Set.member` Set.fromList (vars s') then fail "occurs" else-} varBind vt s'
-      (_, Pure vs)  -> {-if vs `Set.member` Set.fromList (vars t') then fail "occurs" else-} varBind vs t'
+      (Pure vt, Pure vs) -> when(vt /= vs) $ varBind vt s'
+      (Pure vt, _)  -> vt `occursIn` s' >>= \occ -> if occ then fail "occurs" else varBind vt s'
+      (_, Pure vs)  -> vs `occursIn` t' >>= \occ -> if occ then fail "occurs" else varBind vs t'
       (Impure t, Impure s) -> zipTermM_ unifyF t s
    zipTermM_ f (Term f1 tt1) (Term f2 tt2) | f1 == f2 = zipWithM_ f tt1 tt2
                                            | otherwise = fail "structure mismatch"

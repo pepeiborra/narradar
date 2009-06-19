@@ -7,6 +7,7 @@ import Data.Maybe (isJust)
 import Data.Term hiding (unify, unifies)
 --import Data.Term (variant)
 import qualified Data.Term as Term
+import Narradar.Term
 
 unifies  x y = isJust (unify x y)
 unifies' x y = isJust (unify' x y)
