@@ -24,6 +24,7 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), sum, toList)
 import Data.Graph (Graph, edges, buildG)
+import Data.Maybe (isJust)
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -189,7 +190,7 @@ iUsableRulesM p@(Problem typ trs dps) Nothing tt
   go acc []       = return acc
   go acc (t:rest) = evalTerm (\_ -> go acc rest) f t where
       f in_t = do
-         t'  <- wrap `liftM` (icap p `T.mapM` in_t) `const` tt
+         t'  <- wrap `liftM` (icap p `T.mapM` in_t)
          let rr  = [ r | r <- rules trs, lhs r `unifies` t']
              new = Set.difference (Set.fromList rr) acc
          rhsSubterms <- getFresh (rhs <$> F.toList new)
@@ -198,7 +199,7 @@ iUsableRulesM p@(Problem typ trs dps) Nothing tt
 
 iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
   | isInnermostLike typ = do
-     rr <- go mempty =<< getFresh tt
+     rr <- go mempty =<< getFresh (AF.apply pi tt)
      return (mkProblem typ (tRS $ toList rr) dps)
  where
   pi_rules = [(AF.apply pi r, r) | r <- rules trs]
@@ -209,8 +210,7 @@ iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
      f in_t = do
         t' <- wrap `liftM` (icap pi_p `T.mapM` in_t)
         let rr = Set.fromList
-                [r | (pi_r, r) <- pi_rules
-                  , t' `unifies` lhs pi_r]
+                [r | (pi_r, r) <- pi_rules, t' `unifies` lhs pi_r]
             new = Set.difference rr acc
         rhsSubterms <- getFresh (AF.apply pi . rhs <$> F.toList new)
         go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
@@ -218,7 +218,7 @@ iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
 iUsableRulesM p _ _ = return p
 
 iUsableRules :: (Ord v, Enum v, Ord id) => Problem id v -> Maybe (AF.AF_ id) -> [TermN id v] -> Problem id v
-iUsableRules p mb_pi = runIcap p . iUsableRulesM p mb_pi
+iUsableRules p mb_pi tt = (runIcap p . iUsableRulesM p mb_pi) tt
 
 {-
 iUsableRules_correct trs (Just pi) = F.toList . go mempty where
@@ -250,12 +250,13 @@ dpTRS' dps edges unifiers = DPTRS dps edges unifiers (getSignature $ elems dps)
 
 expandDPair :: (Ord a, Ppr id, id ~ Identifier a, t ~ TermF id, v ~ Var) =>
                Problem id v -> Int -> [DP a v] -> Problem id v
---expandDPair (Problem typ rules (DPTRS dps gr unif sig)) i newdps | trace ("expandDPair i="++ show i ++ " dps=" ++ show(numElements dps) ++ " newdps=" ++ show (length newdps)) False = undefined
 expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i (filter (`notElem` elems dps) . snub -> newdps)
- = runIcap (rules p ++ newdps) $ do
-    let dps'     = dps1 ++ dps2 ++ newdps
-        l_dps'   = length dps' - 1
-        a_dps'   = A.listArray (0,l_dps') dps'
+ = assert (isValidUnif res) res
+  where
+   res = runIcap (rules p ++ newdps) $ do
+    let dps'     = tRS (dps1 ++ dps2 ++ newdps)
+        l_dps'   = l_dps + l_newdps
+        a_dps'   = A.listArray (0,l_dps') (rules dps')
         mkUnif' arr arr' =
             A.array ((0,0), (l_dps', l_dps'))
                        ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
@@ -263,29 +264,28 @@ expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i (filter 
                         concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
                                  | j <- new_nodes, k <- [0..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
-        adjust x = if x < i then x else x-1
         gr'      = buildG (0, l_dps')
                    ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
                     [(n,n') | n' <- new_nodes
                             , (n,m) <- edges gr, n/=i, m == i ] ++
                     [(n',n) | n <- gr ! i, n' <- new_nodes] ++
                     [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
+        adjust x = if x < i then x else x-1
 
-    (unif_new :!: unifInv_new) <- computeDPUnifiers (Problem typ trs (tRS dps'))
-    let unif'    = mkUnif' unif    unif_new     `asTypeOf` unif
-        unifInv' = mkUnif' unifInv unifInv_new  `asTypeOf` unif
-        dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')
-    return (mkProblem typ trs dptrs')
+    u@(unif_new :!: unifInv_new) <- computeDPUnifiers p{dps = dps'}
+    let unif'    = mkUnif' unif    unif_new
+        unifInv' = mkUnif' unifInv unifInv_new
+        dptrs'   = dpTRS' a_dps' gr' u -- (unif' :!: unifInv')
+    return p{dps=dptrs'}
 
-  where
-    (dps1,_:dps2) = splitAt i (elems dps)
-    new_nodes= [l_dps .. l_dps + l_newdps]
-    l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
-    l_newdps = length newdps - 1
+   (dps1,_:dps2) = splitAt i (elems dps)
+   new_nodes= [l_dps .. l_dps + l_newdps]
+   l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
+   l_newdps = length newdps - 1
 
 expandDPair (Problem typ trs dps) i newdps = mkProblem typ trs (tRS dps')
   where
-    dps'          = dps1 ++ dps' ++ dps2
+    dps'          = dps1 ++ dps2 ++ dps'
     (dps1,_:dps2) = splitAt i (rules dps)
 
 
@@ -295,20 +295,20 @@ computeDPUnifiers :: (Enum v, Ord v, Ord id, MonadFresh v m, unif ~ Unifiers (Te
 computeDPUnifiers p@(Problem typ _ dpsT@(rules -> the_dps)) = do
    p_f <- getFresh p
    let mbUsableRules x = if (isBNarrowing .|. isGNarrowing) typ
-                               then rules $ trs $ iUsableRules p_f Nothing [x]
+                               then  rules $ trs $ iUsableRules p_f Nothing [x]
                                else (rules $ trs p_f)
        u_rr = listArray (0,ldps) $ map (mbUsableRules . rhs) the_dps
 
    rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p) the_dps
    unif <- runListT $ do
-                (x, r')      <- liftL $ zip [0.. ] rhss'
+                (x, r')      <- liftL $ zip [0..] rhss'
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
                 let unifier = unify l r'
                 return ((x,y), unifier)
    unifInv <- runListT $ do
-                (x, _ :-> r) <- liftL $ zip [0.. ] the_dps
+                (x, _ :-> r) <- liftL $ zip [0..] the_dps
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
-                let p_inv = (Problem Rewriting (tRS (swapRule `map` (u_rr ! x))) dpsT) `asTypeOf` p
+                let p_inv = p{typ=Rewriting, trs=tRS (swapRule `map` (u_rr ! x))}
                 l' <- lift (getFresh l >>= icap p_inv)
                 let unifier = unify l' r
                 return ((x,y), unifier)
@@ -325,6 +325,21 @@ computeDPUnifiers p@(Problem typ _ dpsT@(rules -> the_dps)) = do
 runIcap :: Enum v => GetVars v thing => thing -> State (Substitution t (Either v v), [v]) a -> a
 runIcap t m = evalState m (mempty, freshVars) where
     freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
+
+-- -------------
+-- Sanity Checks
+-- -------------
+
+isValidUnif p@(Problem _ _ (DPTRS dps _ (unif :!: _) _)) =
+    and $ runIcap p $ runListT $ do
+         (x, _ :-> r) <- liftL $ A.assocs dps
+         (y, l :-> _) <- liftL $ A.assocs dps
+         r' <- getFresh r >>= icap p
+         return (unifies l r' == isJust (unif A.! (x,y)))
+  where
+    liftL = ListT . return
+
+isValidUnif _ = True
 
 -- ------------------
 -- Functor Instances

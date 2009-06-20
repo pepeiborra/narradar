@@ -9,6 +9,7 @@ module Narradar.DPairs where
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad (liftM)
+import Control.Monad.List (ListT(..))
 import Data.Array.Base (numElements)
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as G
@@ -115,8 +116,8 @@ mkGoalProblem heu typ trs =
 -- -------------------------------------
 -- DP Processors transforming the graph
 -- -------------------------------------
-cycleProcessor, sccProcessor :: (Ppr v, Ord v, Ppr id, Ord id) => Problem id v -> ProblemProofG id v
-usableSCCsProcessor :: (Ppr v, Ord v) => Problem LPId v -> ProblemProofG LPId v
+cycleProcessor, sccProcessor :: (Ppr v, Ord v, Enum v, Ppr id, Ord id) => Problem id v -> ProblemProofG id v
+usableSCCsProcessor :: (Ppr v, Ord v, Enum v) => Problem LPId v -> ProblemProofG LPId v
 
 usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps@(DPTRS dd _ unif sig))
   | null cc   = success NoCycles problem
@@ -157,8 +158,9 @@ cycleProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
 
 getEDG p = filterSEDG p $ getdirectEDG p
 
-getdirectEDG :: (Ord id) => Problem id v -> G.Graph
+getdirectEDG :: (Ord id, Ord v, Enum v) => Problem id v -> G.Graph
 getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) =
+    assert (isValidUnif p) $
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
 filterSEDG :: (Ord id) => Problem id v -> G.Graph -> G.Graph
