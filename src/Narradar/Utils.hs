@@ -105,6 +105,8 @@ hashId :: Show a => a -> Int32
 hashId = HT.hashString . show
 
 isRight Right{} = True; isRight _ = False
+fromRight (Right a) = a
+
 
 eitherM :: (Monad m, Show err) => Either err a -> m a
 eitherM = either (fail.show) return

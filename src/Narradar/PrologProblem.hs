@@ -34,7 +34,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 import Language.Haskell.TH (runIO)
-import Text.ParserCombinators.Parsec (parse, ParseError, getInput)
+import Text.ParserCombinators.Parsec (parse, parseFromFile, ParseError, getInput)
 import Text.XHtml (Html, toHtml)
 
 import Language.Prolog.Syntax (Clause, ClauseF(..), Program, GoalF(..), Goal,
@@ -54,7 +54,7 @@ import Narradar.Types as Term
 import Narradar.NarrowingProblem
 import Narradar.Proof
 import Narradar.ExtraVars
-import Narradar.Utils ((<$$>),(..&..), showPpr, mapLeft, on, fmap2, foldMap2, return2, trace)
+import Narradar.Utils ((<$$>),(..&..), showPpr, fromRight, mapLeft, on, fmap2, foldMap2, return2, trace)
 import Prelude hiding (and,or,notElem,pi)
 
 inferType (Problem Prolog{..} _ _) = infer program
@@ -145,11 +145,13 @@ skTransform (addMissingPredicates -> clauses) = prologTRS clauseRules where
              Just v  -> return2 v
          toVar (VAuto  id) = return (Term.var id)
 
+Right preludePl = $(do pgm <- runIO (readFile "prelude.pl")
+                       case parse Prolog.program "prelude.pl" pgm of -- parse just for compile time checking
+                         Left err  -> error (show err)
+                         Right _ -> [| fromRight <$$> parse Prolog.program "prelude.pl" pgm|]
+                   )                 -- actual parsing ^^ happens (again) at run time.
+                                     -- I am too lazy to write the required LiftTH instances.
 
-Right preludePl = $(do
-                     pgm <- runIO (readFile "prelude.pl")
-                     either (error.show) (\_ ->[| parse Prolog.program "prelude.pl" pgm|]) (parse Prolog.program "prelude.pl" pgm)
-                   )
 
 skTransformAF = AF.mapSymbols InId
 

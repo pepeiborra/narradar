@@ -178,7 +178,7 @@ data PrologSection = Query [Prolog.Goal String] | Clause (Prolog.Clause String) 
 problemParser = do
   txt <- getInput
   let !queryComments = map QueryString $ catMaybes $ map f (lines txt)
-  res <- Prolog.whiteSpace >> many (Clause <$> Prolog.clause <|> Query <$> Prolog.query)
+  res <- Prolog.whiteSpace >> concat <$> many (Clause <$$> Prolog.clause <|> Query <$$> Prolog.query)
   return (res ++ queryComments)
   where f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
         f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal

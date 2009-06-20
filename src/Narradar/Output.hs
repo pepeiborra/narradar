@@ -29,6 +29,7 @@ import qualified Narradar.Types as TRS
 import Narradar.Utils (snub, foldMap3)
 import Data.Term.Ppr
 
+import qualified Data.Term.Var as Prolog
 import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude hiding (concat)
@@ -138,7 +139,7 @@ instance (Ppr (Term t v)) =>  HTMLTABLE (Rule t v) where
                           td ! [theclass "rhs"]   << show (ppr rhs)
 
 
-instance (Ppr id) => HTMLTABLE (Prolog.Clause id) where
+instance (Ppr id, Ppr (Prolog.Term id)) => HTMLTABLE (Prolog.Clause id) where
     cell = cell . (td <<) .  show . ppr
 {-
     cell (h :- bb) = td ! [theclass "head"]  << show h <->
@@ -146,7 +147,7 @@ instance (Ppr id) => HTMLTABLE (Prolog.Clause id) where
                      td ! [theclass "body"]   << bb
 -}
 
-instance (Ppr id) => HTML (Prolog.Goal id) where
+instance (Ppr id, Ppr (Prolog.Term id)) => HTML (Prolog.Goal id) where
     toHtml = toHtml . show . ppr
 
 typClass typ | isFullNarrowing typ = theclass "NDP"
