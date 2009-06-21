@@ -36,10 +36,9 @@ invariantEV heu trs pi = let pi' = (selectBest . Set.toList . fix subinvariantEV
             = cutWith heu af r orig_poss
 
 
---cutWith :: (Ppr id, Ord id) => Heuristic id t -> AF_ id -> TermN id v -> [Position] -> Set.Set (AF_ id)
+cutWith :: (Ppr id, Ord id) => Heuristic id t -> AF_ id -> Term t v -> [Position] -> Set (AF_ id)
 cutWith _   af _ [] = return af
 cutWith heu af t pp = foldM (\af' pos -> (runHeu heu af' t pos >>= \(f,p) ->
 --                           trace ("term: " ++ show(ppr t) ++ ", pos: " ++ show pos ++ ", symbol:" ++ show (ppr f) ++ ", i: " ++ show p) $
                              return$ cut f p af'))
                             af pp
---cutWith heu af t pp = mconcat `liftM` (mapM (heu af t >=> \(f,p) -> return$ cut f p af) pp)
