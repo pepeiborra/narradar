@@ -1,14 +1,13 @@
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE OverlappingInstances #-}
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 
-module Narradar.Term (TermF(..), TermN, RuleN, constant, term, term1
+module Narradar.Types.Term (TermF(..), TermN, RuleN, constant, term, term1
                      ,termId, mapTermId, mapTermIdF, Size(..), fromSimple
-                     ,module Data.Term, MonadFree(..))
+                     ,ExtraVars(..)
+                     ,module Data.Term, module Data.Term.Rules, MonadFree(..))
     where
 
-import Control.Monad
 import Control.Monad.Free
 import Data.Char
 import Data.Foldable as F (Foldable(..),sum,msum)
@@ -16,7 +15,7 @@ import qualified Data.Set as Set
 import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
-import Data.Term.Rules
+import Data.Term.Rules hiding (unifies')
 import Data.Term.Ppr
 import Text.PrettyPrint
 
@@ -43,6 +42,15 @@ mapTermIdF :: (id -> id') -> TermF id a -> TermF id' a
 mapTermIdF f (Term id tt) = Term (f id) tt
 
 fromSimple (Simple.Term id tt) = Term id tt
+
+
+class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]
+instance (Ord v, Ord (Term t v), Functor t, Foldable t, HasRules t v trs) => ExtraVars v trs where
+    extraVars = concatMap extraVars . rules
+
+instance (Ord v, Functor t, Ord (Term t v), Foldable t) => ExtraVars v (Rule t v) where
+    extraVars (l:->r) = Set.toList (Set.fromList(vars r) `Set.difference` Set.fromList(vars l))
+
 
 -- Specific instance for TermF, only for efficiency
 instance Eq id => Unify (TermF id) where

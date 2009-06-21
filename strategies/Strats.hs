@@ -1,15 +1,17 @@
 {-# LANGUAGE NoMonomorphismRestriction, RecordWildCards #-}
-module Strats where
+module Strats (module Strats, module Narradar.Types.ArgumentFiltering) where
 
 import Control.Monad
+import Control.Monad.Free.Improve
 import Data.Foldable (toList)
 import Data.Maybe
 import Prelude as P
 import Narradar hiding (refineNarrowing, refineNarrowing', reducingP, pSolver)
-import Narradar.Proof
-import Narradar.ExtraVars
+import Narradar.Types.ArgumentFiltering (typeHeu, typeHeu2, innermost, outermost)
+import Narradar.Framework.Proof
+import Narradar.Processor.ExtraVars
 
---pSolver :: opts -> (problem -> C (Free ProofF) ()) -> 
+--pSolver :: opts -> (problem -> C (Free ProofF) ()) ->
 pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe iprob sol, "") where
     prob  = solver p
     iprob = improve prob
@@ -25,16 +27,16 @@ prologSolverAll opts h1 h2 = pSolver opts (prologP_labelling_sk h1 >=> usableSCC
 prologSolverInf' opts h1    = pSolver opts (prologP_sk h1 >=> sccProcessor >=> narrowingSolverInf h1)
 prologSolverInf opts h1    = pSolver opts (prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolverInf h1)
 
-narrowingSolverOne heu = refineBy 2 (stage . solve' (msum.reductionPair heu 20 >=> sccProcessor))
+narrowingSolverOne heu = refineBy 2 (stage . solve' (msum.reductionPair heu 20 >=> sccProcessor >=> narrowingSolverOne heu))
                                      refineNarrowingPar
 
-narrowingSolverOne' heu = solveB 2 (solve (msum.reductionPair heu 20 >=> sccProcessor) <|>
+narrowingSolverOne' heu = solveB 2 (stage . solve (msum.reductionPair heu 20 >=> sccProcessor) <|>
                                       refineNarrowing)
 
 narrowingSolverAll heu = refineBy 2 ((msum.uGroundRhsAllP heu >=> aproveSrvP 15))
                                     refineNarrowing
 
-narrowingSolverInf heu = refineBy 2 (msum.safeAFP heu >=> aproveSrvP defaultTimeout)
+narrowingSolverInf heu = refineBy 1 (msum.safeAFP heu >=> aproveSrvP defaultTimeout)
                                      refineNarrowing
 
 refineNarrowing p
@@ -48,9 +50,10 @@ refineNarrowing p
 
 refineNarrowingPar p
   | length (rules $ dps p) > 1
-  = (firstP [ msumPar . instantiation
+  = (msumF [ msumPar . instantiation
             , msumPar . finstantiation
-            , msumPar . narrowing ]
+            , msumPar . narrowing
+           ]
      >=> sccProcessor) p
   | otherwise = (msumPar . narrowing >=> sccProcessor) p
 

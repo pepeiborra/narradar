@@ -1,39 +1,24 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE PackageImports #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
-{-# LANGUAGE GADTs #-}
 
 module Narradar ( narradarMain, Options(..), defOpts
-                , module Control.Monad.Free.Narradar
---                , module Control.Monad.MonadPlus.Parameterized
                 , module Narradar.Solver
-                , module Narradar.ArgumentFiltering
-                , module Narradar.DPairs
-                , module Narradar.ReductionPair
-                , module Narradar.GraphTransformation
-                , module Narradar.UsableRules
-                , module Narradar.ExtraVars
-                , module Narradar.NarrowingProblem
-                , module Narradar.PrologProblem
+                , module Narradar.Processor.Graph
+                , module Narradar.Processor.ReductionPair
+                , module Narradar.Processor.GraphTransformation
+                , module Narradar.Processor.UsableRules
+                , module Narradar.Processor.NarrowingProblem
+                , module Narradar.Processor.PrologProblem
                 , module Narradar.Types
-                , parseTRS
                 ) where
 
-import Control.Monad
-import Control.Monad.Free.Narradar
---import "monad-param" Control.Monad.Parameterized
---import "monad-param" Control.Monad.MonadPlus.Parameterized
+
+import Control.Monad.Free
 import Data.Maybe
 import System.Cmd
 import System.Environment
 import System.Exit
 import System.IO
-import System.IO.Unsafe
 import System.Posix.Process
 import System.Posix.Signals
 import System.Console.GetOpt
@@ -43,25 +28,25 @@ import Prelude as P
 
 import Narradar.Types hiding (note, dropNote)
 import Narradar.Utils
-import Narradar.Proof hiding (problem)
-import Narradar.GraphViz
+import Narradar.Framework.Proof hiding (problem)
+import Narradar.Framework.GraphViz
 import Narradar.Solver hiding ( prologSolver, prologSolver'
                               , narradarSolver, narradarSolver'
                               , narrowingSolver )
-import Narradar.ArgumentFiltering (Heuristic(..), simpleHeu, simpleHeu', typeHeu, typeHeu2, bestHeu, innermost, outermost)
-import Narradar.DPairs
-import Narradar.GraphTransformation
-import Narradar.UsableRules
-import Narradar.ReductionPair
-import Narradar.ExtraVars
-import Narradar.NarrowingProblem
-import Narradar.PrologProblem
-import Narradar.Convert
+
+import Narradar.Types.DPairs
+import Narradar.Processor.Graph
+import Narradar.Processor.GraphTransformation
+import Narradar.Processor.UsableRules
+import Narradar.Processor.ReductionPair
+import Narradar.Processor.NarrowingProblem
+import Narradar.Processor.PrologProblem
+import Narradar.Utils.Convert
 
 
 --main :: IO ()
 narradarMain solver = do
-  (flags@Options{..}, _, errors) <- getOptions
+  (flags@Options{..}, _, _errors) <- getOptions
   ~(yes, sol, log) <- (solver flags input)
   when (verbose > 0) (  hSetBuffering stdout NoBuffering P.>> putStrLn log)
   putStrLn$ if yes then "YES" else "NO"

@@ -11,15 +11,14 @@
 {-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 
-module Narradar.ArgumentFiltering where
+module Narradar.Types.ArgumentFiltering where
 
 import Control.Applicative
-import Control.Arrow (first, second)
-import Control.Monad (liftM,liftM2,guard)
+import Control.Arrow (second)
 import Control.Monad.Fix (fix)
-import qualified Data.Array.IArray as A
-import Data.List ((\\), intersperse, partition, find, inits)
+import Data.List (partition, find, inits, unfoldr, sortBy)
 import Data.Map (Map)
+import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -27,18 +26,16 @@ import qualified Data.Set as Set
 import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
 import Data.Monoid
-import Data.Term.Rules
-import Data.Traversable (Traversable,sequenceA)
 import Text.PrettyPrint
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
-import Narradar.DPIdentifiers
-import Narradar.PrologIdentifiers
-import Narradar.Labellings
-import Narradar.Ppr
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.PrologIdentifiers
+import Narradar.Types.Labellings
+import Narradar.Types.Term
+import Narradar.Utils.Ppr
 import Narradar.Utils
-import Narradar.Term
 
 import TRSTypes (Mode(..))
 
@@ -112,7 +109,7 @@ splitCD   :: (HasSignature sig id, Ord id, Ppr id) =>  sig -> AF_ id -> (AF_ id,
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show (ppr id))
-                     Just af -> AF $ Map.insertWith (flip Set.difference) id (Set.singleton i) m
+                     Just _ -> AF $ Map.insertWith (flip Set.difference) id (Set.singleton i) m
 cutAll xx af     = Prelude.foldr (uncurry cut) af xx
 lookup id (AF m) = maybe (fail "not found") (return.Set.toList) (Map.lookup id m)
 fromList         = AF . Map.fromListWith Set.intersection . P.map (second Set.fromList)
@@ -159,6 +156,27 @@ instance (Ord id) => ApplyAF (Term (WithNote1 n (TermF id)) v) id  where
                | Just ii <- lookup id af = Impure (Note1 (n, Term id (select tt (pred <$> ii))))
                | otherwise = Impure t
 
+-- -------
+-- Sorting
+-- -------
+
+sortByDefinedness :: (Ord id, Foldable trs, Size (trs a)) => (AF_ id -> trs a -> trs a) -> trs a -> [AF_ id] -> [AF_ id]
+sortByDefinedness apply dps = sortBy (flip compare `on` dpsSize)
+    where dpsSize af = size $ (apply af dps)
+
+selectBest = unfoldr findOne where
+          findOne [] = Nothing
+          findOne (m:xx)
+              | any (\x -> Just True == lt m x) xx = findOne xx
+              | otherwise = Just (m, P.filter (uncomparableTo m) xx)
+              where uncomparableTo x y = isNothing (lt x y)
+
+-- ----------
+-- Soundness
+-- ----------
+isSoundAF     af trs = null (extraVars $ apply af trs)
+
+
 -- -----------
 -- * Heuristics
 -- -----------
@@ -178,7 +196,7 @@ data WrapHeu id f = WrapHeu ((Foldable f, HasId f id, Ord id, Ppr id) => Heurist
 instance (Ord id, Ppr id, HasId f id, Foldable f) => PolyHeuristic WrapHeu id f where runPolyHeu (WrapHeu run) = run
 
 simpleHeu ::  (forall id f. (Foldable f, HasId f id, Ord id, Ppr id) => Heuristic id f) -> MkHeu WrapHeu
-simpleHeu h = MkHeu (\sig -> WrapHeu h)
+simpleHeu h = MkHeu (\_sig -> WrapHeu h)
 
 simpleHeu' ::  (forall id f sig. (Foldable f, Ord id, Ppr id, HasSignature sig id) => sig -> Heuristic id f) -> MkHeu WrapHeu
 simpleHeu' h = MkHeu (\sig -> WrapHeu (h sig))
@@ -197,11 +215,11 @@ bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
 
 innermost = Heuristic f True where
    f _ _ [] = mempty
-   f af t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
+   f _ t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
 outermost = Heuristic f False where
   f _ _ [] = mempty
-  f af t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
+  f _ t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
 
 predHeuAll strat pred = f where
   f _  _ []  = mempty
@@ -212,11 +230,11 @@ predHeuOne strat pred = f where
   f af t pos = maybe mempty Set.singleton $ find (pred af) (strat af t pos)
 
 allInner _  _ []  = mempty
-allInner af t pos =  [(root, last sub_p)
+allInner _ t pos =  [(root, last sub_p)
                                     | sub_p <- reverse (tail $ inits pos)
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 allOuter _  _ []  = mempty
-allOuter af t pos =  [(root, last sub_p)
+allOuter _ t pos =  [(root, last sub_p)
                                     | sub_p <- tail $ inits pos
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 
@@ -234,7 +252,6 @@ instance (HasId f id, Ppr id, Ord id, Foldable f) => PolyHeuristic TypeHeu id f
 
 typeHeu_f assig isUnbounded = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
   where f (p,i)            = not $ isUnbounded (p,i) unboundedPositions
-        constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
         unboundedPositions = fix unboundedF reflexivePositions
 --        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
         unboundedF f uu | null new = uu
@@ -251,19 +268,7 @@ typeHeu_f assig isUnbounded = Heuristic (predHeuOne allInner (const f) `or` runH
 --typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
 typeHeu2 assig = simpleHeu $ Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
   where f (show.ppr -> p,i)  = Set.notMember (p,i) reflexivePositions
-        constructorSymbols = Set.fromList [f | c <- assig, (f,0) <- F.toList c]
-        unboundedPositions = fix unboundedF reflexivePositions
---        unboundedF f uu | trace ("unboundedF: " ++ show uu) False = undefined
-        unboundedF f uu | null new = uu
-                        | otherwise= f(Set.fromList new `mappend` uu)
-           where new =  [ p | c <- assig
-                            , p <- F.toList c
-                            , p `Set.notMember` uu
-                            , (g,0) <- F.toList (Set.delete p c)
-                            , any (`Set.member` uu) (zip (repeat g) [1..getArity g])]
         reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
-        getArity g | Just i <- Map.lookup g arities = i
-        arities = Map.fromListWith max (concatMap F.toList assig) -- :: Map Ident Int
 
 -- Predicates
 -- ----------

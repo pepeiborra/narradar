@@ -8,39 +8,27 @@
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances #-}
 
 
-module Narradar.NarrowingProblem (
+module Narradar.Processor.NarrowingProblem (
      findGroundAF,
      groundRhsOneP, groundRhsAllP, uGroundRhsAllP, uGroundRhsOneP,
      safeAFP) where
 
 import Control.Applicative
 import Control.Exception
-import Control.Monad hiding (join, mapM)
-import Control.Monad.Writer(execWriter, execWriterT, MonadWriter(..), lift)
-import Control.Monad.State (evalState, evalStateT, modify, MonadState(..))
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
-import Data.Foldable (Foldable, foldMap, toList)
-import Data.List (intersect, (\\), sortBy)
-import Data.Maybe
+import Data.List ( (\\), sortBy)
 import Data.Monoid
-import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Map (Map)
 import Data.Set (Set)
-import Data.Traversable
-import Text.XHtml (toHtml, Html)
 import Prelude hiding (mapM, pi)
 
-import Narradar.ArgumentFiltering (AF_, PolyHeuristicN, HeuristicN, MkHeu, mkHeu)
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.DPairs
-import Narradar.Proof
+import Narradar.Constraints.VariableCondition
+import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristicN, HeuristicN, MkHeu, mkHeu, isSoundAF)
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Framework.Proof
 import Narradar.Utils
 import Narradar.Types as Narradar
-import Narradar.ExtraVars
-import Narradar.UsableRules
-import Narradar.Aprove
 import Lattice
 
 #ifdef DEBUG
@@ -82,7 +70,7 @@ groundRhsOneP mk p@(Problem typ@(getAF -> Nothing) trs dps)
 -- ------------------------------------------------------------------------
 groundRhsAllP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
                   MkHeu heu -> Problem id v -> [m(Problem id v)]
-groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyNarrowingProblem p =
+groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) _ dps) | isAnyNarrowingProblem p =
     if null orProblems
       then [failP EVProcFail p]
       else orProblems
@@ -98,7 +86,7 @@ groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyN
                                 AF.apply af (setTyp typ' p)
                         | af <- Set.toList afs]
 
-groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps)
+groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) _ _)
   | isAnyNarrowingProblem p = groundRhsAllP mkHeu (p `withAF` AF.init p)
   | otherwise = [return p]
 
@@ -107,7 +95,7 @@ groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps)
 -- ------------------------------------------------------------------------
 uGroundRhsAllP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
                   MkHeu heu -> Problem id v -> [m(Problem id v)]
-uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyNarrowingProblem p =
+uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) _ dps) | isAnyNarrowingProblem p =
     if null orProblems
       then [failP EVProcFail p]
       else orProblems
@@ -126,17 +114,17 @@ uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAny
           orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundAll (Just (AF.restrictTo (getAllSymbols p') af))) p'
                                 (AF.apply af (setTyp typ' p'))
-                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
+                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (Set.toList results)
                         , let proofU = step UsableRulesP p p']
           dpsSize af = size (AF.apply af dps)
 
-uGroundRhsAllP mkHeu p@(Problem (getAF -> Nothing) trs dps) | isAnyNarrowingProblem p
+uGroundRhsAllP mkHeu p@(Problem (getAF -> Nothing) _ _) | isAnyNarrowingProblem p
   = uGroundRhsAllP mkHeu (p `withAF` AF.init p)
 uGroundRhsAllP _ p = [return p]
 
 uGroundRhsOneP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
                   MkHeu heu -> Problem id v -> [m(Problem id v)]
-uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAnyNarrowingProblem p =
+uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) _ dps) | isAnyNarrowingProblem p =
     if null orProblems
       then [failP EVProcFail p]
       else orProblems
@@ -155,12 +143,12 @@ uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps) | isAny
           orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
                              step (GroundOne (Just (AF.restrictTo (getAllSymbols p') af))) p'
                                 (AF.apply af (setTyp typ' p'))
-                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (toList results)
+                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (Set.toList results)
                         , let proofU = step UsableRulesP p p']
           dpsSize af = size (AF.apply af dps)
 
 
-uGroundRhsOneP mkHeu p@(Problem (getAF -> Nothing) trs dps) | isAnyNarrowingProblem p
+uGroundRhsOneP mkHeu p@(Problem (getAF -> Nothing) _ _) | isAnyNarrowingProblem p
   = uGroundRhsOneP mkHeu (p `withAF` AF.init p)
 uGroundRhsOneP _ p = [return p]
 
@@ -171,9 +159,9 @@ uGroundRhsOneP _ p = [return p]
 
 safeAFP :: (Ord id, Ppr id, Lattice (AF_ id), PolyHeuristicN heu id, MonadFree ProofF m, v ~ Var) =>
            MkHeu heu -> Problem id v -> [m(Problem id v)]
-safeAFP mk p@(Problem typ@(getAF -> Just af) trs dps) = do
+safeAFP mk p@(Problem typ@(getAF -> Just af) _ dps) = do
        let heu = mkHeu mk p
-       af' <-  toList $ invariantEV heu p af
+       af' <-  Set.toList $ invariantEV heu p af
        let p' = iUsableRules (setTyp typ' p) (Just af) (rhs <$> rules dps)
        return $ step (SafeAFP (Just af')) p (AF.apply af' p')
   where typ' = correspondingRewritingStrategy typ
@@ -191,7 +179,7 @@ findGroundAF :: (Ord id, Ppr id, Lattice (AF_ id), v ~ Var) =>
              -> Problem id v
              -> RuleN id v     -- ^ the rule to make ground
              -> Set (AF_ id)
-findGroundAF heu pi_groundInfo af0 p@(Problem _ trs dps) (_:->r)
+findGroundAF heu pi_groundInfo af0 p@(Problem _ _ dps) (_:->r)
   | isVar r = Set.empty
   | otherwise = mkGround r R.>>= invariantEV heu dps
             where

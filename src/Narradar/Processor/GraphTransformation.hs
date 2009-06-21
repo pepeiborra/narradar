@@ -1,41 +1,29 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE ImpredicativeTypes #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
-module Narradar.GraphTransformation (narrowing, instantiation, finstantiation) where
+module Narradar.Processor.GraphTransformation (narrowing, instantiation, finstantiation) where
 
 import Control.Applicative
-import Control.Monad.Identity
-import Control.Monad.Supply
-import Control.Parallel.Strategies
+import Control.Monad.Identity (Identity(..))
 import Data.Array.IArray hiding ( array )
-import Data.Array.Base (numElements)
 import qualified Data.Array.IArray as A
-import Data.Foldable (toList, foldMap)
 import qualified Data.Graph as Gr
-import Data.List (nub, foldl1', isPrefixOf, (\\))
+import Data.List (foldl1', isPrefixOf)
 import Data.Maybe
 import qualified Data.Set as Set
 import Control.Monad.Logic
-import Text.XHtml (Html)
 
-import Control.Monad.Free.Narradar
 import Narradar.Types hiding ((!))
-import Narradar.Utils ((<$$>), (.|.), snub, foldMap2, trace)
-import Narradar.Proof
-import Narradar.DPairs
-import Narradar.UsableRules
+import Narradar.Utils
+import Narradar.Framework.Proof
 
 import Data.Term.Narrowing
 
 --narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => Problem id f -> [ProblemProofG id f]
-narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPTRS dpsA gr unif sig))
+narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA gr _ _))
     = [ step (NarrowingP olddp (tRS newdps)) p0 (expandDPair p0 i newdps)
                      | (i,dps') <- dpss
                      , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
@@ -70,7 +58,7 @@ narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs dptrs@(DPT
 
 narrowing p = [return p]
 
-instantiation p@(Problem typ@(isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr unif _))
+instantiation p@(Problem (isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr unif _))
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
   | otherwise = [ step (InstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
                      | (i,dps') <- dpss
@@ -88,7 +76,7 @@ instantiation p@(Problem typ@(isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr uni
 
 instantiation p = [return p]
 
-finstantiation p@(Problem typ@(isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr unif sig))
+finstantiation p@(Problem (isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr _ _))
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
   | otherwise = [ step (FInstantiationP olddp (tRS newdps)) p
                            (expandDPair p i newdps)
@@ -119,7 +107,7 @@ maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
   updateAt i (x:xx)   = return x : updateAt (i-1) xx
 
 -- maps and maps' are equivalent
-propMaps f xx = maps f xx == maps' f xx where types = (xx :: [Bool], f :: Bool -> [Bool])
+propMaps f xx = maps f xx == maps' f xx where _types = (xx :: [Bool], f :: Bool -> [Bool])
 
 -- ------------------------------
 -- Extracted from category-extras

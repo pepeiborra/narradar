@@ -53,36 +53,38 @@ Library
   exposed-modules:
      Narradar,
      Narradar.Solver,
+     Narradar.Constraints.Unify,
+     Narradar.Constraints.VariableCondition
+     Narradar.Framework.Proof,
+     Narradar.Framework.Output,
+     Narradar.Framework.GraphViz,
      Narradar.Types,
-     Narradar.DPIdentifiers,
-     Narradar.PrologIdentifiers
-     Narradar.Labellings,
-     Narradar.Goal,
-     Narradar.Convert,
-     Narradar.Proof,
-     Narradar.DPairs,
-     Narradar.TRS,
-     Narradar.Problem
-     Narradar.ProblemType,
-     Narradar.GraphTransformation,
-     Narradar.ArgumentFiltering,
-     Narradar.UsableRules,
-     Narradar.ReductionPair
-     Narradar.ExtraVars,
-     Narradar.NarrowingProblem,
-     Narradar.PrologProblem,
-     Narradar.RewritingProblem,
-     Narradar.Aprove,
-     Narradar.Output,
-     Narradar.Ppr,
-     Narradar.GraphViz,
+     Narradar.Types.ArgumentFiltering,
+     Narradar.Types.DPIdentifiers,
+     Narradar.Types.DPairs,
+     Narradar.Types.Goal,
+     Narradar.Types.Labellings,
+     Narradar.Types.Problem
+     Narradar.Types.ProblemType,
+     Narradar.Types.PrologIdentifiers
+     Narradar.Types.Term,
+     Narradar.Types.TRS,
+     Narradar.Types.Var,
+     Narradar.Processor.Aprove,
+     Narradar.Processor.ExtraVars,
+     Narradar.Processor.Graph,
+     Narradar.Processor.GraphTransformation,
+     Narradar.Processor.NarrowingProblem,
+     Narradar.Processor.PrologProblem,
+     Narradar.Processor.RewritingProblem,
+     Narradar.Processor.ReductionPair
+     Narradar.Processor.UsableRules,
+     Narradar.Utils.Convert,
+     Narradar.Utils.Ppr,
      Narradar.Utils,
-     Narradar.Term,
-     Narradar.Var,
      Control.Monad.Free.Narradar,
      Control.Monad.Supply
   other-modules:
-     Narradar.Unify,
      Lattice,
      Paths_narradar
      Text.ParserCombinators.Parsec.Tag

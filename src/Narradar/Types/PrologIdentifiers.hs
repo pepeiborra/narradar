@@ -6,7 +6,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Narradar.PrologIdentifiers where
+module Narradar.Types.PrologIdentifiers where
 
 import Control.Applicative
 import Control.Parallel.Strategies
@@ -19,7 +19,7 @@ import Data.Derive.Traversable
 import Data.Monoid
 import Text.PrettyPrint
 
-import Narradar.DPIdentifiers
+import Narradar.Types.DPIdentifiers
 import Data.Term.Ppr
 
 type PS   = PrologId String
@@ -49,10 +49,10 @@ instance (Foldable l, IsPrologId a) => IsPrologId (l a) where
     isFunctorId = getAny . foldMap (Any . isFunctorId)
 
 instance Show (PrologId String) where
-  showsPrec p (InId a)      = (a ++) . ("_in" ++)
-  showsPrec p (OutId a)     = (a ++) . ("_out" ++)
+  showsPrec _ (InId a)      = (a ++) . ("_in" ++)
+  showsPrec _ (OutId a)     = (a ++) . ("_out" ++)
   showsPrec p (UId i)       = ("u_" ++) . showsPrec p i
-  showsPrec p (FunctorId f) = (f ++)
+  showsPrec _ (FunctorId f) = (f ++)
 
 instance Show a => Show (PrologId a) where
   showsPrec p (InId a)      = showsPrec p a . ("_in" ++)

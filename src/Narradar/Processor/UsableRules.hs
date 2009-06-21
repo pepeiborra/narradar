@@ -3,18 +3,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Narradar.UsableRules where
+module Narradar.Processor.UsableRules where
 
 import Control.Applicative
-import qualified Data.Foldable as F
-import Data.Maybe
 import Data.Monoid
-import qualified Data.Set as Set
-import Text.XHtml (Html)
 
-import Narradar.DPIdentifiers
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Proof
+import Narradar.Framework.Proof
+import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types
 import Narradar.Utils
 

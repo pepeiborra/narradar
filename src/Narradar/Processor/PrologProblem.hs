@@ -1,30 +1,23 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 
-module Narradar.PrologProblem where -- (inferType, prologP_sk, prologP_labelling_sk, skTransform) where
+module Narradar.Processor.PrologProblem where -- (inferType, prologP_sk, prologP_labelling_sk, skTransform) where
 
 import Control.Applicative
-import Control.Arrow
 import Control.Exception (assert)
-import Control.Monad.Error (Error)
-import Control.Monad.Free.Narradar (foldFreeM)
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.Supply
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import Data.Char (isSpace)
-import Data.HashTable (hashString)
-import Data.List (partition, isSuffixOf, isPrefixOf, delete, (\\), sort, groupBy, find)
+import Data.List hiding (notElem)
 import Data.Maybe
 import Data.Monoid
 import Data.Foldable (toList, notElem)
@@ -32,32 +25,25 @@ import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Traversable as T
 import Language.Haskell.TH (runIO)
-import Text.ParserCombinators.Parsec (parse, parseFromFile, ParseError, getInput)
-import Text.XHtml (Html, toHtml)
+import Text.ParserCombinators.Parsec (parse)
 
-import Language.Prolog.Syntax (Clause, ClauseF(..), Program, GoalF(..), Goal,
+import Language.Prolog.Syntax (Clause, ClauseF(..), GoalF(..),
                                TermF(Cons, Nil, Tuple, Wildcard, String, Int, Float))
 import qualified Language.Prolog.Syntax as Prolog
-import qualified Language.Prolog.Parser as Prolog (program, clause, query, whiteSpace, ident)
+import qualified Language.Prolog.Parser as Prolog (program)
 import Language.Prolog.SharingAnalysis (infer)
 import Data.Term.Var as Prolog (Var(VName, VAuto))
 
-import Lattice (Lattice)
-
-import Narradar.ArgumentFiltering (AF_, AF, typeHeu, innermost, MkHeu, mkHeu, PolyHeuristicN, Heuristic(..))
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.DPairs
+import Narradar.Framework.Proof
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.ArgumentFiltering (AF_, MkHeu, mkHeu, PolyHeuristicN, Heuristic(..))
 import Narradar.Types hiding (Var,Term, program)
 import Narradar.Types as Term
-import Narradar.NarrowingProblem
-import Narradar.Proof
-import Narradar.ExtraVars
-import Narradar.Utils ((<$$>),(..&..), showPpr, fromRight, mapLeft, on, fmap2, foldMap2, return2, trace)
+import Narradar.Utils
 import Prelude hiding (and,or,notElem,pi)
 
-inferType (Problem Prolog{..} _ _) = infer program
+inferType (Problem Prolog{program} _ _) = infer program
 
 -- ----------------
 -- Transformations
@@ -213,7 +199,7 @@ labellingTrans mkH goalAF trs@PrologTRS{} = unEmbed $ runWriterT $ do
  where
   heuristic = mkHeu mkH trs'
 
-  trs'@(PrologTRS rr sig) = convert trs :: NarradarTRS LPS v
+  trs'@(PrologTRS rr _) = convert trs :: NarradarTRS LPS v
 
 --  insertNewMode :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
   insertNewMode (id,pp) | trace ("insertNewMode " ++ showPpr (id,pp)) False = undefined

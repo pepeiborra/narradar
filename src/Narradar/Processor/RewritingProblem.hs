@@ -1,10 +1,8 @@
 {-# LANGUAGE ViewPatterns #-}
 
-module Narradar.RewritingProblem where
+module Narradar.Processor.RewritingProblem where
 
-import Text.XHtml (primHtml, Html)
-
-import Narradar.Proof
+import Narradar.Framework.Proof
 import Narradar.Types
 
 
@@ -12,7 +10,7 @@ import Narradar.Types
 -- Trivial cases
 -- ------------------------
 
-trivialP p@(Problem Rewriting{} trs (rules -> dps))
+trivialP p@(Problem Rewriting{} _ (rules -> dps))
     | any (\(l:->r) -> show l == show r) dps ||
       all (null.properSubterms.rhs) dps
     = failP NonTerminationLooping p

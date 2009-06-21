@@ -13,7 +13,7 @@ module Narradar.Utils where
 
 import Control.Applicative
 import Control.Exception (bracket)
-import Control.Monad (join, liftM, liftM2, replicateM, ap)
+import Control.Monad  (liftM2, ap)
 import Control.Monad.Identity(Identity(..))
 import Control.Monad.List (lift, ListT)
 import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
@@ -25,7 +25,7 @@ import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
 import qualified Data.HashTable as HT
 import Data.Int
-import Data.List (group, sort,nub)
+import Data.List (group, sort)
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -35,8 +35,6 @@ import Data.Suitable
 import Data.Traversable
 import System.IO
 import System.Directory
-import Text.ParserCombinators.Parsec as P (GenParser, (<|>), pzero)
-import Text.PrettyPrint
 
 import Data.Term.Rules as Term
 import Data.Term.Ppr as Term
@@ -89,8 +87,8 @@ foldMap3 = foldMap . foldMap2
 -- --------------
 -- Various stuff
 -- --------------
-fst3 (a,b,c) = a
-fst4 (a,b,c,d) = a
+fst3 (a,_,_) = a
+fst4 (a,_,_,_) = a
 
 showPpr = show . ppr
 
@@ -116,7 +114,7 @@ instance Show err => P.Bind (Either err) IO IO where
 -}
 mapLeft :: (l -> l') -> Either l r -> Either l' r
 mapLeft f (Left x)  = Left(f x)
-mapLeft f (Right r) = Right r
+mapLeft _ (Right r) = Right r
 
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
@@ -132,7 +130,7 @@ select xx ii = go 0 xx (sort ii)
                              | otherwise = go (succ n) xx (i:ii)
 
 propSelect xx ii = map (xx!!) ii' == select xx ii'
-  where types = (xx::[Int], ii::[Int])
+  where _types = (xx::[Int], ii::[Int])
         ii'   = filter (< length xx) (map abs ii)
 
 
@@ -236,7 +234,8 @@ instance (Monoid s, Monad m) => Applicative (WriterT s m) where pure = return; (
 -- Missing useful monadic instances
 -- -----------------------------------
 
-instance (Monoid w, MonadWriter w m) => MonadWriter w (ListT m) where tell = lift.tell
+instance (Monoid w, MonadWriter w m) => MonadWriter w (ListT m) where
+    tell = lift.tell
 
 -- --------------------------------
 -- RFunctor instance for Signature

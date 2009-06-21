@@ -4,41 +4,35 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Narradar.DPairs where
+module Narradar.Types.DPairs where
 
-import Control.Applicative
 import Control.Exception (assert)
-import Control.Monad (liftM)
-import Control.Monad.List (ListT(..))
-import Data.Array.Base (numElements)
 import qualified Data.Array.IArray as A
-import qualified Data.Graph as G
-import Data.Char
-import Data.List ((\\), partition)
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Strict.Tuple ((:!:), Pair(..))
-import Data.Traversable as T
-import qualified Data.Tree as Tree
-import Text.XHtml (toHtml, Html)
 import Prelude as P hiding (pi)
 import qualified TRSParser as TRS
 import qualified TRSTypes  as TRS
 import TRSTypes hiding (Id, Term, Narrowing, SimpleRuleF(..))
 import Text.ParserCombinators.Parsec (runParser)
 
-import Narradar.ArgumentFiltering (AF_,AF, LabelledAF, Heuristic(..), PolyHeuristicN, bestHeu, typeHeu, MkHeu, mkHeu)
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Types hiding (Other)
+
+import Narradar.Constraints.VariableCondition
+import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristicN, MkHeu, mkHeu, isSoundAF)
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.Problem
+import Narradar.Types.ProblemType
+import Narradar.Types.Term
+import Narradar.Types.TRS
+import Narradar.Types.Var
 import Narradar.Utils
-import Narradar.Proof
-import Narradar.ExtraVars
-import Narradar.UsableRules
-import Narradar.Term
-import Narradar.Var
+import Narradar.Utils.Convert
+import Narradar.Utils.Ppr
 import Lattice
+
 -- -----------------
 -- Parsing TPDB TRSs
 -- -----------------
@@ -112,62 +106,6 @@ mkGoalProblem heu typ trs =
                                mkProblem typ'{pi=pi'} trs' dps
                                    | pi' <- Set.toList $ invariantEV heu (rules p0) extendedPi]
     in assert (not $ null orProblems) orProblems
-
--- -------------------------------------
--- DP Processors transforming the graph
--- -------------------------------------
-cycleProcessor, sccProcessor :: (Ppr v, Ord v, Enum v, Ppr id, Ord id) => Problem id v -> ProblemProofG id v
-usableSCCsProcessor :: (Ppr v, Ord v, Enum v) => Problem LPId v -> ProblemProofG LPId v
-
-usableSCCsProcessor problem@(Problem typ@GNarrowingModes{pi,goal} trs dps@(DPTRS dd _ unif sig))
-  | null cc   = success NoCycles problem
-  | otherwise =  andP (UsableGraph gr reachable) problem
-                 [return $ mkProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo)
-                      | ciclo <- cc, any (`Set.member` reachable) ciclo]
-  where
-   gr          = getEDG problem
-   cc          = filter isCycle (map Tree.flatten (G.scc gr)) --TODO Use the faster GraphSCC package
-   reachable   = Set.fromList (G.reachable gr =<< goal_pairs)
-   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, Just f <- [rootSymbol (lhs r)], unmarkDPSymbol f `Set.member` AF.domain goal]
-   isCycle [n] = n `elem` gr A.! n
-   isCycle _   = True
-
-
-usableSCCsProcessor p = sccProcessor p
-
-sccProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
-  | null cc   = success NoCycles problem
-  | otherwise =  andP (SCCGraph gr (map Set.fromList cc)) problem
-                 [return $ mkProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
-    where dd = rulesArray dps
-          gr = getEDG problem
-          cc = filter isCycle (map Tree.flatten (G.scc gr))
-          isCycle [n] = n `elem` gr A.! n
-          isCycle _   = True
-
-cycleProcessor problem@(Problem typ trs dps@(DPTRS dd _ unif sig))
-  | null cc   = success NoCycles problem
-  | otherwise =  andP (DependencyGraph gr) problem
-                 [return $ mkProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
-    where cc = cycles gr
-          gr = getEDG problem
-
--- ----------------------------------------
--- Computing the estimated Dependency Graph
--- ----------------------------------------
-
-getEDG p = filterSEDG p $ getdirectEDG p
-
-getdirectEDG :: (Ord id, Ord v, Enum v) => Problem id v -> G.Graph
-getdirectEDG p@(Problem typ trs dptrs@(DPTRS dps _ (unif :!: _) _)) =
-    assert (isValidUnif p) $
-    G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
-
-filterSEDG :: (Ord id) => Problem id v -> G.Graph -> G.Graph
-filterSEDG (Problem typ trs dptrs@DPTRS{}) gr =
-    G.buildG (A.bounds gr)
-               [ (i,j) | (i,j) <- G.edges gr
-                       , isJust (dpUnifyInv dptrs j i)]
 
 -- ---------------------------
 -- Computing Dependency Pairs

@@ -4,10 +4,9 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
-module Narradar.Aprove where
+module Narradar.Processor.Aprove where
 
 import Control.Applicative hiding ((<|>), many)
-import Control.Arrow ((>>>))
 import Control.Exception
 import Control.Monad
 import Data.ByteString.Char8 (pack)
@@ -18,33 +17,27 @@ import Data.List
 import Data.Maybe
 import Network
 import Network.Curl
-import System.Directory
 import System.FilePath
 import System.IO
 import System.IO.Unsafe
 import System.Process
 import Text.PrettyPrint (parens, int, text ,hcat, punctuate, comma, (<>), (<+>))
 import Text.Printf
-import Text.XHtml (Html, primHtml, toHtml)
 import Text.HTML.TagSoup
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Tag
 
 import Paths_narradar
 
-import Control.Monad.Free.Narradar
+import Narradar.Framework.Proof
 import Narradar.Types
-import Narradar.Output
-import Narradar.Proof
 import Narradar.Utils
-import Narradar.Term
-import Narradar.Var
 
 type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => Problem id v -> IO (proof(Problem id v))
 
 aproveWebProc :: ExternalProcTyp m id v
 aproveWebProc = memoExternalProc go where
-  go prob@(Problem  (isRewriting -> True) trs dps) = do
+  go prob@Problem{typ=(isRewriting -> True)} = do
     curl <- initialize
     CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
     CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html",
@@ -58,7 +51,7 @@ aproveWebProc = memoExternalProc go where
 #ifdef DEBUG
     hPutStrLn stderr ("sending the following problem to aProve web interface \n" ++ pprTPDB prob)
 #endif
-    response :: CurlResponse <- perform_with_response curl
+    response :: CurlResponse <- perform_with_response_ curl
     let output = respBody response
     return$ (if isTerminating output then success else failP)
             (External (Aprove "WEB") [OutputHtml  (pack output)]) prob
@@ -71,12 +64,12 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
 
 aproveProc :: FilePath -> ExternalProcTyp m id v
 aproveProc path = go where
-   go prob@(Problem (isRewriting -> True) trs dps) =
+   go prob@Problem{typ=(isRewriting -> True)} =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
               hPutStr h_problem_file (pprTPDB prob)
               hPutStr stderr ("solving the following problem with Aprove:\n" ++ pprTPDB prob)
               hClose h_problem_file
-              (inp,out,err,pid) <- runInteractiveCommand (printf "%s %s 5" path problem_file)
+              (_,out,err,pid) <- runInteractiveCommand (printf "%s %s 5" path problem_file)
               waitForProcess pid
               output            <- hGetContents out
               errors            <- hGetContents err
@@ -151,14 +144,12 @@ callAproveSrv' (strat, timeout, p) = withSocketsDo $ withTempFile "/tmp" "ntt.tr
     evaluate (length res)
     hClose hAprove
     return res
-    where headSafe err [] = error ("head: " ++ err)
-          headSafe _   x  = head x
 
-aproveSrvXML strat (timeout :: Int) prob@(Problem  (isRewriting -> True) trs dps) =
+aproveSrvXML strat (timeout :: Int) prob@Problem{typ=(isRewriting -> True)} =
     let p = pprTPDB prob in callAproveSrv strat timeout p
 
 aproveSrvProc2 strat (timeout :: Int) =  go where
-  go prob@(Problem  (isRewriting -> True) trs dps) = do
+  go prob@Problem{typ=(isRewriting -> True)}= do
     res <- aproveSrvXML strat timeout prob
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success

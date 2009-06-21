@@ -5,20 +5,15 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Narradar.Convert where
+module Narradar.Utils.Convert where
 
-import qualified Data.Set as Set
+import Narradar.Types.ArgumentFiltering (AF_, mapSymbols)
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.PrologIdentifiers
+import Narradar.Types.Labellings
+import Narradar.Types.Term
+import Narradar.Types.Var
 
-import Narradar.ArgumentFiltering (AF_, mapSymbols)
-import Narradar.DPIdentifiers
-import Narradar.PrologIdentifiers
-import Narradar.Labellings
-import Narradar.Utils
-import Narradar.Term
-import Narradar.Var
-
-import Data.Term
-import Data.Term.Rules
 
 -- ------------------
 -- External interface

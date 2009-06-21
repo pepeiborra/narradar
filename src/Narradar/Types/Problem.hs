@@ -1,17 +1,14 @@
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GADTs, TypeFamilies #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.Problem where
+module Narradar.Types.Problem where
 
 import Control.Applicative
 import Control.Exception (assert)
@@ -22,7 +19,7 @@ import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
-import Data.Foldable as F (Foldable(..), sum, toList)
+import Data.Foldable as F (Foldable(..), toList)
 import Data.Graph (Graph, edges, buildG)
 import Data.Maybe (isJust)
 import Data.Monoid
@@ -36,25 +33,24 @@ import qualified Text.PrettyPrint as Ppr
 import Prelude as P hiding (mapM, pi, sum)
 import qualified Prelude as P
 
-import Control.Monad.Supply
-import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), init)
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.DPIdentifiers
-import Narradar.ProblemType
-import Narradar.TRS
-import Narradar.Convert
-import Narradar.Ppr
+import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.ProblemType
+import Narradar.Types.TRS
+import Narradar.Utils.Convert
+import Narradar.Utils.Ppr
 import Narradar.Utils
-import Narradar.Term hiding ((!))
-import Narradar.Unify
-import Narradar.Var
+import Narradar.Types.Term hiding ((!))
+import Narradar.Constraints.Unify
+import Narradar.Types.Var
 
 import Data.Term.Rules
 
 ---------------------------
 -- DP Problems
 ---------------------------
-data ProblemF id (a :: *) = Problem {typ::(ProblemType id), trs::a ,dps :: !a}
+data ProblemF id a = Problem {typ::(ProblemType id), trs::a ,dps :: !a}
      deriving (Eq,Show,Ord)
 
 instance Ord id => HasSignature (Problem id v) id where
@@ -65,7 +61,7 @@ type ProblemG id t v = ProblemF id (NarradarTRSF id t v (Rule t v))
 
 instance (Ord v, Ord id) => Monoid (Problem id v) where
     mempty = Problem Rewriting mempty mempty
-    Problem typ1 t1 dp1 `mappend` Problem typ2 t2 dp2 = Problem typ2 (t1 `mappend` t2) (dp1`mappend`dp2)
+    Problem _ t1 dp1 `mappend` Problem typ2 t2 dp2 = Problem typ2 (t1 `mappend` t2) (dp1`mappend`dp2)
 
 instance (Ord id, Ord v) => HasRules (TermF id) v (Problem id v) where
     rules (Problem _ dps trs) = rules dps `mappend` rules trs
@@ -79,14 +75,14 @@ mkProblem typ trs dps = Problem typ trs dps
 
 setTyp t' (Problem _ r p) = mkProblem t' r p
 
-mkDPSig (getSignature -> sig@Sig{..}) | dd <- toList definedSymbols =
+mkDPSig (getSignature -> sig@Sig{definedSymbols, arity}) | dd <- toList definedSymbols =
   sig{definedSymbols = definedSymbols `Set.union` Set.mapMonotonic markDPSymbol definedSymbols
      ,arity          = arity `Map.union` Map.fromList [(markDPSymbol f, getArity sig f) | f <- dd]
      }
 
 instance (Convert (TermN id v) (TermN id' v'), Convert id id', Ord id, Ord id', Ord v') =>
           Convert (Problem id v) (Problem id' v') where
-  convert p@Problem{..} = (fmap convert p){typ = fmap convert typ}
+  convert p@Problem{typ} = (fmap convert p){typ = fmap convert typ}
 
 instance (Ord id, Ppr id, Ppr v, Ord v) => Ppr (Problem id v) where
     ppr (Problem Prolog{..} _ _) =
@@ -126,10 +122,10 @@ instance (WithAF (ProblemType id) id) => WithAF (Problem id v) id where
   stripGoal (Problem typ trs dps)      = Problem (stripGoal  typ)      trs dps
 
 instance WithAF (ProblemType id) id where
-  withAF pt@NarrowingModes{..}   pi' = pt{pi=pi'}
-  withAF pt@BNarrowingModes{..}  pi' = pt{pi=pi'}
-  withAF pt@GNarrowingModes{..}  pi' = pt{pi=pi'}
-  withAF pt@LBNarrowingModes{..} pi' = pt{pi=pi'}
+  withAF pt@NarrowingModes{}   pi' = pt{pi=pi'}
+  withAF pt@BNarrowingModes{}  pi' = pt{pi=pi'}
+  withAF pt@GNarrowingModes{}  pi' = pt{pi=pi'}
+  withAF pt@LBNarrowingModes{} pi' = pt{pi=pi'}
   withAF Narrowing   pi = narrowingModes0{pi}
   withAF BNarrowing  pi = bnarrowingModes0{pi}
   withAF GNarrowing  pi = gnarrowingModes0{pi}
@@ -144,7 +140,7 @@ instance WithAF (ProblemType id) id where
 --  withAF typ@Prolog{} _ =
 
 instance (Ord id, Ord v) => ApplyAF (Problem id v) id where
-    apply pi p@(Problem typ trs dps) = Problem typ (apply pi trs) (apply pi dps)
+    apply pi p@Problem{trs,dps} = p{trs=apply pi trs, dps=apply pi dps}
 
 
 -- -----------------
@@ -250,7 +246,7 @@ dpTRS' dps edges unifiers = DPTRS dps edges unifiers (getSignature $ elems dps)
 
 expandDPair :: (Ord a, Ppr id, id ~ Identifier a, t ~ TermF id, v ~ Var) =>
                Problem id v -> Int -> [DP a v] -> Problem id v
-expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i (filter (`notElem` elems dps) . snub -> newdps)
+expandDPair p@Problem{dps=DPTRS dps gr (unif :!: unifInv) _} i (filter (`notElem` elems dps) . snub -> newdps)
  = assert (isValidUnif res) res
   where
    res = runIcap (rules p ++ newdps) $ do
@@ -272,10 +268,10 @@ expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i (filter 
                     [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
         adjust x = if x < i then x else x-1
 
-    u@(unif_new :!: unifInv_new) <- computeDPUnifiers p{dps = dps'}
+    unif_new :!: unifInv_new <- computeDPUnifiers p{dps = dps'}
     let unif'    = mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
-        dptrs'   = dpTRS' a_dps' gr' u -- (unif' :!: unifInv')
+        dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')
     return p{dps=dptrs'}
 
    (dps1,_:dps2) = splitAt i (elems dps)
@@ -285,14 +281,14 @@ expandDPair p@(Problem typ trs (DPTRS dps gr (unif :!: unifInv) sig)) i (filter 
 
 expandDPair (Problem typ trs dps) i newdps = mkProblem typ trs (tRS dps')
   where
-    dps'          = dps1 ++ dps2 ++ dps'
+    dps'          = dps1 ++ dps2 ++ newdps
     (dps1,_:dps2) = splitAt i (rules dps)
 
 
 computeDPUnifiers :: (Enum v, Ord v, Ord id, MonadFresh v m, unif ~ Unifiers (TermF id) v) =>
                      Problem id v -> m(unif :!: unif)
 --computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
-computeDPUnifiers p@(Problem typ _ dpsT@(rules -> the_dps)) = do
+computeDPUnifiers p@Problem{typ, dps = (rules -> the_dps)} = do
    p_f <- getFresh p
    let mbUsableRules x = if (isBNarrowing .|. isGNarrowing) typ
                                then  rules $ trs $ iUsableRules p_f Nothing [x]

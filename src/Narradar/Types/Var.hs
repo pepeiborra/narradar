@@ -1,4 +1,4 @@
-module Narradar.Var where
+module Narradar.Types.Var where
 
 import Data.Term.Ppr
 import Text.PrettyPrint
@@ -22,5 +22,5 @@ varName (Var n _) = n
 uniqueId (Var _ i) = i
 
 instance Ppr Var where
-    ppr (Var (Just l) i) = text l -- <> char '_' <> int i
+    ppr (Var (Just l) _i) = text l -- <> char '_' <> int _i
     ppr (Var _ i)        = char 'v' <> int i

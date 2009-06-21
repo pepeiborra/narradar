@@ -1,29 +1,17 @@
-{-# LANGUAGE TypeOperators, ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
-{-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.TRS where
+module Narradar.Types.TRS where
 
 import Control.Applicative
-import Control.Monad.Free (evalFree, wrap)
-import Control.Monad.List
-import Control.Parallel.Strategies
 import Data.Array.IArray as A
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Graph (Graph)
-import Data.Foldable as F (Foldable, foldMap, toList, concatMap, sum)
-import Data.List ((\\))
+import Data.Foldable as F (toList, sum)
 import Data.Maybe (catMaybes)
 import Data.Monoid
 import qualified Data.Map as Map
@@ -35,20 +23,13 @@ import qualified Data.Traversable as T
 import Text.PrettyPrint
 import Prelude hiding (concatMap)
 
-import Data.Term.Rules
-
-import Narradar.ArgumentFiltering (apply, ApplyAF(..))
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Convert
-import Narradar.DPIdentifiers
-import Narradar.Labellings
-import Narradar.Ppr
-import Narradar.ProblemType
-import Narradar.Unify
+import Narradar.Types.ArgumentFiltering (ApplyAF(..))
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.Term hiding ((!))
+import Narradar.Types.Var
+import Narradar.Utils.Convert
+import Narradar.Utils.Ppr
 import Narradar.Utils
-import Narradar.Term hiding ((!))
-import Narradar.Var
-import qualified Language.Prolog.Syntax as Prolog
 
 #ifdef HOOD
 import Debug.Observe
@@ -108,7 +89,7 @@ instance (Ord id, Ord v) => Size (NarradarTRS id v) where size = F.sum . fmap si
 
 instance (Convert (TermN id v) (TermN id' v'), Ord id, Ord id', Ord v') =>
           Convert (NarradarTRS id v) (NarradarTRS id' v') where
-    convert(PrologTRS rr sig) = prologTRS' (Set.mapMonotonic convert rr)
+    convert(PrologTRS rr _) = prologTRS' (Set.mapMonotonic convert rr)
     convert (TRS rr _)        = narradarTRS (map convert$ toList rr)
 
 instance (Ord id, Ord v) => GetFresh (TermF id) v (NarradarTRS id v) where
@@ -124,10 +105,10 @@ mkTRS = tRS
 
 tRS' rr sig  = TRS (Set.fromList rr) sig
 
-prologTRS :: forall id v. (Ord id, Ord v) => [(String, RuleN id v)] -> NarradarTRS id v
+prologTRS ::  (Ord id, Ord v) => [(String, RuleN id v)] -> NarradarTRS id v
 prologTRS rr = prologTRS' (Set.fromList rr)
 
-prologTRS' :: forall id v. (Ord id) => Set(String, RuleN id v) -> NarradarTRS id v
+prologTRS' :: (Ord id) => Set(String, RuleN id v) -> NarradarTRS id v
 prologTRS' rr = PrologTRS rr (getSignature (snd <$> toList rr))
 
 narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
@@ -136,7 +117,7 @@ refreshRules :: (Traversable t, MonadEnv t (Either Var Var) m, MonadFresh v m, v
 refreshRules rr = mapM2 (freshWith leftName) rr where leftName (Var n _) (Var _ i) = Var n i
 
 restrictDPTRS :: Ord id => NarradarTRS id v -> [Int] -> NarradarTRS id v
-restrictDPTRS (DPTRS dps gr (unif :!: unifInv) sig) indexes = DPTRS dps' gr' unif' (getSignature $ elems dps')
+restrictDPTRS (DPTRS dps gr (unif :!: unifInv) _) indexes = DPTRS dps' gr' unif' (getSignature $ elems dps')
   where
    newIndexes = Map.fromList (zip indexes [0..])
    nindexes   = length indexes -1
@@ -167,7 +148,7 @@ instance (Ord v, Ord id) => Monoid (NarradarTRS id v) where
                                     TRS rr (getSignature rr)
     mappend (PrologTRS r1 _) (PrologTRS r2 _) =
        let rr = r1 `mappend` r2 in PrologTRS rr (getSignature (snd <$> toList rr))
-    mappend (DPTRS r1 e1 _ _) (DPTRS r2 e2 _ _) =
+    mappend (DPTRS r1 _ _ _) (DPTRS r2 _ _ _) =
        let rr = elems r1 `mappend` elems r2 in TRS (Set.fromList rr) (getSignature rr)
     mappend emptytrs trs | null (rules emptytrs) = trs
     mappend trs emptytrs | null (rules emptytrs) = trs
@@ -180,6 +161,6 @@ instance (Ord v, Ppr v, Ord id, Ppr id) => Ppr (NarradarTRS id v) where
 
 
 instance (Ord id, Ord v) => ApplyAF (NarradarTRS id v) id where
-    apply af (PrologTRS  cc sig) = let trs' = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) (getSignature $ rules trs') in trs'
+    apply af (PrologTRS cc _) = let trs' = PrologTRS (Set.mapMonotonic (\(c,r) ->(c, apply af r)) cc) (getSignature $ rules trs') in trs'
     apply af trs@TRS{}           = tRS$ apply af <$$> rules trs
     apply af trs@DPTRS{}         = tRS$ apply af <$$> rules trs

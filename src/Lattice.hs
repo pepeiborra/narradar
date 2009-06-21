@@ -1,18 +1,6 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances #-}
 
------------------------------------------------------------------------------------------
-{-| Module      : Lattice
-    Copyright   : 
-    License     : All Rights Reserved
-
-    Maintainer  : 
-    Stability   : 
-    Portability : 
--}
------------------------------------------------------------------------------------------
-
 module Lattice where
-import Control.Arrow
 import Control.Monad (liftM2)
 import Data.Maybe
 import Data.List

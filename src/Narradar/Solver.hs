@@ -1,36 +1,27 @@
-{-# LANGUAGE ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE GADTs #-}
 
 module Narradar.Solver where
 
-import Control.Applicative hiding (Alternative(..))
 import Control.Arrow hiding (first)
-import Control.Monad as P
-import Control.Monad.Free.Narradar
+import Control.Monad.Free
+import Control.Monad.Free.Improve
 import Control.Monad.Logic
-import Data.Foldable (toList)
-import Data.Maybe (fromMaybe, listToMaybe, maybeToList)
-import Data.Monoid
-import Data.Traversable
+import Data.Maybe (fromMaybe)
 import System.IO.Unsafe
-import Text.ParserCombinators.Parsec (ParseError, parse)
-import Text.XHtml (Html, primHtml)
-import Lattice
 
-import Narradar.ArgumentFiltering (typeHeu, typeHeu2, innermost, bestHeu, AF_)
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Aprove
-import Narradar.DPairs
-import Narradar.Proof
+import Narradar.Types.ArgumentFiltering (typeHeu, typeHeu2, bestHeu)
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Processor.Aprove
+import Narradar.Framework.Proof
 import Narradar.Types
-import Narradar.NarrowingProblem
-import Narradar.PrologProblem
-import Narradar.RewritingProblem
-import Narradar.ReductionPair
-import Narradar.GraphTransformation
-import Narradar.UsableRules
+import Narradar.Processor.Graph
+import Narradar.Processor.NarrowingProblem
+import Narradar.Processor.PrologProblem
+import Narradar.Processor.RewritingProblem
+import Narradar.Processor.ReductionPair
+import Narradar.Processor.GraphTransformation
+import Narradar.Processor.UsableRules
 import Narradar.Utils
 
 import Language.Prolog.SharingAnalysis (SharingAssignment)
@@ -61,16 +52,16 @@ parseProlog = eitherM . fmap (inferType &&& id) . toEither . parsePrologProblem
 -- Some Basic solvers
 -- ------------------
 prologSolver opts typ = prologSolver' opts (typeHeu2 typ) (typeHeu typ)
-prologSolver' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
+prologSolver' _opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
   where narrowingSolver = refineBy 4 (solve' (msum . uGroundRhsAllP h2 >=> aproveWebP))
                                      refineNarrowing
 
-prologSolverOne' opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
+prologSolverOne' _opts h1 h2 = prologP_labelling_sk h1 >=> usableSCCsProcessor >=> narrowingSolver
   where narrowingSolver = refineBy 4 (solve' (msum . reductionPair h2 20 >=> sccProcessor))
                                      refineNarrowing
 
 pSolver :: Monad m => options -> (prob -> C (Free ProofF) a) -> prob -> m (Bool, ProofC a, String)
-pSolver _ solver p = P.return (maybe False (const True) sol, fromMaybe iprob sol, "") where
+pSolver _ solver p = return (maybe False (const True) sol, fromMaybe iprob sol, "") where
     prob  = solver p
     iprob = improve prob
     sol   = runProof' iprob `asTypeOf` Just iprob
@@ -108,22 +99,22 @@ which cut nonproductive failure branches.
 {-
 solveT f x = do
   fx <- lift $ runProofT (f x)
-  if null(toList fx) then wrap fx else solveT f P.=<< wrap fx
+  if null(toList fx) then wrap fx else solveT f =<< wrap fx
 
 solveBT 0 f x = f x
 solveBT b f x = do
   fx <- lift $ runProofT (f x)
-  if isSuccess fx then wrap fx else solveBT (b-1) f P.=<< wrap fx
+  if isSuccess fx then wrap fx else solveBT (b-1) f =<< wrap fx
 -}
 
-solve' :: P.MonadPlus m => (a -> m a) -> a -> m a
+solve' :: MonadPlus m => (a -> m a) -> a -> m a
 -- Does not produce 'good-looking' proofs
-solve' f x = let x' = f x in x' `P.mplus` (x' P.>>= solve' f)
+solve' f x = let x' = f x in x' `mplus` (x' >>= solve' f)
 
-solve f x = let fx = f x in if isSuccess fx then fx else (fx P.>>= solve f)
+solve f x = let fx = f x in if isSuccess fx then fx else (fx >>= solve f)
 
 solveB 0 f x = f x
-solveB b f x = let fx = f x in if isSuccess fx then fx else solveB (b-1) f P.=<< fx
+solveB b f x = let fx = f x in if isSuccess fx then fx else solveB (b-1) f =<< fx
 
 --refineBy :: (Prelude.Monad m, Bind m' m m, MPlus m m m) => Int -> (a -> m a) -> (a -> m' a) -> a -> m a
 refineBy maxDepth f refiner = loop maxDepth where
@@ -131,7 +122,7 @@ refineBy maxDepth f refiner = loop maxDepth where
   loop i x = f x `mplus` (refiner x >>= loop (i-1))
 
 --firstP :: [a -> Proof s a] -> a -> Proof s a
-firstP [] _ = P.mzero
+firstP [] _ = mzero
 firstP (a:alternatives) p = do
   ei_free <- free (a p)
   case ei_free of
@@ -139,17 +130,17 @@ firstP (a:alternatives) p = do
     Right x     -> wrap x
     Left  z     -> return z
 
-first :: P.Monad m => [a -> ProofT m a] -> a -> ProofT m a
+first :: Monad m => [a -> ProofT m a] -> a -> ProofT m a
 first [] _ = mzero
 first (a:alternatives) p = FreeT $ do
                            x <- unFreeT (a p)
                            case x of
                              Right MZero      -> unFreeT(first alternatives p)
                              Right DontKnow{} -> unFreeT(first alternatives p)
-                             anything_else    -> P.return anything_else
+                             anything_else    -> return anything_else
 
 
---reducingP ::  (P.MonadPlus m, TRS t id f, Return m) => (t -> m t) -> t -> m t
+--reducingP ::  (MonadPlus m, TRS t id f, Return m) => (t -> m t) -> t -> m t
 reducingP solver p =  do
   p' <- solver p
   guard (length (rules p') <=length (rules p))
@@ -159,5 +150,5 @@ reducingP solver p =  do
 --runSolver solver p = runProofT (p >>= solver)
 infixl 3 <|>
 (<|>) = liftM2 mplus
-msumF  = foldr (<|>) (const P.mzero)
-msumParF = foldr (liftM2 mplusPar) (const P.mzero)
+msumF  = foldr (<|>) (const mzero)
+msumParF = foldr (liftM2 mplusPar) (const mzero)

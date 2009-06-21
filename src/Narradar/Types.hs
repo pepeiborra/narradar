@@ -4,34 +4,31 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Narradar.Types ( module Data.Term.Rules
+module Narradar.Types ( module Narradar.Constraints.Unify
                       , module Narradar.Types
-                      , module Narradar.TRS
-                      , module Narradar.Problem
-                      , module Narradar.ProblemType
-                      , module Narradar.DPIdentifiers
-                      , module Narradar.PrologIdentifiers
-                      , module Narradar.Labellings
-                      , module Narradar.Goal
-                      , module Narradar.Convert
-                      , module Narradar.Unify
-                      , module Narradar.Term
-                      , module Narradar.Var
-                      , module Narradar.Ppr
-                      , MonadFree(..)
+                      , module Narradar.Types.DPairs
+                      , module Narradar.Types.TRS
+                      , module Narradar.Types.Problem
+                      , module Narradar.Types.ProblemType
+                      , module Narradar.Types.DPIdentifiers
+                      , module Narradar.Types.PrologIdentifiers
+                      , module Narradar.Types.Labellings
+                      , module Narradar.Types.Goal
+                      , module Narradar.Types.Term
+                      , module Narradar.Types.Var
+                      , module Narradar.Utils.Convert
+                      , module Narradar.Utils.Ppr
                       ) where
 import Data.DeriveTH
 import Data.Derive.Is
 
 import Control.Applicative hiding (Alternative(..), many, optional)
-import Control.Monad.Error (Error(..), noMsg)
-import Control.Monad.Free (MonadFree(..))
+import Control.Monad.Error (Error(..))
 import Control.Monad (MonadPlus(..))
-import Data.ByteString.Char8 (ByteString, pack, unpack)
+import Data.ByteString.Char8 (ByteString)
 import Data.Graph (Graph, Vertex)
-import Data.List ((\\), groupBy, sort, partition)
+import Data.List (groupBy, sort, partition)
 import Data.Foldable (Foldable(..))
-import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
@@ -40,28 +37,26 @@ import Data.Traversable as T
 import Text.ParserCombinators.Parsec
 import Text.PrettyPrint hiding (char, Mode)
 import qualified Text.PrettyPrint as Ppr
-import Text.XHtml (Html)
 import qualified TRSParser
 import TRSTypes (Mode(..))
 import Prelude as P hiding (mapM, pi, sum)
 
-import Narradar.ArgumentFiltering (AF_)
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.DPIdentifiers
-import Narradar.PrologIdentifiers
-import Narradar.Labellings
-import Narradar.Goal
-import Narradar.Ppr
-import Narradar.Problem
-import Narradar.ProblemType
-import Narradar.TRS
-import Narradar.Convert
+import Narradar.Constraints.Unify
+import Narradar.Types.ArgumentFiltering (AF_)
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.DPairs
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.PrologIdentifiers
+import Narradar.Types.Labellings
+import Narradar.Types.Goal
+import Narradar.Types.Problem
+import Narradar.Types.ProblemType
+import Narradar.Types.TRS
+import Narradar.Types.Term
+import Narradar.Types.Var
+import Narradar.Utils.Convert
 import Narradar.Utils
-import Narradar.Unify
-import Narradar.Term
-import Narradar.Var
-
-import Data.Term.Rules hiding (unifies')
+import Narradar.Utils.Ppr
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.Parser as Prolog
@@ -188,7 +183,7 @@ data ErrorM e a = L e | R a
 
 instance Monad (ErrorM e) where
   return = R
-  L e >>= f = L e
+  L e >>= _ = L e
   R a >>= f = f a
 
 instance Error e => MonadPlus (ErrorM e) where

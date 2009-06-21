@@ -3,10 +3,11 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
-module Narradar.ProblemType where
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+
+module Narradar.Types.ProblemType where
 
 import Control.Applicative
-import qualified Control.RMonad as R
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
@@ -18,15 +19,13 @@ import Data.Monoid
 import Prelude hiding (pi)
 import Text.PrettyPrint
 
-import Data.Term.Rules
-
-import Narradar.ArgumentFiltering as AF
-import Narradar.Convert
-import Narradar.Goal
-import Narradar.DPIdentifiers
-import Narradar.Ppr
-import Narradar.Term
+import Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.Goal
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.Term
 import Narradar.Utils
+import Narradar.Utils.Convert
+import Narradar.Utils.Ppr (Ppr)
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 

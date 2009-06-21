@@ -9,18 +9,16 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Narradar.Labellings where
+module Narradar.Types.Labellings where
 
 import Control.Parallel.Strategies
 import Data.Foldable (Foldable(..))
-import Narradar.DPIdentifiers
-import Narradar.PrologIdentifiers
-import Narradar.Utils
 import Text.PrettyPrint
 
-import Data.Term
-import Data.Term.Simple
-import Data.Term.Ppr
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.PrologIdentifiers
+import Narradar.Types.Term
+import Narradar.Utils.Ppr
 
 -- -----------------------
 -- Named Term Signatures
@@ -43,7 +41,7 @@ instance Functor Labelled where
 
 instance Foldable Labelled where
   foldMap f (Plain a)      = f a
-  foldMap f (Labelling n a) = f a
+  foldMap f (Labelling _ a) = f a
 
 instance Ord a => Ord (Labelled a) where
     compare (Labelling i1 f1) (Labelling i2 f2) = compare (f1,i1) (f2,i2)
@@ -69,7 +67,7 @@ instance NFData a => NFData (Labelled a) where
 
 mapLabel :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Labelled id -> Labelled id
 mapLabel f _  (Labelling ll i) = f ll i
-mapLabel f l0 (Plain i)        = l0 i
+mapLabel _ l0 (Plain i)        = l0 i
 
 mapLabelT :: (Functor (f (Labelled id)), MapId f) => (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Term (f (Labelled id)) v -> Term (f (Labelled id)) v
 mapLabelT f l0 = evalTerm return (Impure . mapId (mapLabel f l0))

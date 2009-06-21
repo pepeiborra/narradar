@@ -4,32 +4,24 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-module Narradar.Output where
+module Narradar.Framework.Output where
 
-import Control.Applicative
 import Control.Monad.Free.Narradar
 import Data.ByteString.Char8 (unpack)
 import Data.HashTable (hashString)
 import Data.Foldable
-import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Text.PrettyPrint
-import Text.Printf
-import Text.Show
 import qualified Text.XHtml as H
 import Text.XHtml (HTML(..), Html(..), (<<), (+++), (!), p, br, noHtml, theclass, hotlink, thediv
                   ,identifier,table,td)
 import Text.XHtml.Table
 
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Proof
+import Narradar.Types.ArgumentFiltering (AF_(..))
+import Narradar.Framework.Proof
 import Narradar.Types hiding ((!))
-import qualified Narradar.Types as TRS
-import Narradar.Utils (snub, foldMap3)
-import Data.Term.Ppr
 
-import qualified Data.Term.Var as Prolog
 import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude hiding (concat)
@@ -40,8 +32,8 @@ import Prelude hiding (concat)
 
 instance HTML a => HTMLTABLE a where cell = cell . toHtml
 
-instance Ppr id => HTML (AF.AF_ id) where
-    toHtml (AF.AF af) = H.unordList [ pi +++ "(" +++ show(ppr k) +++ ") = " +++ show (Set.toList ii)
+instance Ppr id => HTML (AF_ id) where
+    toHtml (AF af) = H.unordList [ pi +++ "(" +++ show(ppr k) +++ ") = " +++ show (Set.toList ii)
                                           | (k,ii) <- Map.toList af]
         where pi = H.primHtmlChar "pi"
 
@@ -63,7 +55,7 @@ instance Ppr id => HTML (ProcInfo id) where
 
 --instance HTML Prolog.Program where toHtml = show . Prolog.ppr
 instance (Ord v, Ord id, Ppr v, Ppr id) => HTML (Problem id v) where
-    toHtml (Problem typ@Prolog{..} _ _) =
+    toHtml (Problem typ@Prolog{program} _ _) =
         H.table ! [typClass typ] << (
             H.td ! [H.theclass "problem"] << H.bold (toHtml (ppr typ <+> text "Problem")) </>
             H.td ! [H.theclass "TRS_TITLE" ] << "Clauses" </> aboves' program)
@@ -106,7 +98,7 @@ instance (Ord id, Ppr id, Ppr v, Ord v) => HTML (ProblemProof id v) where
            divmaybe +++ detailResult procInfo
 --           divmaybe +++ thickbox res << spani "seeproof" << "(see failure)"
 
-    work pr@Or{..} = p
+    work Or{..} = p
                       << problem +++ br +++
                          procInfo +++ br +++
                           "Problem was translated to " +++ show(length subProblems) +++ " equivalent alternatives" +++ br +++
@@ -121,8 +113,8 @@ instance (Ord id, Ppr id, Ppr v, Ord v) => HTML (ProblemProof id v) where
         p
         << H.unordList [p1,p2]
     work MDone = noHtml -- toHtml "RESULT: D"
-    work (MPlus    p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
-    work (MPlusPar p1 p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work (MPlus    _ p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
+    work (MPlusPar _ p2)  = p2 -- If we see the choice after simplifying, it means that none was successful
     work (Stage p)= p
     work Step{..} = p
                     << problem +++ br +++ procInfo +++ br +++ subProblem
@@ -178,6 +170,6 @@ pprSkelt = foldFree ppr f where
   f (And _ _ pp)   = parens $ cat $ punctuate (text " & ") pp
   f (Or _ _ pp)    = parens $ cat $ punctuate (text " | ") pp
   f (MPlus p1 p2)  = p1 <+> text " | " <+> p2
-  f Step{..}       = text " -> " <> subProblem
+  f Step{subProblem}= text " -> " <> subProblem
 
 -- instance H.ADDATTRS H.HotLink where h ! aa = h{H.hotLinkAttributes = H.hotLinkAttributes h ++ aa}

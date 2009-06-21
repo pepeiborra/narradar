@@ -5,14 +5,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances #-}
 
-module Narradar.ReductionPair where
+module Narradar.Processor.ReductionPair where
 
 
 import Control.Applicative
 import Control.Exception
-import Control.Monad
-import Control.Monad.Free.Narradar
-import Control.Monad.Identity
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import qualified Data.Array.IArray as A
@@ -21,26 +18,20 @@ import Data.Foldable (toList)
 import Data.List
 import Data.Monoid
 import qualified Data.Set as Set
-import Text.ParserCombinators.Parsec
-import Text.PrettyPrint (Doc,parens, text, int, hcat, punctuate, comma, (<>), (<+>))
-import Text.XHtml (Html, toHtml)
-import Text.HTML.TagSoup
+import Text.PrettyPrint
 import System.IO.Unsafe
 import Prelude
 import qualified Prelude as P
 
 import Lattice
-import Narradar.Aprove
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.ArgumentFiltering (AF_, PolyHeuristic, MkHeu(..))
-import Narradar.ExtraVars
-import Narradar.NarrowingProblem
-import Narradar.Proof
-import Narradar.UsableRules
+import Narradar.Constraints.VariableCondition
+import Narradar.Framework.Proof
+import Narradar.Processor.Aprove
+import Narradar.Processor.NarrowingProblem
 import Narradar.Utils
 import Narradar.Types
-import Narradar.TRS
-import Narradar.RewritingProblem
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristic, MkHeu(..))
 
 aproveXML :: (Ord v, Ppr v, Enum v, Ord id, Ppr id, Lattice (AF_ id)) => Problem id v -> IO String
 aproveXML = memoExternalProc (aproveSrvXML OnlyReductionPair 20)
@@ -52,7 +43,7 @@ instance Ord a => Ord (Tuple31 a b c) where Tuple31 (a,_,_) `compare` Tuple31 (a
 reductionPair :: (Ord id, Ppr id, Ppr (TermF id Doc), PolyHeuristic heu id (TermF id),
                   MonadFree ProofF m, Lattice (AF_ id), v ~ Var) =>
                  MkHeu heu -> Int -> Problem id v -> [m(Problem id v)]
-reductionPair mkH timeout p@(Problem typ@(getAF -> Just pi_g) trs dpsT@(DPTRS dps_a _ unifs _))
+reductionPair mkH _timeout p@(Problem typ@(getAF -> Just pi_g) trs dpsT@(DPTRS dps_a _ _ _))
     | isAnyNarrowing typ = orProblems where
 
  (af_constructors, pi_groundInfo) = AF.splitCD p pi_g

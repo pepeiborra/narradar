@@ -14,37 +14,23 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-module Narradar.Proof where
+module Narradar.Framework.Proof where
 
 import Control.Applicative
-import Control.Arrow
-import Control.Exception (assert)
-import Control.Monad as M
 import Control.Monad.Logic as M
-import Control.Monad.State as M
 import Control.Monad.RWS
-import Data.Array.IArray as A
 import Data.ByteString.Char8 (unpack)
 import Data.DeriveTH
 import Data.Derive.Functor
 import Data.Derive.Traversable
-import Data.Foldable (Foldable(..), toList, maximum, sum)
-import Data.IORef
-import Data.List (unfoldr, find)
+import Data.Foldable (Foldable(..))
+import Data.List (find)
 import Data.Maybe
-import Data.Monoid
-import qualified Data.Map as Map
 import Data.Traversable as T
 import Text.PrettyPrint as Doc
-import Text.XHtml (Html, toHtml, noHtml)
 import System.IO.Unsafe
 
-import qualified Language.Prolog.Syntax as Prolog (Program)
-
 import Narradar.Types
-import Narradar.Utils
-import qualified Narradar.ArgumentFiltering as AF
-
 import Control.Monad.Free.Narradar
 
 import Prelude hiding (maximum, sum, log, mapM, foldr, concatMap)
@@ -107,7 +93,7 @@ data SomeProblem where
     SomeProblem       :: (Ord id, Ppr id, Ord v, Ppr v) => !(Problem id v) -> SomeProblem
 
 instance Show SomeProblem where
-    show (SomeProblem p) = "<some problem>"
+    show (SomeProblem _) = "<some problem>"
 
 instance Ppr SomeProblem where
   ppr (SomeProblem p) = ppr p
@@ -124,7 +110,7 @@ instance Ppr SomeInfo where ppr (SomeInfo pi) = ppr pi
 instance Show SomeInfo where show = show . ppr
 someInfo = SomeInfo
 
-instance (Ord v, Ppr v, Ppr id, Ppr v) => Ppr (ProblemProofC id v) where ppr = pprProof
+instance (Ord v, Ppr v, Ppr id) => Ppr (ProblemProofC id v) where ppr = pprProof
 pprProof = foldFree (const Doc.empty) ppr -- where leaf prob = ppr prob $$ text ("RESULT: Not solved yet")
 
 
@@ -146,7 +132,7 @@ pprProofF = f where
         text "PROCESSOR: " <> ppr procInfo  $$
         text ("RESULT: Don't know.") $$
         proofTail procInfo
-      f p@(Or proc prob sub) =
+      f (Or proc prob sub) =
         ppr prob $$
         text "PROCESSOR: " <> ppr proc $$
         text ("Problem was translated to " ++ show (length sub) ++ " equivalent problems.") $$
@@ -165,13 +151,13 @@ pprProofF = f where
         ppr problem $$
         text "PROCESSOR: " <> ppr procInfo $$
         nest 8 (ppr subProblem)
-      f p@(MPlus p1 p2) =
+      f (MPlus p1 p2) =
         text ("There is a choice.") $$
         nest 8 (vcat $ punctuate (text "\n") $ map ppr [p1,p2])
-      f p@(MPlusPar p1 p2) =
+      f (MPlusPar p1 p2) =
         text ("There is a choice.") $$
         nest 8 (vcat $ punctuate (text "\n") $ map ppr [p1,p2])
-      f p@(MAnd p1 p2) =
+      f (MAnd p1 p2) =
         text ("Problem was divided in 2 subproblems.") $$
         nest 8 (vcat $ punctuate (text "\n") $ map ppr [p1,p2])
       f MDone = text "Done"
@@ -289,7 +275,7 @@ isSuccessF (Stage p)      = p
 
 annotateLevel :: forall f a. (Functor f) => Free f a -> Free (AnnotatedF Int f) a
 annotateLevel = go 0 where
-  go i (Pure  x) = return x
+  go _ (Pure  x) = return x
   go i (Impure x) = Impure (Annotated i $ fmap (go (succ i)) x)
 
 -- -----------------

@@ -1,17 +1,16 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
-module Narradar.GraphViz where
+{-# OPTIONS_GHC -fno-warn-unused-matches #-}
+
+module Narradar.Framework.GraphViz where
 
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Free.Narradar
 import Data.Graph
-import Data.Foldable (foldMap, toList)
+import Data.Foldable (toList)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.List hiding (unlines)
@@ -23,8 +22,8 @@ import Prelude hiding (unlines)
 import System.Process
 import Text.Printf
 #endif
-import Narradar.ArgumentFiltering (fromAF)
-import Narradar.Proof
+import Narradar.Types.ArgumentFiltering (fromAF)
+import Narradar.Framework.Proof
 import Narradar.Types
 import Narradar.Utils
 import qualified Language.Prolog.Syntax as Prolog
@@ -39,7 +38,7 @@ sliceWorkDone = foldFree return (Impure . f) where
     f (MPlus    p1 p2) = if isSuccess p1 then Stage p1 else (MPlus    p1 p2)
     f (MAnd     p1 p2) = if not(isSuccess p1) then Stage p1 else (MAnd p1 p2)
     f x = x
-    takeWhileAndOneMore f []     = []
+    takeWhileAndOneMore _ []     = []
     takeWhileAndOneMore f (x:xs) = if f x then x : takeWhileAndOneMore f xs else [x]
 
 instance Functor Dot where fmap = liftM
@@ -59,11 +58,11 @@ pprDot' PprDot{..} prb = showDot $ do
   where
     f (Annotated done Success{..})    par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "YES"), ("color","#29431C")] (doneEdge done)
     f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "NO"),("color","#60233E")] (doneEdge done)
-    f (Annotated done MZero{})        par = return par -- childnode' [("label","Don't Know")] (doneEdge done) par
+    f (Annotated _ MZero{})        par = return par -- childnode' [("label","Don't Know")] (doneEdge done) par
     f (Annotated done DontKnow{..})   par = procnode done procInfo par   >>= childnode' [("label","Don't Know")] (doneEdge done)
 --    f (Annotated done (MAnd p1 ))par = p1 par
-    f (Annotated done MDone{})        par = return par
-    f (Annotated done (MAnd  p1 p2))  par = do
+    f (Annotated _ MDone{})        par = return par
+    f (Annotated _ (MAnd  p1 p2))  par = do
                                 cme <- cluster $ do
                                              attribute ("color", "#E56A90")
                                              p1 par
@@ -87,7 +86,7 @@ pprDot' PprDot{..} prb = showDot $ do
                                              return me
                                 return (Cluster cme)
     f (Annotated done  Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
-    f (Annotated done (Stage p)) par = p par
+    f (Annotated _ (Stage p)) par = p par
     f (Annotated done Or{..})   par
       | done || showFailedPaths = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
       | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
@@ -106,7 +105,6 @@ pprDot' PprDot{..} prb = showDot $ do
     problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
 
     problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
-    problemNode' p    = childnode (problemAttrs p)
     doneEdge True     = [("color", "green")]
     doneEdge False    = [("color", "red")]
 
@@ -142,13 +140,12 @@ pprDot' PprDot{..} prb = showDot $ do
 
     procnode' procInfo done par = childnode' [("label", show procInfo)] (doneEdge done) par >>= \me -> return me
 
-    childnode attrs = childnode' attrs []
     childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return (N n)
     childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
 
 
 pprTPDBdot :: (Ord v, Ppr v, Ord id, Ppr id) => Problem id v -> String
-pprTPDBdot p@(Problem Prolog{..} _ _) =
+pprTPDBdot (Problem Prolog{..} _ _) =
     showPpr program ++ "\\l" ++
     unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
 

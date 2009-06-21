@@ -1,13 +1,11 @@
-module Narradar.Unify where
+module Narradar.Constraints.Unify where
 
-import Control.Exception
-import Control.Monad
+import Control.Exception (assert)
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import Data.Term hiding (unify, unifies)
---import Data.Term (variant)
 import qualified Data.Term as Term
-import Narradar.Term
+import Narradar.Types.Term
 
 unifies  x y = isJust (unify x y)
 unifies' x y = isJust (unify' x y)

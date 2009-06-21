@@ -9,33 +9,22 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 
-module Narradar.DPIdentifiers where
+module Narradar.Types.DPIdentifiers where
 
 import Control.Applicative
-import Control.Arrow
 import Control.Parallel.Strategies
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
-import Data.HashTable (hashString)
-import Data.Foldable (toList, Foldable(..))
-import Data.Int
-import Data.List (isSuffixOf)
-import Data.Monoid
-import qualified Data.Set as Set
-import Data.Set (Set)
+import Data.Foldable (Foldable(..))
 import Data.Traversable (Traversable(..))
 import Prelude
 import Text.PrettyPrint
 
-import qualified Language.Prolog.Syntax as Prolog
+import Narradar.Types.Term
+import Narradar.Utils.Ppr
 
-import Narradar.Term
-import Narradar.Utils
-import Data.Term
-import Data.Term.Rules
-import Data.Term.Ppr
 
 type Id = Identifier String
 type DP a v = RuleN (Identifier a) v

@@ -8,7 +8,7 @@ import Text.HTML.TagSoup
 import Text.ParserCombinators.Parsec.Prim  hiding ((<|>), many)
 import Text.ParserCombinators.Parsec.Combinator (many1)
 import Text.ParserCombinators.Parsec.Pos
-import Text.ParserCombinators.Parsec.Applicative
+import Text.ParserCombinators.Parsec.Applicative ()
 
 type TagParser st = GenParser Tag st
 
@@ -52,8 +52,8 @@ noneOf ts = satisfy (not . (`elemTag` ts))
 skipTagP :: TagParser st Tag
 skipTagP = do
   tag@(TagOpen name _) <- tagOpen
-  content <- skipMany ((tagText >> return ()) <|> (skipTagP >> return ()))
-  close <- tagCloseName name
+  skipMany ((tagText >> return ()) <|> (skipTagP >> return ()))
+  tagCloseName name
   return tag
 
 someTagP t k = (tagP t k <|> (skipTagP >> someTagP t k)) <* many skipTagP
@@ -61,7 +61,7 @@ someTagP t k = (tagP t k <|> (skipTagP >> someTagP t k)) <* many skipTagP
 skipTagNameP :: String -> TagParser st ()
 skipTagNameP name = do
   tag name
-  content <- skipMany ((tagText >> return ()) <|> (skipTagP >> return ()))
+  skipMany ((tagText >> return ()) <|> (skipTagP >> return ()))
   let closing_tag = head $ words $ tail $ init name
   tag' (== TagClose closing_tag) <?> closing_tag
   return ()

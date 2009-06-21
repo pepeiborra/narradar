@@ -1,19 +1,19 @@
 {-# LANGUAGE TypeFamilies #-}
-module Narradar.Goal where
+module Narradar.Types.Goal where
 
 import Control.Applicative hiding (Alternative(..), many, optional)
 import Data.Term.Rules
 import qualified Data.Set as Set
-import Narradar.ArgumentFiltering (AF, AF_, ApplyAF(..), init)
-import qualified Narradar.ArgumentFiltering as AF
-import Narradar.Ppr
-import Narradar.Utils
 import qualified TRSParser
 import TRSTypes(Mode(..))
-import qualified TRSTypes (Goal, TermF(..))
+import qualified TRSTypes (TermF(..))
 import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Applicative
+import Text.ParserCombinators.Parsec.Applicative ()
 import Text.PrettyPrint hiding (char, Mode)
+
+import Narradar.Types.ArgumentFiltering (AF_)
+import qualified Narradar.Types.ArgumentFiltering as AF
+import Narradar.Utils.Ppr
 
 type Goal = (String, [Mode])
 instance Ppr Mode where ppr G = text "b"; ppr V = text "f"

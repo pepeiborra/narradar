@@ -13,18 +13,15 @@ module Control.Monad.Free.Narradar
 import "control-monad-free" Control.Monad.Free hiding (Monad(..), join, mplus, liftM)
 import Control.Monad.Free.Improve
 import Control.Applicative
-import qualified Control.Monad as Old
-import qualified Control.Monad.Identity (Identity(..))
-import qualified Control.Monad.Trans as Old
+import Control.Monad
 import Data.Foldable
-import Data.Monoid
 import Data.Traversable as T
 import Prelude hiding (abs)
 import qualified Prelude as P
 
 data AnnotatedF n f a = Annotated {note::n, dropNote::f a}
 instance Functor f => Functor (AnnotatedF n f) where fmap f (Annotated n x) = Annotated n (fmap f x)
-instance Foldable f => Foldable (AnnotatedF n f) where foldMap f (Annotated n x) = foldMap f x
+instance Foldable f => Foldable (AnnotatedF n f) where foldMap f (Annotated _ x) = foldMap f x
 instance Traversable f => Traversable (AnnotatedF n f) where traverse f (Annotated n x) = Annotated n <$> traverse f x
 dropNotes = foldFree Pure (Impure . dropNote)
 annotate :: Functor f => (a -> b) -> (Free f b -> n) -> Free f a -> Free (AnnotatedF n f) a
