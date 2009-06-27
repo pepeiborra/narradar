@@ -21,6 +21,7 @@ import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
 import qualified Control.RMonad as R
 --import qualified "monad-param" Control.Monad.Parameterized as P
 import Data.Array.IArray
+import qualified Data.Foldable as F
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
 import qualified Data.HashTable as HT
@@ -55,15 +56,25 @@ trace _ x = x
 newtype O f g x = O (f(g x))
 instance (Functor f, Functor g) => Functor (O f g) where fmap f (O fgx) = O (fmap2 f fgx)
 
--- -------------
--- fmap / mapM
--- -------------
+-- --------------------------------
+-- fmap / mapM / foldMap / toList n
+-- --------------------------------
 fmap2  = fmap . fmap
+fmap3  = fmap . fmap . fmap
 (<$$>) = fmap2
+(<$$$>)= fmap3
 
 mapM2  = mapM . mapM
 
 return2 = return . return
+
+foldMap2 :: (Foldable t, Foldable t', Monoid m) => (a -> m) -> t(t' a) -> m
+foldMap3 :: (Foldable t, Foldable t', Foldable t'',Monoid m) => (a -> m) -> t(t'(t'' a)) -> m
+foldMap2 = foldMap . foldMap
+foldMap3 = foldMap . foldMap2
+
+toList3 ::  (Foldable t, Foldable t1, Foldable t2) => t (t1 (t2 b)) -> [b]
+toList3 = (F.concatMap . F.concatMap) toList
 
 -- ------------------------
 -- Foldables / Traversables
@@ -77,12 +88,6 @@ unsafeZipWithGM f t1 t2  = evalStateT (mapM zipG' t2) (toList t1)
 unsafeZipWithG :: (Traversable t1, Traversable t2) => (a -> b -> c) -> t1 a -> t2 b -> t2 c
 unsafeZipWithG f x y = runIdentity $ unsafeZipWithGM (\x y -> return (f x y)) x y
 
---size = length . toList
-
-foldMap2 :: (Foldable t, Foldable t', Monoid m) => (a -> m) -> t(t' a) -> m
-foldMap3 :: (Foldable t, Foldable t', Foldable t'',Monoid m) => (a -> m) -> t(t'(t'' a)) -> m
-foldMap2 = foldMap . foldMap
-foldMap3 = foldMap . foldMap2
 
 -- --------------
 -- Various stuff

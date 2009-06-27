@@ -1,5 +1,6 @@
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns, ViewPatterns #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Narradar.Processor.Graph where
 
@@ -39,7 +40,7 @@ filterSEDG (Problem _ _ dptrs@DPTRS{}) gr =
 -- DP Processors transforming the graph
 -- -------------------------------------
 cycleProcessor, sccProcessor :: (Ppr v, Ord v, Enum v, Ppr id, Ord id) => Problem id v -> ProblemProofG id v
-usableSCCsProcessor :: (Ppr v, Ord v, Enum v) => Problem LPId v -> ProblemProofG LPId v
+usableSCCsProcessor :: (Ppr v, Ord v, Enum v, Ppr id, Ord a, id ~ Identifier a) => Problem id v -> ProblemProofG id v
 
 usableSCCsProcessor problem@(Problem typ@GNarrowingModes{goal} trs dps@(DPTRS dd _ unif sig))
   | null cc   = success NoCycles problem

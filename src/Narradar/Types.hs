@@ -89,6 +89,7 @@ data ProcInfo id where                    -- vv ignored vv
     PrologP         :: ProcInfo ()
     PrologSKP       :: ProcInfo ()
     LabellingSKP    :: [Labelled String] -> ProcInfo ()
+    LabellingCP     :: [Labelled String] -> ProcInfo ()
     PrologSKP_rhs   :: ProcInfo ()
     LabellingSKP_rhs:: ProcInfo ()
     UsableRulesNaiveP :: ProcInfo ()
@@ -131,7 +132,10 @@ instance Ppr id => Ppr (ProcInfo id) where
     ppr PrologSKP        = text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation)"
     ppr (LabellingSKP mm)= text "Termination of LP as termination of Narrowing" $$
-                           text "(Schneider-Kamp transformation + Labelling)" $$
+                           text "(Schneider-Kamp transformation + Predicate Labelling)" $$
+                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map (text.show)) $ groupBy ((==) `on` unlabel) $ sort mm)
+    ppr (LabellingCP mm) = text "Termination of LP as termination of Narrowing" $$
+                           text "(Schneider-Kamp transformation + Constructor Labelling)" $$
                            text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map (text.show)) $ groupBy ((==) `on` unlabel) $ sort mm)
     ppr PrologSKP_rhs    = text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + rhs bottoms trick)"

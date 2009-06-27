@@ -25,8 +25,6 @@ import Narradar.Utils.Ppr
 -- -----------------------
 
 type LS   = Labelled String
-type LPS  = Labelled PS
-type LPId = Identifier LPS
 type LId  = Identifier LS
 
 -- -----------

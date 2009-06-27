@@ -22,9 +22,6 @@ import Text.PrettyPrint
 import Narradar.Types.DPIdentifiers
 import Data.Term.Ppr
 
-type PS   = PrologId String
-type PId  = Identifier PS
-
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
