@@ -80,7 +80,7 @@ mkDPSig (getSignature -> sig@Sig{definedSymbols, arity}) | dd <- toList definedS
      ,arity          = arity `Map.union` Map.fromList [(markDPSymbol f, getArity sig f) | f <- dd]
      }
 
-instance (Convert (TermN id v) (TermN id' v'), Convert id id', Ord id, Ord id', Ord v') =>
+instance (Convert (TermN id v) (TermN id' v'), Convert id id', Ord id, Ord id', Ord v, Ord v') =>
           Convert (Problem id v) (Problem id' v') where
   convert p@Problem{typ} = (fmap convert p){typ = fmap convert typ}
 

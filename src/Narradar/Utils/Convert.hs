@@ -57,32 +57,17 @@ instance Convert a String => Convert (PrologId a) String where
   convert (UId i)       = "u_" ++ show i
   convert (FunctorId f) = convert f
 
-instance Convert PS PS   where convert = id
-instance Convert PId PId where convert = id
-
 -- Labellings
 -- ----------
 instance Convert id (Labelled id) where convert = Plain
 instance Convert String LId       where convert = convert . (convert :: String -> Labelled String)
-instance Convert PS     LPId      where convert = IdFunction . Plain
-instance Convert PId    LPId      where convert = fmap Plain
 instance Convert LId    LId       where convert = id
-instance Convert LPId LPId where convert = id
 
 -- Terms
 -- ------
 instance (Functor f, Convert v v') => Convert (Term f v) (Term f v') where convert = fmap convert
-instance (Convert id id') => Convert (TermN id v) (TermN id' v) where convert = mapTermId convert
+instance (Convert id id') => Convert (TermN id v) (TermN id' v) where convert = mapTermSymbols convert
 instance Convert (TermN id v) (TermN id v) where convert = id
-
-convertToLabelled :: IsPrologId id => TermN id v -> TermN (Labelled id) v
-convertToLabelled = foldTerm return f where
-  f (Term id  tt)
-    | isInId id || isOutId id = term (Labelling [1..length tt] id) tt
-    | otherwise               = term (Plain id) tt
-
-instance Convert (TermN PS     v) (TermN LPS  v) where convert = convertToLabelled
-
 
 -- AFs
 -- ---

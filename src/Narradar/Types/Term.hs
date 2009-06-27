@@ -3,7 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 
 module Narradar.Types.Term (TermF(..), TermN, RuleN, constant, term, term1
-                     ,termId, mapTermId, mapTermIdF, Size(..), fromSimple
+                     ,termIds, Size(..), fromSimple
                      ,ExtraVars(..)
                      ,module Data.Term, module Data.Term.Rules, MonadFree(..))
     where
@@ -31,15 +31,9 @@ term1 f t = Impure (Term f [t])
 constant :: id -> TermN id a
 constant f = term f []
 
-termId :: MonadPlus m => TermN id a -> m id
-termId = foldTerm (const mzero) f where
+termIds :: MonadPlus m => TermN id a -> m id
+termIds = foldTerm (const mzero) f where
     f (Term f tt) = return f `mplus` F.msum tt
-
-mapTermId :: (id -> id') -> TermN id a -> TermN id' a
-mapTermId f = mapTerm (mapTermIdF f)
-
-mapTermIdF :: (id -> id') -> TermF id a -> TermF id' a
-mapTermIdF f (Term id tt) = Term (f id) tt
 
 fromSimple (Simple.Term id tt) = Term id tt
 
