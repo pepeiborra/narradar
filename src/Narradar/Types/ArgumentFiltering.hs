@@ -46,47 +46,12 @@ import Language.Prolog.SharingAnalysis (SharingAssignment)
 import Debug.Observe
 #endif HOOD
 
-mkGoalAF (f, tt) = singleton f [ i | (i,G) <- zip [1..] tt]
-
 extendToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
 
 newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord, Show)
 type AF = AF_ Id
 type LabelledAF = AF_ LId
-
-instance Ppr id => Ppr (AF_ id) where
-    ppr af =  vcat [ hcat $ punctuate comma
-                          [ ppr f <> colon <+> ppr (Set.toList aa) | (f, aa) <- xx]
-                      | xx <- chunks 3 $ Map.toList $ fromAF af]
-
--- | bottom is ill defined
---   It fails the law bottom `join` x = x       (join left identity)
---   However, the law x `join` bottom = x holds (join right identity)
-instance Lattice AF where
-  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
-  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
-  top    = AF mempty
-  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
-
-instance Lattice (AF_ LId) where
-  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
-  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
-  top    = AF mempty
-  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
-
-instance Ord id => Lattice (AF_ id) where
-  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
-  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
-  top    = AF mempty
-
-
--- | The meet/top monoid
---   There are (at least) two possible monoids, meet/top and join/bottom
---   But only the former makes sense for AFs.
-instance Ord id => Monoid (AF_ id) where
-  mempty  = AF mempty
-  mappend (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
 
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
@@ -133,6 +98,40 @@ domain (AF pi) = Map.keysSet pi
 splitCD sig (AF af) = (af_c, af_d) where
     af_c = AF (Map.filterWithKey (\k _ -> k `Set.member` getConstructorSymbols sig) af)
     af_d = AF (Map.filterWithKey (\k _ -> k `Set.member` getDefinedSymbols     sig) af)
+
+
+instance Ppr id => Ppr (AF_ id) where
+    ppr af =  vcat [ hcat $ punctuate comma
+                          [ ppr f <> colon <+> ppr (Set.toList aa) | (f, aa) <- xx]
+                      | xx <- chunks 3 $ Map.toList $ fromAF af]
+
+-- | bottom is ill defined
+--   It fails the law bottom `join` x = x       (join left identity)
+--   However, the law x `join` bottom = x holds (join right identity)
+instance Lattice AF where
+  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  top    = AF mempty
+  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
+
+instance Lattice (AF_ LId) where
+  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  top    = AF mempty
+  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
+
+instance Ord id => Lattice (AF_ id) where
+  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  top    = AF mempty
+
+
+-- | The meet/top monoid
+--   There are (at least) two possible monoids, meet/top and join/bottom
+--   But only the former makes sense for AFs.
+instance Ord id => Monoid (AF_ id) where
+  mempty  = AF mempty
+  mappend (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
 
 -- ----------------------
 -- Regular AF Application

@@ -18,6 +18,8 @@ import Narradar.Utils.Ppr
 type Goal = (String, [Mode])
 instance Ppr Mode where ppr G = text "b"; ppr V = text "f"
 
+mkGoalAF (f,mm) = AF.singleton f [i | (G,i) <- zip mm [1..]]
+
 goalP = do
   TRSTypes.Term id tt <- TRSParser.goal
   optional (char '.')
