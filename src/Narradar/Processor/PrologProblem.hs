@@ -132,8 +132,9 @@ prologP_labelling_cons p0@(Problem Prolog{..} _ _)
                            goal  = AF.mapSymbols (Plain <$>) (skTransformAF program g)
                        ((trs, pi), modes) <- toList $ runReader (labellingConsTrans query program)
                                                          ["/Users/pepe/Downloads/bddbddb-full.jar"]
-                       let pp' = mkGoalProblem (simpleHeu innermost) GNarrowingModes{pi, goal} trs
-                       return $ orP (LabellingCP []) p0 (map return pp')
+                       let pp'     = mkGoalProblem (simpleHeu innermost) GNarrowingModes{pi, goal} trs
+                           newCons = [ showPpr <$> c | FunctorId c <- Set.toList $ mconcat (Map.elems modes)]
+                       return $ orP (LabellingCP newCons) p0 (map return pp')
 
 -- ----------------
 -- Transformations
