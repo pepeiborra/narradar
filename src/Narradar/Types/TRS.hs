@@ -150,8 +150,8 @@ instance (Ord v, Ord id) => Monoid (NarradarTRS id v) where
        let rr = r1 `mappend` r2 in PrologTRS rr (getSignature (snd <$> toList rr))
     mappend (DPTRS r1 _ _ _) (DPTRS r2 _ _ _) =
        let rr = elems r1 `mappend` elems r2 in TRS (Set.fromList rr) (getSignature rr)
-    mappend emptytrs trs | null (rules emptytrs) = trs
-    mappend trs emptytrs | null (rules emptytrs) = trs
+    mappend (TRS (Set.null -> True) _) trs = trs
+    mappend trs (TRS (Set.null -> True) _) = trs
     mappend x y = tRS (rules x `mappend` rules y)
 
 instance (Ord v, Ppr v, Ord id, Ppr id) => Ppr (NarradarTRS id v) where
