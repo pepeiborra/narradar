@@ -14,6 +14,10 @@ import Narradar.Types.Labellings
 import Narradar.Types.Term
 import Narradar.Types.Var
 
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 -- ------------------
 -- External interface
@@ -27,6 +31,8 @@ class Convert f g where convert :: f -> g
 
 instance (Convert a a', Convert b b') => Convert (a,b) (a',b') where convert (a,b) = (convert a, convert b)
 instance (Convert a b) => Convert [a] [b] where convert = map convert
+instance (Convert a b) => Convert (Set a) (Set b) where convert = Set.mapMonotonic convert
+instance (Convert a b, Convert k k', Ord k') => Convert (Map k a) (Map k' b) where convert = Map.map convert . Map.mapKeys convert
 instance (Convert b a) => Convert (a -> c) (b -> c) where convert = (. convert)
 instance Convert (Term t v) (Term t' v') => Convert (Rule t v) (Rule t' v') where convert = fmap convert
 

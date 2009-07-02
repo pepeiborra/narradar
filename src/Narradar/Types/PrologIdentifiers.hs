@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE TypeSynonymInstances, UndecidableInstances, OverlappingInstances #-}
 {-# LANGUAGE PatternGuards  #-}
+{-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -10,8 +11,9 @@ module Narradar.Types.PrologIdentifiers where
 
 import Control.Applicative
 import Control.Parallel.Strategies
+import Data.AlaCarte (Expr)
 import Data.Foldable(Foldable(..))
-import Data.Traversable(Traversable(..))
+import Data.Traversable as T (Traversable(..), mapM)
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
@@ -26,6 +28,29 @@ import Data.Term.Ppr
 -- Prolog Identifiers
 -- -------------------
 data PrologId a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord)
+
+class Ord (WithoutPrologId id) => RemovePrologId id where
+  type WithoutPrologId id :: *
+  removePrologId :: id -> Maybe (WithoutPrologId id)
+
+instance Ord a => RemovePrologId (PrologId a) where
+  type WithoutPrologId (PrologId a) = a
+  removePrologId (InId x)      = Just x
+  removePrologId (OutId x)     = Just x
+  removePrologId (FunctorId x) = Just x
+  removePrologId (UId _      ) = Nothing
+
+instance (RemovePrologId a) => RemovePrologId (Identifier a) where
+  type WithoutPrologId (Identifier a) = Identifier (WithoutPrologId a)
+  removePrologId = T.mapM removePrologId
+
+instance RemovePrologId String where
+  type WithoutPrologId String = String
+  removePrologId = Just
+
+instance Ord (Expr p) => RemovePrologId (Expr p) where
+  type WithoutPrologId (Expr p) = Expr p
+  removePrologId = Just
 
 class IsPrologId id where
     isInId      :: id -> Bool

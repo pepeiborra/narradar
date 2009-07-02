@@ -3,11 +3,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, OverlappingInstances, TypeSynonymInstances #-}
-{-# LANGUAGE MultiParamTypeClasses, UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
@@ -50,12 +49,13 @@ import qualified Language.Prolog.Parser as Prolog (program)
 import Language.Prolog.Signature
 import Language.Prolog.SharingAnalysis (infer)
 import Language.Prolog.PreInterpretation (computeSuccessPatterns, ComputeSuccessPatternsOpts(..),
-                                          computeSuccessPatternsOpts, DatalogTerm)
+                                          computeSuccessPatternsOpts, DatalogTerm, Abstract,
+                                          abstractCompileGoal)
 import qualified Language.Prolog.Representation as Prolog
 import Language.Prolog.Representation (representTerm, representProgram,
                                        Term0, term0, T(..), PrologT, PrologP, V, NotVar, Compound(..),
                                        cons, nil, psucc, zero, tup, eq, is,
-                                       any, notvar, compound, mkT,
+                                       NotAny, PrologTerm, any, notvar, compound, mkT,
                                        isNotvar, isAny)
 import Language.Prolog.Transformations (QueryAnswer(..))
 
@@ -68,21 +68,21 @@ import Narradar.Types as Narradar
 import Narradar.Utils
 import Prelude hiding (and,or,any,notElem,pi)
 
-type P    = PrologT :+: PrologP :+: T String
-type PS   = PrologId (Expr P)
-type PId  = Identifier PS
-type LPS  = Labelled PS
-type LPId = Identifier LPS
+type PF   = PrologT :+: PrologP :+: T String
+type P    = Expr PF
+type RP   = PrologId P
+type LP   = Labelled P
+type DRP  = Identifier RP
+type LRP  = Labelled RP
+type DLRP = Identifier LRP
 
-type LPS' = PrologId (Labelled (Expr P))
-type LPId'= Identifier LPS'
-
-instance Convert PS     LPId      where convert = IdFunction . Plain
-instance Convert PId    LPId      where convert = fmap Plain
-instance Convert PS   PS   where convert = id
-instance Convert PId  PId  where convert = id
-instance Convert LPS  LPS  where convert = id
-instance Convert LPId LPId where convert = id
+instance Convert RP   DLRP where convert = IdFunction . Plain
+instance Convert DRP  DLRP where convert = fmap Plain
+instance Convert LRP  DRP  where convert = IdFunction . unlabel
+instance Convert RP   RP   where convert = id
+instance Convert DRP  DRP  where convert = id
+instance Convert LRP  LRP  where convert = id
+instance Convert DLRP DLRP where convert = id
 
 -- ---------
 -- Analysis
@@ -94,64 +94,66 @@ inferType (Problem Prolog{program} _ _) = infer program
 -- Processors
 -- --------------
 
-prologP_sk :: (PolyHeuristicN heu PId, MonadPlus m, MonadFree ProofF m) =>
-              MkHeu heu -> PrologProblem Narradar.Var -> m (Problem PId Narradar.Var)
+prologP_sk :: (PolyHeuristicN heu DRP, MonadPlus m, MonadFree ProofF m) =>
+              MkHeu heu -> PrologProblem Narradar.Var -> m (Problem DRP Narradar.Var)
 prologP_sk heu p0@(Problem Prolog{..} _ _) =
    andP PrologSKP p0
      [ msum (map return pp)
-         | let sk_p          = skTransform (prepareProgram $ addMissingPredicates program)
+         | let sk_p          = prologTRS' $ skTransform (prepareProgram $ addMissingPredicates program)
          , goal0            <- goals
          , let goal          = skTransformAF program goal0
                af_groundinfo = AF.init sk_p `mappend` goal
                pp            = mkGoalProblem heu GNarrowingModes{goal, pi=af_groundinfo} sk_p
      ]
 
-
-prologP_labelling_sk :: (PolyHeuristicN heu LPS, PolyHeuristicN heu LPId, MonadFree ProofF m, v ~ Narradar.Var) =>
-                        MkHeu heu -> PrologProblem v -> m (Problem LPId v)
+prologP_labelling_sk :: (PolyHeuristicN heu LRP, PolyHeuristicN heu DLRP, MonadFree ProofF m, v ~ Narradar.Var) =>
+                        MkHeu heu -> PrologProblem v -> m (Problem DLRP v)
 prologP_labelling_sk mkHeu p0@(Problem Prolog{..} _ _)
-  | null goals = success (LabellingSKP []) p0
+  | null goals = success (LabellingSKP [] :: ProcInfo LRP) p0
   | otherwise  = mall problems
   where problems = do
                        goal <-goals
                        let goal_lps = AF.mapSymbols' (flip Labelling) (skTransformAF program goal)
-                       ((trs, pi), modes) <- toList $ labellingPredsTrans mkHeu goal program
-                       let pp' = mkGoalProblem mkHeu GNarrowingModes{pi, goal = goal_lps} trs
+                       (prolog_rr, pi, sig) <- toList $ labellingPredsTrans mkHeu goal program
+                       let trs   = PrologTRS prolog_rr sig
+                           pp'   = mkGoalProblem mkHeu GNarrowingModes{pi, goal = goal_lps} trs
+                           modes = Map.keys prolog_rr
                        return $ orP (LabellingSKP modes) p0 (map return pp')
 
 
 prologP_labelling_cons :: (MonadFree ProofF m, v ~ Narradar.Var) =>
-                        PrologProblem v -> m (Problem LPId' v)
-prologP_labelling_cons p0@(Problem Prolog{..} _ _)
-  | null goals = success (LabellingCP []) p0
+                        [FilePath] -> PrologProblem v -> m (Problem DLRP v)
+prologP_labelling_cons paths p0@(Problem Prolog{..} _ _)
+  | null goals = success (LabellingCP [] :: ProcInfo LRP) p0
   | otherwise  = mall problems
   where problems = do
                        g      <- goals
                        (f,ii) <- AF.toList g
                        let query = (f, [ if i `elem` ii then G else V | i <- [1..getArity program f]])
-                           goal  = AF.mapSymbols (Plain <$>) (skTransformAF program g)
-                       ((trs, pi), modes) <- toList $ runReader (labellingConsTrans query program)
-                                                         ["/Users/pepe/Downloads/bddbddb-full.jar"]
-                       let pp'     = mkGoalProblem (simpleHeu innermost) GNarrowingModes{pi, goal} trs
-                           newCons = [ showPpr <$> c | FunctorId c <- Set.toList $ mconcat (Map.elems modes)]
+                           goal  = AF.mapSymbols Plain (skTransformAF program g)
+                       ((trs, pi), modes) <- toList $ labellingConsTrans paths query program
+                       let pp'     = mkGoalProblem (simpleHeu innermost) GNarrowingModes{pi, goal} (prologTRS' trs)
+                           newCons = Set.toList modes
                        return $ orP (LabellingCP newCons) p0 (map return pp')
 
 -- ----------------
 -- Transformations
 -- ----------------
 
-skTransform :: (Ord id, Ord v, Ppr id) =>
-                [Prolog.Clause'' id (TermN id v)] -> NarradarTRS (PrologId id) v
-skTransform clauses = prologTRS clauseRules where
+type PrologRules id v = Map (WithoutPrologId id) (Set (RuleN id v))
 
-       clauseRules = concat $ runSupply (mapM (runClause . toRule . fmap2 (mapTermSymbols FunctorId)) clauses)
+skTransform :: (Ord id, Ord v, Ppr id) =>
+                [Prolog.Clause'' id (TermN id v)] -> PrologRules (PrologId id) v
+skTransform clauses = Map.fromListWith mappend clauseRules where
+
+       clauseRules = runSupply (mapM (runClause . toRule . fmap2 (mapTermSymbols FunctorId)) clauses)
 
          -- The counter for u_i is global,
          -- the list of vars is local to each clause.
-       runClause = (`evalStateT` (mempty {-:: Set v -}))
+       runClause = (`evalStateT` mempty)
 
        toRule (Pred id tt :- (filter (/= Cut) -> [])) = do
-         return [(showPpr id, term (InId id) tt :-> term (OutId id) tt)]
+         return (id, Set.singleton (term (InId id) tt :-> term (OutId id) tt))
 
        toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
          modify (getVars tt `mappend`)
@@ -160,7 +162,7 @@ skTransform clauses = prologTRS clauseRules where
          lhs_n  <- mkLhs (last gg)
          let r_0 = term (InId id) tt :-> rhs_0
              r_n = lhs_n :-> term (OutId id) tt
-         return $ zip (repeat (showPpr id)) (r_0 : r_n : mid_r)
+         return (id, Set.fromList (r_0 : r_n : mid_r))
 
        mkRhs (Pred id tt) = mkRhs' id tt
        mkRhs' id tt = do
@@ -175,14 +177,21 @@ skTransform clauses = prologTRS clauseRules where
          i   <- current
          return (term (UId i) (term (OutId id) tt : map Pure vv))
 
+class (Ord id, Ord id') => SkTransformAF id id' | id -> id' where skTransformAF :: HasSignature sig id => sig -> AF_ id -> AF_ id'
 
-skTransformAF sig = AF.mapSymbols (\f -> if f `Set.member` getDefinedSymbols sig
+instance (T String :<: f, Ord (Expr f)) => SkTransformAF String (PrologId (Expr f)) where
+  skTransformAF sig = AF.mapSymbols (\f -> if f `Set.member` getDefinedSymbols sig
                                          then InId (mkT f)
                                          else FunctorId (mkT f))
 
-prepareProgram :: (PrologP :<: f, PrologT :<: f, T id :<: f) =>
+instance (T String :<: f, Ord (Expr f)) => SkTransformAF (Labelled String) (Labelled (PrologId (Expr f))) where
+  skTransformAF sig = AF.mapSymbols (\f@(Labelling l t) -> if f `Set.member` getDefinedSymbols sig
+                                         then Labelling l (InId (mkT t))
+                                         else Labelling l (FunctorId (mkT t)))
+
+prepareProgram :: (f ~ (PrologT :+: PrologP :+: T id)) =>
                   Program id -> Program'' (Expr f) (TermN (Expr f) Narradar.Var)
-prepareProgram = (`evalState` (mempty {- :: Map String Narradar.Var -})) . (`evalStateT` (toEnum <$> [0..]))
+prepareProgram = (`evalState` mempty) . (`evalStateT` (toEnum <$> [0..]))
                  . representProgram toVar term (Pure <$> freshVar)
     where
          toVar (VName id)  = do
@@ -229,114 +238,189 @@ addMissingPredicates cc0
 findFreeSymbol sig pre = fromJust $ find (`Set.notMember` getAllSymbols sig) (pre : [pre ++ show i | i <- [0..]])
 
 
-labellingPredsTrans :: forall heu v. (PolyHeuristicN heu LPS, v ~ Narradar.Var) =>
-                  MkHeu heu -> AF_ String -> Prolog.Program String -> Set((NarradarTRS LPS v, AF_ LPS), [LS])
-labellingPredsTrans _   _      []  = Set.singleton mempty
-labellingPredsTrans mkH goalAF pgm = unEmbed $ runWriterT $ do
+labellingPredsTrans :: forall heu v.
+                       (PolyHeuristicN heu LRP, v ~ Narradar.Var) =>
+                          MkHeu heu -> AF_ String -> Prolog.Program String
+                       -> Set(PrologRules LRP v, AF_ LRP, Signature LRP)
+--labellingPredsTrans _   _      []  = Set.singleton mempty
+labellingPredsTrans mkH goalAF pgm = unEmbed $ do
 
-    trs0 <- (prologTRS' . mconcat) `liftM` (
-             liftM2 (++) (sequence [insertNewMode (f, pp) | (InId f, pp) <- AF.toList (AF.init sktrs)])
-                         (sequence [insertNewMode (f, pp)
-                                   | (InId f, pp) <- AF.toList skgoal
-                                   , pp /= iFun sktrs (InId f)])
-                                           )
-    let af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList skgoal]
-               `mappend` AF.init trs0
+    let af0  = AF.fromList [ (Labelling pp f, pp) | (f,pp) <- AF.toList skgoal] `mappend` AF.init sig0
+        sig0 = getSignature rr0
+
+        rr0  = mconcat [insertNewMode f pp | (InId f, pp) <- AF.toList skgoal]
+
+    (rr1, af1, sig1) <- invariantEV (rr0, af0, sig0)
 
     -- ("Rules added:\n" ++ unlines (map show $ Types.rules added) ) $
-    trace (unlines(map showPpr $ rules trs0) ++ "\n" ++ showPpr af0) $
-     fix invariantEV (trs0, af0)
+--    trace (unlines(map showPpr $ rules rr0) ++ "\n" ++ showPpr af0) $ return ()
+
+    fix invariantNewModes (rr1, af1, sig1)
+
  where
-  heuristic = mkHeu mkH trs'
+  heuristic = mkHeu mkH (prologTRS' lrr)
 
-  sktrs@(PrologTRS rr _)  = skTransform (prepareProgram $ addMissingPredicates pgm)
+  skrr   = skTransform (prepareProgram $ addMissingPredicates pgm)
   skgoal = skTransformAF pgm goalAF
+  sksig  = getSignature skrr
 
-  trs' = prologTRS' lrr
-  lrr  = Set.map (second (fmap (labelTerm (isInId .|. isOutId)))) rr
+  lrr = Map.fromListWith mappend [ (Labelling (iFun sksig (InId k)) k, (Set.mapMonotonic . fmap) (labelTerm (not.isFunctorId)) rr)
+                           | (k,rr) <- Map.toList skrr]
 
---  insertNewMode :: NarradarTRS (Labelled id) f' -> (Labelled id, [Int] -> [Int]) -> NarradarTRS (Labelled id) f'
-  insertNewMode (id,pp) | trace ("insertNewMode " ++ showPpr (id,pp)) False = undefined
-  insertNewMode (Al.match -> Just (T id), pp) = tell [Labelling pp id] >>
-                           return (Set.fromList [ (pred, l `setLabel` Labelling pp :-> r `setLabel` Labelling pp)
-                                                 | (pred, l :-> r) <- toList lrr
-                                                 ,  pred == id])
-  invariantEV f (trs@(PrologTRS rr _), af)
-      | ((pred,rule,pos):_) <- extra = cutEV pred rule pos (trs,af) >>= f
-      | otherwise  = return (trs, af)
-      where extra = [(pred, r, noteV (head ev))
-                             | (pred,r) <- toList rr
+  invariantNewModes f (the_m, af, _)
+      | Set.null new_modes = return (the_m, af, sig0)
+      | otherwise          = f =<< invariantEV =<< foldM g (the_m, af, sig0) (Set.toList new_modes)
+     where
+          sig0      = getSignature the_m
+          new_modes =  Set.fromList [ Labelling l s | (Labelling l (InId s)) <- Set.toList (allSymbols sig0)]
+                      `Set.difference` Map.keysSet the_m
+          g prev@(rr0, af, sig) (Labelling pp id) = (prev `mappend`) `liftM` invariantEV (rr', af', sig')
+            where
+              rr'  = insertNewMode id pp
+              sig' = getSignature (rr' `mappend` rr0)
+              af'  = af `mappend` AF.init sig'
+
+  invariantEV (the_m, af, sig)
+      | ((rr_pred,pred,rule,pos):_) <- extra
+      = cutEV rule pos pred sig rr_pred af >>= \(rr',af',sig') -> invariantEV (Map.insert pred rr' the_m, af', sig')
+      | otherwise  = return (the_m, af, sig)
+      where extra = [(rr, pred, r, noteV (head ev))
+                             | (pred,rr) <- Map.toList the_m, r <- Set.toList rr
                              , let ev = extraVars (AF.apply af (annotateWithPos `fmap` r))
                              , not (null ev)]
-  cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = do
-      (f, i) <- lift $ embed $ runHeu heuristic af r pos
+
+  insertNewMode id pp | trace ("\ninsertNewMode " ++ showPpr (id,pp)) False = undefined
+  insertNewMode id pp =
+    let lid = Labelling (iFun sksig (InId id)) id
+    in (Map.singleton (Labelling pp id) $
+               Set.fromList [l `setLabel` Just pp :-> r `setLabel` Just pp
+                                 | (l :-> r) <- maybe (error "labellingPredTrans.insertNewMode")
+                                                      toList
+                                                      (Map.lookup lid lrr)])
+
+  cutEV rule@(l:->r) pos pred sig rr af = do
+      (f, i) <- embed $ runHeu heuristic af r pos
       trace ("pred: " ++ showPpr pred ++ ", symbol:" ++ showPpr f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ showPpr (AF.apply af rule)) $ return ()
-      case unlabel f of
-        InId f_pred -> do
-         let (Impure (Term u@(unlabel -> UId{}) (Impure (Term g@(unlabel -> InId{}) vv2) : vv1))) = r
-             f'  = assert (f==g) $ mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs g)) g
-             r' = term u (term f' vv2 : vv1)
-             changes1 =  Set.insert (pred, l:->r') . Set.delete (pred,rule)
-             changes2 x = if f' `notElem` (getDefinedSymbols trs) then  (mappend x) `liftM`insertNewMode (f_pred, labelling f') else return x
+      case f of
+        Labelling _lab (InId f_pred) -> do
+         let (Impure (Term u@(unlabel -> UId{}) (Impure (Term g@(Labelling lab (InId gid)) vv2) : vv1))) = r
+             g_arity = getArity sig g
+             gl'     = assert (f==g && lab == _lab) $ Labelling (delete i lab) gid
+             gl_in   = InId  <$> gl'
+             gl_out  = OutId <$> gl'
+             r'      = term u (term gl_in vv2 : vv1)
+             changes1 = Set.insert (l:->r') . Set.delete rule
              changes3 = foldr (.) id
-                        [ Set.insert (pred',outrule') . Set.delete (pred',outrule)
-                                | (pred', outrule@(l :-> r)) <- toList rr
-                                , (Impure (Term u' (Impure (Term p_out@(unlabel -> OutId h) vv2) : vv1))) <- [l]
-                                , u == u', h == f_pred
-                                , let outrule' = term u (term (mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs p_out))  p_out) vv2 : vv1) :-> r]
-         trs'@(PrologTRS rr' _) <- (prologTRS' .changes1 . changes3) `liftM` changes2 rr
-         let af' = af `mappend` AF.singleton f' (labelling f') `mappend` AF.init trs'
+                        [ Set.insert outrule' . Set.delete outrule
+                         | outrule@(l :-> r) <- Set.toList rr
+                         , (Impure (Term u' (Impure (Term (unlabel -> OutId h) vv2) : vv1))) <- [l]
+                         , u == u', assert (h == f_pred) True
+                         , let outrule' = term u (term gl_out vv2 : vv1) :-> r]
+         let rr' = (changes1 . changes3) rr
+             af' = af `mappend` AF.fromList [(gl_in, labelling gl'), (gl_out, [1..g_arity])]
+             sig'= sig{definedSymbols = definedSymbols sig `mappend` Set.fromList [gl_in, gl_out],
+                       arity = arity sig `mappend` Map.fromList [(gl_in, g_arity), (gl_out, g_arity)]}
+
              common = Set.intersection rr' rr; added = rr' `Set.difference` common; deleted = rr `Set.difference` common
-         trace ("Added " ++ show (Set.size added) ++ " rules and deleted " ++ show (Set.size deleted) ++"\n" ++
-                "Rules added:\n" ++ unlines (map (showPpr.snd) $ toList added) ++"\nRules deleted:\n" ++ unlines (map (showPpr.snd) $ toList deleted) ++
-                "\n" ++ unlines(map (showPpr.snd) $ toList rr') ++ "\n" ++ showPpr af') $ return ()
-         R.return (trs', af')
-        _ -> R.return (trs, AF.cut f i af)
+         trace ("\nAdded " ++ show (Set.size added) ++ " rules and deleted " ++ show (Set.size deleted) ++"\n" ++
+                "Rules added:\n" ++ unlines (map showPpr $ toList added) ++"\nRules deleted:\n" ++ unlines (map showPpr $ toList deleted) ++
+                "\nResulting Rules and AF:\n" ++ unlines(map showPpr $ toList rr') ++ "\n" ++ showPpr af') $ return ()
+
+         return (rr', af', sig')
+
+        _ -> return (rr, AF.cut f i af, sig)
 
 -- labellingPredsTrans _ af p = R.return ((convert p, convert af), [])
 
 
 
-type P'   = V :+: PrologT :+: PrologP :+: Prolog.Any :+: NotVar :+: Compound
+type P'   = Abstract :+: V :+: PF
+type LP'  = Labelled (Expr (Abstract :+: V :+: PF))
+type Pred = NotAny   :+: V :+: PF
 
-labellingConsTrans :: forall m v. (v ~ Narradar.Var, MonadReader [FilePath] m) =>
-                      (String, [Mode]) -> [Clause String] -> m(Set((NarradarTRS LPS' v, AF_ LPS'), Map String (Set LPS')))
+labellingConsTrans :: forall m v. (v ~ Narradar.Var) =>
+                      [FilePath] -> (String, [Mode]) -> [Clause String]
+                   -> Set((PrologRules LRP v, AF_ LRP), Set LRP)
 --labellingConsTrans  _ [] = return (Set.singleton mempty)
 --labellingConsTrans (g,_)  pgm | g `Set.notMember` getDefinedSymbols pgm = error "labellingConsTrans: not a valid goal"
-labellingConsTrans (g,mm) pgm = ask >>= \bddbddb_path -> return $ runIt $ do
+labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
+   let abstractGoal  = abstractCompileGoal g [ m == G | m <- mm]
 
-   let abstractGoal :: GoalF String (DatalogTerm (Expr (T String :+: P')))
-       abstractGoal  = Prolog.Pred g [ if m == G then term0 notvar else Pure (Right v)
-                                          | (v,m) <- zip [toEnum 0..] mm]
-
-       cs_opts :: ComputeSuccessPatternsOpts (T String :+: P')
+       cs_opts :: ComputeSuccessPatternsOpts Pred (T String :+: P')
        cs_opts = computeSuccessPatternsOpts{ pl = pgm
                                            , mb_goal = Just abstractGoal
                                            , depth = 1
                                            , bddbddb_path
 #ifdef DEBUG
-                                           , verbosity = 2
+                                           , verbosity = 1
 #endif
                                            }
 
        (_dom, successpats) = unsafePerformIO $ computeSuccessPatterns cs_opts
 
-
-       filteredPats = [ (p :: String, evalTerm (error "labellingConsTrans/meaningful pats: the impossible happened ")
-                                               (\(T x) -> x) <$> tt)
-                          | Pred (Al.match -> Just (Answer p)) tt <- concat successpats `const` abstractGoal
-                          , let tt' =  [ pat | Impure (T pat) <- tt, not (isNotvar pat), not (isAny pat)]
-                          , not (null tt')
+       filteredPats = [ (p, evalTerm (const any) (\(T x) -> x) <$> tt)
+                          | Pred (Al.match -> Just (Answer p)) tt <- concat successpats
+--                          , let tt' =  [ pat | Impure (T pat) <- tt, not (isNotvar pat), not (isAny pat)]
+                          , let special = [ () | Impure (T (Al.match -> Just(Compound _ ss))) <- tt
+                                               , s <- ss
+                                               , isAny s]
+                          , not (null special)
                           ]
 
        additionalClauses = concatMap mkClauses filteredPats
 
-       lpgm              = mapTermSymbols Plain <$$$> (mapPredId Plain <$$> prepareProgram (addMissingPredicates pgm))
-       trs0              = skTransform (additionalClauses ++ lpgm)
-       af0               = AF.mapSymbols (fmap Plain) (skTransformAF pgm (mkGoalAF (g,mm))) `mappend` AF.init trs0
+       pl'  = prepareProgram (addMissingPredicates pgm)
+       lpgm = mapTermSymbols (\c -> Labelling (iFun pl' c) c) <$$$> (mapPredId Plain <$$> pl')
+       rr0  = fixSymbols $ skTransform (additionalClauses ++ lpgm)
+       af0  = AF.mapSymbols Plain (skTransformAF pgm (mkGoalAF (g,mm))) `mappend` AF.init rr0
 
+#ifdef DEBUG
+   trace (show (  text "Bddbddb produced the following patterns:"  $$ vcat (map ppr $ concat successpats) $$
+                  text "Meaningful pats are: " <> ppr filteredPats $$
+                  text "Added the clauses:" $$ (vcat (map ppr additionalClauses)))) $ return ()
+#endif
 
-   ((res, af), newCons) <- listen $ fix invariantEV (trs0, af0)
+   fix invariantEV (rr0, af0)
+
+ where
+  runIt = unEmbed . runWriterT
+
+  rep_pgm = prepareProgram pgm
+  sig_pl  = getSignature $ toList3 rep_pgm -- Only the constructors
+
+  mkClauses (p, apats) = clauses where
+    clauses= [ Pred (Plain p') pats' :- fmap (mapPredId Plain) gg
+                         | (Pred p' pats :- gg) <- fmap3 (mapTermSymbols Plain) rep_pgm
+                         , reinject p' == p
+                         , Just pats' <- [zipWithM amatch pats apats]]
+
+  invariantEV f (the_m, af)
+      | ((pred,rule,pos):_) <- extra = cutEV pred rule pos (the_m,af) >>= f
+      | otherwise  = return (the_m, af)
+      where extra = [(pred, r, noteV (head ev))
+                             | (pred, rr) <- Map.toList the_m
+                             , r <- Set.toList rr
+                             , let ev = extraVars (AF.apply af (annotateWithPos `fmap` r))
+                             , not (null ev)]
+  cutEV pred rule@(l:->r) pos (rr, af) = do
+      let i      = last pos
+          Just f = rootSymbol (r ! init pos)
+      trace ("pred: " ++ showPpr pred ++ ", symbol:" ++ showPpr f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ showPpr (AF.apply af rule)) $ return ()
+      case f of
+        Labelling lab (FunctorId f_l) -> do
+          let f_l' = Labelling (delete i lab) f_l
+              f'   = FunctorId <$> f_l'
+              r'   = updateAt (init pos) r (mapRootSymbol (const f'))
+              rr'  = Map.insertWith (\x rr0 -> Set.union x $ Set.delete rule rr0)
+                                            pred (Set.singleton (l :-> r')) rr
+              af'  = af `mappend` AF.singleton f' (labelling f_l')
+
+          tell (Set.singleton f')
+
+          R.return (rr', af')
+
+        _ -> R.return (rr, AF.cut f i af)
+
 
 {-
        newCons' = Set.fromList [ compound (reinject f :: Expr (T String :+: P')) args
@@ -359,44 +443,6 @@ labellingConsTrans (g,mm) pgm = ask >>= \bddbddb_path -> return $ runIt $ do
                       text "Meaningful pats are: " <> ppr meaningfulPats)) $ return ()
 #endif
 -}
-   return (res, af)
- where
-  runIt = Set.mapMonotonic(second(Map.fromListWith mappend)) . unEmbed . runWriterT
-
-  rep_pgm = prepareProgram pgm
-  sig_pl  = getSignature $ toList3 rep_pgm -- Only the constructors
-
-  mkClauses (p, apats) = clauses where
-    clauses= [ Pred (Plain p') pats' :- fmap (mapPredId Plain) gg
-                         | (Pred p'@(Al.match -> Just (T ps)) pats :- gg) <- fmap3 (mapTermSymbols Plain) rep_pgm
-                         , ps == p
---                       , and (zipWith amatches pats apats)
-                         , Just pats' <- [zipWithM concretize pats apats]]
-
-  invariantEV f (trs@(PrologTRS rr _), af)
-      | ((pred,rule,pos):_) <- extra = cutEV pred rule pos (trs,af) >>= f
-      | otherwise  = return (trs, af)
-      where extra = [(pred, r, noteV (head ev))
-                             | (pred,r) <- toList rr
-                             , let ev = extraVars (AF.apply af (annotateWithPos `fmap` r))
-                             , not (null ev)]
-  cutEV pred rule@(l:->r) pos (trs@(PrologTRS rr _), af) = do
-      let i      = last pos
-          Just f = rootSymbol (r ! init pos)
-      trace ("pred: " ++ showPpr pred ++ ", symbol:" ++ showPpr f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ showPpr (AF.apply af rule)) $ return ()
-      case f of
-        FunctorId f_l -> do
-          let f_l' = mapLabel (Labelling . delete i) (Labelling (delete i $ iFun trs f)) f_l
-              f'   = FunctorId f_l'
-              r'   = updateAt (init pos) r (mapRootSymbol (const f'))
-              trs' = prologTRS' $ Set.insert (pred, l :-> r') $ Set.delete (pred,rule) $ rr
-              af'  = af `mappend` AF.singleton f' (labelling f_l')
-
-          tell [(pred, Set.singleton f')]
-
-          R.return (trs', af')
-
-        _ -> R.return (trs, AF.cut f i af)
 
 {-
 -- | Abstract matching, well sort of
@@ -421,17 +467,55 @@ amatches t@(getId -> Just (Labelling ll (FunctorId c))) (Al.match -> Just (Compo
                              ]
 amatches _ _ = False
 -}
-
-fixSymbols' :: Ord v => NarradarTRS (PrologId (Expr (T (Labelled String) :+: P))) v -> NarradarTRS LPS v
+{-
+fixSymbols' :: Ord v => NarradarTRS (PrologId (Expr (T (Labelled String) :+: P))) v -> NarradarTRS LRP v
 fixSymbols' (PrologTRS rr sig) = prologTRS' rr'  where
   rr'         = Set.map (second (fmap (mapTermSymbols fixSymbol))) rr
   fixSymbol t = case runWriter (T.mapM (foldExprM removeLabelF) t) of
                   (t', Nothing) -> Plain t'
                   (t', Just ll) -> Labelling ll t'
 
-fixSymbols :: (Ord a, Ord v) => NarradarTRS (PrologId (Labelled a)) v -> NarradarTRS (Labelled (PrologId a)) v
-fixSymbols (PrologTRS rr sig) = prologTRS' rr'
-   where rr' = Set.map (second (fmap (mapTermSymbols fixLabelling))) rr
+
+class (Functor f, Functor g) => RemoveLabelF f g where removeLabelF :: MonadWriter (Maybe [Int]) m => f (Expr g) -> m(Expr g)
+instance (RemoveLabelF f1 g, RemoveLabelF f2 g)  => RemoveLabelF (f1 :+: f2) g where
+   removeLabelF (Inl l) = removeLabelF l
+   removeLabelF (Inr r) = removeLabelF r
+instance (a :<: g) => RemoveLabelF a g where removeLabelF = return . inject . fmap reinject
+instance (T id :<: g) => RemoveLabelF (T (Labelled id)) g where
+   removeLabelF (T (Labelling ll x)) = tell (Just ll) >> return (mkT x)
+-}
+
+{-| Abstract matching
+    Takes a labelled pattern and an abstract value and restricts the
+    labellings in the pattern according to the abstract value.
+    It does understand multi-level patterns and abstract values.
+
+    > amatch [_|_] static = [_|_]
+    > amatch [_|_] [s|a]  = [_|_]_1
+    > amatch [_|_] [a|s]  = [_|_]_2
+-}
+amatch :: (t ~ termF lid, lid ~ (Labelled(Expr f')), MapId termF, Traversable t, HasId t lid, Eq (Expr f),
+               Compound :<: f, NotVar :<: f, Prolog.Any :<: f, f' :<: f, MonadPlus m) =>
+              Free t v -> Expr f -> m (Free t v)
+
+amatch pat (isNotvar -> True) = return pat
+amatch pat (isAny    -> True)
+  | isVar pat = return pat
+  | otherwise = mzero
+
+amatch pat@(fmap unlabel . getId -> Just c) apat@(Al.match -> Just (Compound c' tt'))
+-- > amatch [:pterm| c tt] [:oexpr| c' tt'] =
+   = do
+        guard (reinject c == c' && length (directSubterms pat) == length tt')
+        let ll = [ i | (i,a) <- (zip [1..] tt'), not (isAny a)]
+        let pat1 = mapRootSymbol (\_->Labelling ll c) pat
+        pat' <- evalTerm return2 (\tt -> liftM Impure $ unsafeZipWithGM (flip amatch) tt' tt) pat1
+        return pat'
+amatch _ _ = fail "amatch: patterns didn't match"
+
+
+fixSymbols :: (Ord a, Ord v) => PrologRules (PrologId (Labelled a)) v -> PrologRules (Labelled (PrologId a)) v
+fixSymbols = (Map.map . Set.map) (fmap (mapTermSymbols fixLabelling))
 
 fixLabelling :: Ord a => PrologId (Labelled a) -> Labelled (PrologId a)
 fixLabelling t = case toList t of  -- hack to get to the id inside the PrologId
@@ -441,52 +525,8 @@ fixLabelling t = case toList t of  -- hack to get to the id inside the PrologId
      where [lt] = toList t
            pt   = fmap unlabel t
 
-class (Functor f, Functor g) => RemoveLabelF f g where removeLabelF :: MonadWriter (Maybe [Int]) m => f (Expr g) -> m(Expr g)
-instance (RemoveLabelF f1 g, RemoveLabelF f2 g)  => RemoveLabelF (f1 :+: f2) g where
-   removeLabelF (Inl l) = removeLabelF l
-   removeLabelF (Inr r) = removeLabelF r
-instance (a :<: g) => RemoveLabelF a g where removeLabelF = return . inject . fmap reinject
-instance (T id :<: g) => RemoveLabelF (T (Labelled id)) g where
-   removeLabelF (T (Labelling ll x)) = tell (Just ll) >> return (mkT x)
-
-{-| Takes a labelled pattern and an abstract value and restricts the
-    labellings in the pattern according to the abstract value.
-    It does understand multi-level patterns and abstract values.
-
-    > concretize [_|_] static = [_|_]
-    > concretize [_|_] [s|a]  = [_|_]_1
-    > concretize [_|_] [a|s]  = [_|_]_2
--}
-
-
-concretize :: (t ~ termF lid, lid ~ (Labelled(Expr f')), MapId termF, Traversable t, HasId t lid, Eq (Expr f),
-               Compound :<: f, NotVar :<: f, Prolog.Any :<: f, f' :<: f, MonadPlus m) =>
-              Free t v -> Expr f -> m (Free t v)
-
-concretize pat (isNotvar -> True) = return pat
-concretize pat (isAny    -> True)
-  | isVar pat = return pat
-  | otherwise = error ("concretize: Incomplete analysis of success patterns, " ++
-                       "the abstract domain is not deep enough")
-
-concretize pat@(fmap unlabel . getId -> Just c) apat@(Al.match -> Just (Compound c' tt'))
--- > concretize [:pterm| c tt] [:oexpr| c' tt'] =
-   = do
-        guard (reinject c == c' && length (directSubterms pat) == length tt')
-        let ll = [ i | (i,a) <- (zip [1..] tt'), not (isAny a)]
-        let pat1 = mapRootSymbol (\_->Labelling ll c) pat
-        pat' <- evalTerm return2 (\tt -> liftM Impure $ unsafeZipWithGM (flip concretize) tt' tt) pat1
-        return pat'
-concretize _ _ = fail "concretize: patterns didn't match"
-
-
 -- ----------
 -- Auxiliary
 -- ----------
-labelTerm :: IsPrologId id => (id -> Bool) -> TermN id v -> TermN (Labelled id) v
-labelTerm pred = foldTerm return f where
-  f (Term id tt)
-    | pred id   = term (Labelling [1..length tt] id) tt
-    | otherwise = term (Plain id) tt
 
 iFun sig f = [1.. getArity sig f]

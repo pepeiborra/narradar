@@ -11,8 +11,10 @@
 
 module Narradar.Types.Labellings where
 
+import Control.Applicative
 import Control.Parallel.Strategies
-import Data.Foldable (Foldable(..))
+import Data.Foldable (Foldable(..), toList)
+import Data.Traversable as T
 import Text.PrettyPrint
 
 import Narradar.Types.DPIdentifiers
@@ -27,6 +29,11 @@ import Narradar.Utils.Ppr
 type LS   = Labelled String
 type LId  = Identifier LS
 
+instance RemovePrologId a => RemovePrologId (Labelled a) where
+  type WithoutPrologId (Labelled a) = Labelled (WithoutPrologId a)
+  removePrologId = T.mapM removePrologId
+
+
 -- -----------
 -- Labellings
 -- -----------
@@ -38,8 +45,12 @@ instance Functor Labelled where
   fmap f (Labelling l a) = Labelling l (f a)
 
 instance Foldable Labelled where
-  foldMap f (Plain a)      = f a
+  foldMap f (Plain a)       = f a
   foldMap f (Labelling _ a) = f a
+
+instance Traversable Labelled where
+  traverse f (Plain a)       = Plain <$> f a
+  traverse f (Labelling l a) = Labelling l <$> f a
 
 instance Ord a => Ord (Labelled a) where
     compare (Labelling i1 f1) (Labelling i2 f2) = compare (f1,i1) (f2,i2)
@@ -63,15 +74,48 @@ instance NFData a => NFData (Labelled a) where
     rnf (Plain a) = rnf a
     rnf (Labelling ii a) = rnf ii `seq` rnf a
 
+
+
+class IsLabelled id where
+    getLabel    :: id -> Maybe [Int]
+    mapLabel :: (Maybe [Int] -> Maybe [Int]) -> id -> id
+
+instance IsLabelled (Labelled a) where
+    getLabel Plain{} = Nothing; getLabel (Labelling ii _) = Just ii
+    mapLabel f (Plain x)       = maybe (Plain x) (`Labelling` x) (f Nothing)
+    mapLabel f (Labelling l x) = maybe (Plain x) (`Labelling` x) (f (Just l))
+
+instance IsLabelled a => IsLabelled (PrologId a) where
+   getLabel      = foldMap getLabel
+   mapLabel f = fmap (mapLabel f)
+
+
+instance IsLabelled a => IsLabelled (Identifier a) where
+   getLabel      = foldMap getLabel
+   mapLabel f = fmap (mapLabel f)
+
+{-
 mapLabel :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Labelled id -> Labelled id
 mapLabel f _  (Labelling ll i) = f ll i
 mapLabel _ l0 (Plain i)        = l0 i
+-}
+mapLabelT :: (MapId f, Functor (f id), IsLabelled id) => (Maybe [Int] -> Maybe [Int]) -> Term (f id) v -> Term (f id) v
+mapLabelT f = evalTerm return (Impure . mapId (mapLabel f))
 
-mapLabelT :: (Functor (f (Labelled id)), MapId f) => (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Term (f (Labelled id)) v -> Term (f (Labelled id)) v
-mapLabelT f l0 = evalTerm return (Impure . mapId (mapLabel f l0))
+setLabel :: (MapId f, Functor (f id), IsLabelled id) => Term (f id) v -> Maybe [Int] -> Term (f id) v
+setLabel t l = mapLabelT (\_ -> l) t
 
-setLabel :: (MapId f, Functor (f (Labelled id))) => Term (f (Labelled id)) v -> (forall id. id -> Labelled id) -> Term (f (Labelled id)) v
-setLabel t l = mapLabelT (\_ -> l) l t
-appendLabel t ll = mapLabelT (Labelling . (++ ll)) (Labelling ll) t
+-- appendLabel t ll = mapLabelT (Labelling . (++ ll)) (Labelling ll) t
 
 
+labelTerm :: (MapId t, Foldable (t id), Functor (t id), Functor (t (Labelled id))) =>
+             (id -> Bool) -> Free (t id) v -> Free (t (Labelled id)) v
+labelTerm pred = foldTerm return f where
+  f t = Impure $ mapId (\id -> (if pred id then Labelling [1..length (toList t)] else Plain) $ id) t
+
+{-
+labelTerm1 :: (MapId t, Functor prologId, Foldable (t (prologId id)), Functor (t (prologId id)), Functor (t (prologId(Labelled id)))) =>
+             (prologId id -> Bool) -> Free (t (prologId id)) v -> Free (t (prologId (Labelled id))) v
+labelTerm1 pred = foldTerm return f where
+  f t = Impure $ mapId (\id -> (if pred id then Labelling [1..length (toList t)] else Plain) <$> id) t
+-}

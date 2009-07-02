@@ -88,8 +88,8 @@ data ProcInfo id where                    -- vv ignored vv
     FInstantiationP :: (Ord id, Ord v, Ppr v, Ppr id) => NarradarTRS id v -> NarradarTRS id v -> ProcInfo id
     PrologP         :: ProcInfo ()
     PrologSKP       :: ProcInfo ()
-    LabellingSKP    :: [Labelled String] -> ProcInfo ()
-    LabellingCP     :: [Labelled String] -> ProcInfo ()
+    LabellingSKP    :: (Ppr id, Ord id) => [Labelled id] -> ProcInfo id
+    LabellingCP     :: (Ppr id, Ord id) => [Labelled id] -> ProcInfo id
     PrologSKP_rhs   :: ProcInfo ()
     LabellingSKP_rhs:: ProcInfo ()
     UsableRulesNaiveP :: ProcInfo ()
@@ -133,10 +133,10 @@ instance Ppr id => Ppr (ProcInfo id) where
                            text "(Schneider-Kamp transformation)"
     ppr (LabellingSKP mm)= text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + Predicate Labelling)" $$
-                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map (text.show)) $ groupBy ((==) `on` unlabel) $ sort mm)
+                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map ppr) $ groupBy ((==) `on` unlabel) $ sort mm)
     ppr (LabellingCP mm) = text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + Constructor Labelling)" $$
-                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map (text.show)) $ groupBy ((==) `on` unlabel) $ sort mm)
+                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map ppr) $ groupBy ((==) `on` unlabel) $ sort mm)
     ppr PrologSKP_rhs    = text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + rhs bottoms trick)"
     ppr UsableRulesP     = text "Usable Rules for Basic Narrowing or Full Narrowing with constructor substitutions"

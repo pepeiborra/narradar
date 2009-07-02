@@ -25,6 +25,7 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Problem
 import Narradar.Types.ProblemType
+import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Types.Var
@@ -79,7 +80,7 @@ trsParser = do
 -- SO STAY AWAY FROM TYPE FUNCTIONS FOR NOW !!!!!!!!!!!!
 
 -- | Constructing DP problems. Do not construct a goal problem with this function, for that use 'mkGoalProblem'
-mkDPProblem :: (Ppr id, Ord a, id ~ Identifier a) => ProblemType id -> NarradarTRS a Var -> Problem id Var
+mkDPProblem :: (Ppr id, Ord a, id ~ Identifier a, RemovePrologId a) => ProblemType id -> NarradarTRS a Var -> Problem id Var
 mkDPProblem typ _ | isModed typ = error "To create a goal problem use 'mkGoalProblem'"
 mkDPProblem typ trs = mkProblem typ trs' (mkDPs typ trs') where trs' = convert trs
 
@@ -93,7 +94,7 @@ mkDPs typ trs
 --   This is necessary so early because before splitting P into SCCs we need to ensure
 --   that P is indeed a TRS (no extra variables).
 --   I.e. we need to compute the filtering 'globally'
-mkGoalProblem :: (Ppr id, Ord a, PolyHeuristicN heu id, Lattice (AF_ id), id ~ Identifier a) =>
+mkGoalProblem :: (Ppr id, Ord a, PolyHeuristicN heu id, Lattice (AF_ id), RemovePrologId a, id ~ Identifier a) =>
                  MkHeu heu -> ProblemType a -> NarradarTRS a Var -> [Problem id Var]
 mkGoalProblem heu typ trs =
     let trs'       = convert trs
