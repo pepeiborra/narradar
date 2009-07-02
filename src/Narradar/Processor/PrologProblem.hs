@@ -387,6 +387,8 @@ labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
        af0  = AF.mapSymbols Plain (skTransformAF pgm (mkGoalAF (g,mm))) `mappend` AF.init rr0
 
 #ifdef DEBUG
+   trace ("Estimated depth of " ++ show depth) $ return ()
+
    trace (show (  text "Bddbddb produced the following patterns:"  $$ vcat (map ppr $ concat successpats) $$
                   text "Meaningful pats are: " <> ppr filteredPats $$
                   text "Added the clauses:" $$ (vcat (map ppr additionalClauses)))) $ return ()
