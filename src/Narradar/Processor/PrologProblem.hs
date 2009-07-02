@@ -30,7 +30,8 @@ import Data.Maybe
 import Data.Monoid      (Monoid(..))
 import Data.Foldable    (Foldable, toList, notElem)
 import Data.Traversable (Traversable)
-import qualified  Data.Traversable as T
+import qualified Data.Foldable    as F
+import qualified Data.Traversable as T
 import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.Map as Map
@@ -354,13 +355,16 @@ labellingConsTrans :: forall m v. (v ~ Narradar.Var) =>
 labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
    let abstractGoal  = abstractCompileGoal g [ m == G | m <- mm]
 
+       depth     = maximum [ termDepth t | Pred _ tt :- _ <- pgm, t <- tt] - 1
+       termDepth = foldTerm (const 1) (\tf -> 1 + F.maximum (0 : toList tf))
+
        cs_opts :: ComputeSuccessPatternsOpts Pred (T String :+: P')
        cs_opts = computeSuccessPatternsOpts{ pl = pgm
                                            , mb_goal = Just abstractGoal
-                                           , depth = 1
+                                           , depth
                                            , bddbddb_path
 #ifdef DEBUG
-                                           , verbosity = 1
+                                           , verbosity = 2
 #endif
                                            }
 
