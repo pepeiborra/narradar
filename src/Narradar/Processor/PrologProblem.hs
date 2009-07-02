@@ -217,15 +217,21 @@ Right preludePl = $(do pgm <- runIO (readFile "prelude.pl")
 preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
 addMissingPredicates cc0
   | Set.null undefined_cc0 = cc0
-  | otherwise = (insertDummy . insertEqual . insertPrelude) cc0
+  | otherwise = (insertDummy . insertIs . insertEqual . insertPrelude) cc0
 
    where undefined_cc0 = undefinedPreds cc0
-         vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
+
          undefinedPreds    cc = Set.fromList [ f | f <- toList (getDefinedSymbols cc `Set.difference` definedPredicates cc)]
          definedPredicates cc = Set.fromList [ f | Pred f _ :- _ <- cc]
+
          insertEqual       cc = if getAny $ foldMap2 (Any . isEqual) cc then eqclause `mappend` cc else cc
-           where eqclause = let x = Prolog.var "X" in [x :=: x :- []]
-                 isEqual (Is _ _ ) = True; isEqual (_ :=: _) = True; isEqual _ = False
+         insertIs          cc = if getAny $ foldMap2 (Any . isIs)    cc then isclause `mappend` cc else cc
+
+         eqclause = let x = Prolog.var "X" in [x :=: x :- []]
+         isclause = let x = Prolog.var "X" in [Is x x :- []]
+         isEqual (_ :=: _) = True; isEqual _ = False
+         isIs Is{} = True; isIs _ = False
+
          insertPrelude cc = if not (Set.null (Set.intersection (undefinedPreds cc) preludePreds)) then cc' `mappend` cc else cc
            where cc' = foldr renamePred (cc `mappend` preludePl) (toList repeatedIdentifiers)
                  repeatedIdentifiers = preludePreds `Set.intersection` definedPredicates cc0
@@ -233,6 +239,8 @@ addMissingPredicates cc0
          renamePred f = fmap2 (rename (findFreeSymbol cc0 f))
            where rename f' (Pred f tt) | f == f' = Pred f' tt
                  rename _ x = x
+
+         vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
 
 
 findFreeSymbol sig pre = fromJust $ find (`Set.notMember` getAllSymbols sig) (pre : [pre ++ show i | i <- [0..]])
@@ -294,7 +302,7 @@ labellingPredsTrans mkH goalAF pgm = unEmbed $ do
     let lid = Labelling (iFun sksig (InId id)) id
     in (Map.singleton (Labelling pp id) $
                Set.fromList [l `setLabel` Just pp :-> r `setLabel` Just pp
-                                 | (l :-> r) <- maybe (error "labellingPredTrans.insertNewMode")
+                                 | (l :-> r) <- maybe (error ("labellingPredTrans.insertNewMode:" ++ showPpr lid))
                                                       toList
                                                       (Map.lookup lid lrr)])
 
