@@ -145,7 +145,9 @@ type PrologRules id v = Map (WithoutPrologId id) (Set (RuleN id v))
 
 skTransform :: (Ord id, Ord v, Ppr id) =>
                 [Prolog.Clause'' id (TermN id v)] -> PrologRules (PrologId id) v
-skTransform clauses = Map.fromListWith mappend clauseRules where
+skTransform = skTransformWith (\(Pred id _ :- _) -> id)
+
+skTransformWith mkIndex clauses = Map.fromListWith mappend clauseRules where
 
        clauseRules = runSupply (mapM (runClause . toRule . fmap2 (mapTermSymbols FunctorId)) clauses)
 
@@ -153,17 +155,17 @@ skTransform clauses = Map.fromListWith mappend clauseRules where
          -- the list of vars is local to each clause.
        runClause = (`evalStateT` mempty)
 
-       toRule (Pred id tt :- (filter (/= Cut) -> [])) = do
-         return (id, Set.singleton (term (InId id) tt :-> term (OutId id) tt))
+       toRule c@(Pred id tt :- (filter (/= Cut) -> [])) = do
+         return (mkIndex c, Set.singleton (term (InId id) tt :-> term (OutId id) tt))
 
-       toRule (Pred id tt :- (filter (/= Cut) -> gg)) = do
+       toRule c@(Pred id tt :- (filter (/= Cut) -> gg)) = do
          modify (getVars tt `mappend`)
          rhs_0  <- mkRhs (head gg)
          mid_r  <- forM (gg `zip` tail gg) $ \(c,sc) -> (:->) <$> mkLhs c <*> mkRhs sc
          lhs_n  <- mkLhs (last gg)
          let r_0 = term (InId id) tt :-> rhs_0
              r_n = lhs_n :-> term (OutId id) tt
-         return (id, Set.fromList (r_0 : r_n : mid_r))
+         return (mkIndex c, Set.fromList (r_0 : r_n : mid_r))
 
        mkRhs (Pred id tt) = mkRhs' id tt
        mkRhs' id tt = do
@@ -353,39 +355,6 @@ labellingConsTrans :: forall m v. (v ~ Narradar.Var) =>
 --labellingConsTrans  _ [] = return (Set.singleton mempty)
 --labellingConsTrans (g,_)  pgm | g `Set.notMember` getDefinedSymbols pgm = error "labellingConsTrans: not a valid goal"
 labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
-   let abstractGoal  = abstractCompileGoal g [ m == G | m <- mm]
-
-       depth     = maximum [ termDepth t | Pred _ tt :- _ <- pgm, t <- tt] - 1
-       termDepth = foldTerm (const 1) (\tf -> 1 + F.maximum (0 : toList tf))
-
-       cs_opts :: ComputeSuccessPatternsOpts Pred (T String :+: P')
-       cs_opts = computeSuccessPatternsOpts{ pl = pgm
-                                           , mb_goal = Just abstractGoal
-                                           , depth
-                                           , bddbddb_path
-#ifdef DEBUG
-                                           , verbosity = 2
-#endif
-                                           }
-
-       (_dom, successpats) = unsafePerformIO $ computeSuccessPatterns cs_opts
-
-       filteredPats = [ (p, evalTerm (const any) (\(T x) -> x) <$> tt)
-                          | Pred (Al.match -> Just (Answer p)) tt <- concat successpats
---                          , let tt' =  [ pat | Impure (T pat) <- tt, not (isNotvar pat), not (isAny pat)]
-                          , let special = [ () | Impure (T (Al.match -> Just(Compound _ ss))) <- tt
-                                               , s <- ss
-                                               , isAny s]
-                          , not (null special)
-                          ]
-
-       additionalClauses = concatMap mkClauses filteredPats
-
-       pl'  = prepareProgram (addMissingPredicates pgm)
-       lpgm = mapTermSymbols (\c -> Labelling (iFun pl' c) c) <$$$> (mapPredId Plain <$$> pl')
-       rr0  = fixSymbols $ skTransform (additionalClauses ++ lpgm)
-       af0  = AF.mapSymbols Plain (skTransformAF pgm (mkGoalAF (g,mm))) `mappend` AF.init rr0
-
 #ifdef DEBUG
    trace ("Estimated depth of " ++ show depth) $ return ()
 
@@ -394,10 +363,44 @@ labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
                   text "Added the clauses:" $$ (vcat (map ppr additionalClauses)))) $ return ()
 #endif
 
-   fix invariantEV (rr0, af0)
+   (rr', af') <- fix invariantEV (rr0, af0)
+   return (Map.mapKeysWith mappend fst rr', af')
 
  where
   runIt = unEmbed . runWriterT
+
+  abstractGoal  = abstractCompileGoal g [ m == G | m <- mm]
+
+  depth     = maximum [ termDepth t | Pred _ tt :- _ <- pgm, t <- tt] - 1
+  termDepth = foldTerm (const 1) (\tf -> 1 + F.maximum (0 : toList tf))
+
+  cs_opts :: ComputeSuccessPatternsOpts Pred (T String :+: P')
+  cs_opts = computeSuccessPatternsOpts{ pl = pgm
+                                      , mb_goal = Just abstractGoal
+                                      , depth
+                                      , bddbddb_path
+#ifdef DEBUG
+                                      , verbosity = 2
+#endif
+                                      }
+
+  (_dom, successpats) = unsafePerformIO $ computeSuccessPatterns cs_opts
+
+  filteredPats = [ (p, evalTerm (const any) (\(T x) -> x) <$> tt)
+                          | Pred (Al.match -> Just (Answer p)) tt <- concat successpats
+                          , let special = [ () | Impure (T (Al.match -> Just(Compound _ ss))) <- tt
+                                               , s <- ss
+                                               , isAny s]
+                          , not (null special)
+                 ]
+
+  additionalClauses = concatMap mkClauses filteredPats
+
+  pl'  = prepareProgram (addMissingPredicates pgm)
+  lpgm = mapTermSymbols (\c -> Labelling (iFun pl' c) c) <$$$> (mapPredId Plain <$$> pl')
+
+  rr0  = fixSymbols $ skTransformWith (\(Pred id tt :- _) -> (id,tt)) (additionalClauses ++ lpgm)
+  af0  = AF.mapSymbols Plain (skTransformAF pgm (mkGoalAF (g,mm))) `mappend` AF.init rr0
 
   rep_pgm = prepareProgram pgm
   sig_pl  = getSignature $ toList3 rep_pgm -- Only the constructors
@@ -409,32 +412,58 @@ labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
                          , Just pats' <- [zipWithM amatch pats apats]]
 
   invariantEV f (the_m, af)
-      | ((pred,rule,pos):_) <- extra = cutEV pred rule pos (the_m,af) >>= f
+      | ((k,rule,pos):_) <- extra = cutEV k rule pos (the_m,af) >>= f
       | otherwise  = return (the_m, af)
-      where extra = [(pred, r, noteV (head ev))
-                             | (pred, rr) <- Map.toList the_m
+      where extra = [(k, r, noteV (head ev))
+                             | (k, rr) <- Map.toList the_m
                              , r <- Set.toList rr
                              , let ev = extraVars (AF.apply af (annotateWithPos `fmap` r))
                              , not (null ev)]
   cutEV pred rule@(l:->r) pos (rr, af) = do
       let i      = last pos
           Just f = rootSymbol (r ! init pos)
-      trace ("pred: " ++ showPpr pred ++ ", symbol:" ++ showPpr f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ showPpr (AF.apply af rule)) $ return ()
+      trace ("pred: " ++ showPpr (fst pred) ++ ", symbol:" ++ showPpr f ++ ", i: " ++ show i ++ ", pos: " ++ show pos ++ " rule: " ++ showPpr (AF.apply af rule)) $ return ()
       case f of
         Labelling lab (FunctorId f_l) -> do
           let f_l' = Labelling (delete i lab) f_l
               f'   = FunctorId <$> f_l'
               r'   = updateAt (init pos) r (mapRootSymbol (const f'))
-              rr'  = Map.insertWith (\x rr0 -> Set.union x $ Set.delete rule rr0)
-                                            pred (Set.singleton (l :-> r')) rr
+              rr'  = mapAtKey pred ( Set.union (Set.singleton (l :-> r')) . Set.delete rule) rr
               af'  = af `mappend` AF.singleton f' (labelling f_l')
 
           tell (Set.singleton f')
 
           R.return (rr', af')
 
+        -- If there is no constructor, we must cut a function argument.
+        -- If it is a predicate_in, we reset the label of the patterns
+        -- occurring in the argument we are cutting, in every rule.
+        -- This has the effect of deleting all the now irrelevant
+        --  variants with filtered constructors.
+        -- FIX: This does not delete rules, the rhs of the rule is not the same
+        --      To fix it, index the map by function symbol plus patterns
+
+        Plain (InId f_in) ->
+             let rr'  = foldr (\k -> Map.delete k) rr irrelevant
+                 irrelevant =
+                        [ k | k@(pred',pats) <- Map.keys rr
+                             -- awkward: the order of the id wrappers in the key has not been fixed
+                             -- here, so the PrologId wraps the Labelling
+                            , pred' == Plain f_in
+                            , let the_pat = pats !! (i-1)
+                            , Just (FunctorId (Labelling l _)) <- [rootSymbol the_pat]
+                            , l /= [1 .. length (directSubterms the_pat)]
+                        ]
+             in
+                trace ("deleting irrelevant patterns:\n\n" ++ show(vcat(map ppr $ rules rr')) ++ "\n") $
+                R.return (rr', AF.cut f i af)
+
         _ -> R.return (rr, AF.cut f i af)
 
+mapAtKey k f = Map.mapWithKey (\k' x -> if k' == k then f x else x)
+
+resetLabels = foldTerm return f where
+  f t = Impure $ mapId (\(Labelling _ id) -> Labelling [1 .. length (Data.Foldable.toList t)] id) t
 
 {-
        newCons' = Set.fromList [ compound (reinject f :: Expr (T String :+: P')) args
@@ -528,7 +557,7 @@ amatch pat@(fmap unlabel . getId -> Just c) apat@(Al.match -> Just (Compound c' 
 amatch _ _ = fail "amatch: patterns didn't match"
 
 
-fixSymbols :: (Ord a, Ord v) => PrologRules (PrologId (Labelled a)) v -> PrologRules (Labelled (PrologId a)) v
+--fixSymbols :: (Ord a, Ord v) => PrologRules (PrologId (Labelled a)) v -> PrologRules (Labelled (PrologId a)) v
 fixSymbols = (Map.map . Set.map) (fmap (mapTermSymbols fixLabelling))
 
 fixLabelling :: Ord a => PrologId (Labelled a) -> Labelled (PrologId a)
