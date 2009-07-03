@@ -39,7 +39,7 @@ narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dps
               | (isBNarrowing .|. isGNarrowing) typ || isLinear t
               , isNothing (unify' (getVariant t uu) `mapM` uu)
               , new_dps <- [(i,dp') | (dp',p) <- narrow1DP olddp
-                              , let validPos = Set.toList(Set.fromList(positions (runIcap t (getFresh t >>= icap p0)))
+                              , let validPos = Set.toList(Set.fromList(positions (runIcap p0 (getFresh t >>= icap p0)))
                                                           `Set.intersection` pos_uu)
                               , any (`isPrefixOf` p) validPos]
               =  -- extra condition to avoid specializing to pairs whose rhs are variables
