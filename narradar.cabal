@@ -7,7 +7,7 @@ description:         A termination of Narrowing prover
 category:            Math
 license:             BSD3
 license-file:        LICENSE
-author:              Pepe Iborra
+author:              Jose Iborra
 maintainer:          pepeiborra@gmail.com
 data-files:          aproveStrats/*.strategy
 extra-source-files:  prelude.pl
