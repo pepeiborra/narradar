@@ -14,5 +14,5 @@ unify :: (Ord v, Unify t) => Term t v -> Term t v -> Maybe(Substitution t v)
 unify = Term.unify
 unify' w s = let s' = variant s w in unify w s'
 
-applySubst (Subst s) = assert (not infinite) $ Term.applySubst (Subst s)
+applySubst (Subst s) = assert (not infinite) $ Term.applySubst (zonkSubst $ Subst s)
   where infinite = or [ v `elem` vars t | (v,t) <- Map.toList s]
