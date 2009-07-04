@@ -36,12 +36,17 @@ import Data.Suitable
 import Data.Traversable
 import System.IO
 import System.Directory
+import Text.PrettyPrint (render)
 
 import Data.Term.Rules as Term
 import Data.Term.Ppr as Term
 --import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
+
+
+-- Debugging
+-- ---------
 
 #ifdef DEBUG
 import qualified Debug.Trace
@@ -50,6 +55,9 @@ trace = Debug.Trace.trace
 {-# INLINE trace #-}
 trace _ x = x
 #endif
+
+pprTrace = trace . render
+
 
 -- Type Constructor Composition
 -- ----------------------------

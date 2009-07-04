@@ -250,9 +250,9 @@ expandDPair p@Problem{dps=DPTRS dps gr (unif :!: unifInv) _} i (filter (`notElem
  = assert (isValidUnif res) res
   where
    res = runIcap (rules p ++ newdps) $ do
-    let dps'     = tRS (dps1 ++ dps2 ++ newdps)
+    let dps'     = dps1 ++ dps2 ++ newdps
         l_dps'   = l_dps + l_newdps
-        a_dps'   = A.listArray (0,l_dps') (rules dps')
+        a_dps'   = A.listArray (0,l_dps') dps'
         mkUnif' arr arr' =
             A.array ((0,0), (l_dps', l_dps'))
                        ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
@@ -268,7 +268,7 @@ expandDPair p@Problem{dps=DPTRS dps gr (unif :!: unifInv) _} i (filter (`notElem
                     [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
         adjust x = if x < i then x else x-1
 
-    unif_new :!: unifInv_new <- computeDPUnifiers p{dps = dps'}
+    unif_new :!: unifInv_new <- computeDPUnifiers p{dps = DPTRS a_dps' gr undefined undefined}
     let unif'    = mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
         dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')

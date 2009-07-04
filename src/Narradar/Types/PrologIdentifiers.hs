@@ -12,12 +12,13 @@ module Narradar.Types.PrologIdentifiers where
 import Control.Applicative
 import Control.Parallel.Strategies
 import Data.AlaCarte (Expr)
-import Data.Foldable(Foldable(..))
+import Data.Foldable(Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
+import Data.Maybe
 import Data.Monoid
 import Text.PrettyPrint
 
@@ -55,19 +56,21 @@ instance Ord (Expr p) => RemovePrologId (Expr p) where
 class IsPrologId id where
     isInId      :: id -> Bool
     isOutId     :: id -> Bool
-    isUId       :: id -> Bool
     isFunctorId :: id -> Bool
+    getUId      :: id -> Maybe Int
+    isUId       :: id -> Bool
+    isUId       = isJust . getUId
 
 instance IsPrologId (PrologId a) where
-    isOutId OutId{} = True; isOutId _ = False
-    isInId InId{}   = True; isInId _  = False
-    isUId UId{}     = True; isUId _   = False
+    isOutId OutId{} = True; isOutId  _ = False
+    isInId InId{}   = True; isInId   _ = False
+    getUId (UId i)  = Just i; getUId _ = Nothing
     isFunctorId FunctorId{} = True; isFunctorId _ = False
 
 instance (Foldable l, IsPrologId a) => IsPrologId (l a) where
     isInId      = getAny . foldMap (Any . isInId)
     isOutId     = getAny . foldMap (Any . isOutId)
-    isUId       = getAny . foldMap (Any . isUId)
+    getUId x | [x'] <- toList x = getUId x'; getUId _ = Nothing
     isFunctorId = getAny . foldMap (Any . isFunctorId)
 
 instance Show (PrologId String) where
