@@ -282,7 +282,7 @@ labellingPredsTrans mkH goalAF pgm = unEmbed $ do
         af0   = goal0 `mappend` AF.init sig0
         sig0  = getSignature rr0
 
-        rr0   = mconcat [mkNewMode lrr (id, getArity sksig f) pp | (unlabel -> f@(InId id), pp) <- AF.toList goal0]
+        rr0   = mconcat [mkNewMode lrr (id, getArity sig_pl id) pp | (unlabel -> InId id, pp) <- AF.toList goal0]
 
     (rr1, af1, sig1) <- invariantEVPreds heuristic (rr0, af0, sig0)
 
@@ -294,12 +294,12 @@ labellingPredsTrans mkH goalAF pgm = unEmbed $ do
  where
   heuristic = mkHeu mkH (prologTRS' lrr)
 
-  skrr   = skTransform (prepareProgram $ addMissingPredicates pgm)
-  skgoal = skTransformAF pgm goalAF
-  sksig  = getSignature skrr
+  pl1    = prepareProgram (addMissingPredicates pgm)
+  pl'    = fmap2 (fmap (mapTermSymbols Plain) . labelGoal) pl1
+  sig_pl = getSignature pl1
 
-  lrr = Map.fromListWith mappend [ (Labelling (iFun sksig (InId k)) k, (Set.mapMonotonic . fmap) (labelTerm (not.isFunctorId)) rr)
-                           | (k,rr) <- Map.toList skrr]
+  lrr    = fixSymbols $ skTransform pl'
+  skgoal = skTransformAF pgm goalAF
 
 type P'   = Abstract :+: V :+: PF
 type LP'  = Labelled (Expr (Abstract :+: V :+: PF))
