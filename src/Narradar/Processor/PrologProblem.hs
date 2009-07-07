@@ -630,7 +630,7 @@ cutEVPreds _ _ i rr af sig f = (rr, AF.cut f i af, sig)
 -- labellingPredsTrans _ af p = R.return ((convert p, convert af), [])
 
 cutEVCons fix k allRules rule@(l:->r) (i, prefix) (the_m, af, sig) f@(unlabel -> FunctorId{})
-  = case fixOutputPatterns k allRules rule (the_m, af', sig) (i,prefix) r'
+  = case fixOutputPatterns k allRules rule (the_m, af', sig') (i,prefix) r'
                of Just res -> res
                   _        -> let Just symbol' = rootSymbol (r ! init prefix)
                               in  fix k allRules rule (last prefix, init prefix) (the_m, af, sig) symbol'
@@ -638,6 +638,8 @@ cutEVCons fix k allRules rule@(l:->r) (i, prefix) (the_m, af, sig) f@(unlabel ->
     r'  = updateAt prefix r (mapRootSymbol (const f'))
     f'  = mapLabel (fmap (delete i)) f
     af' = af `mappend` AF.singleton f' (fromJust $ getLabel f')
+    sig' = sig {Narradar.constructorSymbols = Set.insert f' (getConstructorSymbols sig)
+               ,arity = Map.insert f' (getArity sig f) (arity sig)}
 
  -- If there is no constructor, we must cut a function argument.
  -- We also take the chance to remove all the now irrelevant
