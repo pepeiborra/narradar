@@ -380,10 +380,9 @@ labellingConsAndPredsTrans :: forall m v. (v ~ Narradar.Var) =>
 labellingConsAndPredsTrans bddbddb_path (g,mm) pgm = runIt $ do
 #ifdef DEBUG
    trace ("Estimated depth of " ++ show depth) $ return ()
-
-   trace (show (  text "Bddbddb produced the following patterns:"  $$ nest 2 (vcat (map ppr $ concat successpats)) $$
+   trace (show(text "Bddbddb produced the following patterns:" $$ nest 2 (vcat (map ppr $ concat successpats))
 --                  text "Meaningful pats are: " <> ppr filteredPats $$
-                  text "Added the clauses:" $$ Ppr.empty $$ vcat (map ppr $ Set.toList (additionalClauses `Set.difference` Set.fromList lpgm))
+--                  text "Added the clauses:" $$ Ppr.empty $$ vcat (map ppr $ Set.toList (additionalClauses `Set.difference` Set.fromList lpgm))
 --                  text "Resulting clauses:" $$ Ppr.empty $$ vcat (map ppr $ Set.toList allClauses)
          )) $ return ()
 #endif
@@ -495,7 +494,7 @@ mkNewMode' lrr (id,ar) pp =
     in Map.fromList  [ (k, Set.fromList rr)
                         | k <- keys
                         , let rr =  [ l `setLabel` Just pp :-> r `setLabel` Just pp
-                                       | (l :-> r) <- maybe (error ("mkNewMode:" ++ showPpr lid'))
+                                       | (l :-> r) <- maybe (error ("mkNewMode':" ++ showPpr lid'))
                                                             toList
                                                             (Map.lookup k lrr)]
                      ]
@@ -512,7 +511,9 @@ invariantNewCons new_rr f (the_m, af, sig)
   new_m    = Map.fromList
               [ ( (f, pats'), rr)
                | ((f,pats), rr) <- Map.toList new_rr
-               , let Just filtering = Set.fromList <$> AF.lookup (InId <$> f) af
+               , let filtering = case Set.fromList <$> AF.lookup (InId <$> f) af of
+                                   Just x -> x
+                                   Nothing -> error (show( text "invariantNewCons" <+> parens(text "new_cons =" <+> ppr new_cons) <> colon <+> ppr (InId <$>f)))
                , let occurrs = [ () | (i, cc) <- zip [1..] (map termIds pats)
                                       , i `Set.member` filtering
                                       , not $ Set.null $ Set.intersection new_cons (Set.fromList cc)]
@@ -642,7 +643,7 @@ cutEVCons fix k allRules rule@(l:->r) (i, prefix) (the_m, af, sig) f@(unlabel ->
  -- We also take the chance to remove all the now irrelevant
  -- variants with filtered constructors.
 cutEVCons _ k _ rule@(l:->r) (i, prefix) (the_m, af,sig) f@(Plain InId{})
-  = pprTrace (-- text "deleting irrelevant patterns" <+> ppr (snd <$> irrelevant) $$
+  = pprTrace (text "deleting irrelevant patterns" <+> ppr (snd <$> irrelevant) $$
               vcat [text "-" <+> ppr r | r <- Set.toList (mconcat (Map.elems the_m) `Set.difference` mconcat(Map.elems the_m'))]
 
     ) $
@@ -697,7 +698,7 @@ fixOutputPatterns k allRules rule@(l:->r) (the_m, af, sig) (i, prefix) r' =
   -- we also need to adjust the answer patterns. There are two cases,
   -- either there is no answer pattern matching, or there are one or
   -- more.
-    []   -> trace "Wanted to filter a constructor but there is no matching answer pattern" $
+    []   -> pprTrace (text "Wanted to introduce constructor" <+> ppr (r' ! init prefix) <+> text "but there is no matching answer pattern") $
             Nothing
 
     outs -> let [next_u@(lu:->ru)] =  [ rl | let Just r_set = Map.lookup k the_m
@@ -754,11 +755,13 @@ resetLabels = foldTerm return f where
     > amatch [_|_] [s|a]  = [_|_]_1
     > amatch [_|_] [a|s]  = [_|_]_2
 -}
+{-
 amatch :: (t ~ termF lid, lid ~ (Labelled(Expr f')), MapId termF, Traversable t, HasId t lid, Eq (Expr f),
                Compound :<: f, NotVar :<: f, Prolog.Any :<: f, f' :<: f, MonadPlus m) =>
               Free t v -> Expr f -> m (Free t v)
-
-amatch pat (isNotvar -> True) = if (isVar .|. isConstant) pat then return pat else error "the analysis is not precise enough (notvar)"
+-}
+amatch pat (isNotvar -> True) = if (isVar .|. isConstant) pat then return pat
+                                 else error(show (text "the analysis is not precise enough (notvar):" <+> ppr pat))
 amatch pat (isAny    -> True) = if (isVar .|. isConstant) pat then return pat else mzero --  error "the analysis is not precise enough (any)"
 
 amatch pat _  | isVar pat = return pat
