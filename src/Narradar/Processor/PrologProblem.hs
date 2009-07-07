@@ -338,6 +338,7 @@ labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
   cs_opts = computeSuccessPatternsOpts{ pl = pgm
                                       , mb_goal = Just abstractGoal
                                       , depth
+                                      , smart = True
                                       , bddbddb_path
 #ifdef DEBUG
                                       , verbosity = 2
@@ -412,6 +413,7 @@ labellingConsAndPredsTrans bddbddb_path (g,mm) pgm = runIt $ do
   cs_opts :: ComputeSuccessPatternsOpts Pred (T String :+: P')
   cs_opts = computeSuccessPatternsOpts{ pl = pgm
                                       , mb_goal = Just abstractGoal
+                                      , smart   = True
                                       , depth
                                       , bddbddb_path
 #ifdef DEBUG
