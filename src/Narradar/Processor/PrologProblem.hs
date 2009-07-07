@@ -490,9 +490,9 @@ mkNewMode' lrr (id,ar) pp | trace ("mkNewMode " ++ showPpr (id,pp)) False = unde
 mkNewMode' lrr (id,ar) pp =
     let lid  = Labelling [1..ar] id
         lid' = Labelling pp      id
-        keys = [ k | k@(the_lid,_pats) <- Map.keys lrr, the_lid == lid]
-    in Map.fromList  [ (k, Set.fromList rr)
-                        | k <- keys
+        keys = [ (lid,pats) | k@(the_lid,pats) <- Map.keys lrr, the_lid == lid]
+    in Map.fromList  [ ((lid',pats), Set.fromList rr)
+                        | k@(_,pats) <- keys
                         , let rr =  [ l `setLabel` Just pp :-> r `setLabel` Just pp
                                        | (l :-> r) <- maybe (error ("mkNewMode':" ++ showPpr lid'))
                                                             toList
