@@ -500,7 +500,7 @@ mkNewMode' lrr (id,ar) pp =
                      ]
 --invariantNewCons _ _ _ | trace "invariantNewCons" False = undefined
 invariantNewCons new_rr f (the_m, af, sig)
-  | Map.null new_rr || Set.null new_cons  || null (rules new_m) = return (the_m, af, sig)
+  | Set.null new_cons || null (rules new_m) = return (the_m, af, sig)
   | otherwise         =    pprTrace (vcat [text "+" <+> ppr r | r <- rules new_m])  $
                         f (the_m', af', sig')
  where
