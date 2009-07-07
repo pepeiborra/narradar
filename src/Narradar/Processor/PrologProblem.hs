@@ -321,8 +321,8 @@ labellingConsTrans bddbddb_path (g,mm) pgm = runIt $ do
          )) $ return ()
 #endif
 
-   (rr', af', sig') <- fix (\f -> invariantEVCons  additionalRules f
-                              >=> invariantNewCons additionalRules f) (rr0, af0, sig0)
+   (rr', af', sig') <- fix (\f -> invariantNewCons additionalRules f
+                              >=> invariantEVCons  additionalRules f) (rr0, af0, sig0)
    let prologrules = Map.mapKeysWith mappend fst rr'
        modes       = Set.filter (\c -> let l = getLabel c in isJust l && l /= Just(iFun sig' c)) (getConstructorSymbols sig')
    return ((prologrules, af'), modes)
@@ -387,8 +387,8 @@ labellingConsAndPredsTrans bddbddb_path (g,mm) pgm = runIt $ do
 --                  text "Resulting clauses:" $$ Ppr.empty $$ vcat (map ppr $ Set.toList allClauses)
          )) $ return ()
 #endif
-   (rr1, af1, sig1) <- fix (\f -> invariantEVConsAndPreds additionalRules f >=>
-                                  invariantNewCons additionalRules f >=>
+   (rr1, af1, sig1) <- fix (\f -> invariantNewCons additionalRules f >=>
+                                  invariantEVConsAndPreds additionalRules f >=>
                                   invariantNewModes' lrr f)
                              (rr0, af0, sig0)
 
