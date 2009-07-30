@@ -77,22 +77,27 @@ instance NFData a => NFData (Labelled a) where
 
 
 class IsLabelled id where
+    type WithoutLabel id :: *
     getLabel    :: id -> Maybe [Int]
     mapLabel :: (Maybe [Int] -> Maybe [Int]) -> id -> id
 
 instance IsLabelled (Labelled a) where
+    type WithoutLabel (Labelled a) = a
     getLabel Plain{} = Nothing; getLabel (Labelling ii _) = Just ii
     mapLabel f (Plain x)       = maybe (Plain x) (`Labelling` x) (f Nothing)
     mapLabel f (Labelling l x) = maybe (Plain x) (`Labelling` x) (f (Just l))
 
 instance IsLabelled a => IsLabelled (PrologId a) where
-   getLabel      = foldMap getLabel
+   type WithoutLabel (PrologId a) = PrologId (WithoutLabel a)
+   getLabel   = foldMap getLabel
    mapLabel f = fmap (mapLabel f)
 
 
 instance IsLabelled a => IsLabelled (Identifier a) where
-   getLabel      = foldMap getLabel
+   type WithoutLabel (Identifier a) = Identifier (WithoutLabel a)
+   getLabel   = foldMap getLabel
    mapLabel f = fmap (mapLabel f)
+
 
 {-
 mapLabel :: (forall id. Label -> id -> Labelled id) -> (forall id. id -> Labelled id) -> Labelled id -> Labelled id
