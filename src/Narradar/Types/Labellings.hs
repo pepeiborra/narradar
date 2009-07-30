@@ -38,7 +38,7 @@ instance RemovePrologId a => RemovePrologId (Labelled a) where
 -- Labellings
 -- -----------
 type Label = [Int]
-data Labelled a = Labelling {labelling::Label, unlabel::a} | Plain {unlabel::a} deriving (Eq)
+data Labelled a = Labelling {labelling::Label, unlabel::a} | Plain {unlabel::a} deriving (Eq, Ord)
 
 instance Functor Labelled where
   fmap f (Plain a)      = Plain (f a)
@@ -51,13 +51,13 @@ instance Foldable Labelled where
 instance Traversable Labelled where
   traverse f (Plain a)       = Plain <$> f a
   traverse f (Labelling l a) = Labelling l <$> f a
-
+{-
 instance Ord a => Ord (Labelled a) where
     compare (Labelling i1 f1) (Labelling i2 f2) = compare (f1,i1) (f2,i2)
     compare (Plain f1) (Plain f2) = compare f1 f2
     compare Labelling{} Plain{} = GT
     compare Plain{} Labelling{} = LT
-
+-}
 instance Show (Labelled String) where
     show (Labelling l a) = a ++ "_" ++ (concatMap show l)
     show (Plain a)       = a
