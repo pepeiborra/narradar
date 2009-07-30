@@ -15,7 +15,7 @@ import qualified Data.Set as Set
 import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
-import Data.Term.Rules hiding (unifies')
+import Data.Term.Rules hiding (unifies', matches')
 import Data.Term.Ppr
 import Text.PrettyPrint
 
