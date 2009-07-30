@@ -46,7 +46,7 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends: base, pretty, containers, process, directory, bytestring, array,
+  build-Depends: base, pretty, containers, process, directory, bytestring, array, GraphSCC,
      xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, parallel, strict,
      term, TRSParser, parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell,
      control-monad-free >= 0.4.1,logict, rmonad, alacarte

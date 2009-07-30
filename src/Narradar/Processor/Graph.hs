@@ -7,6 +7,7 @@ module Narradar.Processor.Graph where
 import Control.Exception (assert)
 import Data.Array as A
 import Data.Graph as G
+import Data.Graph.SCC as GSCC
 import Data.Tree  as Tree
 import Data.Maybe
 import Data.Strict.Tuple
@@ -49,12 +50,11 @@ usableSCCsProcessor problem@(Problem typ@GNarrowingModes{goal} trs dps@(DPTRS dd
                       | ciclo <- cc, any (`Set.member` reachable) ciclo]
   where
    gr          = getEDG problem
-   cc          = filter isCycle (map Tree.flatten (G.scc gr)) --TODO Use the faster GraphSCC package
+   cc          = [vv | CyclicSCC vv <- GSCC.sccList gr]
    reachable   = Set.fromList (G.reachable gr =<< goal_pairs)
-   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps, Just f <- [rootSymbol (lhs r)], unmarkDPSymbol f `Set.member` AF.domain goal]
-   isCycle [n] = n `elem` gr A.! n
-   isCycle _   = True
-
+   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps
+                     , Just f <- [rootSymbol (lhs r)]
+                     , unmarkDPSymbol f `Set.member` AF.domain goal]
 
 usableSCCsProcessor p = sccProcessor p
 
@@ -64,9 +64,7 @@ sccProcessor problem@(Problem typ trs dps@(DPTRS _ _ unif sig))
                  [return $ mkProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
     where dd = rulesArray dps
           gr = getEDG problem
-          cc = filter isCycle (map Tree.flatten (G.scc gr))
-          isCycle [n] = n `elem` gr A.! n
-          isCycle _   = True
+          cc = [vv | CyclicSCC vv <- GSCC.sccList gr]
 
 cycleProcessor problem@(Problem typ trs (DPTRS dd _ unif sig))
   | null cc   = success NoCycles problem
