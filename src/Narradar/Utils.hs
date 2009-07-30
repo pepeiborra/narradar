@@ -15,7 +15,7 @@ import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad  (liftM2, ap)
 import Control.Monad.Identity(Identity(..))
-import Control.Monad.List (lift, ListT)
+import Control.Monad.List (lift, ListT(..))
 import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
 import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
 import qualified Control.RMonad as R
@@ -89,9 +89,12 @@ toList3 = (F.concatMap . F.concatMap) toList
 -- ------------------------
 unsafeZipWithGM :: (Traversable t1, Traversable t2, Monad m) => (a -> b -> m c) -> t1 a -> t2 b -> m(t2 c)
 unsafeZipWithGM f t1 t2  = evalStateT (mapM zipG' t2) (toList t1)
-       where zipG' y = do (x:xx) <- get
-                          put xx
-                          lift (f x y)
+       where zipG' y = do st <- get
+                          case st of
+                            []     -> error "unsafeZipWithGM: first is shorter than second"
+                            (x:xx) -> do
+                                    put xx
+                                    lift (f x y)
 
 unsafeZipWithG :: (Traversable t1, Traversable t2) => (a -> b -> c) -> t1 a -> t2 b -> t2 c
 unsafeZipWithG f x y = runIdentity $ unsafeZipWithGM (\x y -> return (f x y)) x y
@@ -100,6 +103,10 @@ unsafeZipWithG f x y = runIdentity $ unsafeZipWithGM (\x y -> return (f x y)) x 
 -- --------------
 -- Various stuff
 -- --------------
+ignore m = m >> return ()
+
+li = ListT . return
+
 fst3 (a,_,_) = a
 fst4 (a,_,_,_) = a
 
