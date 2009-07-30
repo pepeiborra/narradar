@@ -86,6 +86,7 @@ Library
      Control.Monad.Supply
   other-modules:
      Lattice,
+     Data.UniqueList,
      Paths_narradar
      Text.ParserCombinators.Parsec.Tag
 
