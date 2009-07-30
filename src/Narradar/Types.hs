@@ -214,7 +214,7 @@ parsePrologProblem pgm = do
      gg2    <- concat <$> mapM (fromEither.parseGoal) gg_txt
      gg1'   <- mapM atomToGoal (concat gg1)
      let sig   = getSignature cc
-         (constructor_goals, defined_goals) = partition ((`Set.member` constructorSymbols sig) . fst) (gg1' ++ gg2)
+         (constructor_goals, defined_goals) = partition ((`Set.member` getConstructorSymbols sig) . fst) (gg1' ++ gg2)
          constructor_af = AF.fromList [(f, ii) | (f, mm) <- constructor_goals, let ii = [ i | (i,G) <- zip [1..] mm]]
          goals = [constructor_af `mappend`
                   AF.singleton f ii | (f, mm) <- defined_goals, let ii = [ i | (i,G) <- zip [1..] mm]]

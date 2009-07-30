@@ -75,9 +75,8 @@ mkProblem typ trs dps = Problem typ trs dps
 
 setTyp t' (Problem _ r p) = mkProblem t' r p
 
-mkDPSig (getSignature -> sig@Sig{definedSymbols, arity}) | dd <- toList definedSymbols =
-  sig{definedSymbols = definedSymbols `Set.union` Set.mapMonotonic markDPSymbol definedSymbols
-     ,arity          = arity `Map.union` Map.fromList [(markDPSymbol f, getArity sig f) | f <- dd]
+mkDPSig (getSignature -> sig@Sig{definedSymbols}) =
+  sig{definedSymbols = definedSymbols `mappend` Map.mapKeysMonotonic markDPSymbol definedSymbols
      }
 
 instance (Convert (NarradarTRS id v) (NarradarTRS id' v'), Convert id id', Ord id, Ord id', Ord v, Ord v') =>
@@ -318,8 +317,8 @@ computeDPUnifiers p@Problem{typ, dps = (rules -> the_dps)} = do
 -- Utils
 -- -------------
 
-runIcap :: Enum v => GetVars v thing => thing -> State (Substitution t (Either v v), [v]) a -> a
-runIcap t m = evalState m (mempty, freshVars) where
+runIcap :: ( Enum v) => GetVars v thing => thing -> State (Substitution t (Either v v), [v]) a -> a
+runIcap t m = evalState m (emptySubst, freshVars) where
     freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
 
 -- -------------

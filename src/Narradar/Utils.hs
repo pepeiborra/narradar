@@ -254,9 +254,9 @@ instance (Monoid w, MonadWriter w m) => MonadWriter w (ListT m) where
 -- RFunctor instance for Signature
 -- --------------------------------
 instance R.RFunctor Signature where
-    fmap f sig@(Sig c d a) =
+    fmap f sig@(Sig c d) =
         withConstraintsOf sig $ \SigConstraints -> withResConstraints $ \SigConstraints ->
-              Sig (Set.map f c) (Set.map f d) (Map.mapKeys f a)
+              Sig (Map.mapKeys f c) (Map.mapKeys f d)
 
 instance Ord id => Suitable Signature id where
    data Constraints Signature id = Ord id => SigConstraints

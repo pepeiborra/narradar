@@ -87,11 +87,12 @@ mapSymbols' f pi = fromList [ (f k v, v) | (k,v) <- toList pi ]
 invert rules (AF af) = AF (Map.mapWithKey (\f ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii) af)
   where sig = getSignature rules
 init t | sig <- getSignature t = fromList
-    [ (d, [1 .. getArity sig d])
-          | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)
-          , getArity sig d > 0]
+    [ (d, [1 .. a])
+          | (d,a) <- Map.toList(getArities sig)
+          , a > 0]
 empty t | sig <- getSignature t = fromList
-    [ (d, []) | d <- F.toList(definedSymbols sig `mappend` constructorSymbols sig)]
+    [ (d, []) | d <- F.toList(getDefinedSymbols sig) `mappend`
+                     F.toList(getConstructorSymbols sig)]
 restrictTo sig (AF af) =
     AF (Map.filterWithKey (\k _ -> k `Set.member` sig) af)
 domain (AF pi) = Map.keysSet pi
