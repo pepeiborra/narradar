@@ -146,8 +146,8 @@ pprDot' PprDot{..} prb = showDot $ do
 
 pprTPDBdot :: (Ord v, Ppr v, Ord id, Ppr id) => Problem id v -> String
 pprTPDBdot (Problem Prolog{..} _ _) =
-    showPpr program ++ "\\l" ++
-    unlines ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals]
+    unlines (map showPpr program ++
+            ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals])
 
 pprTPDBdot p@(Problem typ trs dps) = unlines $
     [ "(VAR " ++ (unwords $ map showPpr $ toList $ getVars p) ++ ")"

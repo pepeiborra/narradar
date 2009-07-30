@@ -133,10 +133,10 @@ instance Ppr id => Ppr (ProcInfo id) where
                            text "(Schneider-Kamp transformation)"
     ppr (LabellingSKP mm)= text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + Predicate Labelling)" $$
-                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map ppr) $ groupBy ((==) `on` unlabel) $ sort mm)
+                           text "Modes used " <> ppr (length mm) <> colon <+> (fsep $ map ppr $ sort mm)
     ppr (LabellingCP mm) = text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + Constructor Labelling)" $$
-                           text "Modes used " <> ppr (length mm) <> colon <+> (vcat $ map (hsep . map ppr) $ groupBy ((==) `on` unlabel) $ sort mm)
+                           text "Modes used " <> ppr (length mm) <> colon <+> (fsep $ map ppr $ sort mm)
     ppr PrologSKP_rhs    = text "Termination of LP as termination of Narrowing" $$
                            text "(Schneider-Kamp transformation + rhs bottoms trick)"
     ppr UsableRulesP     = text "Usable Rules for Basic Narrowing or Full Narrowing with constructor substitutions"
