@@ -110,6 +110,9 @@ li = ListT . return
 fst3 (a,_,_) = a
 fst4 (a,_,_,_) = a
 
+firstM f (x,y) = f x >>= \x' -> return (x',y)
+secondM f (x,y) = f y >>= \y' -> return (x,y')
+
 showPpr = show . ppr
 
 snub :: Ord a => [a] -> [a]
