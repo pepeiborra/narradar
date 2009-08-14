@@ -54,10 +54,10 @@ Library
      Narradar,
      Narradar.Solver,
      Narradar.Constraints.Unify,
+     Narradar.Constraints.VariableCondition,
      Narradar.Constraints.SAT.Common,
      Narradar.Constraints.SAT.RPO,
      Narradar.Constraints.SAT.Examples,
-     Narradar.Constraints.VariableCondition
      Narradar.Framework.Proof,
      Narradar.Framework.Output,
      Narradar.Framework.GraphViz,
@@ -67,7 +67,7 @@ Library
      Narradar.Types.DPairs,
      Narradar.Types.Goal,
      Narradar.Types.Labellings,
-     Narradar.Types.Problem
+     Narradar.Types.Problem,
      Narradar.Types.ProblemType,
      Narradar.Types.PrologIdentifiers
      Narradar.Types.Term,
@@ -80,7 +80,7 @@ Library
      Narradar.Processor.NarrowingProblem,
      Narradar.Processor.PrologProblem,
      Narradar.Processor.RewritingProblem,
-     Narradar.Processor.ReductionPair
+     Narradar.Processor.ReductionPair,
      Narradar.Processor.UsableRules,
      Narradar.Utils.Convert,
      Narradar.Utils.Ppr,
