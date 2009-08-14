@@ -50,26 +50,26 @@ import Data.Term.Rules
 ---------------------------
 -- DP Problems
 ---------------------------
-data ProblemF id a = Problem {typ::(ProblemType id), trs::a ,dps :: !a}
+data ProblemF id a = Problem {typ::(ProblemType id), trs::a, dps :: !a}
      deriving (Eq,Show,Ord)
 
-instance Ord id => HasSignature (Problem id v) id where
+instance (HasSignature trs id, Ord id) => HasSignature (ProblemF id trs) id where
   getSignature (Problem _ trs dps) = getSignature trs `mappend` getSignature dps
 
 type Problem  id   v = ProblemG id (TermF id) v
 type ProblemG id t v = ProblemF id (NarradarTRSF id t v (Rule t v))
 
-instance (Ord v, Ord id) => Monoid (Problem id v) where
+instance (Ord id, Monoid trs) => Monoid (ProblemF id trs) where
     mempty = Problem Rewriting mempty mempty
     Problem _ t1 dp1 `mappend` Problem typ2 t2 dp2 = Problem typ2 (t1 `mappend` t2) (dp1`mappend`dp2)
 
-instance (Ord id, Ord v) => HasRules (TermF id) v (Problem id v) where
+instance (Ord id, Ord v, HasRules t v trs) => HasRules t v (ProblemF id trs) where
     rules (Problem _ dps trs) = rules dps `mappend` rules trs
 
-instance (Ord v, Ord id) => GetFresh (TermF id) v (Problem id v) where getFreshM = getFreshMdefault
-instance (Ord v, Ord id) => GetVars v (Problem id v) where getVars = foldMap getVars
+instance (Ord v, Ord id, GetFresh t v trs) => GetFresh t v (ProblemF id trs) where getFreshM = getFreshMdefault
+instance (Ord v, Ord id, GetVars v trs) => GetVars v (ProblemF id trs) where getVars = foldMap getVars
 
-mkProblem :: (Ord id) => ProblemType id -> NarradarTRS id v -> NarradarTRS id v -> Problem id v
+--mkProblem :: (Ord id) => ProblemType id -> NarradarTRS id v -> NarradarTRS id v -> Problem id v
 mkProblem typ@(getAF -> Just pi) trs dps = let p = Problem (typ `withAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
 mkProblem typ trs dps = Problem typ trs dps
 
@@ -83,7 +83,7 @@ instance (Convert (NarradarTRS id v) (NarradarTRS id' v'), Convert id id', Ord i
           Convert (Problem id v) (Problem id' v') where
   convert p@Problem{typ} = (fmap convert p){typ = fmap convert typ}
 
-instance (Ord id, Ppr id, Ppr v, Ord v) => Ppr (Problem id v) where
+instance (Ord id, Ppr id, Ppr a) => Ppr (ProblemF id a) where
     ppr (Problem Prolog{..} _ _) =
             text "Prolog problem." $$
             text "Clauses:" <+> ppr program $$
@@ -152,7 +152,7 @@ ren = foldTermM (\_ -> return `liftM` freshVar) (return . Impure)
 
 -- Use unification instead of just checking if it is a defined symbol
 -- This is not the icap defined in Rene Thiemann, as it does not integrate the REN function
-icap :: (Ord id, Enum v, Ord v, MonadFresh v m) => Problem id v  -> TermN id v -> m(TermN id v)
+icap :: (HasRules t v trs, Unify t, GetVars v trs, MonadFresh v m) => ProblemF id trs -> Term t v -> m(Term t v)
 icap (Problem typ trs _) t = do
 #ifdef DEBUG
   when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
@@ -174,24 +174,29 @@ collapsing trs = any (isVar.rhs) (rules trs)
 
 -- Assumes Innermost or Constructor Narrowing
 -- TODO Extend to work with Q-narrowing to cover more cases
-iUsableRulesM :: (Ord id, Ord v, Enum v, MonadFresh v m) =>
-                 Problem id v -> Maybe (AF.AF_ id) -> [TermN id v] -> m(Problem id v)
+iUsableRulesM :: (problem ~ ProblemF id trs, Ord id, Ord (Term t v), HasSignature trs id, IsTRS t v trs, Unify t, GetVars v trs, MonadFresh v m) =>
+                  problem -> Maybe (AF.AF_ id) -> [Term t v] -> m problem
 --iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
 iUsableRulesM p@(Problem typ trs dps) Nothing tt
   | isInnermostLike typ = do
-     rr <- go mempty =<< getFresh tt
-     return (mkProblem typ (tRS $ toList rr) dps)
+     rr <- go (\_ -> mempty) mempty =<< getFresh tt
+     return (mkProblem typ (tRS$ toList rr) dps)
+
+  | otherwise = do
+     rr <- go (\_ -> Set.fromList $ rules trs) mempty =<< getFresh tt
+     return (mkProblem typ (tRS$ toList rr) dps)
+
  where
-  go acc []       = return acc
-  go acc (t:rest) = evalTerm (\_ -> go acc rest) f t where
-      f in_t = do
+  go vk acc []       = return acc
+  go vk acc (t:rest) = evalTerm (\v -> go vk (vk v `mappend` acc) rest) tf t where
+      tf in_t = do
          t'  <- wrap `liftM` (icap p `T.mapM` in_t)
          let rr  = [ r | r <- rules trs, lhs r `unifies` t']
              new = Set.difference (Set.fromList rr) acc
          rhsSubterms <- getFresh (rhs <$> F.toList new)
-         go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
+         go vk (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
 
-
+{-
 iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
   | isInnermostLike typ = do
      rr <- go mempty =<< getFresh (AF.apply pi tt)
@@ -209,10 +214,12 @@ iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
             new = Set.difference rr acc
         rhsSubterms <- getFresh (AF.apply pi . rhs <$> F.toList new)
         go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
-
+-}
 iUsableRulesM p _ _ = return p
 
-iUsableRules :: (Ord v, Enum v, Ord id) => Problem id v -> Maybe (AF.AF_ id) -> [TermN id v] -> Problem id v
+--iUsableRules :: (Ord v, Enum v, Ord id) => Problem id v -> Maybe (AF.AF_ id) -> [TermN id v] -> Problem id v
+iUsableRules :: (problem ~ ProblemF id trs, Enum v, Ord id, Ord (Term t v), HasSignature trs id, IsTRS t v trs, Unify t, GetVars v trs) =>
+                problem -> Maybe (AF.AF_ id) -> [Term t v] -> problem
 iUsableRules p mb_pi tt = (runIcap p . iUsableRulesM p mb_pi) tt
 
 {-

@@ -9,11 +9,10 @@ import TRSTypes(Mode(..))
 import qualified TRSTypes (TermF(..))
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Applicative ()
-import Text.PrettyPrint hiding (char, Mode)
 
 import Narradar.Types.ArgumentFiltering (AF_)
 import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Utils.Ppr
+import Narradar.Utils.Ppr hiding (char)
 
 type Goal = (String, [Mode])
 instance Ppr Mode where ppr G = text "b"; ppr V = text "f"
