@@ -113,13 +113,13 @@ mkGoalProblem heu typ trs =
 -- ---------------------------
 --getPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
 getPairs trs =
-    [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isDefined trs) r]
+    [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isRootDefined trs) r]
 
 --getNPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
 getNPairs trs = getPairs trs ++ getLPairs trs
 
 --getLPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
-getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isDefined trs lp]
+getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
 
 
 -------------------------
