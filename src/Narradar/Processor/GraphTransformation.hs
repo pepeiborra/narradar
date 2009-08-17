@@ -90,7 +90,7 @@ finstantiation p@(Problem (isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr _ _))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i, applySubst sigma s :-> applySubst sigma t)
-                             | Just sigma <- snub [dpUnify dptrs j i | j <- gr ! i]]
+                             | Just sigma <- snub [dpUnifyInv dptrs j i | j <- gr ! i]]
 finstantiation p = [return p]
 
 
