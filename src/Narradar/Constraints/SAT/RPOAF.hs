@@ -1,7 +1,11 @@
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Narradar.Constraints.SAT.RPOAF where
 
@@ -9,15 +13,15 @@ import Control.Applicative
 import qualified Control.Exception as CE
 import Control.Monad
 import Data.Foldable (Foldable, toList)
-import Data.List ((\\), transpose)
+import Data.List ((\\), transpose, inits)
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Narradar.Utils.Ppr
+import Data.Traversable (Traversable)
+import Narradar.Framework.Ppr
 
 import Narradar.Constraints.SAT.Common
-import Narradar.Constraints.SAT.Examples hiding (gt)
 import Narradar.Types hiding (symbol, constant)
 import Narradar.Utils
 import qualified Narradar.Types.ArgumentFiltering as AF
@@ -25,43 +29,105 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import qualified Prelude
 import Prelude hiding (lex, not, and, or, quot, (>))
 
+
 -- | RPO + AF
-rpoAF allowCol trs = runRPOAF symbol allowCol trs $ \dict -> do
+
+rpoAF allowCol trs = runRPOAF rpos allowCol (getSignature trs) $ \dict -> do
   let symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
   assertAll [ l > r | l:->r <- symb_rules]
+  return (return ())
+
 
 -- | RPO + AF + Usable Rules
-rpoAF_DP allowCol p@Problem{..} = runRPOAF symbol allowCol (dps `mappend` trs) $ \dict -> do
-  let trs' = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
-      dps' = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules dps
-      p'   = Problem{typ = AF.mapSymbols (\f -> fromJust $ Map.lookup f dict) <$> typ
-                    ,trs = trs'
-                    ,dps = dps'
-                    }
-  decreasing_dps <- replicateM (length $ rules dps) boolean
+rpoAF_DP col ex p = rpoAF_DP' col ex p
+
+rposAF_DP col p = rpoAF_DP' col rpos p
+lposAF_DP col p = rpoAF_DP' col lpos p
+lpoAF_DP col p = rpoAF_DP' col (lpo) p
+mpoAF_DP col p = rpoAF_DP' col (mpo) p
+
+{-
+rpoAF_DP' :: (p  ~ DPProblem typ [Rule t v], HasSignature p
+             ,p' ~ DPProblem typ [Rule t' v], HasSignature p'
+             ,t  ~ f id, Ord id, Ppr id, MapId f, TermId t ~ id
+             ,t' ~ f id', HasId t', Foldable t',  TermId t' ~ id'
+             ,Ord id', SATOrd id', Extend id', UsableSymbol id', AFSymbol id', Decode id' (SymbolRes id)
+             ,Ord (Term t' v)
+             ,IsDPProblem typ, Traversable (DPProblem typ)
+             ,Functor t, Enum v, Ord v
+             ,IUsableRules t' v p'
+             ) =>
+             Bool
+          -> (Signature id -> id -> SAT id')
+          -> DPProblem typ [Rule (f id) v]
+          -> (DPProblem typ [Rule (f id') v] -> [SAT Boolean])
+          -> SAT (Decoder ([Int], [SymbolRes id]))
+-}
+-- | Returns the indexes of non decreasing pairs and the symbols used
+rpoAF_DP' allowCol con p = runRPOAF con allowCol (getSignature p) $ \dict -> do
+  let
+      trs' = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules(getR p)
+      dps' = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules(getP p)
+      p'   = mkDPProblem (getProblemType p) trs' dps'
+  decreasing_dps <- replicateM (length dps') boolean
   assertAll [omega  p'
-            ,andM [ l >~ r | l:->r <- rules dps']
-            ,andM [(l > r) <<==>> return dec | (l:->r, dec) <- zip (rules dps') decreasing_dps]
+            ,andM [ l >~ r | l:->r <- dps']
+            ,andM [(l > r) <<==>> return dec | (l:->r, dec) <- zip dps' decreasing_dps]
             ,or decreasing_dps
             ]
-  return decreasing_dps
+  return $ do
+    decreasing <- decode decreasing_dps
+    return [ r | (r,False) <- zip [0..] decreasing]
 
-runRPOAF symbol allowCol trs f = isSAT $ do
-  let sig   = getSignature trs
-  symbols <- mapM (symbol sig) (Set.toList $ getAllSymbols sig)
+-- | Returns the indexes of non decreasing pairs, the indexes of af-rhs-ground pairs, and the symbols used
+rpoAF_NDP allowCol con p = runRPOAF con allowCol (getSignature p) $ \dict -> do
+  let
+      trs' = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules(getR p)
+      dps' = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules(getP p)
+      p'   = mkDPProblem (getProblemType p) trs' dps'
+  decreasing_dps <- replicateM (length dps') boolean
+  af_ground_rhs_dps <- replicateM (length dps') boolean
+
+  assertAll [omega  p'
+            ,andM [ l >~ r | l:->r <- dps']
+            ,andM [(l > r) <<==>> return v | (l:->r, v) <- zip dps' decreasing_dps]
+            ,andM [afGroundRHS r <<==>> return v | (r, v) <- zip dps' af_ground_rhs_dps]
+            ,or decreasing_dps
+            ,or af_ground_rhs_dps
+            ]
+  return $ do
+    decreasing <- decode decreasing_dps
+    af_ground  <- decode af_ground_rhs_dps
+    return ([ r | (r,False) <- zip [0..] decreasing]
+           ,[ r | (r,False) <- zip [0..] af_ground])
+
+runRPOAF con allowCol sig f = isSAT $ do
+  let ids = Set.toList $ getAllSymbols sig
+  symbols <- mapM (con sig) ids
   if allowCol
-    then assertAll [notM(listAF s) ==>> xor(encodeAFpos s) | s <- symbols]
-    else mapM_ assertOne $ map encodeAFlist symbols
+    then assertAll [notM(listAF s) ==>> oneM [inAF i s | i <- [1..a]]
+                    | (s,a) <- zip symbols (getArity sig <$> ids)]
+    else mapM_ (listAF >=> assertOne) symbols
 
-  let dict       = Map.fromList [(the_symbol s, s) | s <- symbols]
+  let dict       = Map.fromList (zip ids symbols)
   res <- f dict
-  return $ do res' <- decode res
-              syms <- mapM (secondM decode) (Map.toList dict)
+  return $ do res' <- res
+              syms <- mapM decode (Map.elems dict)
               return (res',syms)
 
 -- -------------------------------------------------
 -- Encoding of RPO symbols with AF and usable rules
 -- -------------------------------------------------
+
+data SymbolRes a = SymbolRes { the_symbolR:: a
+                             , precedence :: Int
+                             , isUsable   :: Bool
+                             , status     :: Status
+                             , filtering  :: Either Int [Int] }
+  deriving (Eq, Ord)
+
+instance Ppr a => Ppr (SymbolRes a) where
+    ppr SymbolRes{the_symbolR} = ppr the_symbolR
 
 data Symbol a = Symbol { the_symbol   :: a
                        , encodePrec   :: Number
@@ -70,7 +136,7 @@ data Symbol a = Symbol { the_symbol   :: a
                        , encodeAFpos  :: [Boolean]
                        , encodePerm   :: [[Boolean]]
                        , encodeUseMset:: Boolean
-                       , decodeSymbol :: Decoder (Integer, IsUsable, Status, Either Integer [Integer])}
+                       , decodeSymbol :: Decoder (SymbolRes a)}
 
 instance Show a => Show (Symbol a) where
     show Symbol{the_symbol} = show the_symbol
@@ -84,9 +150,9 @@ instance Eq   a => Eq   (Symbol a) where
 instance Ord a => Ord (Symbol a) where
    compare a b = the_symbol a `compare` the_symbol b
 
-instance Decode (Symbol a) (Integer, IsUsable, Status, Either Integer [Integer]) where decode = decodeSymbol
+instance Decode (Symbol a) (SymbolRes a) where decode = decodeSymbol
 
-symbol sig x = do
+rpos sig x = do
   let ar = getArity sig x
   n_b <- number ( length
                 $ takeWhile (Prelude.>0)
@@ -100,12 +166,12 @@ symbol sig x = do
   -- Permutation invariants
   -- -----------------------
   -- There is one or zero arguments considered at the k'th perm position,
-  assertAll [ or perm_k ==>> oneM perm_k
+  assertAll [ or perm_k ==>> oneM (return <$> perm_k)
              | perm_k <- transpose perm_bb]
   -- Filtered arguments may not be used in the permutation
   assertAll [ not p ==> notM (or perm_i) | (p, perm_i) <- zip pos_bb perm_bb]
   -- Non filtered arguments are considered at exactly one position in the permutation
-  assertAll [ p ==> oneM perm_i | (p, perm_i) <- zip pos_bb perm_bb]
+  assertAll [ p ==> oneM (return <$> perm_i) | (p, perm_i) <- zip pos_bb perm_bb]
   -- All non-filtered arguments are permuted 'to the left'
   assertAll [ or perm_k1 ==>> or perm_k
              | (perm_k, perm_k1) <- zip (transpose perm_bb) (tail $transpose perm_bb)]
@@ -119,35 +185,33 @@ symbol sig x = do
              , encodePerm = perm_bb
              , encodeUseMset = mset
              , decodeSymbol = do
-                 n      <- decode n_b
+                 n      <- fromInteger `liftM` decode n_b
 --               usable <- decode usable_b
                  isList <- decode list_b
                  pos    <- decode pos_bb
                  isUsable <- decode usable_b
                  status   <- decode mset
                  perm_bools <- decode perm_bb
-                 let the_positions = [i | (i,True) <- zip [1..] pos]
-                     isUsableMsg = if isUsable then Usable else NotUsable
-                     perm        = [ let poss =  [i | (i,True) <- zip [1..] perm_i]
-                                            in CE.assert (length poss <= 1) (head (poss++[-1]))
-                                                | perm_i <- perm_bools ]
-                     statusMsg   = if status then Mul else Lex perm
+                 let the_positions = [fromInteger i | (i,True) <- zip [1..] pos]
+                     statusMsg   = mkStatus status perm_bools
                  return$
                   if Prelude.not isList
                    then CE.assert (length the_positions == 1)
-                        (n, isUsableMsg, statusMsg, Left $ head the_positions)
-                   else (n, isUsableMsg, statusMsg, Right the_positions)
+                        (SymbolRes x n isUsable statusMsg (Left $ head the_positions))
+                   else (SymbolRes x n isUsable statusMsg (Right the_positions))
              }
 
-data IsUsable = Usable | NotUsable deriving (Eq, Show)
-data Status   = Mul    | Lex [Int] deriving (Eq, Show)
+class AFSymbol a where
+    listAF :: a -> SAT Boolean
+    inAF, isAF :: Int -> a -> SAT Boolean
+    isAF j sym = andM [inAF j sym, notM (listAF sym)]
 
-listAF     = return . encodeAFlist
---inAF j sym | pprTrace (text "inAF" <+> ppr j <+> ppr sym) False = undefined
-inAF j sym = return (encodeAFpos sym !! (j-1))
-isAF j sym = andM [inAF j sym, notM (listAF sym)]
+instance AFSymbol (Symbol a) where
+   listAF     = return . encodeAFlist
+   inAF j sym = return (encodeAFpos sym !! (j-1))
 
-usable = return . encodeUsable
+class UsableSymbol a where usable :: a -> SAT Boolean
+instance UsableSymbol (Symbol a) where usable = return . encodeUsable
 
 instance SATOrd (Symbol a) where
   a > b  = encodePrec a `gt` encodePrec b
@@ -165,11 +229,71 @@ instance Eq a => Extend (Symbol a) where
                        lexpgt s t ss tt]
           ]
 
+-- --------
+-- Variants
+-- --------
+
+-- LPO with status
+
+newtype LPOSsymbol a = LPOS{unLPOS::Symbol a} deriving (Eq, Ord, Show, SATOrd)
+instance Decode (LPOSsymbol a) (SymbolRes a) where decode = decode . unLPOS
+
+lpos sig = liftM LPOS . rpos sig
+
+instance Eq a => Extend (LPOSsymbol a) where
+  exeq s t = lexpeq (unLPOS s) (unLPOS t)
+  exgt s t = exgt (unLPOS s) (unLPOS t)
+
+
+instance AFSymbol (LPOSsymbol a) where
+   listAF     = return . encodeAFlist . unLPOS
+   inAF j sym = return (encodeAFpos (unLPOS sym) !! (j-1))
+
+instance UsableSymbol (LPOSsymbol a) where usable = return . encodeUsable . unLPOS
+
+-- LPO
+newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd)
+instance Decode (LPOsymbol a) (SymbolRes a) where decode = decode . unLPO
+
+lpo sig x = do
+  s <- rpos sig x
+  return (LPO s)
+
+instance Eq a => Extend (LPOsymbol a) where
+  exeq s t = lexeq (unLPO s) (unLPO t)
+  exgt s t = exgt (unLPO s) (unLPO t)
+
+instance AFSymbol (LPOsymbol a) where
+   listAF     = return . encodeAFlist . unLPO
+   inAF j sym = return (encodeAFpos (unLPO sym) !! (j-1))
+
+instance UsableSymbol (LPOsymbol a) where usable = return . encodeUsable . unLPO
+
+
+-- MPO
+newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd)
+instance Decode (MPOsymbol a) (SymbolRes a) where decode = decode . unMPO
+
+mpo sig x = do
+  s <- rpos sig x
+  assertOne (encodeUseMset s)
+  return (MPO s)
+
+instance Eq a => Extend (MPOsymbol a) where
+  exeq s t = lexpeq (unMPO s) (unMPO t)
+  exgt s t = exgt (unMPO s) (unMPO t)
+
+instance AFSymbol (MPOsymbol a) where
+   listAF     = return . encodeAFlist . unMPO
+   inAF j sym = return (encodeAFpos (unMPO sym) !! (j-1))
+
+instance UsableSymbol (MPOsymbol a) where usable = return . encodeUsable . unMPO
 
 -- -----------
 -- RPO with AF
 -- -----------
-instance (Eq v, Eq (Term f v), Foldable f, HasId f (Symbol a), Eq a, Ppr a) =>
+instance (Eq v, Eq (Term f v), Foldable f, HasId f, TermId f ~ id
+         ,SATOrd id, AFSymbol id, Extend id) =>
     SATOrd (Term f v) where
  s > t
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
@@ -221,6 +345,15 @@ instance (Eq v, Eq (Term f v), Foldable f, HasId f (Symbol a), Eq a, Ppr a) =>
         tt = directSubterms t
         Just id_s = rootSymbol s
         Just id_t = rootSymbol t
+
+-- -------------------------
+-- Narrowing related stuff
+-- -------------------------
+afGroundRHS (_ :-> t) = andM [ orM [ notM(inAF i f)
+                                    | prefix <- tail $ inits pos
+                                    , let Just f = rootSymbol (t ! init prefix)
+                                    , let      i = last prefix]
+                               | pos <- [noteV v | v <- vars(annotateWithPos t)]]
 
 -- -----------------------------------
 -- Lexicographic extension with AF
@@ -318,13 +451,13 @@ mulgen id_f id_g (i, j) k = do
     epsilons <- replicateM i boolean
     gammasM  <- replicateM i (replicateM j boolean)
 
-    andM [andM [ inAF j id_g ==>> oneM gammas_j
+    andM [andM [ inAF j id_g ==>> oneM (return <$> gammas_j)
                 | (j, gammas_j) <- zip [1..] (transpose gammasM) ]
          ,andM [ notM(inAF i id_f) ==>> notM (or gammas_i)
                 | (i, gammas_i) <- zip [1..] gammasM]
          ,andM [ notM(inAF j id_g) ==>> notM (or gammas_j)
                 | (j, gammas_j) <- zip [1..] (transpose gammasM)]
-         ,andM [ ep ==> oneM gammasR
+         ,andM [ ep ==> oneM (return <$> gammasR)
                      | (ep, gammasR) <- zip epsilons gammasM]
          ,k epsilons gammasM]
 
@@ -332,15 +465,27 @@ mulgen id_f id_g (i, j) k = do
 -- Usable Rules with AF
 -- ------------------------
 
-omega p@Problem{dps, trs} =
-      andM [ andM [go r (rules trs) | _:->r <- rules dps]
-           , andM [ usable f ==>> andM [ l > r
-                                      | l:->r <- rulesFor f (rules trs)]
-                  | f <- Set.toList dd]
+omega :: forall p typ t v trs id.
+         (p  ~ DPProblem typ, HasSignature (p trs)
+         ,id ~ TermId t, TermId t ~ SignatureId trs
+         ,IsDPProblem typ, Traversable (DPProblem typ)
+         ,IsTRS t v trs, GetVars v trs, HasSignature trs
+         ,Ord v, Enum v
+         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Foldable t, HasId t, Ord (Term t v)
+         ,IUsableRules t v (p trs)
+         ) => p trs -> SAT Boolean
+omega p =
+      andM [andM [go r trs | _:->r <- rules dps]
+           ,andM [ usable f ==>> andM [ l > r | l:->r <- rulesFor f trs]
+                  | f <- Set.toList dd ]
            ]
+
    where
-    dd = getDefinedSymbols $
-         iUsableRules p Nothing (rhs <$> rules dps)
+    (trs,dps) = (rules $ getR p, rules $ getP p)
+    sig = getSignature (getR p)
+    dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps))
+
     go (Pure x) _ = constant True
     go t trs
       | id_t `Set.notMember` getDefinedSymbols sig
@@ -348,15 +493,14 @@ omega p@Problem{dps, trs} =
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
       = andM [ usable id_t
-             , andM [ go r (trs \\ rls) | _:->r <- rls]
+             , andM [ go r trs' | _:->r <- rls, let trs' = (trs \\ rls) :: [Rule t v]]
              , andM [ inAF i id_t ==>> go t_i trs
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where
          Just id_t = rootSymbol t
          tt        = directSubterms t
-         sig       = getSignature trs
          rls       = rulesFor id_t trs
 
-
+rulesFor :: (HasId t, TermId t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]

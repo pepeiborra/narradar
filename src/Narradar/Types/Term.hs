@@ -1,6 +1,7 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Narradar.Types.Term (TermF(..), TermN, RuleN, constant, term, term1
                      ,termIds, Size(..), fromSimple
@@ -10,14 +11,14 @@ module Narradar.Types.Term (TermF(..), TermN, RuleN, constant, term, term1
 
 import Control.Monad.Free
 import Data.Char
+import Data.Bifunctor
 import Data.Foldable as F (Foldable(..),sum,msum)
 import qualified Data.Set as Set
 import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
 import Data.Term.Rules hiding (unifies', matches')
-import Data.Term.Ppr
-import Text.PrettyPrint
+import Narradar.Framework.Ppr
 
 data TermF id f = Term id [f] deriving (Eq,Ord,Show)
 type TermN id = Free (TermF id)
@@ -61,7 +62,10 @@ instance Eq id => Unify (TermF id) where
    zipTermM_ f (Term f1 tt1) (Term f2 tt2) | f1 == f2 = zipWithM_ f tt1 tt2
                                            | otherwise = fail "structure mismatch"
 
-instance HasId (TermF id) id where getId (Term id _) = Just id
+instance Ord id =>  HasId (TermF id) where
+    type TermId (TermF id) = id
+    getId (Term id _) = Just id
+
 instance MapId TermF where mapId f (Term id tt) = Term (f id) tt
 
 -- -----
@@ -81,6 +85,8 @@ instance Foldable (TermF id) where
     foldMap  f (Term _ tt) = foldMap f tt
 instance Traversable (TermF id) where
     traverse f (Term a tt) = Term a `fmap` traverse f tt
+
+instance Bifunctor TermF where bimap f g (Term a tt) = Term (f a) (map g tt)
 
 -- Ppr
 -- ---

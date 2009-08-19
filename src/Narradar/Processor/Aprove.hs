@@ -1,17 +1,22 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE PatternGuards, RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeFamilies #-}
+
 module Narradar.Processor.Aprove where
 
 import Control.Applicative hiding ((<|>), many)
 import Control.Exception
 import Control.Monad
-import Data.ByteString.Char8 (pack)
+import Data.ByteString.Char8 as BS (pack, unpack)
 import Data.Char
-import Data.Foldable  (toList)
+import Data.Foldable  (toList, Foldable)
 import Data.HashTable (hashString)
 import Data.List
 import Data.Maybe
@@ -21,40 +26,109 @@ import System.FilePath
 import System.IO
 import System.IO.Unsafe
 import System.Process
-import Text.PrettyPrint (parens, int, text ,hcat, punctuate, comma, (<>), (<+>))
 import Text.Printf
+import Text.XHtml (HTML(..), primHtml)
 import Text.HTML.TagSoup
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Tag
 
 import Paths_narradar
 
-import Narradar.Framework.Proof
+import MuTerm.Framework.DotRep
+import MuTerm.Framework.Proof
+import MuTerm.Framework.Problem
+import MuTerm.Framework.Processor
+import Narradar.Framework.GraphViz
+import Narradar.Framework.Ppr
+
 import Narradar.Types
+import Narradar.Types.Problem.Rewriting
 import Narradar.Utils
+import Narradar.Utils.Html
 
-type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => Problem id v -> IO (proof(Problem id v))
+--type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => Problem id v -> IO (proof(Problem id v))
 
-aproveWebProc :: ExternalProcTyp m id v
+-- -----------------
+-- Aprove Processor
+-- -----------------
+
+data Aprove = AproveServer {timeout :: Seconds, strategy :: Strat}
+            | AproveWeb
+            | AproveBinary {path :: FilePath}
+              deriving (Show, Eq)
+
+type Seconds = Int
+data Strat   = Default | OnlyReductionPair deriving (Show, Eq)
+
+strats = [ (Default,           "aproveStrats/narradar.strategy")
+         , (OnlyReductionPair, "aproveStrats/reductionPair.strategy")]
+
+-- ---------------
+-- Aprove proofs
+-- ---------------
+
+data AproveProof = AproveProof [Output]
+instance Ppr AproveProof  where ppr   (AproveProof outs) = text "Aprove:" <+> vcat [ text(BS.unpack txt) | OutputTxt txt <- outs]
+
+instance HTML AproveProof where
+ toHtml (AproveProof outputs)
+     | Just (OutputHtml html) <- find isOutputHtml outputs = thickbox (unpack html) << spani "seeproof" << "(see proof)"
+
+instance DotRep AproveProof where dot p = Text (ppr p) []
+
+instance ProofInfo AproveProof
+
+
+-- ------------------
+-- Allowed instances
+-- ------------------
+instance ( p ~ DPProblem Rewriting trs
+         , ProblemInfo p, PprTPDB p, Eq trs, Ppr trs, HasRules t v trs, Ppr (Term t v)
+         ) =>
+    Processor Aprove trs Rewriting Rewriting
+  where
+    apply AproveWeb{..}    = unsafePerformIO . aproveWebProc
+    apply AproveBinary{..} = unsafePerformIO . aproveProc path
+    apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
+
+instance (p ~ DPProblem IRewriting trs
+         , ProblemInfo p, PprTPDB p, Eq trs, Ppr trs, HasRules t v trs, Ppr (Term t v)
+         ) =>
+    Processor Aprove trs IRewriting IRewriting
+  where
+    apply AproveWeb{..} = unsafePerformIO . aproveWebProc
+    apply AproveBinary{..} = unsafePerformIO . aproveProc path
+    apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
+
+-- ------------------
+-- Implementation
+-- ------------------
+
+aproveWebProc :: ( p ~ DPProblem typ trs
+                 , IsDPProblem typ, Eq p, ProblemInfo p, PprTPDB p
+                 , Ppr trs, Ppr typ, HTML typ, HTMLClass typ
+                 , HasRules t v trs, Ppr (Term t v)
+                 ) => p -> IO (Proof b)
 aproveWebProc = memoExternalProc go where
-  go prob@Problem{typ=(isRewriting -> True)} = do
+  go prob = do
     curl <- initialize
+    let source = show(pprTPDB prob)
     CurlOK <- setopt curl (CurlURL "http://aprove.informatik.rwth-aachen.de/index.asp?subform=termination_proofs.html")
-    CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html",
-                                       multiformString "program_type" "trs"
-                                      ,multiformString "source" (pprTPDB prob)
+    CurlOK <- setopt curl (CurlHttpPost [multiformString "subform" "termination_proofs.html"
+                                      ,multiformString "program_type" "trs"
+                                      ,multiformString "source" source
                                       ,multiformString "timeout" "10"
                                       ,multiformString "head" "no"
                                       ,multiformString "output" "html"
                                       ,multiformString "submit_mode" "Submit"
                                       ,multiformString "fullscreen_request" "1"])
 #ifdef DEBUG
-    hPutStrLn stderr ("sending the following problem to aProve web interface \n" ++ pprTPDB prob)
+    hPutStrLn stderr ("sending the following problem to aProve web interface \n" ++ source)
 #endif
     response :: CurlResponse <- perform_with_response_ curl
     let output = respBody response
     return$ (if isTerminating output then success else failP)
-            (External (Aprove "WEB") [OutputHtml  (pack output)]) prob
+            (AproveProof [OutputHtml  (pack output)]) prob
 
 isTerminating (canonicalizeTags.parseTags -> tags) = let
      ww = words $ map toLower $ innerText $ takeWhile ((~/= "<br>") .&. (~/= "</p>")) $ dropWhile (~/= "<b>") $ dropWhile (~/= "<body>") tags
@@ -62,12 +136,13 @@ isTerminating (canonicalizeTags.parseTags -> tags) = let
      any ("proven" `isPrefixOf`) ww && ("not" `notElem` ww)
 
 
-aproveProc :: FilePath -> ExternalProcTyp m id v
+--aproveProc :: FilePath -> ExternalProcTyp m id v
 aproveProc path = go where
-   go prob@Problem{typ=(isRewriting -> True)} =
+   go prob =
      withTempFile "/tmp" "ntt_temp.trs" $ \ problem_file h_problem_file -> do
-              hPutStr h_problem_file (pprTPDB prob)
-              hPutStr stderr ("solving the following problem with Aprove:\n" ++ pprTPDB prob)
+              let source = show $ pprTPDB prob
+              hPutStr h_problem_file source
+              hPutStr stderr ("solving the following problem with Aprove:\n" ++ source)
               hClose h_problem_file
               (_,out,err,pid) <- runInteractiveCommand (printf "%s %s 5" path problem_file)
               waitForProcess pid
@@ -75,9 +150,10 @@ aproveProc path = go where
               errors            <- hGetContents err
               unless (null errors) (error ("Aprove failed with the following error: \n" ++ errors))
               return$ (if take 3 output == "YES" then success else failP)
-                        (External (Aprove path) [OutputHtml(pack $ massage output)] ) prob
+                        (AproveProof [OutputHtml(pack $ massage output)] ) prob
 
 aproveSrvPort    = 5250
+
 {-
 aproveSrvProc :: (Ord id, Show id,TRSC f, T id :<: f) => Int -> Problem id f -> IO (ProblemProofG id Html f)
 {-# SPECIALIZE aproveSrvProc :: Int -> Problem BBasicId -> IO (ProblemProof Html BBasicId) #-}
@@ -114,10 +190,6 @@ aproveSrvProc timeout =  go where
           headSafe _   x  = head x
 
 -}
-data Strat = Default | OnlyReductionPair deriving (Show, Eq)
-
-strats = [ (Default,           "aproveStrats/narradar.strategy")
-         , (OnlyReductionPair, "aproveStrats/reductionPair.strategy")]
 
 callAproveSrv s t p = memoCallAproveSrv'(s,t,p)
 {-# NOINLINE memoCallAproveSrv' #-}
@@ -145,16 +217,16 @@ callAproveSrv' (strat, timeout, p) = withSocketsDo $ withTempFile "/tmp" "ntt.tr
     hClose hAprove
     return res
 
-aproveSrvXML strat (timeout :: Int) prob@Problem{typ=(isRewriting -> True)} =
-    let p = pprTPDB prob in callAproveSrv strat timeout p
+aproveSrvXML strat (timeout :: Int) prob =
+    let p = show(pprTPDB prob) in callAproveSrv strat timeout p
 
 aproveSrvProc2 strat (timeout :: Int) =  go where
-  go prob@Problem{typ=(isRewriting -> True)}= do
+  go prob = do
     res <- aproveSrvXML strat timeout prob
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
               _     -> failP
-    return (k (External (Aprove "SRV") [OutputXml (pack $ tail $ dropWhile (/= '\n') res)]) prob)
+    return (k (AproveProof [OutputXml (pack $ tail $ dropWhile (/= '\n') res)]) prob)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
   go p = return $ return p
@@ -163,20 +235,25 @@ aproveSrvProc2 strat (timeout :: Int) =  go where
 memoExternalProc go = unsafePerformIO (memoIO hashProb go)
 
 
-hashProb prob = hashString (pprTPDB prob)
+hashProb prob = hashString (show $ pprTPDB prob)
 massage     = unlines . drop 8  . lines
 
 -- ----
 -- TPDB
 -- ----
 
-pprTPDB :: (Ppr id, Ord id, Ppr v, Enum v, Ord v) => Problem id v -> String
-pprTPDB p@(Problem typ trs dps) =
-  unlines ([ printf "(VAR %s)" (unwords $ map (show . pprVar) $ toList $ getVars p)
-           , printf "(PAIRS\n %s)" (unlines (map (show.pprRule) (rules dps)))
-           , printf "(RULES\n %s)" (unlines (map (show.pprRule) (rules trs)))
-           ] ++ if (isInnermostRewriting typ) then ["(STRATEGY INNERMOST)"] else [])
+class PprTPDB p where pprTPDB :: p -> Doc
 
+instance (GetVars v trs, HasRules t v trs
+         ,Ppr (Term t v), Ppr v, Enum v, Foldable t, HasId t, Ppr (TermId t)
+         ) => PprTPDB (DPProblem Rewriting trs) where
+ pprTPDB p =
+     vcat [ parens (text "VAR" <+> hsep (map pprVar (toList $ getVars p)))
+          , parens (text "PAIRS" $$
+                    vcat (map pprRule (rules $ getP p)))
+          , parens (text "RULES" $$
+                    vcat (map pprRule (rules $ getR p)))
+          ]
   where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprVar v = text "v" <> int(fromEnum v)
         pprTerm  = foldTerm pprVar f
@@ -186,20 +263,12 @@ pprTPDB p@(Problem typ trs dps) =
             = text "comma" <> parens (hcat$ punctuate comma $ toList t) -- TODO Fix this HACK
             | Just id <- getId t
             = ppr id <> parens (hcat$ punctuate comma $ toList t)
-
+-- TODO  ++ ["(STRATEGY INNERMOST)"]
+-- TODO Relative Termination
 
 -- ----------------
 -- Parse XML
 -- ----------------
-{-
-findResultingPairs x = (parseTags
-                 >>> dropWhile (~/= "<qdp-reduction-pair-proof>")
-                 >>> dropWhile (~/= "<implication value='equivalent'>")
-                 >>> dropWhile (~/= "<dps>")
-                 >>> (tailSafe >=> (eitherM . parse (many ruleP) ""))) x
-  where tailSafe []     = Nothing
-        tailSafe (_:xx) = Just xx
--}
 findResultingPairs :: String -> Maybe [RuleN String Var]
 findResultingPairs x = (eitherM . parse proofP "" . parseTags . dropLine) x
   where dropLine = tailSafe . dropWhile (/= '\n')

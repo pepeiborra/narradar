@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.2
-version:             0.2.20090610
+version:             0.2.20090823
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -46,49 +46,57 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends: base, pretty, containers, process, directory, bytestring, array, GraphSCC,
-     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, dotgen, parallel, strict,
+  build-Depends:  muterm-framework, base, pretty, array, containers, process, directory,
+     bytestring, GraphSCC,
+     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, graphviz, parallel, strict,
      term, TRSParser, parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell,
-     control-monad-free >= 0.4.1,logict, rmonad, alacarte, satchmo
+     control-monad-free >= 0.4.1,logict, rmonad, alacarte, satchmo, satchmo-backends, fgl
   exposed-modules:
      Narradar,
-     Narradar.Solver,
+--     Narradar.Solver,
+     Narradar.Constraints.ICap,
+     Narradar.Constraints.UsableRules,
      Narradar.Constraints.Unify,
      Narradar.Constraints.VariableCondition,
      Narradar.Constraints.SAT.Common,
      Narradar.Constraints.SAT.RPO,
-     Narradar.Constraints.SAT.Examples,
-     Narradar.Framework.Proof,
-     Narradar.Framework.Output,
-     Narradar.Framework.GraphViz,
+     Narradar.Constraints.SAT.RPOAF,
+     Narradar.Examples,
+     Narradar.Framework,
+     Narradar.Framework.GraphViz
+     Narradar.Framework.Ppr,
      Narradar.Types,
      Narradar.Types.ArgumentFiltering,
      Narradar.Types.DPIdentifiers,
-     Narradar.Types.DPairs,
+     Narradar.Types.PrologIdentifiers
      Narradar.Types.Goal,
      Narradar.Types.Labellings,
      Narradar.Types.Problem,
-     Narradar.Types.ProblemType,
-     Narradar.Types.PrologIdentifiers
+     Narradar.Types.Problem.Prolog,
+     Narradar.Types.Problem.Rewriting,
+     Narradar.Types.Problem.Narrowing,
+     Narradar.Types.Problem.NarrowingGoal,
+     Narradar.Types.Problem.Relative,
+     Narradar.Types.Problem.InitialGoal,
+     Narradar.Types.Problem.Infinitary,
      Narradar.Types.Term,
      Narradar.Types.TRS,
      Narradar.Types.Var,
      Narradar.Processor.Aprove,
-     Narradar.Processor.ExtraVars,
      Narradar.Processor.Graph,
+     Narradar.Processor.RPO,
      Narradar.Processor.GraphTransformation,
      Narradar.Processor.NarrowingProblem,
-     Narradar.Processor.PrologProblem,
-     Narradar.Processor.RewritingProblem,
+     Narradar.Processor.InitialGoalNarrowingProblem,
+     Narradar.Processor.InfinitaryProblem,
+--     Narradar.Processor.PrologProblem,
      Narradar.Processor.ReductionPair,
      Narradar.Processor.UsableRules,
-     Narradar.Utils.Convert,
-     Narradar.Utils.Ppr,
      Narradar.Utils,
-     Control.Monad.Free.Narradar,
-     Control.Monad.Supply
+     Narradar.Utils.Html,
+--     Control.Monad.Supply,
+     Lattice
   other-modules:
-     Lattice,
      Data.UniqueList,
      Paths_narradar
      Text.ParserCombinators.Parsec.Tag

@@ -1,34 +1,140 @@
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
-module Narradar.Processor.GraphTransformation (narrowing, instantiation, finstantiation) where
+module Narradar.Processor.GraphTransformation where
 
 import Control.Applicative
 import Control.Monad.Identity (Identity(..))
+import Control.Monad.Logic
 import Data.Array.IArray hiding ( array )
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as Gr
 import Data.List (foldl1', isPrefixOf)
 import Data.Maybe
 import qualified Data.Set as Set
-import Control.Monad.Logic
+import Data.Traversable (Traversable)
+import Text.XHtml (HTML)
 
 import Narradar.Types hiding ((!))
+import Narradar.Types.TRS
+import Narradar.Framework
+import Narradar.Framework.GraphViz
 import Narradar.Utils
-import Narradar.Framework.Proof
 
 import Data.Term.Narrowing
 
---narrowing, instantiation, finstantiation :: forall f id a. (DPMark f, NFData (f(Term f)), Hole :<: f, T id :<: f, Show id, {- HasTrie (f(Term f)),-} id ~ Identifier a, Ord a) => Problem id f -> [ProblemProofG id f]
-narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dpsA gr _ _))
-    = [ step (NarrowingP olddp (tRS newdps)) p0 (expandDPair p0 i newdps)
+
+data NarrowingP     = NarrowingP
+data Instantiation  = Instantiation
+data FInstantiation = FInstantiation
+
+-- Narrowing
+
+instance (Ppr (Identifier id), Ppr id, Ord id) =>
+    Processor NarrowingP (NarradarTRS (Identifier id) Var) Rewriting Rewriting where
+  applySearch NarrowingP = narrowing
+
+instance (Ppr (Identifier id), Ppr id, Ord id) =>
+    Processor NarrowingP (NarradarTRS (Identifier id) Var) Narrowing Narrowing where
+  applySearch NarrowingP = narrowing
+
+instance (Ppr (Identifier id), Ppr id, Ord id) =>
+    Processor NarrowingP (NarradarTRS (Identifier id) Var) IRewriting IRewriting where
+  applySearch NarrowingP = narrowing_innermost
+instance (Ppr (Identifier id), Ppr id, Ord id) =>
+    Processor NarrowingP (NarradarTRS (Identifier id) Var) CNarrowing CNarrowing where
+  applySearch NarrowingP = narrowing_innermost
+
+-- Instantiation
+
+instance (trs ~ NarradarTRS (Identifier id) v
+         ,t   ~ TermF (Identifier id)
+         ,v   ~ Var
+         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (DPProblem typ trs)
+         ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
+         ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+         ,Ppr (Identifier id), Ppr id, Ord id
+         ) =>
+    Processor Instantiation (NarradarTRS (Identifier id) Var) typ typ where
+  applySearch Instantiation = instantiation
+
+
+-- Forward Instantiation
+
+instance (trs ~ NarradarTRS (Identifier id) v
+         ,t   ~ TermF (Identifier id)
+         ,v   ~ Var
+         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (DPProblem typ trs)
+         ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
+         ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+         ,Ppr (Identifier id), Ppr id, Ord id
+         ) =>
+    Processor FInstantiation (NarradarTRS (Identifier id) Var) typ typ where
+  applySearch FInstantiation = finstantiation
+
+
+-- -------
+-- Proofs
+-- -------
+data NarrowingProof where NarrowingProof :: Ppr (Rule t v) =>  Rule t v   -- ^ Old pair
+                                                           -> [Rule t v]  -- ^ New pairs
+                                                           -> NarrowingProof
+
+instance ProofInfo NarrowingProof
+instance Ppr NarrowingProof where
+  ppr (NarrowingProof old new) = text "Narrowing Processor." <+>
+                                 text "Pair" <+> ppr old <+> text "replaced by" <+> ppr new
+
+data InstantiationProof where InstantiationProof :: Ppr (Rule t v) =>  Rule t v   -- ^ Old pair
+                                                           -> [Rule t v]  -- ^ New pairs
+                                                           -> InstantiationProof
+
+instance ProofInfo InstantiationProof
+instance Ppr InstantiationProof where
+  ppr (InstantiationProof old new) = text "Instantiation Processor." <+>
+                                 text "Pair" <+> ppr old <+> text "replaced by" <+> ppr new
+
+data FInstantiationProof where FInstantiationProof :: Ppr (Rule t v) =>  Rule t v   -- ^ Old pair
+                                                           -> [Rule t v]  -- ^ New pairs
+                                                           -> FInstantiationProof
+
+instance ProofInfo FInstantiationProof
+instance Ppr FInstantiationProof where
+  ppr (FInstantiationProof old new) = text "FInstantiation Processor." <+>
+                                 text "Pair" <+> ppr old <+> text "replaced by" <+> ppr new
+
+-- ----------------
+-- Implementation
+-- ----------------
+-- Narrowing
+
+narrowing, narrowing_innermost
+          :: (p  ~ NarradarProblem typ (Identifier id)
+             ,t  ~ TermF (Identifier id)
+             ,v  ~ Var, Enum v
+             ,trs ~ NarradarTRS (Identifier id) v
+             ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo p
+             , Ppr (Identifier id), Ppr id, Ord id, HTML p, Ppr p
+             ,IUsableRules t v (typ, trs), ICap t v (typ,trs)
+             ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ,[Rule t v])
+             ) =>
+             NarradarProblem typ (Identifier id) -> [Proof (NarradarProblem typ (Identifier id))]
+
+narrowing p0
+  | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
+  | otherwise  = [ singleP (NarrowingProof olddp newdps) p0 (expandDPair p0 i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
+                     , let olddp  = dpsA ! i
                      , let newdps = dps' !! i]
     where --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
+          (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
           dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                           , all (not.null) dps]
           f (i, olddp@(_s :-> t))
@@ -36,62 +142,111 @@ narrowing p0@(Problem typ@(isGNarrowing .|. isBNarrowing -> True) trs (DPTRS dps
               | otherwise = []
            where
              newdps
-              | (isBNarrowing .|. isGNarrowing) typ || isLinear t
+              |  isLinear t
               , isNothing (unify' (getVariant t uu) `mapM` uu)
-              , new_dps <- [(i,dp') | (dp',p) <- narrow1DP olddp
-                              , let validPos = Set.toList(Set.fromList(positions (runIcap p0 (getFresh t >>= icap p0)))
-                                                          `Set.intersection` pos_uu)
+              , new_dps <- [(i,dp')
+                              | (dp',p) <- narrow1DP (rules $ getR p0) olddp
+                              , let validPos
+                                     = Set.toList(Set.fromList(positions (runIcap (getVars p0) (getFresh t >>= icap p0)))
+                                        `Set.intersection` pos_uu)
                               , any (`isPrefixOf` p) validPos]
               =  -- extra condition to avoid specializing to pairs whose rhs are variables
                  -- (I don't recall having seen this in any paper but surely is common knowledge)
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-
                where uu     = map (lhs . (dpsA !)) (gr ! i)
                      pos_uu = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
-          narrow1DP (l :-> r) = [ (applySubst theta l :-> r', p)
-                                  | ((r',p),theta) <- observeAll (narrow1P (rules trs) r)
-                                  ]
-
-narrowing p = [return p]
-
-instantiation p@(Problem (isAnyNarrowing->True) trs dptrs@(DPTRS dpsA gr unif _))
-  | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
-  | otherwise = [ step (InstantiationP olddp (tRS newdps)) p (expandDPair p i newdps)
+narrowing_innermost p0
+  | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
+  | otherwise = [ singleP (NarrowingProof olddp newdps) p0 (expandDPair p0 i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = tRS[dpsA ! i] `asTypeOf` trs
+                     , let olddp  = dpsA ! i
+                     , let newdps = dps' !! i]
+    where --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
+          (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
+          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                          , all (not.null) dps]
+          f (i, olddp@(_s :-> t))
+              | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
+              | otherwise = []
+           where
+             newdps
+              | isNothing (unify' (getVariant t uu) `mapM` uu)
+              , new_dps <- [(i,dp')
+                              | (dp',p) <- narrow1DP (rules $ getR p0) olddp
+                              , let validPos
+                                     = Set.toList(Set.fromList(positions (runIcap (getVars p0) (getFresh t >>= icap p0)))
+                                        `Set.intersection` pos_uu)
+                              , any (`isPrefixOf` p) validPos]
+              =  -- extra condition to avoid specializing to pairs whose rhs are variables
+                 -- (I don't recall having seen this in any paper but surely is common knowledge)
+                 if any (isVar.rhs.snd) new_dps then [] else new_dps
+
+              | otherwise = []
+               where uu     = map (lhs . (dpsA !)) (gr ! i)
+                     pos_uu = if null uu then Set.empty
+                                else foldl1' Set.intersection (Set.fromList . positions <$> uu)
+
+narrow1DP rr (l :-> r) = [ (applySubst theta l :-> r', p)
+                           | ((r',p),theta) <- observeAll (narrow1P rr r) ]
+
+-- Instantiation
+
+instantiation, finstantiation
+          :: (p  ~ NarradarProblem typ (Identifier id), ProblemInfo p
+             ,t  ~ TermF (Identifier id)
+             ,v  ~ Var, Enum v
+             ,trs ~ NarradarTRS (Identifier id) v
+             ,IsDPProblem typ, Traversable (DPProblem typ)
+             , Ppr (Identifier id), Ppr id, Ord id, HTML p, Ppr p
+             ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
+             ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+             ) =>
+             NarradarProblem typ (Identifier id) -> [Proof (NarradarProblem typ (Identifier id))]
+
+instantiation p
+  | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
+  | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
+  | otherwise = [ singleP (InstantiationProof olddp newdps) p (expandDPair p i newdps)
+                     | (i,dps') <- dpss
+                     , let olddp  = dpsA  ! i
                      , let newdps = dps' !! i ]
 
-   where dps  = elems dpsA `const` unif
+   where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
+         dps  = elems dpsA
          dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                     , all (not.null) dps]
          f  (i,olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
             where newdps = [ (i, applySubst sigma s :-> applySubst sigma t)
-                           | Just sigma <- snub [dpUnify dptrs i m | (m,n) <- Gr.edges gr, n == i]]
+                           | Just sigma <- snub [dpUnify (getP p) i m | (m,n) <- Gr.edges gr, n == i]]
 
-instantiation p = [return p]
+--instantiation p = [return p]
 
-finstantiation p@(Problem (isAnyNarrowing ->True) trs dptrs@(DPTRS dpsA gr _ _))
+-- Forward instantiation
+
+finstantiation p
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
-  | otherwise = [ step (FInstantiationP olddp (tRS newdps)) p
+  | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
+  | otherwise = [ singleP (FInstantiationProof olddp newdps) p
                            (expandDPair p i newdps)
                      | (i, dps') <- dpss
-                     , let olddp  = tRS[dpsA !  i] `asTypeOf` trs
+                     , let olddp  = dpsA !  i
                      , let newdps = dps' !! i]
-   where dps  = elems dpsA
+   where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
+         dps  = elems dpsA
          dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                     , all (not.null) dps]
          f (i, olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i, applySubst sigma s :-> applySubst sigma t)
-                             | Just sigma <- snub [dpUnifyInv dptrs j i | j <- gr ! i]]
-finstantiation p = [return p]
+                             | Just sigma <- snub [dpUnifyInv (getP p) j i | j <- gr ! i]]
+-- finstantiation p = [return p]
 
 
 -- I should teach myself about comonads

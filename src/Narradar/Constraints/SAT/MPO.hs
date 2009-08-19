@@ -14,7 +14,7 @@ import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 
 import Narradar.Constraints.SAT.Common
 import Narradar.Constraints.SAT.Examples hiding (gt)

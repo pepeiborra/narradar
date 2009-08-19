@@ -39,7 +39,7 @@ import System.Directory
 import Text.PrettyPrint (render)
 
 import Data.Term.Rules as Term
-import Data.Term.Ppr as Term
+import Narradar.Framework.Ppr
 --import TRS.Utils hiding (size, parens, brackets, trace)
 
 import Prelude hiding (mapM)
@@ -71,6 +71,7 @@ fmap2  = fmap . fmap
 fmap3  = fmap . fmap . fmap
 (<$$>) = fmap2
 (<$$$>)= fmap3
+(<$$$$>)= fmap . fmap . fmap . fmap
 
 mapM2  = mapM . mapM
 
@@ -230,6 +231,7 @@ memoIO hash f = do
                         res <- f x
                         HT.insert ht x res
                         return res)
+
 
 -- ------------------------------
 -- Higher Rank boolean operators

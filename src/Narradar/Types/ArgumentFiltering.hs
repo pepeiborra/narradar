@@ -7,7 +7,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 
@@ -16,6 +16,7 @@ module Narradar.Types.ArgumentFiltering where
 import Control.Applicative
 import Control.Arrow (second)
 import Control.Monad.Fix (fix)
+import Data.Bifunctor
 import Data.List (partition, find, inits, unfoldr, sortBy)
 import Data.Map (Map)
 import Data.Maybe
@@ -34,8 +35,8 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Labellings
 import Narradar.Types.Term
-import Narradar.Utils.Ppr
-import Narradar.Utils
+import Narradar.Framework.Ppr
+import Narradar.Utils hiding (fromRight)
 
 import TRSTypes (Mode(..))
 
@@ -49,43 +50,60 @@ import Debug.Observe
 extendToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
 
-newtype AF_ id = AF {fromAF:: Map id (Set Int)} deriving (Eq, Ord, Show)
+newtype AF_ id = AF {fromAF:: Map id (Either Int (Set Int))} deriving (Eq, Ord, Show)
 type AF = AF_ Id
 type LabelledAF = AF_ LId
 
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
-init      :: (HasSignature sig id, Ord id, Ppr id) => sig -> AF_ id
-empty     :: (HasSignature sig id,  Ord id, Ppr id) => sig -> AF_ id
+init      :: (HasSignature sig) => sig -> AF_ (SignatureId sig)
+empty     :: (HasSignature sig) => sig -> AF_ (SignatureId sig)
 singleton :: Ord id => id -> [Int] -> AF_ id
+singleton':: Ord id => id -> Either Int [Int] -> AF_ id
 fromList  :: Ord id => [(id,[Int])] -> AF_ id
+fromList' :: Ord id => [(id,Either Int [Int])] -> AF_ id
 toList    :: AF_ id -> [(id,[Int])]
+toList'   :: AF_ id -> [(id,Either Int [Int])]
 lookup    :: (Ord id, Monad m) => id -> AF_ id -> m [Int]
+lookup'   :: (Ord id, Monad m) => id -> AF_ id -> m (Either Int [Int])
 cut       :: (Ppr id, Ord id) => id -> Int -> AF_ id -> AF_ id
 cutAll    :: (Ppr id, Ord id) => [(id, Int)] -> AF_ id -> AF_ id
 map       :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
+map'      :: (id -> Either Int [Int] -> Either Int [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
-mapSymbols':: Ord id' => (id -> [Int] -> id') -> AF_ id -> AF_ id'
-filter    :: Ord id => (id -> Set Int -> Bool) -> AF_ id -> AF_ id
-invert    :: (Ord id, Ppr id, HasSignature sig id) => sig -> AF_ id -> AF_ id
+mapSymbols':: Ord id' => (id -> Either Int [Int] -> id') -> AF_ id -> AF_ id'
+filter    :: Ord id => (id -> Either Int (Set Int) -> Bool) -> AF_ id -> AF_ id
+invert    :: (HasSignature sig) => sig -> AF_ (SignatureId sig) -> AF_ (SignatureId sig)
 restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
-splitCD   :: (HasSignature sig id, Ord id, Ppr id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
+splitCD   :: (HasSignature sig, id ~ SignatureId sig, Ppr id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show (ppr id))
-                     Just _ -> AF $ Map.insertWith (flip Set.difference) id (Set.singleton i) m
+                     Just _ -> AF $ Map.insertWith (flip difference) id (Right $ Set.singleton i) m
 cutAll xx af     = Prelude.foldr (uncurry cut) af xx
-lookup id (AF m) = maybe (fail "not found") (return.Set.toList) (Map.lookup id m)
-fromList         = AF . Map.fromListWith Set.intersection . P.map (second Set.fromList)
-toList (AF af)   = Map.toList (Map.map Set.toList af)
-singleton id ii  = fromList [(id,ii)]
-map f (AF af)    = AF$ Map.mapWithKey (\k ii -> Set.fromList (f k (Set.toList ii))) af
+lookup' id (AF m)= maybe (fail "not found") (return . mapRight Set.toList) (Map.lookup id m)
+lookup  id (AF m)= maybe (fail "not found") (return . Set.toList . fromRight) (Map.lookup id m)
+fromList         = AF . Map.fromListWith intersection . P.map (second (Right . Set.fromList))
+fromList'        = AF . Map.fromListWith intersection . P.map (second (mapRight Set.fromList))
+toList (AF af)   = Map.toList (Map.map (Set.toList . fromRight) af)
+toList' (AF af)  = Map.toList (Map.map (mapRight Set.toList) af)
+singleton  id ii = fromList  [(id,ii)]
+singleton' id ii = fromList' [(id,ii)]
+map  f (AF af)   = AF$ Map.mapWithKey (\k ii -> Right $ Set.fromList (f k (Set.toList $ fromRight ii))) af
+map' f (AF af)   = AF$ Map.mapWithKey (\k ii -> mapRight Set.fromList (f k (mapRight Set.toList ii))) af
 filter f (AF af) = AF (Map.filterWithKey f af)
-mapSymbols f (AF af) = AF (Map.mapKeys f af)
-mapSymbols' f pi = fromList [ (f k v, v) | (k,v) <- toList pi ]
-invert rules (AF af) = AF (Map.mapWithKey (\f ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii) af)
+mapSymbols  f (AF af) = AF (Map.mapKeys f af)
+mapSymbols' f (AF af) = AF $ Map.fromList [ (f k (mapRight Set.toList v), v) | (k,v) <- Map.toList af ]
+invert rules (AF af)
+  = AF (Map.mapWithKey
+          (\f -> Right . either
+                 (\i ->  Set.delete i $ Set.fromDistinctAscList [1..getArity sig f])
+                 (\ii -> Set.fromDistinctAscList [1..getArity sig f] `Set.difference` ii))
+          af
+       )
   where sig = getSignature rules
+
 init t | sig <- getSignature t = fromList
     [ (d, [1 .. a])
           | (d,a) <- Map.toList(getArities sig)
@@ -102,28 +120,27 @@ splitCD sig (AF af) = (af_c, af_d) where
 
 
 instance Ppr id => Ppr (AF_ id) where
-    ppr af =  vcat [ hcat $ punctuate comma
-                          [ ppr f <> colon <+> ppr (Set.toList aa) | (f, aa) <- xx]
-                      | xx <- chunks 3 $ Map.toList $ fromAF af]
+    ppr af =  fsep $punctuate comma
+              [ ppr f <> colon <+> either (ppr.id) (ppr . Set.toList) aa | (f, aa) <-  Map.toList $ fromAF af]
 
 -- | bottom is ill defined
 --   It fails the law bottom `join` x = x       (join left identity)
 --   However, the law x `join` bottom = x holds (join right identity)
 instance Lattice AF where
-  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
-  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  meet (AF af1) (AF af2) = AF (Map.unionWith intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith union af1 af2)
   top    = AF mempty
-  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
+  bottom = AF $ Map.fromList [(AnyIdentifier, Right mempty)]
 
 instance Lattice (AF_ LId) where
-  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
-  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  meet (AF af1) (AF af2) = AF (Map.unionWith intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith union af1 af2)
   top    = AF mempty
-  bottom = AF $ Map.fromList [(AnyIdentifier, mempty)]
+  bottom = AF $ Map.fromList [(AnyIdentifier, Right mempty)]
 
 instance Ord id => Lattice (AF_ id) where
-  meet (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
-  join (AF af1) (AF af2) = AF (Map.unionWith Set.union af1 af2)
+  meet (AF af1) (AF af2) = AF (Map.unionWith intersection af1 af2)
+  join (AF af1) (AF af2) = AF (Map.unionWith union af1 af2)
   top    = AF mempty
 
 
@@ -132,7 +149,25 @@ instance Ord id => Lattice (AF_ id) where
 --   But only the former makes sense for AFs.
 instance Ord id => Monoid (AF_ id) where
   mempty  = AF mempty
-  mappend (AF af1) (AF af2) = AF (Map.unionWith Set.intersection af1 af2)
+  mappend (AF af1) (AF af2) = AF (Map.unionWith intersection af1 af2)
+
+intersection (Right s1) (Right s2) = Right (Set.intersection s1 s2)
+intersection (Left x) _ = Left x
+intersection _ (Left y) = Left y
+
+union (Right s1) (Right s2) = Right (Set.union s1 s2)
+union (Left x)   (Left y)   = Right $ Set.fromList[x,y]
+union (Left x)   (Right s2) = Right $ Set.insert x s2
+union (Right s1) (Left y)   = Right $ Set.insert y s1
+
+difference (Right s1) (Right s2) = Right (Set.difference s1 s2)
+difference (Left x)   (Right s2) = if x `Set.member` s2
+                                    then error "AF.difference: cannot further filter a collapsed filtering"
+                                    else Left x
+difference (Right s1) (Left y)   = Right (Set.delete y s1)
+difference (Left x) (Left y)     = if x == y
+                                    then error "AF.difference: cannot further filter a collapsed filtering"
+                                    else Left x
 
 -- ----------------------
 -- Regular AF Application
@@ -143,7 +178,9 @@ instance Ord id => ApplyAF (TermN id v) id where apply = applyTerm
 applyTerm :: forall v id . Ord id => AF_ id -> TermN id v -> TermN id v
 applyTerm af = foldTerm return f
      where   f t@(Term n tt)
-               | Just ii <- lookup n af = term n (select tt (pred <$> ii))
+               | Just ii <- lookup' n af = either (\i  -> term n [tt !! pred i])
+                                                  (\ii -> term n (select tt (pred <$> ii)))
+                                                  ii
                | otherwise = Impure t
 
 instance ApplyAF a id => ApplyAF [a] id where apply af = fmap (apply af)
@@ -153,7 +190,9 @@ instance (Functor f, ApplyAF t id) => ApplyAF (f t) id  where apply af = fmap (a
 instance (Ord id) => ApplyAF (Term (WithNote1 n (TermF id)) v) id  where
     apply af = foldTerm return f where
       f t@(Note1 (n,Term id tt))
-               | Just ii <- lookup id af = Impure (Note1 (n, Term id (select tt (pred <$> ii))))
+               | Just ii <- lookup' id af = Impure (Note1 (n, Term id (either (\i  -> [tt !! pred i])
+                                                                              (\ii -> select tt (pred <$> ii))
+                                                                              ii )))
                | otherwise = Impure t
 
 -- -------
@@ -189,19 +228,19 @@ class PolyHeuristic tag id t where runPolyHeu :: tag id t -> Heuristic id t
 class PolyHeuristic tag id (TermF id) => PolyHeuristicN tag id; instance PolyHeuristic tag id (TermF id) => PolyHeuristicN tag id
 
 -- | Wrapper for heuristics which depend on the problem signature
-data MkHeu tag = MkHeu { mkTag :: (HasSignature sig id, PolyHeuristic tag id f) => sig -> tag id f }
+data MkHeu tag = MkHeu { mkTag :: (HasSignature sig, id ~ SignatureId sig, PolyHeuristic tag id f) => sig -> tag id f }
 
 -- | Wrapper around a non-overloaded heuristic
-data WrapHeu id f = WrapHeu ((Foldable f, HasId f id, Ord id, Ppr id) => Heuristic id f)
-instance (Ord id, Ppr id, HasId f id, Foldable f) => PolyHeuristic WrapHeu id f where runPolyHeu (WrapHeu run) = run
+data WrapHeu id f = WrapHeu ((Foldable f, HasId f, id ~ TermId f, Ppr id) => Heuristic id f)
+instance (Foldable f, HasId f, id ~ TermId f, Ppr id) => PolyHeuristic WrapHeu id f where runPolyHeu (WrapHeu run) = run
 
-simpleHeu ::  (forall id f. (Foldable f, HasId f id, Ord id, Ppr id) => Heuristic id f) -> MkHeu WrapHeu
+simpleHeu ::  (forall id f. (Foldable f, HasId f, Ppr (TermId f)) => Heuristic (TermId f) f) -> MkHeu WrapHeu
 simpleHeu h = MkHeu (\_sig -> WrapHeu h)
 
-simpleHeu' ::  (forall id f sig. (Foldable f, Ord id, Ppr id, HasSignature sig id) => sig -> Heuristic id f) -> MkHeu WrapHeu
+simpleHeu' ::  (forall id f sig. (Foldable f, Ppr id, HasSignature sig, id ~ SignatureId sig ) => sig -> Heuristic id f) -> MkHeu WrapHeu
 simpleHeu' h = MkHeu (\sig -> WrapHeu (h sig))
 
-mkHeu :: (PolyHeuristic tag id f, HasSignature sig id) => MkHeu tag -> sig -> Heuristic id f
+mkHeu :: (PolyHeuristic tag id f, HasSignature sig, id ~ SignatureId sig) => MkHeu tag -> sig -> Heuristic id f
 mkHeu (MkHeu mkTag) sig = runPolyHeu (mkTag sig)
 
 
@@ -242,11 +281,11 @@ typeHeu assig = MkHeu $ \_ -> (TypeHeu assig)
 
 data TypeHeu id (f :: * -> *) = TypeHeu (SharingAssignment String)
 
-instance (HasId f String, Foldable f) => PolyHeuristic TypeHeu String f
+instance (HasId f, TermId f ~ String, Foldable f) => PolyHeuristic TypeHeu String f
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
 
-instance (HasId f id, Ppr id, Ord id, Foldable f) => PolyHeuristic TypeHeu id f
+instance (HasId f, id ~ TermId f, Ppr (TermId f), Foldable f) => PolyHeuristic TypeHeu id f
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (show.ppr -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
 
@@ -296,6 +335,10 @@ cond f _ x = f x
 f ==> g = ((not.). f) ..|.. g
 infixr 2 ==>
 
+fromRight (Right x) = x
+fromRight _ = error "This AF is collapsing, use primed versions of the functions"
+
+mapRight f = bimap id f
 -- ------------
 -- debug stuff
 -- ------------

@@ -1,115 +1,52 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
-module Narradar.Framework.GraphViz where
+module Narradar.Framework.GraphViz (
+     module Narradar.Framework.GraphViz,
+     module MuTerm.Framework.GraphViz,
+     module MuTerm.Framework.DotRep,
+ ) where
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.Free.Narradar
 import Data.Graph
-import Data.Foldable (toList)
+import Data.Foldable (toList, Foldable)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.List hiding (unlines)
 import Data.Maybe
-import Text.Dot
-import Text.PrettyPrint
+import Data.Traversable (Traversable)
+import Data.GraphViz.Attributes
+
 import Prelude hiding (unlines)
 #ifdef DEBUG
 import System.Process
 import Text.Printf
 #endif
+
+import MuTerm.Framework.DotRep
+import MuTerm.Framework.GraphViz
+import MuTerm.Framework.Proof
+import MuTerm.Framework.Problem
+
+
 import Narradar.Types.ArgumentFiltering (fromAF)
-import Narradar.Framework.Proof
+import Narradar.Types.Problem
+import Narradar.Types.Problem.Infinitary
 import Narradar.Types
 import Narradar.Utils
 import qualified Language.Prolog.Syntax as Prolog
 
--- ----------------------------
--- GraphViz logs
--- ----------------------------
-sliceWorkDone = foldFree return (Impure . f) where
-    f (Or  p pi pp) = (Or  p pi $ takeWhileAndOneMore (not . isSuccess) pp)
-    f (And p pi pp) = (And p pi $ takeWhileAndOneMore isSuccess pp)
-    f (MPlusPar p1 p2) = if isSuccess p1 then Stage p1 else (MPlusPar p1 p2)  -- We use stage in lieu of return here
-    f (MPlus    p1 p2) = if isSuccess p1 then Stage p1 else (MPlus    p1 p2)
-    f (MAnd     p1 p2) = if not(isSuccess p1) then Stage p1 else (MAnd p1 p2)
-    f x = x
-    takeWhileAndOneMore _ []     = []
-    takeWhileAndOneMore f (x:xs) = if f x then x : takeWhileAndOneMore f xs else [x]
 
-instance Functor Dot where fmap = liftM
 
-data Parent = N NodeId | Cluster (NodeId, Parent)
-getParentNode (N n) = n
-getParentNode (Cluster (_,n)) = getParentNode n
-
-data PprDot = PprDot { showFailedPaths :: Bool }
-
-pprDot = pprDot' PprDot{showFailedPaths=False}
-
-pprDot' PprDot{..} prb = showDot $ do
-               attribute ("size", "100,100")
-               attribute ("compound", "true")
-               foldFree (\_->return) f (annotate (const False) isSuccess (sliceWorkDone prb)) =<< (N <$> node [("label","0")])
-  where
-    f (Annotated done Success{..})    par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "YES"), ("color","#29431C")] (doneEdge done)
-    f (Annotated done Fail{..})       par = problemNode problem done par >>= procnode done procInfo >>= childnode' [("label", "NO"),("color","#60233E")] (doneEdge done)
-    f (Annotated _ MZero{})        par = return par -- childnode' [("label","Don't Know")] (doneEdge done) par
-    f (Annotated done DontKnow{..})   par = procnode done procInfo par   >>= childnode' [("label","Don't Know")] (doneEdge done)
---    f (Annotated done (MAnd p1 ))par = p1 par
-    f (Annotated _ MDone{})        par = return par
-    f (Annotated _ (MAnd  p1 p2))  par = do
-                                cme <- cluster $ do
-                                             attribute ("color", "#E56A90")
-                                             p1 par
-                                             p2 par
-                                             return par
-                                return (Cluster cme)
-    f (Annotated done (MPlusPar p1 p2))  par = f (Annotated done (MPlus p1 p2)) par
-    f (Annotated done (MPlus p1 p2))  par = do
-        dis <- childnode' [("shape","point"),("label","")] (doneEdge done) par
-        p1 dis
-        p2 dis
-        return dis
-    f (Annotated done And{subProblems=[p], procInfo = proc@(SomeInfo pi)}) par | isAFProc pi = procnode' proc done par >>= \me -> p me >> return me
-    f (Annotated done And{subProblems=[p], ..}) par = f (Annotated done Or{subProblems = [p], ..}) par
-    f (Annotated done And{..}) par = do
-                                trs <- if (done || showFailedPaths) then problemNode problem done par else return par
-                                cme <- cluster $ do
-                                             attribute ("color", "#E56A90")
-                                             me <- procnode done procInfo trs
-                                             forM_ subProblems ($ me)
-                                             return me
-                                return (Cluster cme)
-    f (Annotated done  Step{..}) par = f (Annotated done Or{subProblems = [subProblem], ..}) par
-    f (Annotated _ (Stage p)) par = p par
-    f (Annotated done Or{..})   par
-      | done || showFailedPaths = problemNode problem done par >>= procnode done procInfo >>= \me -> forM_ subProblems ($ me) >> return me
-      | otherwise = procnode done procInfo par   >>= \me -> forM_ subProblems ($ me) >> return me
-
---    problemLabel :: (Ord v, Ppr v, Ord id, Ppr id) => Problem id v -> (String, String)
-    problemLabel p = ("label", pprTPDBdot p)
-
---    problemColor :: Problem id v -> (String, String)
-    problemColor p | isPrologProblem        p = ("color", "#F6D106")
-                   | isFullNarrowingProblem p = ("color", "#4488C9")
-                   | isBNarrowingProblem    p = ("color", "#FD6802")
-                   | isGNarrowingProblem    p = ("color", "#FD6802")
-                   | isRewritingProblem     p = ("color", "#EAAAFF")
-                   | otherwise = error ("problemColor")
---    problemAttrs :: (Ord v, Ppr v, Ord id, Show id) => Problem id v -> [(String,String)]
-    problemAttrs p    = [problemLabel p, problemColor p, ("shape","box"), ("style","bold"),("fontname","monospace"),("fontsize","10"),("margin",".2,.2")]
-
-    problemNode  (SomeProblem p) done par = childnode'(problemAttrs p) (doneEdge done) par
-    doneEdge True     = [("color", "green")]
-    doneEdge False    = [("color", "red")]
-
-    procnode :: Bool -> SomeInfo -> Parent -> Dot Parent
-    procnode done (SomeInfo (DependencyGraph gr)) par | done || showFailedPaths = do
+-- instance Ppr a => DotRep a where dotSimple x = Text (showPpr x)[]
+{-
+    proofnode done (SomeInfo (DependencyGraph gr)) par | done || showFailedPaths = do
       (cl, nn) <- cluster (attribute ("shape", "ellipse") >> pprGraph gr [])
       case nn of
         []   -> return par
@@ -118,7 +55,7 @@ pprDot' PprDot{..} prb = showDot $ do
                      Cluster (cl',n) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)]
                    return (Cluster (cl, N me))
 
-    procnode done (SomeInfo (SCCGraph gr sccs)) par = do
+    proofnode done (SomeInfo (SCCGraph gr sccs)) par = do
       (cl, nn) <- cluster (
                     attribute ("shape", "ellipse") >>
                     pprGraph gr (zip sccs (cycle ["yellow","darkorange"
@@ -129,60 +66,78 @@ pprDot' PprDot{..} prb = showDot $ do
         (me:_, Cluster (cl',n)) -> edge (getParentNode n) me [("ltail", show cl'), ("lhead", show cl)] >> return (Cluster (cl, N me))
 
 
-    procnode done (SomeInfo (UsableGraph gr reachable)) par = do
+    proofnode done (SomeInfo (UsableGraph gr reachable)) par = do
       (cl, nn) <- cluster (attribute ("shape", "ellipse") >> (pprGraph gr [(reachable,"blue")]))
       case (nn,par) of
         ([]  , _  )             -> return par
         (me:_, N n)             -> edge n me ([("lhead", show cl)] ++ doneEdge done) >> return (Cluster (cl, N me))
         (me:_, Cluster (cl',n)) -> edge (getParentNode n) me ([("ltail", show cl'), ("lhead", show cl)] ++ doneEdge done) >> return (Cluster (cl, N me))
+-}
 
-    procnode done  procInfo      par = childnode'  [("label", show procInfo),("fontsize","10")] (doneEdge done) par >>= \me -> return me
+instance (PprTPDBDot (NarradarProblem typ id), ProblemColor (NarradarProblem typ id)) =>
+    DotRep (NarradarProblem typ id) where
+    dot p = Text (pprTPDBdot p) [ Color [problemColor p]
+                                , Shape BoxShape
+                                , Style (Stl Bold Nothing)
+                                , FontName "monospace"
+                                , FontSize 10
+                                , Margin (PVal (PointD 0.2 0.2))]
 
-    procnode' procInfo done par = childnode' [("label", show procInfo)] (doneEdge done) par >>= \me -> return me
+class PprTPDBDot p where pprTPDBdot :: p -> Doc
+instance PprTPDBDot PrologProblem where
+  pprTPDBdot PrologProblem{..} =
+    vcat (map ppr program) $$
+    vcat [text "%Query: " <+> (pprGoalAF (getSignature program) g) | g <- goals]
 
-    childnode' attrs edge_attrs (N par) = node (("URL","url"):attrs) >>= \n -> edge par n edge_attrs >> return (N n)
-    childnode' attrs edge_attrs (Cluster (cl,par)) = node (("URL","url"):attrs) >>= \n -> edge (getParentNode par) n (("ltail", show cl):edge_attrs) >> return (N n)
-
-
-pprTPDBdot :: (Ord v, Ppr v, Ord id, Ppr id) => Problem id v -> String
-pprTPDBdot (Problem Prolog{..} _ _) =
-    unlines (map showPpr program ++
-            ["%Query: " ++ show(pprGoalAF (getSignature program) g) | g <- goals])
-
-pprTPDBdot p@(Problem typ trs dps) = unlines $
-    [ "(VAR " ++ (unwords $ map showPpr $ toList $ getVars p) ++ ")"
-    , "(PAIRS\\l" ++ (unlines (map ((' ':).show.pprRule) (rules dps))) ++ ")"
-    , "(RULES\\l" ++ (unlines (map ((' ':).show.pprRule) (rules trs))) ++ ")"] ++
-    maybeToList (fmap (\af -> "(AF\\l" ++ pprAF af ++ ")") (getAF typ)) ++ ["\\l"]
-
-  where pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
+instance (IsDPProblem typ, HasRules t v trs, GetVars v trs, Ppr v, Ppr (Term t v)
+         ,HasId t, Ppr (TermId t), Foldable t, Traversable (DPProblem typ)
+         ) => PprTPDBDot (DPProblem typ trs) where
+  pprTPDBdot p = vcat
+     [parens( text "VAR" <+> (hsep $ map ppr $ toList $ getVars p))
+     ,parens( text "PAIRS" $$
+              nest 1 (vcat $ map pprRule $ rules $ getP p))
+     ,parens( text "RULES" $$
+              nest 1 (vcat $ map pprRule $ rules $ getR p))
+     ]
+   where
+        pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
         pprTerm = foldTerm ppr f
         f t@(getId -> Just id)
             | null tt = ppr id
             | otherwise = ppr id <> parens (hcat$ punctuate comma tt)
          where tt = toList t
+{-
+instance (Ppr id, PprTPDBDot (DPProblem typ trs)) =>
+    PprTPDBDot (DPProblem (InitialGoal id typ) trs) where
+    pprTPDBdot (InitialGoalProblem goal p) = pprTPDBdot p ++ "\\l" ++
+                                              "(AF\\l" ++ pprAF pi ++ ")" ++
+                                               "\\l"
+-}
 
-pprAF af = unlines [ ' ' : unwords (intersperse ","
-                          [ showPpr f ++ ": " ++ showPpr (toList aa) | (f, aa) <- xx])
+instance (Ppr trs, PprTPDBDot (DPProblem Rewriting trs)) => PprTPDBDot (DPProblem Narrowing trs) where
+  pprTPDBdot p = pprTPDBdot (mkDPProblem Rewriting (getR p) (getP p)) $$
+                 text "(STRATEGY Narrowing)"
+
+instance (Ppr trs, PprTPDBDot (DPProblem typ trs)) =>
+  PprTPDBDot (DPProblem (Infinitary trs typ) trs) where
+   pprTPDBdot (InfinitaryProblem pi p) = pprTPDBdot p $$
+                                         parens(text "AF" <+> pprAF pi)
+
+
+pprAF af = vcat [ hsep (punctuate comma [ ppr f <> colon <+> either (ppr.id) (ppr.toList) aa | (f, aa) <- xx])
                       | xx <- chunks 4 $ Map.toList $ fromAF af]
 
-unlines = concat . intersperse "\\l"
+
+class ProblemColor p where problemColor :: p -> Color
+instance ProblemColor typ where problemColor _ = ColorName "black"
+instance (IsDPProblem typ, ProblemColor typ) =>
+    ProblemColor (DPProblem typ trs) where problemColor = problemColor . getProblemType
+instance ProblemColor PrologProblem where problemColor _ = ColorName "#F6D106"
+instance ProblemColor Rewriting where problemColor _ = ColorName "#EAAAFF"
+instance ProblemColor Narrowing where problemColor _ = ColorName "#4488C9"
+instance ProblemColor CNarrowing where problemColor _ = ColorName "#FD6802"
 
 
--- --------------------
--- Graphing fgl graphs
--- --------------------
-
-pprGraph g specials = do
-  nodeids <- forM (vertices g) $ \n -> node [("label",show n), ("color", getColor n)]
-  forM_ (edges g) $ \(n1,n2) -> edge (nodeids !! n1) (nodeids !! n2) [("color",getColorEdge n1 n2)]
-  return nodeids
-  where
-     getColor node = maybe "black" snd $ find ((node `Set.member`) . fst) specials
-     getColorEdge n1 n2
-        | c1 == c2  = c1
-        | otherwise = "black"
-           where c1 = getColor n1; c2 = getColor n2
 #ifdef DEBUG
-debugDot x = let t = "temp" in writeFile (t ++ ".dot") (pprDot' (PprDot True) x) >> system (printf "dot %s.dot -O -Tpdf && open %s.dot.pdf" t t)
+--debugDot x = let t = "temp" in writeFile (t ++ ".dot") (pprDot' (PprDot True) x) >> system (printf "dot %s.dot -O -Tpdf && open %s.dot.pdf" t t)
 #endif

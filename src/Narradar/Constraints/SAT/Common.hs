@@ -22,7 +22,7 @@ import Satchmo.Boolean as Bool
 import Satchmo.Code
 import Satchmo.Data
 import Narradar.Utils
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 import Prelude hiding (and, not, or, lex, (>))
 
 
@@ -36,6 +36,11 @@ class Extend a where
     exgt :: (SATOrd a', Eq a') => a -> a -> [a'] -> [a'] -> SAT Boolean
     exeq :: (SATOrd a', Eq a') => a -> a -> [a'] -> [a'] -> SAT Boolean
 
+data Status   = Mul | Lex [Int] deriving (Eq, Ord, Show)
+mkStatus mul perm
+ | mul       = Mul
+ | otherwise = Lex [head ([i | (i,True) <- zip [1..] perm_i] ++ [-1])
+                        | perm_i <- perm ]
 -- -----
 -- Utils
 -- -----
@@ -50,8 +55,8 @@ oneM vv = do
   ones  <- replicateM n boolean
   zeros <- replicateM n boolean
   andM (return(head ones) :
-        [ andM [ return one_i  <<==>> ifte b_i zero_i1 one_i1
-              , return zero_i <<==>> and[not b_i, zero_i1]]
+        [ andM [ return one_i  <<==>> ifM b_i (return zero_i1) (return one_i1)
+              , return zero_i <<==>> andM[notM b_i, return zero_i1]]
          | (b_i, one_i, zero_i, one_i1, zero_i1) <-
              zip5 vv ones zeros (tail ones ++ [fa]) (tail zeros ++ [tru])])
 

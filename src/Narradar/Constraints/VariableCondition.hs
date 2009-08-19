@@ -11,7 +11,7 @@ import qualified Data.Set as Set
 import Narradar.Types.ArgumentFiltering
 import Narradar.Types.Term
 import Narradar.Types.Var
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 
 import Lattice
 

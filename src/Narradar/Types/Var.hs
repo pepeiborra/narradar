@@ -1,7 +1,10 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
+
 module Narradar.Types.Var where
 
-import Data.Term.Ppr
-import Text.PrettyPrint
+import Data.Term.Rules
+import Data.Set as Set
+import Narradar.Framework.Ppr
 
 data Var = Var (Maybe String) Int deriving Show
 instance Eq  Var where Var _ i == Var _ j = i == j
@@ -24,3 +27,5 @@ uniqueId (Var _ i) = i
 instance Ppr Var where
     ppr (Var (Just l) _i) = text l -- <> char '_' <> int _i
     ppr (Var _ i)        = char 'v' <> int i
+
+instance GetVars Var Var where getVars = Set.singleton

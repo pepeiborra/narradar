@@ -7,7 +7,7 @@ import qualified Data.List as List
 import Data.Monoid
 import Data.Set as Set (Set, fromList)
 import Data.Traversable
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 import Prelude
 
 instance Ppr [a] => Ppr (UniqueList a) where ppr = ppr . toList

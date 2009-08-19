@@ -5,18 +5,17 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverlappingInstances, TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
+{-# LANGUAGE GADTs #-}
 
 
-module Narradar.Processor.NarrowingProblem (
-     findGroundAF,
-     groundRhsOneP, groundRhsAllP, uGroundRhsAllP, uGroundRhsOneP,
-     safeAFP) where
-
+module Narradar.Processor.NarrowingProblem where
 import Control.Applicative
 import Control.Exception
 import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
+import Data.Foldable (Foldable)
+import Data.Traversable (Traversable)
 import Data.List ( (\\), sortBy)
 import Data.Monoid
 import qualified Data.Set as Set
@@ -26,162 +25,136 @@ import Prelude hiding (mapM, pi)
 import Narradar.Constraints.VariableCondition
 import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristicN, HeuristicN, MkHeu, mkHeu, isSoundAF)
 import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Framework.Proof
-import Narradar.Utils
+import Narradar.Framework
+import Narradar.Framework.GraphViz hiding (note)
+import Narradar.Processor.UsableRules
 import Narradar.Types as Narradar
+import Narradar.Types.Problem.Narrowing
+import Narradar.Types.Problem.NarrowingGoal
+import Narradar.Utils
 import Lattice
 
 #ifdef DEBUG
 import Debug.Observe
 #endif
 
--- ------------------------------------------------------------------------
--- This is the AF processor described in our ICLP'08 paper
--- ------------------------------------------------------------------------
-groundRhsOneP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> Problem id v -> [m(Problem id v)]
-groundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) trs dps)
-  | isAnyNarrowingProblem p =
-    if null orProblems
-      then [failP EVProcFail p]
-      else orProblems
+data NarrowingToRewritingICLP08 heu = NarrowingToRewritingICLP08 (MkHeu heu)
+                                    | NarrowingToRewritingICLP08_SCC (MkHeu heu)
+
+
+instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
+    Processor (NarrowingToRewritingICLP08 heu) (NarradarTRS id Var) Narrowing Rewriting where
+  applySearch (NarrowingToRewritingICLP08 mk) p
+    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | otherwise = orProblems
+    where (trs, dps) = (getR p, getP p)
+          heu        = mkHeu mk p
+          u_p        = iUsableRules p (rhs <$> rules dps)
+          afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
+          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
+                         singleP (NarrowingToRewritingICLP08Proof af) p $
+                                AF.apply af (mkNewProblem Rewriting p')
+                        | af <- Set.toList afs]
+
+  applySearch (NarrowingToRewritingICLP08_SCC mk) p
+    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | otherwise = orProblems
+    where (trs, dps) = (getR p, getP p)
+          heu        = mkHeu mk p
+          u_p        = iUsableRules p (rhs <$> rules dps)
+          afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
+          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
+                         singleP (NarrowingToRewritingICLP08Proof af) p' $
+                                AF.apply af (mkNewProblem Rewriting p')
+                        | af <- Set.toList afs]
+
+instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
+    Processor (NarrowingToRewritingICLP08 heu) (NarradarTRS id Var) CNarrowing IRewriting where
+  applySearch (NarrowingToRewritingICLP08 mk) p
+    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | otherwise = orProblems
+    where (trs, dps) = (getR p, getP p)
+          heu        = mkHeu mk p
+          u_p        = iUsableRules p (rhs <$> rules dps)
+          afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
+          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
+                         singleP (NarrowingToRewritingICLP08Proof af) p $
+                                AF.apply af (mkNewProblem IRewriting p')
+                        | af <- Set.toList afs]
+
+  applySearch (NarrowingToRewritingICLP08_SCC mk) p
+    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | otherwise = orProblems
+    where (trs, dps) = (getR p, getP p)
+          heu        = mkHeu mk p
+          u_p        = iUsableRules p (rhs <$> rules dps)
+          afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
+          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
+                         singleP (NarrowingToRewritingICLP08Proof af) p' $
+                                AF.apply af (mkNewProblem IRewriting p')
+                        | af <- Set.toList afs]
+
+
+instance (p ~ NarradarProblem (NarrowingGoalGen id typ0) id
+         ,PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id
+         ,IsDPProblem typ0, ProblemInfo p, Traversable (DPProblem typ0)) =>
+    Processor (NarrowingToRewritingICLP08 heu) (NarradarTRS id Var) (NarrowingGoalGen id typ0) typ0 where
+  applySearch (NarrowingToRewritingICLP08 mk) p
+    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | otherwise = orProblems
     where heu = mkHeu mk p
+          NarrowingGoal pi_groundInfo0 typ0 = getProblemType p
           af0 = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo0
           afs = unEmbed $ do
                   af00 <- embed $ invariantEV heu p af0
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
-                  embed $ findGroundAF heu pi_groundInfo af0 p R.=<< Set.fromList(rules dps)
-          orProblems = [ step (GroundOne (Just af)) p $
-                                AF.apply af (mkProblem (correspondingRewritingStrategy typ) trs dps)
+                  embed $ findGroundAF' heu pi_groundInfo af0 p R.=<< Set.fromList(rules $ getP p)
+          orProblems = [ singleP (NarrowingToRewritingICLP08Proof af) p $
+                                AF.apply af (mkNewProblem typ0 p)
                         | af <- Set.toList afs]
 
-groundRhsOneP mk p@(Problem typ@(getAF -> Nothing) trs dps)
-  | isAnyNarrowingProblem p =
-    if null orProblems then [failP EVProcFail p] else orProblems
-  | otherwise = [return p]
-    where heu        = mkHeu mk p
-          afs        = findGroundAF heu (AF.empty p) (AF.init p) p R.=<< Set.fromList(rules dps)
-          orProblems = [ step (GroundOne (Just af)) p $
-                                AF.apply af (mkProblem (correspondingRewritingStrategy typ) trs dps)
-                        | af <- Set.toList afs]
 
--- ------------------------------------------------------------------------
--- A variation for use with SCCs
--- ------------------------------------------------------------------------
-groundRhsAllP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> Problem id v -> [m(Problem id v)]
-groundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) _ dps) | isAnyNarrowingProblem p =
-    if null orProblems
-      then [failP EVProcFail p]
-      else orProblems
-    where heu  = mkHeu mk p
-          typ' = correspondingRewritingStrategy typ
-          afs  = unEmbed $ do
-                   af00 <- embed $ invariantEV heu p pi_groundInfo0
-                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
-                   embed $ R.foldM (\af -> findGroundAF heu pi_groundInfo af p)
-                                   (AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo)
-                                   (rules dps)
-          orProblems = [ step (GroundAll (Just af)) p $
-                                AF.apply af (setTyp typ' p)
-                        | af <- Set.toList afs]
+-- -----------
+-- Proofs
+-- -----------
 
-groundRhsAllP mkHeu p@(Problem (getAF -> Nothing) _ _)
-  | isAnyNarrowingProblem p = groundRhsAllP mkHeu (p `withAF` AF.init p)
-  | otherwise = [return p]
+data NarrowingToRewritingProof id where
+    NarrowingToRewritingICLP08Proof :: AF_ id -> NarrowingToRewritingProof id
+    NarrowingToRewritingICLP08Fail  :: NarrowingToRewritingProof ()
 
--- ------------------------------------------------------------------------
--- A variation for use with SCCs, incorporate usable rules
--- ------------------------------------------------------------------------
-uGroundRhsAllP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> Problem id v -> [m(Problem id v)]
-uGroundRhsAllP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) _ dps) | isAnyNarrowingProblem p =
-    if null orProblems
-      then [failP EVProcFail p]
-      else orProblems
-    where heu     = mkHeu mk p
-          typ'    = correspondingRewritingStrategy typ
-          results = unEmbed $ do
-                  pi_groundInfo <- embed $ invariantEV heu p pi_groundInfo0
-                  af0  <- embed $
-                          R.foldM (\af -> findGroundAF heu pi_groundInfo af p)
-                                  (AF.init p)
-                                  (rules dps)
-                  let u_p = iUsableRules p (Just af0) (rhs <$> rules dps)
-                  af1 <- embed $ invariantEV heu u_p af0
-                  let u_p' = iUsableRules u_p (Just af1) (rhs <$> rules dps)
-                  return (af1, u_p')
-          orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
-                             step (GroundAll (Just (AF.restrictTo (getAllSymbols p') af))) p'
-                                (AF.apply af (setTyp typ' p'))
-                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (Set.toList results)
-                        , let proofU = step UsableRulesP p p']
-          dpsSize af = size (AF.apply af dps)
+instance Ppr id => Ppr (NarrowingToRewritingProof id) where
+    ppr NarrowingToRewritingICLP08Fail = text "Failed to find an argument filtering that satisfies" $$
+                                         text "the one pair with a ground right hand side condition."
+    ppr (NarrowingToRewritingICLP08Proof af) = text "Termination of the following rewriting DP problem" $$
+                                               text "implies termination of the original problem." $$
+                                               text "The following argument filtering was used:" $$
+                                               ppr af
 
-uGroundRhsAllP mkHeu p@(Problem (getAF -> Nothing) _ _) | isAnyNarrowingProblem p
-  = uGroundRhsAllP mkHeu (p `withAF` AF.init p)
-uGroundRhsAllP _ p = [return p]
+instance Ppr id =>  ProofInfo (NarrowingToRewritingProof id)
 
-uGroundRhsOneP :: (PolyHeuristicN heu id, Lattice (AF_ id), Ppr id, Ord id, MonadFree ProofF m, v ~ Var) =>
-                  MkHeu heu -> Problem id v -> [m(Problem id v)]
-uGroundRhsOneP mk p@(Problem typ@(getAF -> Just pi_groundInfo0) _ dps) | isAnyNarrowingProblem p =
-    if null orProblems
-      then [failP EVProcFail p]
-      else orProblems
-    where heu     = mkHeu mk p
-          typ'    = correspondingRewritingStrategy typ
-          results = unEmbed $ do
-                  af00 <- embed $ invariantEV heu p pi_groundInfo0
-                  let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
-                  af0  <- embed $
-                          findGroundAF heu af00 pi_groundInfo p R.=<< Set.fromList(rules dps)
-                  let u_p  = iUsableRules p   (Just af0) (rhs <$> rules dps)
-                  af1 <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
-                  let u_p' = iUsableRules u_p (Just af1) (rhs <$> rules dps)
-                  return (af1, u_p')
-
-          orProblems = [ proofU >>= \p' -> assert (isSoundAF af p') $
-                             step (GroundOne (Just (AF.restrictTo (getAllSymbols p') af))) p'
-                                (AF.apply af (setTyp typ' p'))
-                        | (af,p') <- sortBy (flip compare `on` (dpsSize.fst)) (Set.toList results)
-                        , let proofU = step UsableRulesP p p']
-          dpsSize af = size (AF.apply af dps)
-
-
-uGroundRhsOneP mkHeu p@(Problem (getAF -> Nothing) _ _) | isAnyNarrowingProblem p
-  = uGroundRhsOneP mkHeu (p `withAF` AF.init p)
-uGroundRhsOneP _ p = [return p]
-
--- ------------------------------------------------------------------
--- This is the infinitary constructor rewriting AF processor described in
--- "Termination of Logic Programs ..." (Schneider-Kamp et al)
--- ------------------------------------------------------------------
-
-safeAFP :: (Ord id, Ppr id, Lattice (AF_ id), PolyHeuristicN heu id, MonadFree ProofF m, v ~ Var) =>
-           MkHeu heu -> Problem id v -> [m(Problem id v)]
-safeAFP mk p@(Problem typ@(getAF -> Just af) _ dps) = do
-       let heu = mkHeu mk p
-       af' <-  Set.toList $ invariantEV heu p af
-       let p' = iUsableRules (setTyp typ' p) (Just af) (rhs <$> rules dps)
-       return $ step (SafeAFP (Just af')) p (AF.apply af' p')
-  where typ' = correspondingRewritingStrategy typ
-
-safeAFP _ p = [return p]
 
 -- ---------------
 -- building blocks
 -- ---------------
+findGroundAF heu af0 p (_:->r)
+  | isVar r = Set.empty
+  | otherwise = mkGround r R.>>= invariantEV heu p
+            where
+              mkGround t = cutWith heu af0 t varsp -- TODO Fix: cut one at a time
+                  where varsp = [noteV v | v <- vars (annotateWithPos t)]
+
+
 -- | Takes a heuristic, an af with groundness information, an af to use as starting point, a problem and a rule,
-findGroundAF :: (Ord id, Ppr id, Lattice (AF_ id), v ~ Var) =>
+findGroundAF' :: (IsDPProblem typ, HasSignature (NarradarProblem typ id), Ord id, Ppr id, Lattice (AF_ id), Foldable (DPProblem typ)) =>
                 HeuristicN id
              -> AF_ id         -- ^ Groundness information
              -> AF_ id         -- ^ the argument filtering to constrain
-             -> Problem id v
-             -> RuleN id v     -- ^ the rule to make ground
+             -> NarradarProblem typ id
+             -> RuleN id Var     -- ^ the rule to make ground
              -> Set (AF_ id)
-findGroundAF heu pi_groundInfo af0 p@(Problem _ _ dps) (_:->r)
+findGroundAF' heu pi_groundInfo af0 p (_:->r)
   | isVar r = Set.empty
-  | otherwise = mkGround r R.>>= invariantEV heu dps
+  | otherwise = mkGround r R.>>= invariantEV heu p
             where
               mkGround t = cutWith heu (af0 `mappend` pi_c) t varsp -- TODO Fix: cut one at a time
                   where varsp = [noteV v | v <- vars (annotateWithPos t)] \\\

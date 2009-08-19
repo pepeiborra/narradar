@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns #-}
@@ -8,110 +9,216 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.Types.Problem where
+
+module Narradar.Types.Problem (
+          module Narradar.Types.Problem,
+          module Narradar.Constraints.ICap,
+          module Narradar.Constraints.UsableRules) where
 
 import Control.Applicative
+import Control.Arrow (first, second)
 import Control.Exception (assert)
 import Control.Monad.List
 import Control.Monad.State
 import Data.Array as A
+import Data.Graph as G (Graph, edges, buildG)
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
-import Data.Graph (Graph, edges, buildG)
 import Data.Maybe (isJust)
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Set (Set)
 import Data.Strict.Tuple ((:!:), Pair(..))
 import Data.Traversable as T
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
-import Text.PrettyPrint hiding (char, Mode)
-import qualified Text.PrettyPrint as Ppr
+import Text.XHtml as H hiding ((!), rules, text)
+import qualified Text.XHtml as H
 import Prelude as P hiding (mapM, pi, sum)
 import qualified Prelude as P
+
+import MuTerm.Framework.Problem
+import MuTerm.Framework.Proof
 
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
-import Narradar.Types.ProblemType
 import Narradar.Types.TRS
-import Narradar.Utils.Convert
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 import Narradar.Utils
 import Narradar.Types.Term hiding ((!))
-import Narradar.Constraints.Unify
+import Narradar.Constraints.ICap
+import Narradar.Constraints.UsableRules
 import Narradar.Types.Var
 
 import Data.Term.Rules
 
----------------------------
--- DP Problems
----------------------------
-data ProblemF id a = Problem {typ::(ProblemType id), trs::a, dps :: !a}
-     deriving (Eq,Show,Ord)
+-- -------------------------
+-- Constructing DP problems
+-- -------------------------
+type NarradarProblem typ id = DPProblem typ (NarradarTRS id Var)
 
-instance (HasSignature trs id, Ord id) => HasSignature (ProblemF id trs) id where
-  getSignature (Problem _ trs dps) = getSignature trs `mappend` getSignature dps
+-- | Construct the set of pairs corresponding to a problem type and a TRS R of rules.
+class (IsDPProblem typ, IsDPProblem (Typ' typ id)) => MkNarradarProblem typ id where
+    type Typ' typ id :: *
+    mkNarradarProblem :: ( IsTRS (TermF id) Var trs
+                         ) => typ -> trs -> NarradarProblem (Typ' typ id) (Identifier id)
 
-type Problem  id   v = ProblemG id (TermF id) v
-type ProblemG id t v = ProblemF id (NarradarTRSF id t v (Rule t v))
+mkNewProblem typ p = mkDPProblem typ (getR p) (getP p)
 
-instance (Ord id, Monoid trs) => Monoid (ProblemF id trs) where
-    mempty = Problem Rewriting mempty mempty
-    Problem _ t1 dp1 `mappend` Problem typ2 t2 dp2 = Problem typ2 (t1 `mappend` t2) (dp1`mappend`dp2)
+-- ---------------------------
+-- Computing Dependency Pairs
+-- ---------------------------
+--getPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
+getPairs trs =
+    [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isRootDefined trs) r]
 
-instance (Ord id, Ord v, HasRules t v trs) => HasRules t v (ProblemF id trs) where
-    rules (Problem _ dps trs) = rules dps `mappend` rules trs
+--getNPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
+getNPairs trs = getPairs trs ++ getLPairs trs
 
-instance (Ord v, Ord id, GetFresh t v trs) => GetFresh t v (ProblemF id trs) where getFreshM = getFreshMdefault
-instance (Ord v, Ord id, GetVars v trs) => GetVars v (ProblemF id trs) where getVars = foldMap getVars
+--getLPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
+getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
 
---mkProblem :: (Ord id) => ProblemType id -> NarradarTRS id v -> NarradarTRS id v -> Problem id v
-mkProblem typ@(getAF -> Just pi) trs dps = let p = Problem (typ `withAF` AF.restrictTo (getAllSymbols p) pi) trs dps in p
-mkProblem typ trs dps = Problem typ trs dps
 
-setTyp t' (Problem _ r p) = mkProblem t' r p
+-- ----------------------------------------
+-- Computing the estimated Dependency Graph
+-- ----------------------------------------
 
-mkDPSig (getSignature -> sig@Sig{definedSymbols}) =
-  sig{definedSymbols = definedSymbols `mappend` Map.mapKeysMonotonic markDPSymbol definedSymbols
-     }
+getEDG p = filterSEDG p $ getdirectEDG p
 
-instance (Convert (NarradarTRS id v) (NarradarTRS id' v'), Convert id id', Ord id, Ord id', Ord v, Ord v') =>
-          Convert (Problem id v) (Problem id' v') where
-  convert p@Problem{typ} = (fmap convert p){typ = fmap convert typ}
+getdirectEDG :: (Ord id, Traversable (DPProblem typ)
+                ,IsDPProblem typ, ICap (TermF id) Var (NarradarProblem typ id)
+                ) => NarradarProblem typ id -> G.Graph
+getdirectEDG p@(getP -> DPTRS dps _ (unif :!: _) _) =
+    assert (isValidUnif p) $
+    G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
-instance (Ord id, Ppr id, Ppr a) => Ppr (ProblemF id a) where
-    ppr (Problem Prolog{..} _ _) =
-            text "Prolog problem." $$
-            text "Clauses:" <+> ppr program $$
-            text "Goals:" <+> ppr goals
+filterSEDG :: (Ord id, IsDPProblem typ) => DPProblem typ (NarradarTRS id v) -> G.Graph -> G.Graph
+filterSEDG (getP -> dptrs@DPTRS{}) gr =
+    G.buildG (A.bounds gr)
+               [ (i,j) | (i,j) <- G.edges gr
+                       , isJust (dpUnifyInv dptrs j i)]
 
-    ppr (Problem typ trs dps) =
-            ppr typ <+> text "Problem" $$
-            text "TRS:" <+> ppr trs $$
-            text "DPS:" <+> ppr dps
+emptyArray :: (Num i, Ix i) => Array i e
+emptyArray = A.listArray (0,-1) []
 
-type PrologProblem v = Problem String v
+-- ----------------
+-- Output
+-- ----------------
 
-mkPrologProblem :: Ord v => [AF_ String] -> Prolog.Program String -> PrologProblem v
-mkPrologProblem gg pgm = mkProblem (Prolog gg pgm) mempty mempty
+instance (IsDPProblem p, Ppr p, Ppr trs) => Ppr (DPProblem p trs) where
+    ppr p =
+            ppr (getProblemType p) <+> text "Problem" $$
+            text "TRS:" <+> ppr (getR p) $$
+            text "DPS:" <+> ppr (getP p)
 
-isPrologProblem = isProlog . typ
+instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Ppr (Term t v)
+         ) => HTML (DPProblem typ trs) where
+    toHtml p
+     | null $ rules (getP p) =
+        H.table H.! [htmlClass typ] << (
+            H.td H.! [H.theclass "problem"] << H.bold << typ </>
+            H.td H.! [H.theclass "TRS_TITLE" ] << "Rules"</> aboves' (rules $ getR p) </>
+                 "Dependency Pairs: none")
+     | otherwise =
+        H.table H.! [htmlClass typ] << (
+            H.td H.! [H.theclass "problem"] << H.bold << typ </>
+            H.td H.! [H.theclass "TRS_TITLE" ] << "Rules" </>
+                 aboves' (rules $ getR p) </>
+            H.td H.! [H.theclass "DPS" ] << "Dependency Pairs" </>
+                 aboves' (rules $ getP p))
 
-isFullNarrowingProblem = isFullNarrowing . typ
-isBNarrowingProblem    = isBNarrowing . typ
-isGNarrowingProblem    = isGNarrowing . typ
-isAnyNarrowingProblem  = isAnyNarrowing . typ
-isRewritingProblem     = isRewriting . typ
-getProblemAF           = getAF . typ
+     where typ = getProblemType p
+
+instance (Ppr (Term t v)) =>  HTMLTABLE (Rule t v) where
+    cell (lhs :-> rhs ) = td H.! [theclass "lhs"]   << show (ppr lhs) <->
+                          td H.! [theclass "arrow"] << (" " +++ H.primHtmlChar "#x2192" +++ " ") <->
+                          td H.! [theclass "rhs"]   << show (ppr rhs)
+
+instance HTMLTABLE String where cell = cell . toHtml
+
+aboves' [] = cell noHtml
+aboves' xx = aboves xx
+
+class HTMLClass a where htmlClass :: a -> HtmlAttr
+
+-- ------------------------------
+-- Data.Term framework instances
+-- ------------------------------
+
+instance (IsDPProblem typ, HasSignature trs) => HasSignature (DPProblem typ trs) where
+  type SignatureId (DPProblem typ trs) = SignatureId trs
+  getSignature p = getSignature (getR p) `mappend` getSignature (getP p)
+
+instance (Ord v, IsDPProblem typ, HasRules t v trs, Foldable (DPProblem typ)) => HasRules t v (DPProblem typ trs) where
+    rules = foldMap rules
+
+instance (Ord v, GetFresh t v trs, Traversable (DPProblem typ)) => GetFresh t v (DPProblem typ trs) where getFreshM = getFreshMdefault
+
+instance (Ord v, GetVars v trs, Traversable (DPProblem typ)) => GetVars v (DPProblem typ trs) where getVars = foldMap getVars
+
+
+-- ------------------------------------
+-- Dealing with the pairs in a problem
+-- ------------------------------------
+
+expandDPair :: ( problem ~ DPProblem typ
+               , trs ~ NarradarTRS id v
+               , id ~ Identifier a
+               , t ~ TermF id
+               , v ~ Var
+               , Traversable problem, IsDPProblem typ
+               , ICap t v (typ, trs), ICap t v (typ, [Rule t v]), IUsableRules t v (typ, [Rule t v])
+               , Ord a, Ppr a
+               ) =>
+               problem trs -> Int -> [DP a v] -> problem trs
+expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
+ = assert (isValidUnif p) $
+   assert (isValidUnif res) res
+  where
+   res = runIcap (rules p ++ newdps) $ do
+    let dps'     = dps1 ++ dps2 ++ newdps
+        l_dps'   = l_dps + l_newdps
+        a_dps'   = A.listArray (0,l_dps') dps'
+        mkUnif' arr arr' =
+            A.array ((0,0), (l_dps', l_dps'))
+                       ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
+                                                      , x /= i, y /= i] ++
+                        concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
+                                 | j <- new_nodes, k <- [0..l_dps']
+                                 , let in1 = (j,k), let in2 = (k,j)])
+        gr'      = buildG (0, l_dps')
+                   ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
+                    [(n,n') | n' <- new_nodes
+                            , (n,m) <- edges gr, n/=i, m == i ] ++
+                    [(n',n) | n <- gr ! i, n' <- new_nodes] ++
+                    [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
+        adjust x = if x < i then x else x-1
+
+    unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (rules $ getR p) dps'
+    let unif'    = mkUnif' unif    unif_new
+        unifInv' = mkUnif' unifInv unifInv_new
+        dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')
+        dptrs_new= dpTRS' a_dps' gr' (unif_new :!: unifInv_new)
+    return $ setP dptrs_new p
+
+   (dps1,_:dps2) = splitAt i (elems dps)
+   new_nodes= [l_dps .. l_dps + l_newdps]
+   l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
+   l_newdps = length newdps - 1
+
+expandDPair p i newdps = setP (tRS dps') p
+  where
+    dps'          = dps1 ++ dps2 ++ newdps
+    (dps1,_:dps2) = splitAt i (rules $ getP p)
 
 -- -------------
 -- AF Problems
 -- -------------
-
+{-
 class WithAF t id | t -> id where
   withAF :: t -> AF_ id -> t
   stripGoal    :: t -> t
@@ -137,216 +244,40 @@ instance WithAF (ProblemType id) id where
   stripGoal LBNarrowingModes{}= LBNarrowing
   stripGoal m = m
 --  withAF typ@Prolog{} _ =
-
-instance (Ord id, Ord v) => ApplyAF (Problem id v) id where
-    apply pi p@Problem{trs,dps} = p{trs=apply pi trs, dps=apply pi dps}
-
-
--- -----------------
--- Cap & friends
--- -----------------
--- This should not live here, but it does to make GHC happy (avoid recursive module dependencies)
-
-ren :: (Enum v, Traversable t, MonadFresh v m) => Term t v -> m(Term t v)
-ren = foldTermM (\_ -> return `liftM` freshVar) (return . Impure)
-
--- Use unification instead of just checking if it is a defined symbol
--- This is not the icap defined in Rene Thiemann, as it does not integrate the REN function
-icap :: (HasRules t v trs, Unify t, GetVars v trs, MonadFresh v m) => ProblemF id trs -> Term t v -> m(Term t v)
-icap (Problem typ trs _) t = do
-#ifdef DEBUG
-  when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
-    error "assertion failed (icap)" `const` t `const` trs
-#else
-  assert (Set.null (getVars trs `Set.intersection` getVars t)) (return ())
-#endif
-  rr <- {-getFresh-} return (rules trs)
-  let go t = if any (unifies (Impure t) . lhs) rr then return `liftM` freshVar else return (Impure t)
-      doVar v | isInnermostLike typ = return2 v
-              | otherwise           = return `liftM` freshVar
-  foldTermM doVar go t
-
-collapsing trs = any (isVar.rhs) (rules trs)
-
--- ---------------------
--- Usable rules of a TRS
--- ---------------------
-
--- Assumes Innermost or Constructor Narrowing
--- TODO Extend to work with Q-narrowing to cover more cases
-iUsableRulesM :: (problem ~ ProblemF id trs, Ord id, Ord (Term t v), HasSignature trs id, IsTRS t v trs, Unify t, GetVars v trs, MonadFresh v m) =>
-                  problem -> Maybe (AF.AF_ id) -> [Term t v] -> m problem
---iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
-iUsableRulesM p@(Problem typ trs dps) Nothing tt
-  | isInnermostLike typ = do
-     rr <- go (\_ -> mempty) mempty =<< getFresh tt
-     return (mkProblem typ (tRS$ toList rr) dps)
-
-  | otherwise = do
-     rr <- go (\_ -> Set.fromList $ rules trs) mempty =<< getFresh tt
-     return (mkProblem typ (tRS$ toList rr) dps)
-
- where
-  go vk acc []       = return acc
-  go vk acc (t:rest) = evalTerm (\v -> go vk (vk v `mappend` acc) rest) tf t where
-      tf in_t = do
-         t'  <- wrap `liftM` (icap p `T.mapM` in_t)
-         let rr  = [ r | r <- rules trs, lhs r `unifies` t']
-             new = Set.difference (Set.fromList rr) acc
-         rhsSubterms <- getFresh (rhs <$> F.toList new)
-         go vk (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
-
-{-
-iUsableRulesM p@(Problem typ trs dps) (Just pi) tt
-  | isInnermostLike typ = do
-     rr <- go mempty =<< getFresh (AF.apply pi tt)
-     return (mkProblem typ (tRS $ toList rr) dps)
- where
-  pi_rules = [(AF.apply pi r, r) | r <- rules trs]
-  pi_p     = AF.apply pi p
---go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  go acc [] = return acc
-  go acc (t:rest) = evalTerm (\_ -> go acc rest) f t where
-     f in_t = do
-        t' <- wrap `liftM` (icap pi_p `T.mapM` in_t)
-        let rr = Set.fromList
-                [r | (pi_r, r) <- pi_rules, t' `unifies` lhs pi_r]
-            new = Set.difference rr acc
-        rhsSubterms <- getFresh (AF.apply pi . rhs <$> F.toList new)
-        go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
--}
-iUsableRulesM p _ _ = return p
-
---iUsableRules :: (Ord v, Enum v, Ord id) => Problem id v -> Maybe (AF.AF_ id) -> [TermN id v] -> Problem id v
-iUsableRules :: (problem ~ ProblemF id trs, Enum v, Ord id, Ord (Term t v), HasSignature trs id, IsTRS t v trs, Unify t, GetVars v trs) =>
-                problem -> Maybe (AF.AF_ id) -> [Term t v] -> problem
-iUsableRules p mb_pi tt = (runIcap p . iUsableRulesM p mb_pi) tt
-
-{-
-iUsableRules_correct trs (Just pi) = F.toList . go mempty where
-  pi_trs = AF.apply pi trs
-  --go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-  go acc [] = acc
-  go acc (t:rest) = evalTerm (\_ -> go acc rest) f t where
-    f t0
-      | t@(Impure in_t) <- AF.apply pi t0
-      , rr   <- Set.fromList [r | (pi_r, r) <- zip (rules pi_trs) (rules trs)
-                                , wrap(runSupply' (icap pi_trs `T.mapM` in_t) ids) `unifies` lhs pi_r ]
-      , new  <- Set.difference rr acc
-      = go (new `mappend` acc) (mconcat [rhs <$> F.toList new, directSubterms t, rest])
-  ids = [0..] \\ (concatMap.concatMap) collectVars (rules trs)
 -}
 
--- ------------------------------------
--- Dealing with the pairs in a problem
--- ------------------------------------
-
--- | Assumes that the rules have already been renamed apart
-dpTRS :: (Ord id, id ~ Identifier a) => Problem id Var -> Graph -> NarradarTRS id Var
-dpTRS p edges = DPTRS dps_a edges unifs (getSignature the_dps)
-    where dps_a   = listArray (0, length the_dps - 1) the_dps
-          unifs   = runIcap p (computeDPUnifiers p)
-          the_dps = rules (dps p)
-
-dpTRS' dps edges unifiers = DPTRS dps edges unifiers (getSignature $ elems dps)
-
-expandDPair :: (Ord a, Ppr id, id ~ Identifier a, t ~ TermF id, v ~ Var) =>
-               Problem id v -> Int -> [DP a v] -> Problem id v
-expandDPair p@Problem{dps=DPTRS dps gr (unif :!: unifInv) _} i (filter (`notElem` elems dps) . snub -> newdps)
- = assert (isValidUnif res) res
-  where
-   res = runIcap (rules p ++ newdps) $ do
-    let dps'     = dps1 ++ dps2 ++ newdps
-        l_dps'   = l_dps + l_newdps
-        a_dps'   = A.listArray (0,l_dps') dps'
-        mkUnif' arr arr' =
-            A.array ((0,0), (l_dps', l_dps'))
-                       ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
-                                                      , x /= i, y /= i] ++
-                        concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
-                                 | j <- new_nodes, k <- [0..l_dps']
-                                 , let in1 = (j,k), let in2 = (k,j)])
-        gr'      = buildG (0, l_dps')
-                   ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
-                    [(n,n') | n' <- new_nodes
-                            , (n,m) <- edges gr, n/=i, m == i ] ++
-                    [(n',n) | n <- gr ! i, n' <- new_nodes] ++
-                    [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
-        adjust x = if x < i then x else x-1
-
-    unif_new :!: unifInv_new <- computeDPUnifiers p{dps = DPTRS a_dps' gr undefined undefined}
-    let unif'    = mkUnif' unif    unif_new
-        unifInv' = mkUnif' unifInv unifInv_new
-        dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')
-    return p{dps=dptrs'}
-
-   (dps1,_:dps2) = splitAt i (elems dps)
-   new_nodes= [l_dps .. l_dps + l_newdps]
-   l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
-   l_newdps = length newdps - 1
-
-expandDPair (Problem typ trs dps) i newdps = mkProblem typ trs (tRS dps')
-  where
-    dps'          = dps1 ++ dps2 ++ newdps
-    (dps1,_:dps2) = splitAt i (rules dps)
+--instance (Ord id, Ord v) => ApplyAF (Problem id v) id where
+--    apply pi p@Problem{trs,dps} = p{trs=apply pi trs, dps=apply pi dps}
 
 
-computeDPUnifiers :: (Enum v, Ord v, Ord id, MonadFresh v m, unif ~ Unifiers (TermF id) v) =>
-                     Problem id v -> m(unif :!: unif)
---computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
-computeDPUnifiers p@Problem{typ, dps = (rules -> the_dps)} = do
-   p_f <- getFresh p
-   let mbUsableRules x = if (isBNarrowing .|. isGNarrowing) typ
-                               then  rules $ trs $ iUsableRules p_f Nothing [x]
-                               else (rules $ trs p_f)
-       u_rr = listArray (0,ldps) $ map (mbUsableRules . rhs) the_dps
 
-   rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p) the_dps
-   unif <- runListT $ do
-                (x, r')      <- liftL $ zip [0..] rhss'
-                (y, l :-> _) <- liftL $ zip [0..] the_dps
-                let unifier = unify l r'
-                return ((x,y), unifier)
-   unifInv <- runListT $ do
-                (x, _ :-> r) <- liftL $ zip [0..] the_dps
-                (y, l :-> _) <- liftL $ zip [0..] the_dps
-                let p_inv = p{typ=Rewriting, trs=tRS (swapRule `map` (u_rr ! x))}
-                l' <- lift (getFresh l >>= icap p_inv)
-                let unifier = unify l' r
-                return ((x,y), unifier)
-   return(   array ( (0,0), (ldps,ldps) ) unif
-         :!: array ( (0,0), (ldps,ldps) ) unifInv)
- where
-   liftL = ListT . return
-   ldps  = length the_dps - 1
+
+{-
+-- | Constructing NDP problems with as starting goal. This function takes an AF heuristic.
+--   This is necessary so early because before splitting P into SCCs we need to ensure
+--   that P is indeed a TRS (no extra variables).
+--   I.e. we need to compute the filtering 'globally'
+mkGoalProblem :: (Ppr id, Ord a, PolyHeuristicN heu id, Lattice (AF_ id), RemovePrologId a, id ~ Identifier a) =>
+                 MkHeu heu -> ProblemType a -> NarradarTRS a Var -> [Problem id Var]
+mkGoalProblem heu typ trs =
+    let trs'       = convert trs
+        dps        = mkDPs typ' trs'
+        typ'       = typ{pi=extendedPi, goal=AF.extendToTupleSymbols (goal typ)}
+        extendedPi = AF.extendToTupleSymbols (pi typ)
+        p0         = mkProblem typ' trs' dps
+        orProblems = case mkHeu heu p0 of
+                       heu -> [assert (isSoundAF pi' p0) $
+                               mkProblem typ'{pi=pi'} trs' dps
+                                   | pi' <- Set.toList $ invariantEV heu (rules p0) extendedPi]
+    in assert (not $ null orProblems) orProblems
+-}
 
 -- -------------
 -- Utils
 -- -------------
 
-runIcap :: ( Enum v) => GetVars v thing => thing -> State (Substitution t (Either v v), [v]) a -> a
-runIcap t m = evalState m (emptySubst, freshVars) where
-    freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
+{-
+mkDPSig (getSignature -> sig@Sig{definedSymbols}) =
+  sig{definedSymbols = definedSymbols `mappend` Map.mapKeysMonotonic markDPSymbol definedSymbols}
+-}
 
--- -------------
--- Sanity Checks
--- -------------
-
-isValidUnif p@(Problem _ _ (DPTRS dps _ (unif :!: _) _)) =
-    and $ runIcap p $ runListT $ do
-         (x, _ :-> r) <- liftL $ A.assocs dps
-         (y, l :-> _) <- liftL $ A.assocs dps
-         r' <- getFresh r >>= icap p
-         return (unifies l r' == isJust (unif A.! (x,y)))
-  where
-    liftL = ListT . return
-
-isValidUnif _ = True
-
--- ------------------
--- Functor Instances
--- ------------------
-
-$(derive makeFunctor     ''ProblemF)
-$(derive makeFoldable    ''ProblemF)
-$(derive makeTraversable ''ProblemF)

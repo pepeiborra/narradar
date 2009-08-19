@@ -5,14 +5,16 @@
 
 module Narradar.Processor.UsableRules where
 
-import Control.Applicative
-import Data.Monoid
+import Narradar.Framework
+import Narradar.Framework.Ppr
 
-import Narradar.Framework.Proof
-import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types
-import Narradar.Utils
+data UsableRulesProof = UsableRulesProof deriving (Eq,Show,Ord)
 
+instance Ppr UsableRulesProof where ppr _ = text "Usable rules proof"
+
+instance ProofInfo UsableRulesProof
+
+{-
 usableRulesP :: (Ppr v, Ppr id, Ord v, Ord a, Enum v, id ~ Identifier a) => Problem id v -> ProblemProofG id v
 
 usableRulesP p@(Problem typ trs dps)
@@ -21,3 +23,4 @@ usableRulesP p@(Problem typ trs dps)
  where
   pi'  = AF.restrictTo  (getDefinedSymbols dps `mappend` getConstructorSymbols trs ) <$> getAF typ
 
+-}

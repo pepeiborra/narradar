@@ -24,7 +24,6 @@ import Narradar.Processor.GraphTransformation
 import Narradar.Processor.UsableRules
 import Narradar.Utils
 
-import Language.Prolog.SharingAnalysis (SharingAssignment)
 
 import qualified Prelude
 import Prelude hiding (Monad(..))

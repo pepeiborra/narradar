@@ -18,20 +18,43 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 import Narradar.Constraints.SAT.Common
-import Narradar.Constraints.SAT.Examples hiding (gt, div)
 import Narradar.Types hiding (symbol, constant)
 import Narradar.Utils
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 
 import qualified Prelude
 import Prelude hiding (lex, not, and, or, (>))
+
+lpoDP  = rpoGen lpoSymbol
+mpoDP  = rpoGen mpoSymbol
+lposDP = rpoGen lpopSymbol
+rpoDP  = rpoGen symbol
+
+rpoGen inn p = isSAT $ do
+  let sig        = getSignature p
+  let ids = Set.toList $ getAllSymbols sig
+  symbols <- mapM (inn sig) ids
+  let dict       = Map.fromList (zip ids symbols)
+      symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules (getR p)
+      symb_pairs = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules (getP p)
+
+  decreasing_dps <- replicateM (length symb_pairs) boolean
+  assertAll [andM [ l >~ r | l:->r <- symb_rules]
+            ,andM [ l >~ r | l:->r <- symb_pairs]
+            ,andM [(l > r) <<==>> return dec | (l:->r, dec) <- zip symb_pairs decreasing_dps]
+           , or decreasing_dps]
+
+  return $ do syms  <- mapM decode symbols
+              dec_bools <- decode decreasing_dps
+              let non_dec_pairs = [ r | (r,False) <- zip [0..] dec_bools]
+              return (non_dec_pairs, syms)
 
 -- ----------------------------------------------------------------
 -- The Recursive Path Ordering, parametric w.r.t the extension
 -- ----------------------------------------------------------------
 
 instance (Eq v, Eq (Term f v), Foldable f,
-          HasId f id, Eq id, SATOrd id, Ppr id, Extend id) =>
+          HasId f, SATOrd (TermId f), Ppr (TermId f), Extend (TermId f)) =>
     SATOrd (Term f v) where
   s ~~ t | s == t = constant True
   s ~~ t = fromMaybe (constant False) $ do
@@ -56,47 +79,38 @@ instance (Eq v, Eq (Term f v), Foldable f,
    | otherwise = constant False
 
 
--- -----------
--- RPO impls.
--- -----------
-lpo  = rpoGen lpoSymbol unLPO
-mpo  = rpoGen mpoSymbol unMPO
-lpop = rpoGen lpopSymbol unLPOP
-rpo  = rpoGen symbol id
-
-rpoGen inn out trs = isSAT $ do
-  let sig        = getSignature trs
-  symbols <- mapM (inn sig) (Set.toList $ getAllSymbols sig)
-  let dict       = Map.fromList [(the_symbol $ out s, s) | s <- symbols]
-      symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
-  (assert . (:[])) =<< andM [ l > r | l:->r <- symb_rules]
-  return $ mapM (secondM decode) (Map.toList dict)
-
 -- -------------------------------------------------
 -- The symbol datatype encoding all the constraints
 -- -------------------------------------------------
-data Symbol a = Constant a
-              | Symbol { the_symbol   :: a
+data Symbol a = Symbol { the_symbol   :: a
                        , encodePrec   :: Number
                        , encodePerm   :: [[Boolean]]
                        , encodeUseMset:: Boolean
-                       , decodeSymbol :: Decoder Integer}
+                       , decodeSymbol :: Decoder (SymbolRes a)}
+
+data SymbolRes a = SymbolRes { the_symbolR :: a
+                             , precedence  :: Int
+                             , status      :: Status }
+
+  deriving (Eq, Ord)
+
 
 instance Show a => Show (Symbol a) where
     show Symbol{the_symbol} = show the_symbol
-    show (Constant x)       = show x
 
 instance Ppr a => Ppr (Symbol a) where
     ppr Symbol{the_symbol} = ppr the_symbol
-    ppr (Constant x)       = ppr x
+
+instance Ppr a => Ppr (SymbolRes a) where
+    ppr SymbolRes{the_symbolR} = ppr the_symbolR
 
 instance Eq   a => Eq   (Symbol a) where
     a@Symbol{} == b@Symbol{} = the_symbol a == the_symbol b
-    Constant a == Constant b = a == b
-    _          == _          = False
 
-instance Decode (Symbol a) Integer where
-    decode Constant{} = error "Constants cannot be decoded"
+instance Ord a => Ord (Symbol a) where
+   compare a b = the_symbol a `compare` the_symbol b
+
+instance Decode (Symbol a) (SymbolRes a) where
     decode x@Symbol{} = decodeSymbol x
 
 
@@ -107,15 +121,19 @@ symbol sig x = do
   mset <- boolean
 
   -- Permutation invariants
-  assertAll [ oneM perm_i | perm_i <- perm]
-  assertAll [ oneM perm_k | perm_k <- transpose perm]
+  assertAll [ oneM (return <$> perm_i) | perm_i <- perm]
+  assertAll [ oneM (return <$> perm_k) | perm_k <- transpose perm]
 
   return $ Symbol
              { the_symbol = x
              , encodePrec = n
              , encodePerm = perm
              , encodeUseMset = mset
-             , decodeSymbol = decode n
+             , decodeSymbol = do
+                 n          <- fromInteger `liftM` decode n
+                 multiset   <- decode mset
+                 perm_bools <- decode perm
+                 return (SymbolRes x n (mkStatus multiset perm_bools))
              }
 
 instance Eq a => SATOrd (Symbol a) where
@@ -127,11 +145,11 @@ instance Eq a => SATOrd (Symbol a) where
 -- LPO and MPO
 -- ------------
 
-newtype LPOSymbol a = LPO{unLPO::Symbol a} deriving (Eq, Show, Ppr, SATOrd)
-newtype MPOSymbol a = MPO{unMPO::Symbol a} deriving (Eq, Show, Ppr, SATOrd)
+newtype LPOSymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, Ppr, SATOrd)
+newtype MPOSymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, Ppr, SATOrd)
 
-instance Decode (LPOSymbol a) Integer where decode = decode . unLPO
-instance Decode (MPOSymbol a) Integer where decode = decode . unMPO
+instance Decode (LPOSymbol a) (SymbolRes a) where decode = decode . unLPO
+instance Decode (MPOSymbol a) (SymbolRes a) where decode = decode . unMPO
 
 lpoSymbol sig = liftM LPO . symbol sig
 mpoSymbol sig = liftM MPO . symbol sig
@@ -187,17 +205,17 @@ mulgen (i, j) k = do
     epsilons <- replicateM i boolean
     gammasM  <- replicateM i (replicateM j boolean)
 
-    andM [andM [ oneM gammasC | gammasC <- transpose gammasM ]
-         ,andM [ ep ==> oneM gammasR
+    andM [andM [ oneM (return <$> gammasC) | gammasC <- transpose gammasM ]
+         ,andM [ ep ==> oneM (return <$> gammasR)
                      | (ep, gammasR) <- zip epsilons gammasM]
          ,k epsilons gammasM]
 
 -- ---------------------
 -- LPO with permutation
 -- ---------------------
-newtype LPOPSymbol a = LPOP{unLPOP::Symbol a} deriving (Eq, Show, Ppr, SATOrd)
+newtype LPOPSymbol a = LPOP{unLPOP::Symbol a} deriving (Eq, Ord, Show, Ppr, SATOrd)
 
-instance Decode (LPOPSymbol a) Integer where decode = decode . unLPOP
+instance Decode (LPOPSymbol a) (SymbolRes a) where decode = decode . unLPOP
 
 lpopSymbol sig = liftM LPOP . symbol sig
 
@@ -247,6 +265,7 @@ instance Eq a => Extend (Symbol a) where
 
 -- test
 -- -----
+{-
 check_lpo solver trs = do
   mb_prec <- solver (lpo trs)
   case mb_prec of
@@ -265,3 +284,4 @@ clpo s t
 
      where Just id_s   = rootSymbol s
            tt_s        = directSubterms s
+-}

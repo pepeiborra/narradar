@@ -23,7 +23,7 @@ import Data.Monoid
 import Text.PrettyPrint
 
 import Narradar.Types.DPIdentifiers
-import Data.Term.Ppr
+import Narradar.Framework.Ppr
 
 -- -------------------
 -- Prolog Identifiers

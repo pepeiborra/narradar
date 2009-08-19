@@ -20,7 +20,7 @@ import Text.PrettyPrint
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Term
-import Narradar.Utils.Ppr
+import Narradar.Framework.Ppr
 
 -- -----------------------
 -- Named Term Signatures

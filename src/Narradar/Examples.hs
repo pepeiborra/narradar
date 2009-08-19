@@ -2,10 +2,10 @@ module Narradar.Examples where
 
 import Prelude hiding (div,succ, quot)
 
+import Narradar.Types.Problem
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Term
 import Narradar.Types.Var
-import Narradar.Types.DPairs
 import Narradar.Utils
 
 (x:y:z:a:b:c:_) = map var [0..]
