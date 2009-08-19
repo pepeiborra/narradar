@@ -1,8 +1,11 @@
-module Narradar.Constraints.SAT.Examples where
+module Narradar.Examples where
 
 import Prelude hiding (div,succ, quot)
 
-import Narradar
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.Term
+import Narradar.Types.Var
+import Narradar.Types.DPairs
 import Narradar.Utils
 
 (x:y:z:a:b:c:_) = map var [0..]
@@ -72,10 +75,11 @@ minusquot = mapTermSymbols IdFunction <$$>
 
 minusquotPairs = getPairs minusquot
 
+{-
 minusquotP  = mkProblem Rewriting minusquot minusquotPairs
 minusquotP1 = mkProblem Rewriting minusquot (take 1 minusquotPairs)
 minusquotP2 = mkProblem Rewriting minusquot [minusquotPairs !! 1]
-
+-}
 -- -----
 -- large
 -- -----
@@ -98,3 +102,12 @@ large = minus ++
 
 nonterm1 = [term "f" [term "s" [x]] :-> term "f" [term "s" [x]]]
 nonterm2 = [term "f" [x] :-> term "f" [x]]
+
+
+-- -------
+-- lpairs
+-- -------
+
+f x = term "f" [x]
+
+lpairs = [f (f x) :-> x]
