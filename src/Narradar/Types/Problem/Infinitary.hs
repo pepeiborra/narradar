@@ -36,6 +36,7 @@ import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
+import Narradar.Types.Term
 import Narradar.Framework.Ppr
 
 import Prelude hiding (pi)
@@ -45,7 +46,8 @@ data Infinitary id p = Infinitary {pi_PType :: AF_ id, baseProblemType :: p} der
 instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (Infinitary id p) where
   data DPProblem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::DPProblem p a}
   getProblemType (InfinitaryProblem af p) = Infinitary af (getProblemType p)
-  mkDPProblem     (Infinitary af p) = (InfinitaryProblem af .) . mkDPProblem p
+  mkDPProblem    (Infinitary af base) dp rr = let p = mkDPProblem base dp rr
+                                             in InfinitaryProblem (af) p
   getP   (InfinitaryProblem _  p) = getP p
   getR   (InfinitaryProblem _  p) = getR p
   mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
@@ -58,6 +60,8 @@ deriving instance (Eq id, Eq (DPProblem p trs)) => Eq (DPProblem (Infinitary id 
 deriving instance (Ord id, Ord (DPProblem p trs)) => Ord (DPProblem (Infinitary id p) trs)
 deriving instance (Show id, Show (DPProblem p trs)) => Show (DPProblem (Infinitary id p) trs)
 
+-- Functor
+
 instance Functor (DPProblem p) => Functor (DPProblem (Infinitary id p)) where fmap f (InfinitaryProblem af p) = InfinitaryProblem af (fmap f p)
 instance Foldable (DPProblem p) => Foldable (DPProblem (Infinitary id p)) where foldMap f (InfinitaryProblem af p) = foldMap f p
 instance Traversable (DPProblem p) => Traversable (DPProblem (Infinitary id p)) where traverse f (InfinitaryProblem af p) = InfinitaryProblem af <$> traverse f p
@@ -66,36 +70,52 @@ $(derive makeFunctor     ''Infinitary)
 $(derive makeFoldable    ''Infinitary)
 $(derive makeTraversable ''Infinitary)
 
+-- Output
 
-instance Ppr p => Ppr (Infinitary id p) where
-    ppr Infinitary{..} = text "Infinitary" <+> ppr baseProblemType
+instance Pretty p => Pretty (Infinitary id p) where
+    pPrint Infinitary{..} = text "Infinitary" <+> pPrint baseProblemType
 
-instance HTMLClass (Infinitary id Rewriting) where htmlClass _ = theclass "IRew"
-instance HTMLClass (Infinitary id Narrowing) where htmlClass _ = theclass "INarr"
-instance HTMLClass (Infinitary id CNarrowing) where htmlClass _ = theclass "ICNarr"
+instance HTMLClass (Infinitary id Rewriting) where htmlClass _ = theclass "InfRew"
+instance HTMLClass (Infinitary id IRewriting) where htmlClass _ = theclass "InfIRew"
+instance HTMLClass (Infinitary id Narrowing) where htmlClass _ = theclass "InfNarr"
+instance HTMLClass (Infinitary id CNarrowing) where htmlClass _ = theclass "InfCNarr"
 
-instance (Ord id, Ppr (Identifier id), MkNarradarProblem p id) =>
-    MkNarradarProblem (Infinitary id p) id
+-- Construction
+
+instance (Ord id, TermId (TermType p (TermF id)) ~ Identifier id, MkNarradarProblem p (TermF id)) =>
+    MkNarradarProblem (Infinitary id p) (TermF id)
  where
-   type Typ' (Infinitary id p) id = Infinitary (Identifier id) (Typ' p id)
+   type ProblemType (Infinitary id p) (TermF id) = Infinitary (Identifier id) (ProblemType p (TermF id))
+   type TermType    (Infinitary id p) (TermF id) = TermType p (TermF id)
    mkNarradarProblem (Infinitary pi typ) trs = infinitaryProblem (AF.extendToTupleSymbols pi) p where
       p   = mkNarradarProblem typ trs
 
-instance (Ord id, Ppr (Identifier id), MkNarradarProblem p id) =>
-    MkNarradarProblem (Infinitary (Identifier id) p) id
+
+instance (Ord id, TermId (TermType p (TermF id)) ~ Identifier id
+         , MkNarradarProblem p (TermF id)) =>
+    MkNarradarProblem (Infinitary (Identifier id) p) (TermF id)
  where
-   type Typ' (Infinitary (Identifier id) p) id = Infinitary (Identifier id) (Typ' p id)
+   type ProblemType (Infinitary (Identifier id) p) (TermF id) =
+         Infinitary (Identifier id) (ProblemType p (TermF id))
+
+   type TermType    (Infinitary (Identifier id) p) (TermF id) =
+         TermType p (TermF id)
+
    mkNarradarProblem (Infinitary pi typ) trs = infinitaryProblem pi p where
       p   = mkNarradarProblem typ trs
+
+-- Icap
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
     ICap t v (Infinitary id p, trs)
   where
     icap (Infinitary{..},trs) = icap (baseProblemType,trs)
 
+-- Usable Rules
 
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
-         ,ApplyAF (Term t v) id, ApplyAF trs id
+         ,ApplyAF (Term t v), ApplyAF trs
+         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id
          ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
    IUsableRules t v (Infinitary id p, trs)
  where
@@ -111,8 +131,9 @@ f_UsableRulesAF :: forall term vk acc t id v trs typ problem m.
                  , term    ~ Term t v
                  , vk      ~ (v -> acc)
                  , acc     ~ Set (Rule t v)
-                 , Ord (Term t v), Unify t, Ord v, ApplyAF term id
-                 , HasRules t v trs, ApplyAF trs id, GetVars v trs
+                 , id      ~ AFId trs, AFId term ~ id, Ord id
+                 , Ord (Term t v), Unify t, Ord v, ApplyAF term
+                 , HasRules t v trs, ApplyAF trs, GetVars v trs
                  , ICap t v problem
                  , MonadFresh v m
                  ) =>

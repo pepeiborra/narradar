@@ -20,7 +20,6 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Maybe
 import Data.Monoid
-import Text.PrettyPrint
 
 import Narradar.Types.DPIdentifiers
 import Narradar.Framework.Ppr
@@ -90,11 +89,17 @@ instance Show a => Show (PrologId a) where
   showsPrec p (UId i)       = ("u_" ++) . showsPrec p i
   showsPrec p (FunctorId f) = showsPrec p f
 
-instance Ppr a => Ppr (PrologId a) where
-  ppr (InId a)  = ppr a <> text "_in"
-  ppr (OutId a) = ppr a <> text "_out"
-  ppr (UId i)   = text "u_" <> int i
-  ppr (FunctorId f) = ppr f
+instance Pretty (PrologId String) where
+  pPrint (InId a)  = text a <> text "_in"
+  pPrint (OutId a) = text a <> text "_out"
+  pPrint (UId i)   = text "u_" <> int i
+  pPrint (FunctorId f) = text f
+
+instance Pretty a => Pretty (PrologId a) where
+  pPrint (InId a)  = pPrint a <> text "_in"
+  pPrint (OutId a) = pPrint a <> text "_out"
+  pPrint (UId i)   = text "u_" <> int i
+  pPrint (FunctorId f) = pPrint f
 
 instance NFData a => NFData (PrologId a) where
   rnf (InId a)  = rnf a

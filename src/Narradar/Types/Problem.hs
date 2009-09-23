@@ -59,29 +59,44 @@ import Data.Term.Rules
 -- -------------------------
 -- Constructing DP problems
 -- -------------------------
-type NarradarProblem typ id = DPProblem typ (NarradarTRS id Var)
+type NarradarProblem typ t = DPProblem typ (NarradarTRS t Var)
 
 -- | Construct the set of pairs corresponding to a problem type and a TRS R of rules.
-class (IsDPProblem typ, IsDPProblem (Typ' typ id)) => MkNarradarProblem typ id where
-    type Typ' typ id :: *
-    mkNarradarProblem :: ( IsTRS (TermF id) Var trs
-                         ) => typ -> trs -> NarradarProblem (Typ' typ id) (Identifier id)
+class (IsDPProblem typ, IsDPProblem (ProblemType typ t)) => MkNarradarProblem typ t where
+    type ProblemType typ t :: *
+    type TermType    typ t :: * -> *
+    mkNarradarProblem :: ( IsTRS t Var trs
+                         ) => typ -> trs -> DPProblem (ProblemType typ t) (NarradarTRS (TermType typ t) Var)
+
+
+mkNarradarProblemDefault typ trs = mkDPProblem' typ (rules rr') (getPairs typ rr') where
+   rr' = mapTermSymbols IdFunction <$$> rules trs
 
 mkNewProblem typ p = mkDPProblem typ (getR p) (getP p)
+
+mkDPProblem' :: ( v ~ Var
+                , rr ~ [Rule t v]
+                , ntrs ~ NarradarTRS t v
+                , Unify t, HasId t, Ord (Term t v)
+                , IsDPProblem typ, Traversable (DPProblem typ)
+                , ICap t v (typ, rr), IUsableRules t v (typ, rr)
+                , ICap t v (typ, ntrs)
+                ) => typ -> [Rule t v] -> [Rule t v] -> DPProblem typ (NarradarTRS t v)
+mkDPProblem' typ rr dps = p where
+      p     = mkDPProblem typ (tRS rr) dptrs
+      dptrs = dpTRS typ rr dps (getEDG p)
 
 -- ---------------------------
 -- Computing Dependency Pairs
 -- ---------------------------
---getPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
-getPairs trs =
+class GetPairs typ where
+  getPairs :: ( HasRules t v trs, HasSignature trs, SignatureId trs ~ Identifier id
+              , t ~ f (Identifier id), Ord id
+              , Foldable t, MapId f, HasId t, TermId t ~ Identifier id)
+               => typ -> trs -> [Rule t v]
+instance GetPairs typ where
+  getPairs _ trs =
     [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isRootDefined trs) r]
-
---getNPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
-getNPairs trs = getPairs trs ++ getLPairs trs
-
---getLPairs :: (Ord id, Ord v) => NarradarTRS id v -> [DP (TermF (Identifier id)) v]
-getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
-
 
 -- ----------------------------------------
 -- Computing the estimated Dependency Graph
@@ -89,14 +104,15 @@ getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSub
 
 getEDG p = filterSEDG p $ getdirectEDG p
 
-getdirectEDG :: (Ord id, Traversable (DPProblem typ)
-                ,IsDPProblem typ, ICap (TermF id) Var (NarradarProblem typ id)
-                ) => NarradarProblem typ id -> G.Graph
+getdirectEDG :: (Traversable (DPProblem typ)
+                ,IsDPProblem typ, Enum v, Ord v, Unify t
+                ,ICap t v (typ, NarradarTRS t v)
+                ) => DPProblem typ (NarradarTRS t v) -> G.Graph
 getdirectEDG p@(getP -> DPTRS dps _ (unif :!: _) _) =
     assert (isValidUnif p) $
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
-filterSEDG :: (Ord id, IsDPProblem typ) => DPProblem typ (NarradarTRS id v) -> G.Graph -> G.Graph
+filterSEDG :: (IsDPProblem typ) => DPProblem typ (NarradarTRS t v) -> G.Graph -> G.Graph
 filterSEDG (getP -> dptrs@DPTRS{}) gr =
     G.buildG (A.bounds gr)
                [ (i,j) | (i,j) <- G.edges gr
@@ -109,13 +125,13 @@ emptyArray = A.listArray (0,-1) []
 -- Output
 -- ----------------
 
-instance (IsDPProblem p, Ppr p, Ppr trs) => Ppr (DPProblem p trs) where
-    ppr p =
-            ppr (getProblemType p) <+> text "Problem" $$
-            text "TRS:" <+> ppr (getR p) $$
-            text "DPS:" <+> ppr (getP p)
+instance (IsDPProblem p, Pretty p, Pretty trs) => Pretty (DPProblem p trs) where
+    pPrint p =
+            pPrint (getProblemType p) <+> text "Problem" $$
+            text "TRS:" <+> pPrint (getR p) $$
+            text "DPS:" <+> pPrint (getP p)
 
-instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Ppr (Term t v)
+instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Pretty (Term t v)
          ) => HTML (DPProblem typ trs) where
     toHtml p
      | null $ rules (getP p) =
@@ -133,10 +149,10 @@ instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Ppr (Term 
 
      where typ = getProblemType p
 
-instance (Ppr (Term t v)) =>  HTMLTABLE (Rule t v) where
-    cell (lhs :-> rhs ) = td H.! [theclass "lhs"]   << show (ppr lhs) <->
+instance (Pretty (Term t v)) =>  HTMLTABLE (Rule t v) where
+    cell (lhs :-> rhs ) = td H.! [theclass "lhs"]   << show (pPrint lhs) <->
                           td H.! [theclass "arrow"] << (" " +++ H.primHtmlChar "#x2192" +++ " ") <->
-                          td H.! [theclass "rhs"]   << show (ppr rhs)
+                          td H.! [theclass "rhs"]   << show (pPrint rhs)
 
 instance HTMLTABLE String where cell = cell . toHtml
 
@@ -144,6 +160,18 @@ aboves' [] = cell noHtml
 aboves' xx = aboves xx
 
 class HTMLClass a where htmlClass :: a -> HtmlAttr
+
+
+-- -------------------
+-- Narradar instances
+-- -------------------
+
+instance (Ord v, ExtraVars v trs, IsDPProblem p) =>  ExtraVars v (DPProblem p trs) where
+  extraVars p = extraVars (getP p) `mappend` extraVars (getR p)
+
+instance (ApplyAF trs, IsDPProblem p) => ApplyAF (DPProblem p trs) where
+    type AFId (DPProblem p trs) = AFId trs
+    apply af = fmap (apply af)
 
 -- ------------------------------
 -- Data.Term framework instances
@@ -166,15 +194,11 @@ instance (Ord v, GetVars v trs, Traversable (DPProblem typ)) => GetVars v (DPPro
 -- ------------------------------------
 
 expandDPair :: ( problem ~ DPProblem typ
-               , trs ~ NarradarTRS id v
-               , id ~ Identifier a
-               , t ~ TermF id
-               , v ~ Var
+               , HasId t, Foldable t, Unify t, Ord (Term t v), Ord v, Enum v
                , Traversable problem, IsDPProblem typ
-               , ICap t v (typ, trs), ICap t v (typ, [Rule t v]), IUsableRules t v (typ, [Rule t v])
-               , Ord a, Ppr a
+               , ICap t v (typ, NarradarTRS t v), ICap t v (typ, [Rule t v]), IUsableRules t v (typ, [Rule t v])
                ) =>
-               problem trs -> Int -> [DP a v] -> problem trs
+               problem (NarradarTRS t v) -> Int -> [Rule t v] -> problem (NarradarTRS t v)
 expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
  = assert (isValidUnif p) $
    assert (isValidUnif res) res
@@ -237,7 +261,7 @@ instance WithAF (ProblemType id) id where
   withAF GNarrowing  pi = gnarrowingModes0{pi}
   withAF LBNarrowing pi = lbnarrowingModes0{pi}
   withAF Rewriting   _  = Rewriting
---  withAF typ _ = error ("withAF - error: " ++ show(ppr typ))
+--  withAF typ _ = error ("withAF - error: " ++ show(pPrint typ))
   stripGoal NarrowingModes{}  = Narrowing
   stripGoal BNarrowingModes{} = BNarrowing
   stripGoal GNarrowingModes{} = GNarrowing
@@ -257,7 +281,7 @@ instance WithAF (ProblemType id) id where
 --   This is necessary so early because before splitting P into SCCs we need to ensure
 --   that P is indeed a TRS (no extra variables).
 --   I.e. we need to compute the filtering 'globally'
-mkGoalProblem :: (Ppr id, Ord a, PolyHeuristicN heu id, Lattice (AF_ id), RemovePrologId a, id ~ Identifier a) =>
+mkGoalProblem :: (Pretty id, Ord a, PolyHeuristicN heu id, Lattice (AF_ id), RemovePrologId a, id ~ Identifier a) =>
                  MkHeu heu -> ProblemType a -> NarradarTRS a Var -> [Problem id Var]
 mkGoalProblem heu typ trs =
     let trs'       = convert trs

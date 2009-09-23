@@ -68,13 +68,13 @@ strats = [ (Default,           "aproveStrats/narradar.strategy")
 -- ---------------
 
 data AproveProof = AproveProof [Output]
-instance Ppr AproveProof  where ppr   (AproveProof outs) = text "Aprove:" <+> vcat [ text(BS.unpack txt) | OutputTxt txt <- outs]
+instance Pretty AproveProof  where pPrint   (AproveProof outs) = text "Aprove:" <+> vcat [ text(BS.unpack txt) | OutputTxt txt <- outs]
 
 instance HTML AproveProof where
  toHtml (AproveProof outputs)
      | Just (OutputHtml html) <- find isOutputHtml outputs = thickbox (unpack html) << spani "seeproof" << "(see proof)"
 
-instance DotRep AproveProof where dot p = Text (ppr p) []
+instance DotRep AproveProof where dot p = Text (pPrint p) []
 
 instance ProofInfo AproveProof
 
@@ -83,22 +83,25 @@ instance ProofInfo AproveProof
 -- Allowed instances
 -- ------------------
 instance ( p ~ DPProblem Rewriting trs
-         , ProblemInfo p, PprTPDB p, Eq trs, Ppr trs, HasRules t v trs, Ppr (Term t v)
+         , ProblemInfo p, PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
          ) =>
-    Processor Aprove trs Rewriting Rewriting
+    Processor Aprove (DPProblem Rewriting trs) (DPProblem Rewriting trs)
   where
     apply AproveWeb{..}    = unsafePerformIO . aproveWebProc
     apply AproveBinary{..} = unsafePerformIO . aproveProc path
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
 instance (p ~ DPProblem IRewriting trs
-         , ProblemInfo p, PprTPDB p, Eq trs, Ppr trs, HasRules t v trs, Ppr (Term t v)
+         , ProblemInfo p, PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
          ) =>
-    Processor Aprove trs IRewriting IRewriting
+    Processor Aprove (DPProblem IRewriting trs) (DPProblem IRewriting trs)
   where
     apply AproveWeb{..} = unsafePerformIO . aproveWebProc
     apply AproveBinary{..} = unsafePerformIO . aproveProc path
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
+
+instance Processor Aprove (DPProblem i trs) o => Processor Aprove (DPProblem (InitialGoal t i) trs) o where
+    apply mode InitialGoalProblem{..} = apply mode baseProblem
 
 -- ------------------
 -- Implementation
@@ -106,9 +109,10 @@ instance (p ~ DPProblem IRewriting trs
 
 aproveWebProc :: ( p ~ DPProblem typ trs
                  , IsDPProblem typ, Eq p, ProblemInfo p, PprTPDB p
-                 , Ppr trs, Ppr typ, HTML typ, HTMLClass typ
-                 , HasRules t v trs, Ppr (Term t v)
-                 ) => p -> IO (Proof b)
+                 , Pretty trs, Pretty typ, HTML typ, HTMLClass typ
+                 , HasRules t v trs, Pretty (Term t v)
+                 , Monad mp
+                 ) => p -> IO (Proof mp b)
 aproveWebProc = memoExternalProc go where
   go prob = do
     curl <- initialize
@@ -245,7 +249,7 @@ massage     = unlines . drop 8  . lines
 class PprTPDB p where pprTPDB :: p -> Doc
 
 instance (GetVars v trs, HasRules t v trs
-         ,Ppr (Term t v), Ppr v, Enum v, Foldable t, HasId t, Ppr (TermId t)
+         ,Pretty (Term t v), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
          ) => PprTPDB (DPProblem Rewriting trs) where
  pprTPDB p =
      vcat [ parens (text "VAR" <+> hsep (map pprVar (toList $ getVars p)))
@@ -259,10 +263,10 @@ instance (GetVars v trs, HasRules t v trs
         pprTerm  = foldTerm pprVar f
 --        f (prj -> Just (T (id::id) [])) = text (show id)
         f t | Just id <- getId t
-            , show (ppr id) == "','"
+            , show (pPrint id) == "','"
             = text "comma" <> parens (hcat$ punctuate comma $ toList t) -- TODO Fix this HACK
             | Just id <- getId t
-            = ppr id <> parens (hcat$ punctuate comma $ toList t)
+            = pPrint id <> parens (hcat$ punctuate comma $ toList t)
 -- TODO  ++ ["(STRATEGY INNERMOST)"]
 -- TODO Relative Termination
 

@@ -44,28 +44,29 @@ import Narradar.Framework.Ppr
 
 import Prelude hiding (pi)
 
-data InitialGoal id p = InitialGoal
-    { goals_PType     :: [Goal id]
-    , dgraph_PType    :: Either (forall p. IsDPProblem p => NarradarProblem p id -> DGraph id Var)
-                                (DGraph id Var)
+data InitialGoal t p = InitialGoal
+    { goals_PType     :: [Goal (TermId t)]
+    , dgraph_PType    :: Either (forall p. (IsDPProblem p) =>
+                                        DPProblem p (NarradarTRS t Var) -> DGraph t Var)
+                                (DGraph t Var)
     , baseProblemType :: p}
 
-instance (Eq p, Eq id) => Eq (InitialGoal id p) where
+instance (Eq p, Eq (TermId t)) => Eq (InitialGoal t p) where
     p0 == p1 = (goals_PType p0, baseProblemType p0) == (goals_PType p1, baseProblemType p1)
 
-instance (Ord p, Ord id) => Ord (InitialGoal id p) where
+instance (Ord p, Ord (TermId t)) => Ord (InitialGoal t p) where
     compare p0 p1 = compare (goals_PType p0, baseProblemType p0) (goals_PType p1, baseProblemType p1)
 
-instance (Show p, Show id) => Show (InitialGoal id p) where
+instance (Show p, Show (TermId t)) => Show (InitialGoal t p) where
     show p0 = show (goals_PType p0, baseProblemType p0)
 
-instance Functor (InitialGoal id) where
+instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
-instance (Ord id, IsDPProblem p) => IsDPProblem (InitialGoal id p) where
-  data DPProblem (InitialGoal id p) a = InitialGoalProblem { goals       :: [Goal id]
-                                                               , dgraph      :: DGraph id Var
-                                                               , baseProblem :: DPProblem p a}
+instance (IsDPProblem p, HasId t, Foldable t, Ord (Term t Var)) => IsDPProblem (InitialGoal t p) where
+  data DPProblem (InitialGoal t p) a = InitialGoalProblem { goals       :: [Goal (TermId t)]
+                                                          , dgraph      :: DGraph t Var
+                                                          , baseProblem :: DPProblem p a}
   getProblemType (InitialGoalProblem goals g p) = initialGoal goals (getProblemType p)
   mkDPProblem    (InitialGoal goals (Right g)  p) = (InitialGoalProblem goals g .) . mkDPProblem p
   mkDPProblem    (InitialGoal goals (Left mkg) p) = error ("Cannot build an InitialGoal problem with mkDPProblem,"
@@ -75,27 +76,33 @@ instance (Ord id, IsDPProblem p) => IsDPProblem (InitialGoal id p) where
   mapR f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapR f p)
   mapP f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapP f p)
 
-initialGoal :: forall id typ.
-               ( --trs ~ NarradarTRS id Var, Ord id
---                 HasRules (TermF id) Var trs
-                Ord id
+initialGoal :: forall typ t.
+               ( Ord (Term t Var), HasId t, Foldable t
                , IsDPProblem typ) =>
-               [Goal id] -> typ -> InitialGoal id typ
+               [Goal (TermId t)] -> typ -> InitialGoal t typ
 initialGoal gg typ = InitialGoal gg (Left mkDG) typ where
-  mkDG :: forall typ. IsDPProblem typ => NarradarProblem typ id -> DGraph id Var
+  mkDG :: forall typ. IsDPProblem typ => DPProblem typ (NarradarTRS t Var) -> DGraph t Var
   mkDG = mkDGraph gg
 
 initialGoalProblem :: IsDPProblem typ =>
-                      [Goal id]
-                   -> Either (forall typ. IsDPProblem typ => DPProblem typ trs -> DGraph id Var) (DGraph id Var)
-                   -> DPProblem typ trs -> DPProblem (InitialGoal id typ) trs
+                      [Goal (TermId t)]
+                   -> Either (forall typ. IsDPProblem typ =>
+                               DPProblem typ trs -> DGraph t Var) (DGraph t Var)
+                   -> DPProblem typ trs -> DPProblem (InitialGoal t typ) trs
 initialGoalProblem gg (Left mkG) p = InitialGoalProblem gg (mkG p) p
 initialGoalProblem gg (Right dg) p = InitialGoalProblem gg dg p
 
+updateInitialGoalProblem p p0 = p{baseProblem = p0}
 
-deriving instance (Eq id, Eq (DPProblem p trs)) => Eq (DPProblem (InitialGoal id p) trs)
-deriving instance (Ord id, Ord (DPProblem p trs)) => Ord (DPProblem (InitialGoal id p) trs)
-deriving instance (Ppr (Identifier id), Show id, Show (DPProblem p trs)) => Show (DPProblem (InitialGoal id p) trs)
+-- ---------
+-- Instances
+-- ---------
+
+deriving instance (Eq (Term t Var), Eq (TermId t), Eq (DPProblem p trs)) => Eq (DPProblem (InitialGoal t p) trs)
+deriving instance (Ord (t(Term t Var)),  Ord (TermId t), Ord (DPProblem p trs)) => Ord (DPProblem (InitialGoal t p) trs)
+deriving instance (Show (TermId t), Show (Term t Var), Show (DPProblem p trs)) => Show (DPProblem (InitialGoal t p) trs)
+
+-- Functor
 
 instance Functor (DPProblem p) => Functor (DPProblem (InitialGoal id p)) where fmap f (InitialGoalProblem gg g p) = InitialGoalProblem gg g (fmap f p)
 instance Foldable (DPProblem p) => Foldable (DPProblem (InitialGoal id p)) where foldMap f (InitialGoalProblem gg g p) = foldMap f p
@@ -103,18 +110,32 @@ instance Traversable (DPProblem p) => Traversable (DPProblem (InitialGoal id p))
 
 -- Output
 
-instance Ppr p => Ppr (InitialGoal id p) where
-    ppr InitialGoal{..} = text "Initial Goal" <+> ppr baseProblemType
+instance Pretty p => Pretty (InitialGoal id p) where
+    pPrint InitialGoal{..} = text "Initial Goal" <+> pPrint baseProblemType
 
 instance HTML p => HTML (InitialGoal id p) where
     toHtml InitialGoal{..} = toHtml "Initial goal " +++ baseProblemType
 
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
 
-instance (Ord id, Ppr id, MkNarradarProblem p id) =>
-    MkNarradarProblem (InitialGoal id p) id
+-- Construction
+
+mkInitialGoalProblem :: (InitialGoal t' p ~ ProblemType (InitialGoal (t id) p) (t id')
+                        ,t' ~ TermType (InitialGoal (t id) p) (t id')
+                        ,MkNarradarProblem (InitialGoal (t id) p) (t id')
+                        ,Foldable (t id), HasId (t id), Ord (Term (t id) Var)
+                        ,IsTRS (t id') Var trs
+                        ) => InitialGoal (t id) p -> trs -> DPProblem (InitialGoal t' p) (NarradarTRS t' Var)
+mkInitialGoalProblem = mkNarradarProblem
+
+instance (Ord id, MapId t, MkNarradarProblem p (t id), TermType p (t id) ~ t(Identifier id)
+         ,HasId (t id), Foldable (t id), Ord (Term (t id) Var), TermId (t id) ~ id, TermId (t(Identifier id)) ~ Identifier id
+         ,HasId (t(Identifier id)), Foldable (t(Identifier id)), Ord (Term (t(Identifier id)) Var)
+         ) =>
+    MkNarradarProblem (InitialGoal (t id) p) (t id)
  where
-   type Typ' (InitialGoal id p) id = InitialGoal (Identifier id) (Typ' p id)
+   type ProblemType (InitialGoal (t id) p) (t id) = InitialGoal (t(Identifier id)) (ProblemType p (t id))
+   type TermType (InitialGoal (t id) p) (t id) = TermType p (t id)
 
    mkNarradarProblem (InitialGoal gg (Right g) typ) trs = initialGoalProblem gg' (Right g') p
     where
@@ -122,21 +143,34 @@ instance (Ord id, Ppr id, MkNarradarProblem p id) =>
       gg' = IdDP <$$> gg
       g' = R.fmap (mapTermSymbols IdDP) g
 
-   mkNarradarProblem (InitialGoal gg (Left mkG) typ) trs = initialGoalProblem gg' (Left mkG') p
+   mkNarradarProblem (InitialGoal gg (Left mkG) typ) trs = initialGoalProblem gg' (Right g) p
     where
       p   = mkNarradarProblem typ trs
       gg' = IdDP <$$> gg
-      mkG' :: forall p. IsDPProblem p => NarradarProblem p (Identifier id) -> DGraph (Identifier id) Var
-      mkG' p = R.fmap (mapTermSymbols IdDP) (mkG (mapNarradarTRS (mapTermSymbols symbol) `fmap` p))
+      g = mapTermSymbols IdDP `R.fmap` mkG (mapNarradarTRS (mapTermSymbols symbol) <$> p)
 
 
-instance (Ord id, Ppr (Identifier id), MkNarradarProblem p id) =>
-    MkNarradarProblem (InitialGoal (Identifier id) p) id
+{-
+instance (Ord id, MkNarradarProblem p (TermF id), TermType p (TermF id) ~ TermF(Identifier id)) =>
+    MkNarradarProblem (InitialGoal (TermF (Identifier id)) p) (TermF (Identifier id))
  where
-   type Typ' (InitialGoal (Identifier id) p) id
-          = InitialGoal (Identifier id) (Typ' p id)
-   mkNarradarProblem (InitialGoal gg g typ) trs = initialGoalProblem gg g p where
+   type ProblemType (InitialGoal (TermF (Identifier id)) p) (TermF (Identifier id)) = InitialGoal (TermF(Identifier id)) (ProblemType p (TermF (Identifier id)))
+   type TermType (InitialGoal (TermF (Identifier id)) p) (TermF (Identifier id)) = TermType p (TermF (Identifier id))
+
+   mkNarradarProblem (InitialGoal gg g typ) trs = initialGoalProblem gg g p
+    where
       p   = mkNarradarProblem typ trs
+-}
+instance (Ord id, MkNarradarProblem p (TermF id), TermType p (TermF id) ~ TermF(Identifier id)) =>
+    MkNarradarProblem (InitialGoal (TermF (Identifier id)) p) (TermF id)
+ where
+   type ProblemType (InitialGoal (TermF (Identifier id)) p) (TermF id) = InitialGoal (TermF(Identifier id)) (ProblemType p (TermF id))
+   type TermType (InitialGoal (TermF (Identifier id)) p) (TermF id) = TermType p (TermF id)
+
+   mkNarradarProblem (InitialGoal gg g typ) trs = initialGoalProblem gg g p
+    where
+      p   = mkNarradarProblem typ trs
+
 
 -- ICap
 
@@ -146,6 +180,7 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
     icap (InitialGoal{..},trs) = icap (baseProblemType,trs)
 
 -- Usable Rules
+
 {-
 instance IUsableRules t v (DPProblem p trs) =>
     IUsableRules t v (DPProblem (InitialGoal id p) trs)
@@ -207,7 +242,7 @@ instance ( IsDPProblem p, Ord id
 -- -------------------------------
 -- Dependency Graph data structure
 -- -------------------------------
-type DGraph id v = DGraphF (TermN id v)
+type DGraph t v = DGraphF (Term t v)
 
 data DGraphF a = DGraph {pairs    :: Array Int (RuleF a)
                         ,pairsMap :: Map (RuleF a) Int
@@ -232,6 +267,8 @@ lookupNode p dg = fromMaybe (error "lookupPair: Pair not in graph") $
 
 lookupPair n dg = pairs dg A.! n
 
+mkDGraph :: (IsDPProblem typ, IsTRS t v trs, HasId t, Ord (Term t v)
+            ) => [Goal (TermId t)] -> DPProblem typ trs -> DGraph t v
 mkDGraph goals p = DGraph dps_a dps_map initialPairs graph
  where
   dps       = rules $ getP p
@@ -245,7 +282,7 @@ mkDGraph goals p = DGraph dps_a dps_map initialPairs graph
   initialFunctions = foldMap (Set.singleton . goalId) goals
   graph = undefined -- filterSEDG $ getEDG p
 
-dnodesInPath :: (Ord v, Ord id) => DGraph id v -> RuleN id v -> RuleN id v -> [RuleN id v]
+dnodesInPath :: (Ord v, Ord (Term t v)) => DGraph t v -> Rule t v -> Rule t v -> [Rule t v]
 dnodesInPath dg from to = map (`lookupPair` dg) nodes
     where
        from_node = lookupNode from dg

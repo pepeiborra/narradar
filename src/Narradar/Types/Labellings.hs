@@ -15,7 +15,6 @@ import Control.Applicative
 import Control.Parallel.Strategies
 import Data.Foldable (Foldable(..), toList)
 import Data.Traversable as T
-import Text.PrettyPrint
 
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
@@ -66,9 +65,9 @@ instance Show a => Show (Labelled a) where
     show (Labelling l a) = show a ++ "_" ++ (concatMap show l)
     show (Plain a)       = show a
 
-instance Ppr a => Ppr (Labelled a) where
-    ppr (Labelling l a) = ppr a <> text "_" <> (hcat $ map ppr l)
-    ppr (Plain a)       = ppr a
+instance Pretty a => Pretty (Labelled a) where
+    pPrint (Labelling l a) = pPrint a <> text "_" <> (hcat $ map pPrint l)
+    pPrint (Plain a)       = pPrint a
 
 instance NFData a => NFData (Labelled a) where
     rnf (Plain a) = rnf a

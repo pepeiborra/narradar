@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Narradar.Utils.Html (module Narradar.Utils.Html, module H, module MuTerm.Framework.Output) where

@@ -67,28 +67,28 @@ instance Foldable (DPProblem CNarrowing) where foldMap f (CNarrowingProblem r p)
 instance Traversable (DPProblem CNarrowing) where traverse f (CNarrowingProblem r p) = CNarrowingProblem <$> f r <*> f p
 
 
-instance Ppr Narrowing where ppr _ = text "Narrowing"
-instance Ppr CNarrowing where ppr _ = text "Constructor Narrowing"
+instance Pretty Narrowing where pPrint _ = text "Narrowing"
+instance Pretty CNarrowing where pPrint _ = text "Constructor Narrowing"
 
 instance HTML Narrowing where toHtml _ = toHtml "Narrowing Problem"
 instance HTML CNarrowing where toHtml _ = toHtml "Constructor Narrowing Problem"
 instance HTMLClass Narrowing where htmlClass _ = theclass "NDP"
 instance HTMLClass CNarrowing where htmlClass _ = theclass "GNDP"
 
+instance GetPairs Narrowing where getPairs _ = getNPairs
 
-instance Ord id => MkNarradarProblem Narrowing id where
-  type Typ' Narrowing id = Narrowing
-  mkNarradarProblem typ trs = assert (isValidUnif p) p where
-      p   = mkDPProblem typ (tRS rr) dps
-      dps = dpTRS typ rr (getNPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
+getNPairs trs = getPairs Rewriting trs ++ getLPairs trs
+getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
 
-instance Ord id => MkNarradarProblem CNarrowing id where
-  type Typ' CNarrowing id = CNarrowing
-  mkNarradarProblem typ trs = mkDPProblem typ (tRS rr) dps where
-      dps = dpTRS typ rr (getPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
+instance Ord id => MkNarradarProblem Narrowing (TermF id) where
+  type ProblemType Narrowing (TermF id) = Narrowing
+  type TermType    Narrowing (TermF id) = TermF (Identifier id)
+  mkNarradarProblem = mkNarradarProblemDefault
 
+instance Ord id => MkNarradarProblem CNarrowing (TermF id) where
+  type ProblemType CNarrowing (TermF id) = CNarrowing
+  type TermType    CNarrowing (TermF id) = TermF(Identifier id)
+  mkNarradarProblem = mkNarradarProblemDefault
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v trs) => ICap t v (Narrowing, trs) where icap (_,trs) = icap (Rewriting,trs)
 instance (HasRules t v trs, Unify t, GetVars v trs) => ICap t v (CNarrowing, trs) where icap (_,trs) = icap (IRewriting,trs)

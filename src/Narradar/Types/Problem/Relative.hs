@@ -46,7 +46,8 @@ instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
   mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
   mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
 
-relativeProblem          = RelativeProblem
+relative = Relative
+relativeProblem = RelativeProblem
 
 deriving instance (Eq trs, Eq (DPProblem p trs)) => Eq (DPProblem (Relative trs p) trs)
 deriving instance (Ord trs, Ord (DPProblem p trs)) => Ord (DPProblem (Relative trs p) trs)
@@ -71,19 +72,64 @@ instance (IsDPProblem p, Ord (SignatureId trs), HasSignature (DPProblem p trs), 
 
 -- Output
 
-instance Ppr p => Ppr (Relative trs p)
+instance Pretty p => Pretty (Relative trs p)
     where
-         ppr (Relative _ p) = text "Relative termination of" <+> ppr p
+         pPrint (Relative _ p) = text "Relative termination of" <+> pPrint p
 
 -- Construction
 
-instance (Ord id, HasRules (TermF id) Var trs0, MkNarradarProblem p id) =>
-    MkNarradarProblem (Relative trs0 p) id
+instance (Functor (t id), MapId t, MkNarradarProblem p (t id)
+         ,HasId (t(Identifier id)), Foldable (t(Identifier id))
+         ,Ord (Term (t id) Var), Ord (Term (t(Identifier id)) Var)) =>
+    MkNarradarProblem (Relative [Rule (t id) Var] p) (t id)
  where
-  type Typ' (Relative trs0 p) id = Relative (NarradarTRS (Identifier id) Var) (Typ' p id)
+  type ProblemType (Relative [Rule (t id) Var] p) (t id)
+                  = Relative (NarradarTRS (t (Identifier id)) Var) (ProblemType p (t id))
+
+  type TermType    (Relative [Rule (t id) Var] p) (t id) = TermType p (t id)
   mkNarradarProblem (Relative trs0 typ) trs = relativeProblem trs0' p where
       p     = mkNarradarProblem typ trs
-      trs0' = tRS $ mapTermSymbols IdFunction <$$> rules trs0
+      trs0' = tRS(mapTermSymbols IdFunction <$$> trs0)
+
+
+instance (Functor (t (Identifier id)), MapId t, MkNarradarProblem p (t id)
+         ,HasId (t(Identifier id)), Foldable (t(Identifier id))
+         ,Ord (Term (t(Identifier id)) Var)) =>
+    MkNarradarProblem (Relative [Rule (t (Identifier id)) Var] p) (t id)
+ where
+  type ProblemType (Relative [Rule (t (Identifier id)) Var] p) (t id)
+                  = Relative (NarradarTRS (t (Identifier id)) Var) (ProblemType p (t id))
+
+  type TermType    (Relative [Rule (t (Identifier id)) Var] p) (t id) = TermType p (t id)
+  mkNarradarProblem (Relative trs0 typ) trs = relativeProblem (tRS trs0) p where
+      p = mkNarradarProblem typ trs
+
+
+instance (Functor (t id), MapId t, MkNarradarProblem p (t id)
+         ,HasId (t(Identifier id)), Foldable (t(Identifier id))
+         ,Ord (Term (t id) Var), Ord (Term (t(Identifier id)) Var)) =>
+    MkNarradarProblem (Relative (NarradarTRS (t id) Var) p) (t id)
+ where
+  type ProblemType (Relative (NarradarTRS (t id) Var) p) (t id)
+                  = Relative (NarradarTRS (t(Identifier id)) Var) (ProblemType p (t id))
+
+  type TermType    (Relative (NarradarTRS (t id) Var) p) (t id) = TermType p (t id)
+  mkNarradarProblem (Relative trs0 typ) trs = relativeProblem trs0' p where
+      p     = mkNarradarProblem typ trs
+      trs0' = mapNarradarTRS (mapTermSymbols IdFunction) trs0
+
+
+instance (Functor (t (Identifier id)), MapId t, MkNarradarProblem p (t id)
+         ,HasId (t(Identifier id)), Foldable (t(Identifier id))
+         ,Ord (Term (t(Identifier id)) Var)) =>
+    MkNarradarProblem (Relative (NarradarTRS (t (Identifier id)) Var) p) (t id)
+ where
+  type ProblemType (Relative (NarradarTRS (t(Identifier id)) Var) p) (t id)
+                  = Relative (NarradarTRS (t(Identifier id)) Var) (ProblemType p (t id))
+
+  type TermType    (Relative (NarradarTRS (t(Identifier id)) Var) p) (t id) = TermType p (t id)
+  mkNarradarProblem (Relative trs0 typ) trs = relativeProblem trs0 p where
+      p = mkNarradarProblem typ trs
 
 
 -- ICap

@@ -40,41 +40,36 @@ data DependencyGraphSCC    = DependencyGraphSCC    deriving (Eq, Ord, Show)
 data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
 
 
-instance ( t   ~ TermF id
-         , trs ~ NarradarTRS id v
-         , v   ~ Var
+instance ( trs ~ NarradarTRS t Var
          , problem ~ DPProblem typ trs, ProblemInfo problem
-         , IsDPProblem typ, Ppr typ, Traversable (DPProblem typ)
-         , Ppr id, Ord id, Ppr v, Ord v, Enum v
-         , ICap t v (typ,trs)
+         , IsDPProblem typ, Pretty typ, Traversable (DPProblem typ)
+         , Unify t, ICap t Var (typ,trs)
          ) =>
-    Processor DependencyGraphSCC (NarradarTRS id v) typ typ where
+    Processor DependencyGraphSCC (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
   apply DependencyGraphSCC = sccProcessor
 
 
-instance ( t   ~ TermF (Identifier id0)
-         , trs ~ NarradarTRS id v
-         , v   ~ Var
-         , id  ~ Identifier id0
-         , problem ~ DPProblem (InitialGoal id typ0) trs, ProblemInfo problem
-         , IsDPProblem typ0, Ppr typ0, HTML typ0, HTMLClass typ0, Traversable (DPProblem typ0)
-         , Ppr id, Ord id0, Ppr v, Ord v, Enum v
-         , ICap t v (typ0,trs), ProblemColor problem, PprTPDBDot problem
+instance ( TermId t ~ Identifier id0, Ord id0
+         , trs ~ NarradarTRS t Var
+         , problem ~ DPProblem (InitialGoal t typ0) trs, ProblemInfo problem
+         , IsDPProblem typ0, Pretty typ0, HTML typ0, HTMLClass typ0, Traversable (DPProblem typ0)
+         , HasId t, Unify t, Ord (Term t Var)
+         , ICap t Var (typ0,trs), ProblemColor problem, PprTPDBDot problem
          ) =>
-    Processor DependencyGraphSCC (NarradarTRS (Identifier id0) v) (InitialGoal (Identifier id0) typ0) (InitialGoal (Identifier id0) typ0) where
+    Processor DependencyGraphSCC
+             (DPProblem (InitialGoal t typ0) (NarradarTRS t Var))
+             (DPProblem (InitialGoal t typ0) (NarradarTRS t Var))
+ where
   apply DependencyGraphSCC    = usableSCCsProcessor
 
 
-
-instance ( t   ~ TermF id
-         , trs ~ NarradarTRS id v
-         , v   ~ Var
+instance ( trs ~ NarradarTRS t Var
          , problem ~ DPProblem typ trs, ProblemInfo problem
-         , IsDPProblem typ, Ppr typ, HTML typ, HTMLClass typ, Traversable (DPProblem typ)
-         , Ppr id, Ord id, Ppr v, Ord v, Enum v
-         , ICap t v (typ,trs), ProblemColor problem, PprTPDBDot problem
+         , IsDPProblem typ, Pretty typ, HTML typ, HTMLClass typ, Traversable (DPProblem typ)
+         , HasId t, Unify t, Ord (Term t Var)
+         , ICap t Var (typ,trs), ProblemColor problem, PprTPDBDot problem
          ) =>
-    Processor DependencyGraphCycles (NarradarTRS id v) typ typ where
+    Processor DependencyGraphCycles (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
   apply DependencyGraphCycles = cycleProcessor
 
 -- --------------
@@ -87,13 +82,13 @@ data DependencyGraphProof = SCCs   Graph [Set Vertex]
                           | NoCycles
                          deriving (Eq, Ord, Show)
 
-instance Ppr DependencyGraphProof where
-  ppr SCCs{}   = text "Dependency Graph Processor (SCCs)"
-  ppr Cycles{} = text "Dependency Graph Processor (cycles)"
-  ppr NoCycles = text "We need to prove termination for all the cycles." <+>
+instance Pretty DependencyGraphProof where
+  pPrint SCCs{}   = text "Dependency Graph Processor (SCCs)"
+  pPrint Cycles{} = text "Dependency Graph Processor (cycles)"
+  pPrint NoCycles = text "We need to prove termination for all the cycles." <+>
                  text "There are no cycles, so the system is terminating"
 
-instance HTML DependencyGraphProof where toHtml = toHtml . show . ppr
+instance HTML DependencyGraphProof where toHtml = toHtml . show . pPrint
 
 instance DotRep DependencyGraphProof where
   dot (Cycles g) = let n     = head (G.vertices g)
@@ -125,19 +120,17 @@ instance ProofInfo DependencyGraphProof
 -- ---------------
 -- Implementation
 -- ---------------
-type GraphProcessor typ trs id = (problem ~ DPProblem typ trs, ProblemInfo problem
-                                 ,trs     ~ NarradarTRS id v
-                                 ,t       ~ TermF id
-                                 ,v       ~ Var
+type GraphProcessor typ t mp =   (problem ~ DPProblem typ trs, ProblemInfo problem
+                                 ,trs     ~ NarradarTRS t Var
                                  ,IsDPProblem typ, Traversable (DPProblem typ)
-                                 ,Ppr typ
-                                 ,ICap t v (typ, trs)
-                                 ,Ppr v, Ord v, Enum v, Ppr id, Ord id
+                                 ,Pretty typ
+                                 ,Unify t, ICap t Var (typ, trs)
+                                 ,Monad mp
                                  ) =>
-                                    DPProblem typ trs -> Proof problem
+                                    DPProblem typ (NarradarTRS t Var) -> Proof mp problem
 
-cycleProcessor, sccProcessor :: GraphProcessor typ trs id
-usableSCCsProcessor :: GraphProcessor (InitialGoal (Identifier id0) typ0) trs (Identifier id0)
+cycleProcessor, sccProcessor :: GraphProcessor typ t mp
+usableSCCsProcessor :: (Identifier a ~ TermId t, Ord a) => GraphProcessor (InitialGoal t  typ0) t mp
 
 
 sccProcessor problem@(getP -> dps@(DPTRS _ _ unif sig))
@@ -176,6 +169,7 @@ usableSCCsProcessor :: (problem ~ DPProblem typ trs
                             DPProblem typ trs -> Proof problem
 -- TODO Think about the usableSCC processor.
 -}
+
 usableSCCsProcessor problem@(getP -> dps@(DPTRS dd _ unif sig))
   | null cc   = success NoCycles problem
   | otherwise =  andP (UsableSCCs gr reachable) problem

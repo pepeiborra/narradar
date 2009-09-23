@@ -20,7 +20,6 @@ import Data.Derive.Traversable
 import Data.Foldable (Foldable(..))
 import Data.Traversable (Traversable(..))
 import Prelude
-import Text.PrettyPrint
 
 import Narradar.Types.Term
 import Narradar.Framework.Ppr
@@ -40,15 +39,15 @@ instance Eq a => Eq (Identifier a) where
     _             == AnyIdentifier = True
     _             == _             = False
 
-instance Ppr (Identifier a) => Show (Identifier a) where show = show . ppr
+instance Pretty (Identifier a) => Show (Identifier a) where show = show . pPrint
 
-instance Ppr (Identifier String) where
-    ppr (IdFunction f) = text f
-    ppr (IdDP n) = text n <> text "#"
+instance Pretty (Identifier String) where
+    pPrint (IdFunction f) = text f
+    pPrint (IdDP n) = text n <> text "#"
 
-instance Ppr a => Ppr (Identifier a) where
-    ppr (IdFunction f) = ppr f
-    ppr (IdDP n) = ppr n <> text "#"
+instance Pretty a => Pretty (Identifier a) where
+    pPrint (IdFunction f) = pPrint f
+    pPrint (IdDP n) = pPrint n <> text "#"
 
 instance NFData a => NFData (Identifier a) where
     rnf (IdFunction f) = rnf f

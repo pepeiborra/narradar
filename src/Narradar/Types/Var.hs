@@ -24,8 +24,8 @@ varName (Var n _) = n
 
 uniqueId (Var _ i) = i
 
-instance Ppr Var where
-    ppr (Var (Just l) _i) = text l -- <> char '_' <> int _i
-    ppr (Var _ i)        = char 'v' <> int i
+instance Pretty Var where
+    pPrint (Var (Just l) _i) = text l -- <> char '_' <> int _i
+    pPrint (Var _ i)        = char 'v' <> int i
 
 instance GetVars Var Var where getVars = Set.singleton

@@ -69,8 +69,8 @@ instance Traversable (DPProblem IRewriting) where traverse f (IRewritingProblem 
 
 -- Output
 
-instance Ppr Rewriting where ppr _ = text "Rewriting"
-instance Ppr IRewriting where ppr _ = text "Innermost Rewriting"
+instance Pretty Rewriting where pPrint _ = text "Rewriting"
+instance Pretty IRewriting where pPrint _ = text "Innermost Rewriting"
 
 instance HTML Rewriting where toHtml _ = toHtml "Rewriting Problem"
 instance HTML IRewriting where toHtml _ = toHtml "Innermost Rewriting Problem"
@@ -81,18 +81,15 @@ instance HTMLClass IRewriting where htmlClass _ = theclass "IDP"
 
 -- Construction
 
-instance Ord id => MkNarradarProblem Rewriting id where
-  type Typ' Rewriting id = Rewriting
-  mkNarradarProblem typ trs = mkDPProblem typ (tRS rr) dps where
-      dps = dpTRS typ rr (getPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
+instance Ord id => MkNarradarProblem Rewriting (TermF id) where
+  type ProblemType Rewriting (TermF id) = Rewriting
+  type TermType    Rewriting (TermF id) = TermF (Identifier id)
+  mkNarradarProblem = mkNarradarProblemDefault
 
-instance Ord id => MkNarradarProblem IRewriting id where
-  type Typ' IRewriting id = IRewriting
-  mkNarradarProblem typ trs = mkDPProblem typ (tRS rr) dps where
-      dps = dpTRS typ rr (getPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
-
+instance Ord id => MkNarradarProblem IRewriting (TermF id) where
+  type ProblemType IRewriting (TermF id) = IRewriting
+  type TermType    IRewriting (TermF id) = TermF (Identifier id)
+  mkNarradarProblem = mkNarradarProblemDefault
 
 -- ICap
 
