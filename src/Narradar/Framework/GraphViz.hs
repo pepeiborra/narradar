@@ -79,7 +79,7 @@ instance (PprTPDBDot (NarradarProblem typ id), ProblemColor (NarradarProblem typ
     DotRep (NarradarProblem typ id) where
     dot p = Text (pprTPDBdot p) [ Color [problemColor p]
                                 , Shape BoxShape
-                                , Style (Stl Bold Nothing)
+                                , Style [SItem Bold []]
                                 , FontName "monospace"
                                 , FontSize 10
                                 , Margin (PVal (PointD 0.2 0.2))]
