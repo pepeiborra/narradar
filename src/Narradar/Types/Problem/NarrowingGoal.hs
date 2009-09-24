@@ -48,13 +48,14 @@ instance GetPairs (NarrowingGoal id) where getPairs _ = getNPairs
 
 data MkNarrowingGoal id p = NarrowingGoal {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
 instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (MkNarrowingGoal id p) where
-  data DPProblem (MkNarrowingGoal id p) a = NarrowingGoalProblem {pi::AF_ id, baseProblem::DPProblem p a}
+  data DPProblem (MkNarrowingGoal id p) trs = NarrowingGoalProblem {pi::AF_ id, baseProblem::DPProblem p trs}
   getProblemType (NarrowingGoalProblem af p) = NarrowingGoal af (getProblemType p)
-  mkDPProblem     (NarrowingGoal af p) = (NarrowingGoalProblem af .) . mkDPProblem p
   getP   (NarrowingGoalProblem _  p) = getP p
   getR   (NarrowingGoalProblem _  p) = getR p
   mapR f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (mapR f p)
   mapP f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (mapP f p)
+instance (HasSignature trs, id ~ SignatureId trs, Ord id, MkDPProblem p trs) => MkDPProblem (MkNarrowingGoal id p) trs where
+  mkDPProblem (NarrowingGoal pi typ) = (narrowingGoalProblem pi.) . mkDPProblem typ
 
 narrowingGoal        g = NarrowingGoal (mkGoalAF g) Rewriting
 cnarrowingGoal       g = NarrowingGoal (mkGoalAF g) IRewriting
@@ -81,24 +82,6 @@ instance Pretty p => Pretty (MkNarrowingGoal id p) where
 
 instance HTMLClass (MkNarrowingGoal id Rewriting) where htmlClass _ = theclass "IRew"
 instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass "INarr"
-
--- Construction
-
-instance (Ord id, Pretty (Identifier id), MkNarradarProblem p (TermF id), TermType p (TermF id) ~ TermF (Identifier id)) =>
-    MkNarradarProblem (MkNarrowingGoal id p) (TermF id)
- where
-   type ProblemType (MkNarrowingGoal id p) (TermF id) = MkNarrowingGoal (Identifier id) (ProblemType p (TermF id))
-   type TermType (MkNarrowingGoal id p) (TermF id) = TermType p (TermF id)
-   mkNarradarProblem (NarrowingGoal pi typ) trs = narrowingGoalProblem (AF.extendToTupleSymbols pi) p where
-      p   = mkNarradarProblem typ trs
-
-instance (Ord id, Pretty (Identifier id), MkNarradarProblem p (TermF id), TermType p (TermF id) ~ TermF (Identifier id)) =>
-    MkNarradarProblem (MkNarrowingGoal (Identifier id) p) (TermF id)
- where
-   type ProblemType (MkNarrowingGoal (Identifier id) p) (TermF id) = MkNarrowingGoal (Identifier id) (ProblemType p (TermF id))
-   type TermType (MkNarrowingGoal (Identifier id) p) (TermF id)    = TermType p (TermF id)
-   mkNarradarProblem (NarrowingGoal pi typ) trs = narrowingGoalProblem pi p where
-      p   = mkNarradarProblem typ trs
 
 -- ICap
 

@@ -43,15 +43,17 @@ import Prelude hiding (pi)
 
 
 data Infinitary id p = Infinitary {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
-instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (Infinitary id p) where
+instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (Infinitary id p)  where
   data DPProblem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::DPProblem p a}
   getProblemType (InfinitaryProblem af p) = Infinitary af (getProblemType p)
-  mkDPProblem    (Infinitary af base) dp rr = let p = mkDPProblem base dp rr
-                                             in InfinitaryProblem (af) p
   getP   (InfinitaryProblem _  p) = getP p
   getR   (InfinitaryProblem _  p) = getR p
   mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
   mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
+instance (id ~ SignatureId trs, HasSignature trs, Ord id, MkDPProblem p trs) => MkDPProblem (Infinitary id p) trs where
+  mkDPProblem (Infinitary af base) dp rr = InfinitaryProblem (af `mappend` AF.init p) p
+    where p = mkDPProblem base dp rr
+
 
 infinitary        g p = Infinitary (mkGoalAF g) p
 infinitaryProblem g p = InfinitaryProblem (g `mappend` AF.init p) p
@@ -79,30 +81,6 @@ instance HTMLClass (Infinitary id Rewriting) where htmlClass _ = theclass "InfRe
 instance HTMLClass (Infinitary id IRewriting) where htmlClass _ = theclass "InfIRew"
 instance HTMLClass (Infinitary id Narrowing) where htmlClass _ = theclass "InfNarr"
 instance HTMLClass (Infinitary id CNarrowing) where htmlClass _ = theclass "InfCNarr"
-
--- Construction
-
-instance (Ord id, TermId (TermType p (TermF id)) ~ Identifier id, MkNarradarProblem p (TermF id)) =>
-    MkNarradarProblem (Infinitary id p) (TermF id)
- where
-   type ProblemType (Infinitary id p) (TermF id) = Infinitary (Identifier id) (ProblemType p (TermF id))
-   type TermType    (Infinitary id p) (TermF id) = TermType p (TermF id)
-   mkNarradarProblem (Infinitary pi typ) trs = infinitaryProblem (AF.extendToTupleSymbols pi) p where
-      p   = mkNarradarProblem typ trs
-
-
-instance (Ord id, TermId (TermType p (TermF id)) ~ Identifier id
-         , MkNarradarProblem p (TermF id)) =>
-    MkNarradarProblem (Infinitary (Identifier id) p) (TermF id)
- where
-   type ProblemType (Infinitary (Identifier id) p) (TermF id) =
-         Infinitary (Identifier id) (ProblemType p (TermF id))
-
-   type TermType    (Infinitary (Identifier id) p) (TermF id) =
-         TermType p (TermF id)
-
-   mkNarradarProblem (Infinitary pi typ) trs = infinitaryProblem pi p where
-      p   = mkNarradarProblem typ trs
 
 -- Icap
 

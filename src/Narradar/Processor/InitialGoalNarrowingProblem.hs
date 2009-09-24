@@ -38,46 +38,45 @@ data InitialGoalNarrowingToInfinitaryRewriting = InitialGoalNarrowingToInfinitar
 -- | This is the approach of Iborra, Nishida & Vidal
 data InitialGoalNarrowingToRelativeRewriting = InitialGoalNarrowingToRelativeRewriting deriving (Eq, Show)
 
-instance (HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var), HasSignature trs) =>
+instance (HasId t, Foldable t, TermId t ~ id, SignatureId trs ~ id, Ord id, Ord (Term t Var), HasSignature trs) =>
     Processor InitialGoalNarrowingToNarrowingGoal
               (DPProblem (InitialGoal t Narrowing) trs)
               (DPProblem (NarrowingGoal id) trs)
  where
-  apply _ p = mprod [mkNewProblem (narrowingGoal g) p | g <- gg]
+  apply _ p = mprod [mkDerivedProblem (narrowingGoal g) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
-instance (HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var), HasSignature trs) =>
+instance (HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var), HasSignature trs, SignatureId trs ~ id) =>
     Processor InitialGoalNarrowingToNarrowingGoal
               (DPProblem (InitialGoal t CNarrowing) trs)
               (DPProblem (CNarrowingGoal id) trs)
  where
-  apply _ p = mprod [mkNewProblem (cnarrowingGoal g) p | g <- gg]
+  apply _ p = mprod [mkDerivedProblem (cnarrowingGoal g) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
 
-instance (HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id, HasSignature trs) =>
+instance (HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id, HasSignature trs, SignatureId trs ~ id) =>
     Processor InitialGoalNarrowingToInfinitaryRewriting
               (DPProblem (InitialGoal t Narrowing) trs)
               (DPProblem (Infinitary id Rewriting) trs)
  where
-  apply _ p = mprod [mkNewProblem (infinitary g Rewriting) p | g <- gg]
+  apply _ p = mprod [mkDerivedProblem (infinitary g Rewriting) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
-instance (HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id, HasSignature trs) =>
+instance (HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id, HasSignature trs, SignatureId trs ~ id) =>
     Processor InitialGoalNarrowingToInfinitaryRewriting
               (DPProblem (InitialGoal t CNarrowing) trs)
               (DPProblem (Infinitary id IRewriting) trs)
  where
-  apply _ p = mprod [mkNewProblem (infinitary g IRewriting) p | g <- gg]
+  apply _ p = mprod [mkDerivedProblem (infinitary g IRewriting) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
-
+{-
 instance (trsGDP ~ NarradarTRS gdp Var
          ,gid    ~ GenTermF id
          ,gdp    ~ GenTermF (Identifier id)
          ,typ'   ~ InitialGoal gdp (Relative trsGDP NarrowingGen)
-         ,MkNarradarProblem (InitialGoal gdp (Relative trsGDP NarrowingGen)) gid
-         ,ProblemType typ' gid ~ typ', TermType typ' gid ~ gdp
+--         ,MkNarradarProblem (InitialGoal gdp (Relative trsGDP NarrowingGen)) gid
          ,Ord id
          ) =>
     Processor InitialGoalNarrowingToRelativeRewriting
@@ -87,7 +86,7 @@ instance (trsGDP ~ NarradarTRS gdp Var
                          (NarradarTRS (GenTermF (Identifier id)) Var))
  where
    apply = initialGoalNarrowingToRelativeRewriting
-
+-}
 initialGoalNarrowingToRelativeRewriting ::
               forall typ typ' tag id mp gid gdp trsG trsGDP.
             ( gid ~ GenTermF id
@@ -95,21 +94,20 @@ initialGoalNarrowingToRelativeRewriting ::
             , typ' ~ InitialGoal gdp (Relative trsGDP NarrowingGen)
             , trsG ~ NarradarTRS gid Var
             , trsGDP ~ NarradarTRS gdp Var
-            , ProblemType typ' gid ~ typ', TermType typ' gid ~ gdp
-            , Ord id
-            , MkNarradarProblem (InitialGoal gdp (Relative trsGDP NarrowingGen)) gid
+            , Ord id, Pretty (Identifier id)
+--            ,MkDPProblem (Relative trs NarrowingGen) trsGDP
             , Monad mp
             ) => tag -> DPProblem (InitialGoal (TermF (Identifier id)) Narrowing) (NarradarTRS (TermF (Identifier id)) Var)
                      -> Proof mp (DPProblem typ' trsGDP)
 
 initialGoalNarrowingToRelativeRewriting _ p =
-              mprod [mkInitialGoalProblem (initialGoal [goal] (relative genRules narrowingGen))
-                                          (tRS (goalRule : rr')  :: trsG)
+              mprod [mkNewProblem (initialGoal [goal] (relative genRules narrowingGen))
+                                  (tRS (goalRule : rr') :: trsG)
                       | Goal f modes <- gg
                       , let rr' = convert <$$> (rules $ getR p)
                       , let goal_vars =  [ v | (G,v) <- modes `zip` take (length modes) vars]
                       , let goalRule = goalTerm goal_vars :-> term (symbol f) (take (length modes) vars)
-                      , let goal = Goal (GoalId :: GenId (Identifier id)) []
+                    , let goal = Goal (GoalId :: GenId (Identifier id)) []
                     ]
     where
       vars = map return ([toEnum 0 ..] \\ toList (getVars p))

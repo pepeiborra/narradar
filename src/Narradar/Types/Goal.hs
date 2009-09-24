@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverlappingInstances, FlexibleInstances #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module Narradar.Types.Goal where
 
@@ -37,3 +38,6 @@ pPrintGoalAF sig pi = vcat [ pPrint (Goal f mm) | (f,pp) <- AF.toList pi
                                            , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
 
 instance Pretty id => Pretty (Goal id) where pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ map (text.show) modes)
+
+
+instance Pretty (Goal String) where pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)

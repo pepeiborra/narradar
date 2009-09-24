@@ -53,7 +53,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
           afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkNewProblem Rewriting p')
+                                AF.apply af (mkDerivedProblem Rewriting p')
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
@@ -65,7 +65,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
           afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p' $
-                                AF.apply af (mkNewProblem Rewriting p')
+                                AF.apply af (mkDerivedProblem Rewriting p')
                         | af <- Set.toList afs]
 
 instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
@@ -80,7 +80,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
           afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkNewProblem IRewriting p')
+                                AF.apply af (mkDerivedProblem IRewriting p')
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
@@ -92,13 +92,13 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
           afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p' $
-                                AF.apply af (mkNewProblem IRewriting p')
+                                AF.apply af (mkDerivedProblem IRewriting p')
                         | af <- Set.toList afs]
 
 
 instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,ProblemInfo (NarradarProblem(MkNarrowingGoal id typ0) (TermF id))
-         ,IsDPProblem typ0, Traversable (DPProblem typ0)) =>
+         ,MkDPProblem typ0 (NTRS id Var), Traversable (DPProblem typ0)) =>
     Processor (NarrowingToRewritingICLP08 heu)
               (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
               (NarradarProblem typ0 (TermF id))
@@ -114,7 +114,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
                   embed $ findGroundAF' heu pi_groundInfo af0 p R.=<< Set.fromList(rules $ getP p)
           orProblems = [ singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkNewProblem typ0 p)
+                                AF.apply af (mkDerivedProblem typ0 p)
                         | af <- Set.toList afs]
 
 

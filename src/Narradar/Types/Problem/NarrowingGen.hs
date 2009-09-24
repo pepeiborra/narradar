@@ -12,6 +12,7 @@ module Narradar.Types.Problem.NarrowingGen where
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad.Free
+import Data.Char
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
@@ -37,6 +38,7 @@ import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Problem.Infinitary
 import Narradar.Framework.Ppr
+import Narradar.Utils
 
 import Prelude hiding (pi)
 
@@ -79,6 +81,15 @@ instance MapId GenTermF where
   mapId _ (GenTerm    ) = GenTerm
   mapId _ (GoalTerm tt) = GoalTerm tt
 
+
+instance (Pretty a, Pretty id) => Pretty (GenTermF id a) where
+    pPrint (Term n []) = pPrint n
+    pPrint (Term n [x,y]) | not (any isAlpha $ show $ pPrint n) = pPrint x <+> pPrint n <+> pPrint y
+    pPrint (Term n tt) = pPrint n <> parens (hcat$ punctuate comma$ map pPrint tt)
+    pPrint (GoalTerm tt) = text "GOAL" <> parens (hcat $ punctuate comma $ map pPrint tt)
+    pPrint GenTerm     = text "GEN"
+
+
 -- --------------------------------------------------------------
 -- The class of Narrowing-as-Rewriting-with-Generators problems
 -- --------------------------------------------------------------
@@ -91,11 +102,12 @@ data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, S
 instance (IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (MkNarrowingGen p) where
   data DPProblem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::DPProblem p a}
   getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
-  mkDPProblem   (NarrowingGen p) = (NarrowingGenProblem .) . mkDPProblem p
   getP   (NarrowingGenProblem p) = getP p
   getR   (NarrowingGenProblem p) = getR p
   mapR f (NarrowingGenProblem p) = NarrowingGenProblem (mapR f p)
   mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
+instance MkDPProblem p trs => MkDPProblem (MkNarrowingGen p) trs where
+  mkDPProblem (NarrowingGen typ) = (narrowingGenProblem.) . mkDPProblem typ
 
 narrowingGen        = NarrowingGen  Rewriting
 cnarrowingGen       = NarrowingGen  IRewriting
@@ -127,17 +139,21 @@ instance Pretty p => Pretty (MkNarrowingGen p) where
 instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "IRew"
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "INarr"
 
--- Construction
+instance ApplyAF (Term (GenTermF id) v) where
+   type AFId (Term (GenTermF id) v) = GenId id
+   apply af = foldTerm return f
+     where
+       f t@(Term n tt)
+         | Just ii <- AF.lookup' (AnId n) af = either (\i  -> term n [tt !! pred i])
+                                               (\ii -> term n (select tt (pred <$> ii)))
+                                               ii
+         | otherwise = Impure t
 
-instance (Ord id, MkNarradarProblem p (GenTermF id)) =>
-    MkNarradarProblem (MkNarrowingGen p) (GenTermF id)
- where
-   type ProblemType (MkNarrowingGen p) (GenTermF id) = MkNarrowingGen (ProblemType p (GenTermF id))
-   type TermType    (MkNarrowingGen p) (GenTermF id) = TermType p (GenTermF id)
-   mkNarradarProblem (NarrowingGen typ) trs = narrowingGenProblem p where
-      p = mkNarradarProblem typ trs
-
---instance ApplyAF
+       f (GoalTerm tt)
+         | Just ii <- AF.lookup' GoalId af = either (\i  -> goalTerm [tt !! i])
+                                                    (\ii -> goalTerm (select tt (pred <$> ii)))
+                                                    ii
+       f GenTerm = genTerm
 
 -- ICap
 

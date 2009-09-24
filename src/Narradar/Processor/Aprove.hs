@@ -63,6 +63,10 @@ data Strat   = Default | OnlyReductionPair deriving (Show, Eq)
 strats = [ (Default,           "aproveStrats/narradar.strategy")
          , (OnlyReductionPair, "aproveStrats/reductionPair.strategy")]
 
+stratFor s = Data.Maybe.fromJust (Prelude.lookup s strats)
+
+aprove = apply (AproveServer 10 Default)
+
 -- ---------------
 -- Aprove proofs
 -- ---------------
@@ -212,7 +216,7 @@ callAproveSrv' (strat, timeout, p) = withSocketsDo $ withTempFile "/tmp" "ntt.tr
 
     hPutStrLn hAprove "3"                     -- Saying hello
     hPutStrLn hAprove fp                      -- Sending the problem path
-    hPutStrLn hAprove =<< getDataFileName (Data.Maybe.fromJust (Prelude.lookup strat strats)) -- strategy file path
+    hPutStrLn hAprove =<< getDataFileName (stratFor strat) -- strategy file path
 
     hPutStrLn hAprove (show timeout) -- Sending the timeout
     hFlush hAprove
@@ -267,8 +271,13 @@ instance (GetVars v trs, HasRules t v trs
             = text "comma" <> parens (hcat$ punctuate comma $ toList t) -- TODO Fix this HACK
             | Just id <- getId t
             = pPrint id <> parens (hcat$ punctuate comma $ toList t)
--- TODO  ++ ["(STRATEGY INNERMOST)"]
+
 -- TODO Relative Termination
+
+instance (GetVars v trs, HasRules t v trs
+         ,Pretty (Term t v), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
+         ) => PprTPDB (DPProblem IRewriting trs) where
+ pprTPDB p = pprTPDB (mkDerivedProblem Rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 -- ----------------
 -- Parse XML

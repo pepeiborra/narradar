@@ -46,9 +46,7 @@ import Prelude hiding (pi)
 
 data InitialGoal t p = InitialGoal
     { goals_PType     :: [Goal (TermId t)]
-    , dgraph_PType    :: Either (forall p. (IsDPProblem p) =>
-                                        DPProblem p (NarradarTRS t Var) -> DGraph t Var)
-                                (DGraph t Var)
+    , dgraph_PType    :: Maybe (DGraph t Var)
     , baseProblemType :: p}
 
 instance (Eq p, Eq (TermId t)) => Eq (InitialGoal t p) where
@@ -63,34 +61,30 @@ instance (Show p, Show (TermId t)) => Show (InitialGoal t p) where
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
-instance (IsDPProblem p, HasId t, Foldable t, Ord (Term t Var)) => IsDPProblem (InitialGoal t p) where
+instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
   data DPProblem (InitialGoal t p) a = InitialGoalProblem { goals       :: [Goal (TermId t)]
                                                           , dgraph      :: DGraph t Var
                                                           , baseProblem :: DPProblem p a}
-  getProblemType (InitialGoalProblem goals g p) = initialGoal goals (getProblemType p)
-  mkDPProblem    (InitialGoal goals (Right g)  p) = (InitialGoalProblem goals g .) . mkDPProblem p
-  mkDPProblem    (InitialGoal goals (Left mkg) p) = error ("Cannot build an InitialGoal problem with mkDPProblem,"
-                                                        ++ " use mkNarradarProblem")
+  getProblemType (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getProblemType p)
   getP   (InitialGoalProblem _     _ p) = getP p
   getR   (InitialGoalProblem _     _ p) = getR p
   mapR f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapR f p)
   mapP f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapP f p)
 
-initialGoal :: forall typ t.
-               ( Ord (Term t Var), HasId t, Foldable t
-               , IsDPProblem typ) =>
-               [Goal (TermId t)] -> typ -> InitialGoal t typ
-initialGoal gg typ = InitialGoal gg (Left mkDG) typ where
-  mkDG :: forall typ. IsDPProblem typ => DPProblem typ (NarradarTRS t Var) -> DGraph t Var
-  mkDG = mkDGraph gg
+instance (HasId t, Foldable t, MkDPProblem p trs
+         ,IsTRS t Var trs, Ord (Term t Var)
+         ) => MkDPProblem (InitialGoal t p) trs where
+  mkDPProblem (InitialGoal goals g p) = (initialGoalProblem goals g .) . mkDPProblem p
 
-initialGoalProblem :: IsDPProblem typ =>
+initialGoal gg = InitialGoal gg Nothing
+
+initialGoalProblem :: (IsTRS t Var trs, HasId t, Ord (Term t Var), IsDPProblem typ) =>
                       [Goal (TermId t)]
-                   -> Either (forall typ. IsDPProblem typ =>
-                               DPProblem typ trs -> DGraph t Var) (DGraph t Var)
+                   -> Maybe(DGraph t Var)
                    -> DPProblem typ trs -> DPProblem (InitialGoal t typ) trs
-initialGoalProblem gg (Left mkG) p = InitialGoalProblem gg (mkG p) p
-initialGoalProblem gg (Right dg) p = InitialGoalProblem gg dg p
+
+initialGoalProblem gg Nothing   p = InitialGoalProblem gg (mkDGraph gg p) p
+initialGoalProblem gg (Just dg) p = InitialGoalProblem gg dg p
 
 updateInitialGoalProblem p p0 = p{baseProblem = p0}
 
@@ -117,60 +111,6 @@ instance HTML p => HTML (InitialGoal id p) where
     toHtml InitialGoal{..} = toHtml "Initial goal " +++ baseProblemType
 
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
-
--- Construction
-
-mkInitialGoalProblem :: (InitialGoal t' p ~ ProblemType (InitialGoal (t id) p) (t id')
-                        ,t' ~ TermType (InitialGoal (t id) p) (t id')
-                        ,MkNarradarProblem (InitialGoal (t id) p) (t id')
-                        ,Foldable (t id), HasId (t id), Ord (Term (t id) Var)
-                        ,IsTRS (t id') Var trs
-                        ) => InitialGoal (t id) p -> trs -> DPProblem (InitialGoal t' p) (NarradarTRS t' Var)
-mkInitialGoalProblem = mkNarradarProblem
-
-instance (Ord id, MapId t, MkNarradarProblem p (t id), TermType p (t id) ~ t(Identifier id)
-         ,HasId (t id), Foldable (t id), Ord (Term (t id) Var), TermId (t id) ~ id, TermId (t(Identifier id)) ~ Identifier id
-         ,HasId (t(Identifier id)), Foldable (t(Identifier id)), Ord (Term (t(Identifier id)) Var)
-         ) =>
-    MkNarradarProblem (InitialGoal (t id) p) (t id)
- where
-   type ProblemType (InitialGoal (t id) p) (t id) = InitialGoal (t(Identifier id)) (ProblemType p (t id))
-   type TermType (InitialGoal (t id) p) (t id) = TermType p (t id)
-
-   mkNarradarProblem (InitialGoal gg (Right g) typ) trs = initialGoalProblem gg' (Right g') p
-    where
-      p   = mkNarradarProblem typ trs
-      gg' = IdDP <$$> gg
-      g' = R.fmap (mapTermSymbols IdDP) g
-
-   mkNarradarProblem (InitialGoal gg (Left mkG) typ) trs = initialGoalProblem gg' (Right g) p
-    where
-      p   = mkNarradarProblem typ trs
-      gg' = IdDP <$$> gg
-      g = mapTermSymbols IdDP `R.fmap` mkG (mapNarradarTRS (mapTermSymbols symbol) <$> p)
-
-
-{-
-instance (Ord id, MkNarradarProblem p (TermF id), TermType p (TermF id) ~ TermF(Identifier id)) =>
-    MkNarradarProblem (InitialGoal (TermF (Identifier id)) p) (TermF (Identifier id))
- where
-   type ProblemType (InitialGoal (TermF (Identifier id)) p) (TermF (Identifier id)) = InitialGoal (TermF(Identifier id)) (ProblemType p (TermF (Identifier id)))
-   type TermType (InitialGoal (TermF (Identifier id)) p) (TermF (Identifier id)) = TermType p (TermF (Identifier id))
-
-   mkNarradarProblem (InitialGoal gg g typ) trs = initialGoalProblem gg g p
-    where
-      p   = mkNarradarProblem typ trs
--}
-instance (Ord id, MkNarradarProblem p (TermF id), TermType p (TermF id) ~ TermF(Identifier id)) =>
-    MkNarradarProblem (InitialGoal (TermF (Identifier id)) p) (TermF id)
- where
-   type ProblemType (InitialGoal (TermF (Identifier id)) p) (TermF id) = InitialGoal (TermF(Identifier id)) (ProblemType p (TermF id))
-   type TermType (InitialGoal (TermF (Identifier id)) p) (TermF id) = TermType p (TermF id)
-
-   mkNarradarProblem (InitialGoal gg g typ) trs = initialGoalProblem gg g p
-    where
-      p   = mkNarradarProblem typ trs
-
 
 -- ICap
 

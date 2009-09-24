@@ -85,7 +85,7 @@ instance (PprTPDBDot (NarradarProblem typ id), ProblemColor (NarradarProblem typ
                                 , Margin (PVal (PointD 0.2 0.2))]
 
 class PprTPDBDot p where pprTPDBdot :: p -> Doc
-instance (Pretty id, Pretty (Prolog.Term' id Term.Var)) => PprTPDBDot (PrologProblem id) where
+instance (Pretty (Prolog.GoalF id (Prolog.Term id)), Pretty (Goal id)) => PprTPDBDot (PrologProblem id) where
   pprTPDBdot PrologProblem{..} =
     vcat (map pPrint program) $$
     vcat [text "%Query: " <+> (pPrint g) | g <- goals]

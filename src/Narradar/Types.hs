@@ -138,17 +138,18 @@ trsParser = do
       strategy = [s | Strategy s <- spec]
 
   let r   = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->  r) _ <- rr]
-      r0  = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->= r) _ <- rr]
+      r0  = [ mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r
+                  | Rules rr <- spec', TRS.Rule (l TRS.:->= r) _ <- rr]
       dps = [markDPRule (mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r)
-                            | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
+                  | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
       r' = mapTermSymbols IdFunction <$$> r
 
   case (r0, dps, strategy) of
     ([], [], [])
-        -> return $ ARewritingProblem (mkNarradarProblem Rewriting r)
+        -> return $ ARewritingProblem (mkNewProblem Rewriting r)
 
     ([], [], [InnerMost])
-        -> return $ AIRewritingProblem (mkNarradarProblem IRewriting r)
+        -> return $ AIRewritingProblem (mkNewProblem IRewriting r)
 
     ([], dps, [])
         -> return $ ARewritingProblem (mkDPProblem' Rewriting r' (tRS dps))
@@ -157,16 +158,16 @@ trsParser = do
         -> return $ AIRewritingProblem (mkDPProblem' IRewriting r' (tRS dps))
 
     (r0, [], [])
-        -> return $ ARelativeRewritingProblem (mkNarradarProblem (Relative r0 Rewriting) r)
+        -> return $ ARelativeRewritingProblem (mkNewProblem (Relative (tRS r0) Rewriting) r)
 
     ([], [], [TRS.Narrowing])
-        -> return $ ANarrowingProblem (mkNarradarProblem Narrowing r)
+        -> return $ ANarrowingProblem (mkNewProblem Narrowing r)
 
     ([], [], [ConstructorNarrowing])
-        -> return $ ACNarrowingProblem (mkNarradarProblem CNarrowing r)
+        -> return $ ACNarrowingProblem (mkNewProblem CNarrowing r)
 
     ([], [], [NarrowingG (TRS.Term id tt)])
-        -> return $ AGoalNarrowingProblem (mkInitialGoalProblem (initialGoal [Goal id tt] Narrowing) r)
+        -> return $ AGoalNarrowingProblem (mkNewProblem (initialGoal [Goal (IdFunction id) tt] Narrowing) r)
 {-
     ([], [], [ConstructorNarrowingG (TRS.Term id tt)])
         -> return $ AGoalCNarrowingProblem (mkNarradarProblem (initialGoal [Goal id tt] CNarrowing) r)

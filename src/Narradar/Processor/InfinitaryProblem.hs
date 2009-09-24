@@ -44,7 +44,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
        let (Infinitary af _) = getProblemType p
            heu = mkHeu mk p
        af' <-  Set.toList $ invariantEV heu p af
-       let p' = mkNewProblem Rewriting (iUsableRules p (rhs <$> rules (getP p)))
+       let p' = mkDerivedProblem Rewriting (iUsableRules p (rhs <$> rules (getP p)))
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
 
@@ -56,7 +56,7 @@ instance (t   ~ TermF id
          ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
          ,ProblemInfo (DPProblem (Infinitary id typ) (NTRS id Var))
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,IsDPProblem typ, Traversable (DPProblem typ)
+         ,MkDPProblem typ (NTRS id Var), Traversable (DPProblem typ)
          ) =>
     Processor (InfinitaryToRewriting heu)
               (DPProblem (Infinitary id typ) (NTRS id Var))
@@ -70,17 +70,17 @@ instance (t   ~ TermF id
        let (Infinitary af base_p) = getProblemType p
            heu = mkHeu mk p
        af' <-  Set.toList $ invariantEV heu p af
-       let p' = mkNewProblem base_p (iUsableRules p (rhs <$> rules (getP p)))
+       let p' = mkDerivedProblem base_p (iUsableRules p (rhs <$> rules (getP p)))
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
 
 
-instance (Ord id, Pretty id, IsDPProblem typ, Pretty typ, HTMLClass (MkNarrowingGoal id typ)) =>
+instance (Ord id, Pretty id, MkDPProblem typ (NTRS id Var), Pretty typ, HTMLClass (MkNarrowingGoal id typ)) =>
     Processor NarrowingGoalToInfinitary
               (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
               (DPProblem (Infinitary id typ) (NTRS id Var))
    where
-    apply _ p@(getProblemType -> NarrowingGoal pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkNewProblem (Infinitary pi p0) p
+    apply _ p@(getProblemType -> NarrowingGoal pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkDerivedProblem (Infinitary pi p0) p
 
 -- -------------
 -- Proofs

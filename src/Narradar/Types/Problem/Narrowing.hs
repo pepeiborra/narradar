@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -39,21 +39,23 @@ data Narrowing = Narrowing                          deriving (Eq, Ord, Show)
 instance IsDPProblem Narrowing where
   data DPProblem Narrowing a = NarrowingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Narrowing
-  mkDPProblem    _ = NarrowingProblem
   getR (NarrowingProblem r _) = r
   getP (NarrowingProblem _ p) = p
   mapR f (NarrowingProblem r p) = NarrowingProblem (f r) p
   mapP f (NarrowingProblem r p) = NarrowingProblem r (f p)
+instance MkDPProblem Narrowing trs where mkDPProblem _ = NarrowingProblem
+
 
 data CNarrowing = CNarrowing                          deriving (Eq, Ord, Show)
 instance IsDPProblem CNarrowing where
   data DPProblem CNarrowing a = CNarrowingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = CNarrowing
-  mkDPProblem    _ = CNarrowingProblem
   getR (CNarrowingProblem r _) = r
   getP (CNarrowingProblem _ p) = p
   mapR f (CNarrowingProblem r p) = CNarrowingProblem (f r) p
   mapP f (CNarrowingProblem r p) = CNarrowingProblem r (f p)
+instance MkDPProblem CNarrowing trs where mkDPProblem _ = CNarrowingProblem
+
 
 narrowingProblem         = NarrowingProblem
 cNarrowingProblem        = CNarrowingProblem
@@ -80,28 +82,22 @@ instance GetPairs Narrowing where getPairs _ = getNPairs
 getNPairs trs = getPairs Rewriting trs ++ getLPairs trs
 getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
 
-instance Ord id => MkNarradarProblem Narrowing (TermF id) where
-  type ProblemType Narrowing (TermF id) = Narrowing
-  type TermType    Narrowing (TermF id) = TermF (Identifier id)
-  mkNarradarProblem = mkNarradarProblemDefault
+-- ICap
 
-instance Ord id => MkNarradarProblem CNarrowing (TermF id) where
-  type ProblemType CNarrowing (TermF id) = CNarrowing
-  type TermType    CNarrowing (TermF id) = TermF(Identifier id)
-  mkNarradarProblem = mkNarradarProblemDefault
+instance (Ord v, Unify t) => ICap t v (Narrowing, NarradarTRS t v) where icap (_,trs) = icap (Rewriting,trs)
+instance (Ord v, Unify t) => ICap t v (CNarrowing, NarradarTRS t v) where icap (_,trs) = icap (IRewriting,trs)
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v trs) => ICap t v (Narrowing, trs) where icap (_,trs) = icap (Rewriting,trs)
-instance (HasRules t v trs, Unify t, GetVars v trs) => ICap t v (CNarrowing, trs) where icap (_,trs) = icap (IRewriting,trs)
+-- Usable Rules
 
-instance (Enum v, Ord (Term t v), Unify t, IsTRS t v trs, GetVars v trs, ICap t v trs) =>
-  IUsableRules t v (Narrowing, trs) where
+instance (Enum v, Ord (Term t v), Ord v, HasId t, Unify t) =>
+  IUsableRules t v (Narrowing, NarradarTRS t v) where
    iUsableRulesM (typ,trs) tt = do
       (_, trs') <- iUsableRulesM (Rewriting, trs) tt
       return (typ, trs')
    iUsableRulesVar (_, trs) = iUsableRulesVar (Rewriting, trs)
 
-instance (Enum v, Ord (Term t v), Unify t, IsTRS t v trs, GetVars v trs) =>
-  IUsableRules t v (CNarrowing, trs) where
+instance (Enum v, Ord (Term t v), Ord v, HasId t, Unify t) =>
+  IUsableRules t v (CNarrowing, NarradarTRS t v) where
    iUsableRulesM (typ,trs) tt = do
       (_, trs') <- iUsableRulesM (IRewriting, trs) tt
       return (typ, trs')

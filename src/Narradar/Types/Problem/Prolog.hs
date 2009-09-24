@@ -231,7 +231,7 @@ prologP_sk :: ( Monad m
 
 prologP_sk p0@PrologProblem{..} =
    andP PrologToTRSSKNarrowingProof p0
-     [ mkInitialGoalProblem (initialGoal [skTransformGoal goal] CNarrowing) sk_p
+     [ mkNewProblem (initialGoal [IdFunction <$> skTransformGoal goal] CNarrowing) sk_p
          | let sk_p          = prologTRS'' rr (getSignature rr)
                rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal            <- goals

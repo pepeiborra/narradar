@@ -74,7 +74,26 @@ instance (Ord id, Pretty id) => Processor RPOProc (DPProblem IRewriting  (Narrad
 -- TODO And also we do not just remove the strictly decreasing pairs,
 --      Instead we need to create two problems, one without the decreasing pairs and one
 --      without the ground right hand sides
-instance (Ord id, Pretty id) => Processor RPOProc (DPProblem Narrowing  (NarradarTRS (TermF id) Var)) (DPProblem Narrowing  (NarradarTRS (TermF id) Var)) where
+instance (Ord id, Pretty id
+         ) => Processor RPOProc
+                        (DPProblem Narrowing (NarradarTRS (TermF id) Var))
+                        (DPProblem Narrowing (NarradarTRS (TermF id) Var))
+  where
+    apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
+    apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
+    apply (RPOProc LPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpo  p)
+    apply (RPOProc MPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.mpo  p)
+
+    apply (RPOProc RPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.rpos p)
+    apply (RPOProc LPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpos p)
+    apply (RPOProc LPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpo  p)
+    apply (RPOProc MPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.mpo  p)
+
+instance (Ord id, Pretty id
+         ) => Processor RPOProc
+                        (DPProblem CNarrowing (NarradarTRS (TermF id) Var))
+                        (DPProblem CNarrowing (NarradarTRS (TermF id) Var))
+  where
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
     apply (RPOProc LPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpo  p)

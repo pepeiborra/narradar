@@ -44,7 +44,7 @@ data AProveReductionPairProcessor heu = AProveReductionPairProcessor (MkHeu heu)
 instance (p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
          ,trs ~ NTRS id Var
          ,t   ~ TermF id, Pretty (t Doc)
-         ,IsDPProblem typ, Pretty typ, Traversable(DPProblem typ)
+         ,MkDPProblem typ (NTRS id Var), Pretty typ, Traversable(DPProblem typ)
          ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
          ,Pretty id, Ord id, Lattice (AF_ id), PolyHeuristic heu id
          ,HTMLClass (MkNarrowingGoal id typ)) =>
@@ -62,10 +62,10 @@ instance (p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
     afs = unEmbed $ do
        let p_f = getVariant p dps
        af0    <- embed (findGroundAF' heu pi_groundInfo af_init p R.=<< Set.fromList (rules dps))
-       let u_p = iUsableRules (mkNewProblem (NarrowingGoal af0 basetyp) p_f) (rhs <$> rules dps)
+       let u_p = iUsableRules (mkDerivedProblem (NarrowingGoal af0 basetyp) p_f) (rhs <$> rules dps)
        af1    <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
-       let u_p' = iUsableRules (mkNewProblem (NarrowingGoal af1 basetyp) u_p) (rhs <$> rules dps)
-           rp   = AF.apply af1 (mkNewProblem basetyp u_p')
+       let u_p' = iUsableRules (mkDerivedProblem (NarrowingGoal af1 basetyp) u_p) (rhs <$> rules dps)
+           rp   = AF.apply af1 (mkDerivedProblem basetyp u_p')
        return (Tuple31 (rp, af1, u_p'))   -- forcing unicity of the rewriting problem
 
     orProblems =

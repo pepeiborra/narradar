@@ -61,38 +61,32 @@ import Data.Term.Rules
 -- -------------------------
 type NarradarProblem typ t = DPProblem typ (NarradarTRS t Var)
 
--- | Construct the set of pairs corresponding to a problem type and a TRS R of rules.
-class (IsDPProblem typ, IsDPProblem (ProblemType typ t)) => MkNarradarProblem typ t where
-    type ProblemType typ t :: *
-    type TermType    typ t :: * -> *
-    mkNarradarProblem :: ( IsTRS t Var trs
-                         ) => typ -> trs -> DPProblem (ProblemType typ t) (NarradarTRS (TermType typ t) Var)
-
-
-mkNarradarProblemDefault typ trs = mkDPProblem' typ (rules rr') (getPairs typ rr') where
+mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
    rr' = mapTermSymbols IdFunction <$$> rules trs
 
-mkNewProblem typ p = mkDPProblem typ (getR p) (getP p)
+mkDerivedProblem typ p = mkDPProblem typ (getR p) (getP p)
 
 mkDPProblem' :: ( v ~ Var
                 , rr ~ [Rule t v]
                 , ntrs ~ NarradarTRS t v
                 , Unify t, HasId t, Ord (Term t v)
-                , IsDPProblem typ, Traversable (DPProblem typ)
-                , ICap t v (typ, rr), IUsableRules t v (typ, rr)
+                , MkDPProblem typ (NarradarTRS t v), Traversable (DPProblem typ)
                 , ICap t v (typ, ntrs)
+                , IUsableRules t v (typ, ntrs)
                 ) => typ -> [Rule t v] -> [Rule t v] -> DPProblem typ (NarradarTRS t v)
 mkDPProblem' typ rr dps = p where
       p     = mkDPProblem typ (tRS rr) dptrs
       dptrs = dpTRS typ rr dps (getEDG p)
 
+
+
 -- ---------------------------
 -- Computing Dependency Pairs
 -- ---------------------------
 class GetPairs typ where
-  getPairs :: ( HasRules t v trs, HasSignature trs, SignatureId trs ~ Identifier id
-              , t ~ f (Identifier id), Ord id
-              , Foldable t, MapId f, HasId t, TermId t ~ Identifier id)
+  getPairs :: ( HasRules t v trs, HasSignature trs, t ~ f (Identifier id), Ord id
+              , Foldable t, MapId f, HasId t
+              , SignatureId trs ~ TermId t)
                => typ -> trs -> [Rule t v]
 instance GetPairs typ where
   getPairs _ trs =
@@ -196,7 +190,8 @@ instance (Ord v, GetVars v trs, Traversable (DPProblem typ)) => GetVars v (DPPro
 expandDPair :: ( problem ~ DPProblem typ
                , HasId t, Foldable t, Unify t, Ord (Term t v), Ord v, Enum v
                , Traversable problem, IsDPProblem typ
-               , ICap t v (typ, NarradarTRS t v), ICap t v (typ, [Rule t v]), IUsableRules t v (typ, [Rule t v])
+               , ICap t v (typ, NarradarTRS t v)
+               , IUsableRules t v (typ, NarradarTRS t v)
                ) =>
                problem (NarradarTRS t v) -> Int -> [Rule t v] -> problem (NarradarTRS t v)
 expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
