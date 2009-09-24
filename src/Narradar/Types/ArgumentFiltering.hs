@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
+{-# LANGUAGE GADTs #-}
 
 module Narradar.Types.ArgumentFiltering where
 
@@ -232,9 +233,16 @@ isSoundAF     af trs = null (extraVars $ apply af trs)
 -- * Heuristics
 -- -----------
 -- | The type of heuristics
-data Heuristic (id :: *) = Heuristic { runHeu :: forall v t. (Foldable t, HasId t, TermId t ~ id) =>
-                                                             AF_ id -> Term t v -> Position -> Set (id, Int)
-                                     , isSafeOnDPs :: Bool }
+data Heuristic (id :: *) where
+      Heuristic :: (forall t v. (Foldable t, HasId t, TermId t ~ id) =>
+                    AF_ id -> Term t v -> Position -> Set (id, Int))
+                -> Bool
+                -> Heuristic id
+
+runHeu :: (Foldable t, HasId t, TermId t ~ id) => Heuristic id -> AF_ id -> Term t v -> Position -> Set (id,Int)
+runHeu (Heuristic f _) = f
+isSafeOnDPs :: Heuristic id -> Bool
+isSafeOnDPs (Heuristic _ b) = b
 
 -- | Heuristics with overloading
 class PolyHeuristic tag id where runPolyHeu :: tag id -> Heuristic id
@@ -263,16 +271,16 @@ bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
                          (cond (isDPSymbol.fst) ==> notNullArity ..&.. noUs))
      `or`
 -}
-
 innermost, outermost :: forall id . Ord id => Heuristic id
+
 innermost = Heuristic f True where
---   f :: forall v t . (HasId t, Foldable t, TermId t ~ id) => AF_ id -> Term t v -> Position -> Set (id, Int)
    f _ _ [] = mempty
-   f _ t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
+   f _ t pos | Just root <- getId (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
 outermost = Heuristic f False where
   f _ _ [] = mempty
-  f _ t pos | Just root <- rootSymbol t = Set.singleton (root, head pos)
+  f _ t pos | Just root <- getId t = Set.singleton (root, head pos)
+
 
 predHeuAll strat pred = f where
   f _  _ []  = mempty
