@@ -101,7 +101,7 @@ rpoAF_NDP allowCol con p = runRPOAF con allowCol (getSignature p) $ \dict -> do
     return ([ r | (r,False) <- zip [0..] decreasing]
            ,[ r | (r,False) <- zip [0..] af_ground])
 
-runRPOAF con allowCol sig f = runSAT $ do
+runRPOAF con allowCol sig f = do
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (con sig) ids
   if allowCol

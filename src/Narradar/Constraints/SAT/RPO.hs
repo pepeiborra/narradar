@@ -30,7 +30,7 @@ mpoDP  = rpoGen mpoSymbol
 lposDP = rpoGen lpopSymbol
 rpoDP  = rpoGen symbol
 
-rpoGen inn p = isSAT $ do
+rpoGen inn p = do
   let sig        = getSignature p
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (inn sig) ids

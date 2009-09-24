@@ -1,5 +1,6 @@
 {-# LANGUAGE UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Narradar.Constraints.SAT.Common
     ( module Narradar.Constraints.SAT.Common
