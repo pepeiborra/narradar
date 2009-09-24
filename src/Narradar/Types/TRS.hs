@@ -19,12 +19,13 @@ import Data.Array as A
 import Data.Array.IArray as A (amap)
 import Data.Graph (Graph, buildG, edges)
 import Data.Foldable as F (Foldable, toList, sum, foldMap)
-import Data.Maybe (catMaybes, isJust)
+import Data.Maybe (catMaybes, isJust, isNothing)
 import Data.Monoid
 import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Strict as Strict
 import Data.Strict.Tuple ((:!:), Pair(..))
 import Data.Traversable (Traversable)
 import qualified Data.Traversable as T
@@ -40,7 +41,7 @@ import Narradar.Constraints.ICap
 import Narradar.Constraints.Unify
 import Narradar.Constraints.UsableRules
 import Narradar.Framework
-import Narradar.Framework.Ppr
+import Narradar.Framework.Ppr as Ppr
 import Narradar.Utils
 
 #ifdef HOOD
@@ -163,6 +164,13 @@ instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
     extraVars (PrologTRS rr _) = extraVars rr
     extraVars (DPTRS a _ _ _) = extraVars (A.elems a)
 
+instance (ICap t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap t v (typ, [Rule t v]) where
+    icap (typ, p) = icap (typ, mkTRS p)
+
+instance (IUsableRules t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => IUsableRules t v (typ, [Rule t v]) where
+    iUsableRulesM   (typ, p) = liftM (second rules) . iUsableRulesM (typ, mkTRS p)
+    iUsableRulesVar (typ,p)  = iUsableRulesVar (typ, mkTRS p)
+
 -- ------------
 -- Constructors
 -- ------------
@@ -187,10 +195,11 @@ dpTRS :: ( SignatureId trs ~ TermId t
          , Ord (Term t v), HasId t, Unify t, Enum v
          , HasRules t v trs, HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
          , IsDPProblem typ, IUsableRules t v (typ, trs), ICap t v (typ, trs)
+         , Pretty trs, Pretty (Term t v), Pretty v
          ) =>
          typ -> trs -> trs -> Graph -> NarradarTRS t v
 
-dpTRS typ trs dps edges = DPTRS dps_a edges unifs (getSignature dps)
+dpTRS typ trs dps edges = dpTRS' dps_a edges unifs
     where dps_a   = listArray (0, length (rules dps) - 1) (rules dps)
           unifs   = runIcap dps (computeDPUnifiers typ trs dps)
 
@@ -248,6 +257,7 @@ computeDPUnifiers :: forall unif typ trs t v term m.
                      , Enum v, Ord v, Ord term, Unify t
                      , IUsableRules t v (typ, trs), ICap t v (typ, trs)
                      , HasRules t v trs, IsTRS t v trs, GetFresh t v trs, GetVars v trs
+                     , Pretty (Term t v), Pretty v, Pretty trs
                      , MonadFresh v m) =>
                      typ -> trs -> trs -> m(unif :!: unif)
 --computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
@@ -257,12 +267,7 @@ computeDPUnifiers typ trs dps = do
 
    u_rr <- listArray (0,ldps) `liftM` P.sequence [snd `liftM` iUsableRulesM p_f [r] | _:->r <- the_dps]
 
-   rhss'<- P.mapM (\(_:->r) -> icap p_f r) (rules dps)
-   unif <- runListT $ do
-                (x, r')      <- liftL $ zip [0..] rhss'
-                (y, l :-> _) <- liftL $ zip [0..] the_dps
-                let unifier = unify l r'
-                return ((x,y), unifier)
+   unif <- computeDirectUnifiers p_f dps
    unifInv <- runListT $ do
                 (x, _ :-> r) <- liftL $ zip [0..] the_dps
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
@@ -271,13 +276,24 @@ computeDPUnifiers typ trs dps = do
                 let unifier = unify l' r
                 return ((x,y), unifier)
 
-   return(   array ( (0,0), (ldps,ldps) ) unif
-         :!: array ( (0,0), (ldps,ldps) ) unifInv)
+   return (unif :!: array ( (0,0), (ldps,ldps) ) unifInv)
+
  where
    the_dps = rules dps
    liftL = ListT . return
    ldps  = length the_dps - 1
 
+computeDirectUnifiers p_f (rules -> the_dps) = do
+   rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p_f) the_dps
+   unif <- runListT $ do
+                (x, r')      <- liftL $ zip [0..] rhss'
+                (y, l :-> _) <- liftL $ zip [0..] the_dps
+                let unifier = unify l r'
+--                pprTrace (text "unify" <+> pPrint l <+> pPrint r' <+> equals <+> pPrint unifier) (return ())
+                return ((x,y), unifier)
+   return $ array ( (0,0), (ldps, ldps) ) unif
+ where liftL = ListT . return
+       ldps  = length the_dps - 1
 -- -------------------------------
 -- Auxiliary Data.Term instances
 -- -------------------------------
@@ -299,16 +315,35 @@ instance HasRules t v a => HasRules t v (Map k a) where rules = foldMap rules . 
 -- -------------
 isValidUnif :: ( p   ~ DPProblem typ
                , Ord v, Enum v, Unify t
-               , Traversable p, IsDPProblem typ
-               , ICap t v (p (NarradarTRS t v))
+               , Traversable p, IsDPProblem typ, Pretty typ
+               , ICap t v (typ,NarradarTRS t v)
+               , Pretty v, Pretty (Term t v)
                ) => p (NarradarTRS t v) -> Bool
-isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _) =
-    and $ runIcap p $ runListT $ do
-         (x, _ :-> r) <- liftL $ A.assocs dps
-         (y, l :-> _) <- liftL $ A.assocs dps
-         r' <- getFresh r >>= icap p
-         return (unifies l r' == isJust (unif A.! (x,y)))
+isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _)
+  | valid = True
+  | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
+                          text "Problem type:" <+> pPrint (getProblemType p) $$
+                          text "DPS:"      <+> pPrint (elems dps) $$
+                          text "Unifiers:" <+> pPrint unif        $+$ Ppr.empty $+$
+                          text "Computed:" <+> pPrint unif'       $+$ Ppr.empty $+$
+                          text "Expected:" <+> pPrint (amap (\b -> if b then "Y" else "N") validUnif)
+                         )
+                         valid
   where
-    liftL = ListT . return
+  liftL = ListT . return
+  l     = length (rules $ getP p) - 1
+  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' -> computeDirectUnifiers (getProblemType p,rr') (getP p))
+  validUnif = array ( (0,0), (l,l)) $ runIcap p $ runListT $ do
+            (x, _ :-> r) <- liftL $ A.assocs dps
+            (y, l :-> _) <- liftL $ A.assocs dps
+            r' <- getFresh r >>= icap p
+--            pprTrace (text "unify" <+> pPrint l <+> pPrint r') (return ())
+            return ((x,y),unifies l r')
+
+  valid = and $ zipWith (\subst unifies -> if unifies then isJust subst else isNothing subst) (elems unif) (elems validUnif)
+
 
 isValidUnif _ = True
+
+
+instance Pretty (Unifiers t v) where pPrint = pPrint . amap (maybe "N" (const "Y"))

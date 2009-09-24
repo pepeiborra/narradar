@@ -73,6 +73,7 @@ mkDPProblem' :: ( v ~ Var
                 , MkDPProblem typ (NarradarTRS t v), Traversable (DPProblem typ)
                 , ICap t v (typ, ntrs)
                 , IUsableRules t v (typ, ntrs)
+                , Pretty (Term t v), Pretty typ
                 ) => typ -> [Rule t v] -> [Rule t v] -> DPProblem typ (NarradarTRS t v)
 mkDPProblem' typ rr dps = p where
       p     = mkDPProblem typ (tRS rr) dptrs
@@ -101,6 +102,7 @@ getEDG p = filterSEDG p $ getdirectEDG p
 getdirectEDG :: (Traversable (DPProblem typ)
                 ,IsDPProblem typ, Enum v, Ord v, Unify t
                 ,ICap t v (typ, NarradarTRS t v)
+                ,Pretty v, Pretty (Term t v), Pretty typ
                 ) => DPProblem typ (NarradarTRS t v) -> G.Graph
 getdirectEDG p@(getP -> DPTRS dps _ (unif :!: _) _) =
     assert (isValidUnif p) $
@@ -192,6 +194,7 @@ expandDPair :: ( problem ~ DPProblem typ
                , Traversable problem, IsDPProblem typ
                , ICap t v (typ, NarradarTRS t v)
                , IUsableRules t v (typ, NarradarTRS t v)
+               , Pretty (Term t v), Pretty v, Pretty typ
                ) =>
                problem (NarradarTRS t v) -> Int -> [Rule t v] -> problem (NarradarTRS t v)
 expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)

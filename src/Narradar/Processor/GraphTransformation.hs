@@ -64,7 +64,7 @@ instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Id
 instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
-         ,Unify t, Pretty (Term t Var), Ord (Term t Var)
+         ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
          ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (NarradarProblem typ t)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
@@ -78,7 +78,7 @@ instance (trs ~ NarradarTRS t v
 instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
-         ,Unify t, Pretty (Term t Var), Ord (Term t Var)
+         ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
          ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (NarradarProblem typ t)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
@@ -130,7 +130,7 @@ narrowing, narrowing_innermost
              ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo p
              ,IUsableRules t v (typ, trs), ICap t v (typ,trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ,[Rule t v])
-             ,Pretty (Term t v)
+             ,Pretty (Term t v), Pretty v, Pretty typ
              ,Monad mp
              ) =>
              DPProblem typ trs -> [Proof mp (DPProblem typ trs)]
@@ -210,7 +210,7 @@ instantiation, finstantiation
              ,TermId t ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v
              ,IsDPProblem typ, Traversable (DPProblem typ)
-             , Pretty (Term t v), Ord(Term t v)
+             ,Pretty (Term t v), Ord(Term t v), Pretty v, Pretty typ
              ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
              ,Monad mp

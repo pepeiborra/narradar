@@ -42,8 +42,9 @@ data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
 
 instance ( trs ~ NarradarTRS t Var
          , problem ~ DPProblem typ trs, ProblemInfo problem
-         , IsDPProblem typ, Pretty typ, Traversable (DPProblem typ)
+         , MkDPProblem typ (NarradarTRS t Var), Traversable (DPProblem typ)
          , Unify t, ICap t Var (typ,trs)
+         , Pretty (Term t Var), Pretty typ
          ) =>
     Processor DependencyGraphSCC (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
   apply DependencyGraphSCC = sccProcessor
@@ -52,8 +53,9 @@ instance ( trs ~ NarradarTRS t Var
 instance ( TermId t ~ Identifier id0, Ord id0
          , trs ~ NarradarTRS t Var
          , problem ~ DPProblem (InitialGoal t typ0) trs, ProblemInfo problem
-         , IsDPProblem typ0, Pretty typ0, HTML typ0, HTMLClass typ0, Traversable (DPProblem typ0)
+         , MkDPProblem typ0 (NarradarTRS t Var), Traversable (DPProblem typ0)
          , HasId t, Unify t, Ord (Term t Var)
+         , Pretty (Term t Var), Pretty typ0
          , ICap t Var (typ0,trs), ProblemColor problem, PprTPDBDot problem
          ) =>
     Processor DependencyGraphSCC
@@ -65,8 +67,9 @@ instance ( TermId t ~ Identifier id0, Ord id0
 
 instance ( trs ~ NarradarTRS t Var
          , problem ~ DPProblem typ trs, ProblemInfo problem
-         , IsDPProblem typ, Pretty typ, HTML typ, HTMLClass typ, Traversable (DPProblem typ)
+         , MkDPProblem typ (NarradarTRS t Var), Traversable (DPProblem typ)
          , HasId t, Unify t, Ord (Term t Var)
+         , Pretty (Term t Var), Pretty typ
          , ICap t Var (typ,trs), ProblemColor problem, PprTPDBDot problem
          ) =>
     Processor DependencyGraphCycles (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
@@ -122,8 +125,9 @@ instance ProofInfo DependencyGraphProof
 -- ---------------
 type GraphProcessor typ t mp =   (problem ~ DPProblem typ trs, ProblemInfo problem
                                  ,trs     ~ NarradarTRS t Var
-                                 ,IsDPProblem typ, Traversable (DPProblem typ)
-                                 ,Pretty typ
+                                 ,MkDPProblem typ (NarradarTRS t Var)
+                                 ,Traversable (DPProblem typ)
+                                 ,Pretty (Term t Var), Pretty typ
                                  ,Unify t, ICap t Var (typ, trs)
                                  ,Monad mp
                                  ) =>
