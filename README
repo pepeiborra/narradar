@@ -1,1 +1,23 @@
 
+Introduction
+------------
+
+Narradar is a tool for automatic proving of termination of logic programs and narrowing.
+
+author: Pepe Iborra
+maintainer: pepeiborra@gmail.com
+homepage: http://github.com/pepeiborra/narradar
+
+
+Installation
+------------
+
+There is a hackage repository available to facilitate the installation of Narradar:
+
+http://safe-tools.dsic.upv.es/~pepe/haskell
+
+The hackage repository contains updated versions of all the dependencies.
+
+Other
+-----
+Consult the LICENSE file for copyright issues
