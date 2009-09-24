@@ -46,7 +46,7 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends:  muterm-framework, base, prettyclass, array, containers, process, directory,
+  build-Depends:  muterm-framework >= 1.1.1, base, prettyclass, array, containers, process, directory,
      bytestring, GraphSCC,
      xhtml, tagsoup, curl, derive,  network, filepath, graphviz, parallel, strict,
      term >= 0.1.20090915, TRSParser, parsec, prolog >= 0.1.20090915, prolog-tools >= 0.1.20090915, unix, template-haskell,
