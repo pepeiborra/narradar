@@ -1,8 +1,11 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE OverlappingInstances, FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
-module Narradar ( narradarMain, narradarMain', Options(..), defOpts
+module Narradar ( narradarMain, Options(..), defOpts
                 , module Narradar.Framework
 --                , module Narradar.Solver
                 , module Narradar.Processor.Graph
@@ -13,13 +16,16 @@ module Narradar ( narradarMain, narradarMain', Options(..), defOpts
                 , module Narradar.Processor.InfinitaryProblem
                 , module Narradar.Processor.NarrowingProblem
                 , module Narradar.Processor.InitialGoalNarrowingProblem
+                , module Narradar.Processor.ExtraVariables
 --                , module Narradar.Processor.PrologProblem
                 , module Narradar.Types
                 ) where
 
 
 import Control.Monad.Free
+import Data.Foldable (Foldable)
 import Data.Maybe
+import Data.Monoid
 import System.Cmd
 import System.Environment
 import System.Exit
@@ -27,6 +33,7 @@ import System.IO
 import System.Posix.Process
 import System.Posix.Signals
 import System.Console.GetOpt
+import Text.ParserCombinators.Parsec (parse, runParser)
 import Text.Printf
 
 import Prelude as P
@@ -47,17 +54,10 @@ import Narradar.Processor.NarrowingProblem
 import Narradar.Processor.InitialGoalNarrowingProblem
 import Narradar.Processor.UsableRules
 import Narradar.Processor.ReductionPair
+import Narradar.Processor.ExtraVariables
+
 
 {-
-import Narradar.Solver hiding ( prologSolver, prologSolver'
-                              , narradarSolver, narradarSolver'
-                              , narrowingSolver )
-
-import Narradar.Processor.PrologProblem
--}
-
---main :: IO ()
-
 narradarMain solver = do
   (flags@Options{..}, _, _errors) <- getOptions
   ~(yes, sol, log) <- (solver flags input)
@@ -75,27 +75,24 @@ narradarMain solver = do
         system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
         -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
         P.return ()
+-}
 
-
-narradarMain' :: (Dispatch
-                        (InitialGoal (Identifier String) CNarrowing)
-                        (NarradarTRS (Identifier String) Var),
-                      Dispatch
-                        (InitialGoal (Identifier String) Narrowing)
-                        (NarradarTRS (Identifier String) Var),
-                      Dispatch
-                        (Narradar.Types.Problem.Relative.Relative
-                           (NarradarTRS (Identifier String) Var) Rewriting)
-                        (NarradarTRS (Identifier String) Var),
-                      Dispatch CNarrowing (NarradarTRS (Identifier String) Var),
-                      Dispatch Narrowing (NarradarTRS (Identifier String) Var),
-                      Dispatch IRewriting (NarradarTRS (Identifier String) Var),
-                      Dispatch Rewriting (NarradarTRS (Identifier String) Var)
-                ) => (Proof () -> IO (Solution (Proof ()))) -> IO ()
-narradarMain' runProof = do
+narradarMain :: forall mp.
+                 (IsMZero mp, Foldable mp
+                 ,Dispatch (DPProblem  (InitialGoal (TermF (Identifier String)) CNarrowing) (NTRS (Identifier String) Var))
+                 ,Dispatch (DPProblem  (InitialGoal (TermF (Identifier String))  Narrowing) (NTRS (Identifier String) Var))
+                 ,Dispatch (DPProblem  (Relative (NTRS (Identifier String) Var) Rewriting) (NTRS (Identifier String) Var))
+                 ,Dispatch (DPProblem  Narrowing  (NTRS (Identifier String) Var))
+                 ,Dispatch (DPProblem  CNarrowing (NTRS (Identifier String) Var))
+                 ,Dispatch (DPProblem  Rewriting  (NTRS (Identifier String) Var))
+                 ,Dispatch (DPProblem  IRewriting (NTRS (Identifier String) Var))
+                 ,Dispatch (PrologProblem String)
+                 ) => (forall a. mp a -> Maybe a) -> IO ()
+narradarMain run = do
   (flags@Options{..}, _, _errors) <- getOptions
 
-  let printDiagram proof = withTempFile "." "narradar.dot" $ \fp h -> do
+  let printDiagram :: Proof mp a -> IO ()
+      printDiagram proof = withTempFile "." "narradar.dot" $ \fp h -> do
         let dotSrc = dotProof' DotProof{showFailedPaths = verbose > 1} proof
         hPutStrLn h dotSrc
         hClose h
@@ -104,23 +101,32 @@ narradarMain' runProof = do
 #endif
         ignore $ system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
 
-  let processYesNo sol = when (verbose>0) $ do
-                          print $ ppr sol
-                          when diagrams $ printDiagram sol
-
-  a_problem <- parseTRS input
+  a_problem <- eitherM $ runParser narradarParser mempty "INPUT" input
 
   let proof = dispatchAProblem a_problem
-  sol <- runProof proof
+  let sol = run (runProof proof)
 
   case sol of
-    YES sol -> putStrLn "YES" >> processYesNo sol
-    NO  sol -> putStrLn "NO"  >> processYesNo sol
-    MAYBE   -> do
+    Just sol -> do putStrLn "YES"
+                   when (verbose>0) $ do
+                          print $ pPrint sol
+                          when diagrams $ printDiagram sol
+
+    Nothing  -> do
              putStrLn "MAYBE"
              when (diagrams && verbose > 0) $ do
-                  print $ ppr proof
-                  printDiagram proof
+                  print $ pPrint proof
+                  printDiagram (sliceWorkDone proof)
+  where
+    dispatchAProblem (ARewritingProblem p)         = dispatch p
+    dispatchAProblem (AIRewritingProblem p)        = dispatch p
+    dispatchAProblem (ANarrowingProblem p)         = dispatch p
+    dispatchAProblem (ACNarrowingProblem p)        = dispatch p
+    dispatchAProblem (ARelativeRewritingProblem p) = dispatch p
+    dispatchAProblem (AGoalNarrowingProblem p)     = dispatch p
+    dispatchAProblem (AGoalCNarrowingProblem p)    = dispatch p
+    dispatchAProblem (APrologProblem p)            = dispatch p
+
 
 -- ------------------------------
 -- Command Line Options handling

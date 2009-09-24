@@ -41,14 +41,17 @@ import Narradar.Utils.Html
 
 data AProveReductionPairProcessor heu = AProveReductionPairProcessor (MkHeu heu) Int
 
-instance (p   ~ NarradarProblem (NarrowingGoalGen id typ) id, PprTPDBDot p, ProofInfo p
-         ,p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
-         ,trs ~ NarradarTRS id Var
-         ,t   ~ TermF id, Ppr (t Doc)
-         ,IsDPProblem typ, Traversable(DPProblem typ)
+instance (p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
+         ,trs ~ NTRS id Var
+         ,t   ~ TermF id, Pretty (t Doc)
+         ,MkDPProblem typ (NTRS id Var), Pretty typ, Traversable(DPProblem typ)
          ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
-         ,Ppr id, Ord id, Lattice (AF_ id), PolyHeuristic heu id (TermF id)) =>
-    Processor (AProveReductionPairProcessor heu) (NarradarTRS id Var) (NarrowingGoalGen id typ) (NarrowingGoalGen id typ) where
+         ,Pretty id, Ord id, Lattice (AF_ id), PolyHeuristic heu id
+         ,HTMLClass (MkNarrowingGoal id typ)) =>
+    Processor (AProveReductionPairProcessor heu)
+              (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
+              (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
+ where
   applySearch (AProveReductionPairProcessor mkH timeout) p
     = orProblems
    where
@@ -59,10 +62,10 @@ instance (p   ~ NarradarProblem (NarrowingGoalGen id typ) id, PprTPDBDot p, Proo
     afs = unEmbed $ do
        let p_f = getVariant p dps
        af0    <- embed (findGroundAF' heu pi_groundInfo af_init p R.=<< Set.fromList (rules dps))
-       let u_p = iUsableRules (mkNewProblem (NarrowingGoal af0 basetyp) p_f) (rhs <$> rules dps)
+       let u_p = iUsableRules (mkDerivedProblem (NarrowingGoal af0 basetyp) p_f) (rhs <$> rules dps)
        af1    <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
-       let u_p' = iUsableRules (mkNewProblem (NarrowingGoal af1 basetyp) u_p) (rhs <$> rules dps)
-           rp   = AF.apply af1 (mkNewProblem basetyp u_p')
+       let u_p' = iUsableRules (mkDerivedProblem (NarrowingGoal af1 basetyp) u_p) (rhs <$> rules dps)
+           rp   = AF.apply af1 (mkDerivedProblem basetyp u_p')
        return (Tuple31 (rp, af1, u_p'))   -- forcing unicity of the rewriting problem
 
     orProblems =
@@ -74,7 +77,7 @@ instance (p   ~ NarradarProblem (NarrowingGoalGen id typ) id, PprTPDBDot p, Proo
               Nothing -> singleP (AProveReductionPairProof the_af [OutputXml $ pack xml]) p' rp P.>>= \p'' ->
                          failP AProveReductionPairFail p''
               Just basic_nonDecreasingDPs ->
-               let text_nonDecreasingDPs = Set.fromList(show <$> (ppr <$$> basic_nonDecreasingDPs))
+               let text_nonDecreasingDPs = Set.fromList(show <$> (pPrint <$$> basic_nonDecreasingDPs))
                    nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- [0..] `zip` rules (getP up)
                                                              , show (pprDP <$> AF.apply the_af dp) `Set.member` text_nonDecreasingDPs]
                in assert (Set.size nonDecreasingDPs == length basic_nonDecreasingDPs) $
@@ -90,7 +93,7 @@ instance (p   ~ NarradarProblem (NarrowingGoalGen id typ) id, PprTPDBDot p, Proo
      ]
 
     heu   = AF.mkHeu mkH p
-    pprDP = foldTerm (\v -> text "v" <> int (fromEnum v)) ppr
+    pprDP = foldTerm (\v -> text "v" <> int (fromEnum v)) pPrint
 
 -- -------
 -- Proof
@@ -100,7 +103,7 @@ data AProveReductionPairProof id where AProveReductionPairProof :: AF_ id -> [Ou
                                        AProveReductionPairFail :: AProveReductionPairProof ()
 
 
-instance Ppr (AProveReductionPairProof id) where ppr _ = text "External: Aprove (Reduction Pair)"
+instance Pretty (AProveReductionPairProof id) where pPrint _ = text "External: Aprove (Reduction Pair)"
 
 instance HTML (AProveReductionPairProof id) where
  toHtml (AProveReductionPairProof _ outputs)
@@ -112,7 +115,7 @@ instance ProofInfo (AProveReductionPairProof id)
 -- Implementation
 -- ----------------
 
---aproveXML :: (Ord v, Ppr v, Enum v, Ord id, Ppr id, Lattice (AF_ id)) => Int -> DPProblem typ trs -> IO String
+--aproveXML :: (Ord v, Pretty v, Enum v, Ord id, Pretty id, Lattice (AF_ id)) => Int -> DPProblem typ trs -> IO String
 aproveXML timeout = memoExternalProc (aproveSrvXML OnlyReductionPair timeout)
 
 newtype Tuple31 a b c = Tuple31 {tuple31::(a,b,c)}

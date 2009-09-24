@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.2
-version:             0.2.20090823
+version:             0.2.20090917
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -46,10 +46,10 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends:  muterm-framework, base, pretty, array, containers, process, directory,
+  build-Depends:  muterm-framework, base, prettyclass, array, containers, process, directory,
      bytestring, GraphSCC,
-     xhtml, tagsoup, curl, derive, cgi, stm, network, filepath, graphviz, parallel, strict,
-     term, TRSParser, parsec, prolog >= 0.1.20090305, prolog-tools, unix, template-haskell,
+     xhtml, tagsoup, curl, derive,  network, filepath, graphviz, parallel, strict,
+     term >= 0.1.20090915, TRSParser, parsec, prolog >= 0.1.20090915, prolog-tools >= 0.1.20090915, unix, template-haskell,
      control-monad-free >= 0.4.1,logict, rmonad, alacarte, satchmo, satchmo-backends, fgl
   exposed-modules:
      Narradar,
@@ -75,6 +75,7 @@ Library
      Narradar.Types.Problem.Prolog,
      Narradar.Types.Problem.Rewriting,
      Narradar.Types.Problem.Narrowing,
+     Narradar.Types.Problem.NarrowingGen,
      Narradar.Types.Problem.NarrowingGoal,
      Narradar.Types.Problem.Relative,
      Narradar.Types.Problem.InitialGoal,
@@ -83,18 +84,18 @@ Library
      Narradar.Types.TRS,
      Narradar.Types.Var,
      Narradar.Processor.Aprove,
+     Narradar.Processor.ExtraVariables,
      Narradar.Processor.Graph,
-     Narradar.Processor.RPO,
      Narradar.Processor.GraphTransformation,
      Narradar.Processor.NarrowingProblem,
      Narradar.Processor.InitialGoalNarrowingProblem,
      Narradar.Processor.InfinitaryProblem,
---     Narradar.Processor.PrologProblem,
      Narradar.Processor.ReductionPair,
+     Narradar.Processor.RPO,
      Narradar.Processor.UsableRules,
      Narradar.Utils,
      Narradar.Utils.Html,
---     Control.Monad.Supply,
+     Control.Monad.Supply,
      Lattice
   other-modules:
      Data.UniqueList,

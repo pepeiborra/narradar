@@ -37,8 +37,8 @@ data Symbol a = Symbol { the_symbol   :: a
 instance Show a => Show (Symbol a) where
     show Symbol{the_symbol} = show the_symbol
 
-instance Ppr a => Ppr (Symbol a) where
-    ppr Symbol{the_symbol} = ppr the_symbol
+instance Pretty a => Pretty (Symbol a) where
+    pPrint Symbol{the_symbol} = pPrint the_symbol
 
 instance Eq   a => Eq   (Symbol a) where
     a@Symbol{} == b@Symbol{} = the_symbol a == the_symbol b

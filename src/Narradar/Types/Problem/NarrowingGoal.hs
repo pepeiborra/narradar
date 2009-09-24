@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -35,71 +35,68 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
+import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Problem.Infinitary
+import Narradar.Types.Term
 import Narradar.Framework.Ppr
 
 import Prelude hiding (pi)
 
-type NarrowingGoal  id = NarrowingGoalGen id Rewriting
-type CNarrowingGoal id = NarrowingGoalGen id IRewriting
+type NarrowingGoal  id = MkNarrowingGoal id Rewriting
+type CNarrowingGoal id = MkNarrowingGoal id IRewriting
+instance GetPairs (NarrowingGoal id) where getPairs _ = getNPairs
 
-data NarrowingGoalGen id p = NarrowingGoal {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
-instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (NarrowingGoalGen id p) where
-  data DPProblem (NarrowingGoalGen id p) a = NarrowingGoalProblem {pi::AF_ id, baseProblem::DPProblem p a}
+data MkNarrowingGoal id p = NarrowingGoal {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
+instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (MkNarrowingGoal id p) where
+  data DPProblem (MkNarrowingGoal id p) trs = NarrowingGoalProblem {pi::AF_ id, baseProblem::DPProblem p trs}
   getProblemType (NarrowingGoalProblem af p) = NarrowingGoal af (getProblemType p)
-  mkDPProblem     (NarrowingGoal af p) = (NarrowingGoalProblem af .) . mkDPProblem p
   getP   (NarrowingGoalProblem _  p) = getP p
   getR   (NarrowingGoalProblem _  p) = getR p
   mapR f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (mapR f p)
   mapP f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (mapP f p)
+instance (HasSignature trs, id ~ SignatureId trs, Ord id, MkDPProblem p trs) => MkDPProblem (MkNarrowingGoal id p) trs where
+  mkDPProblem (NarrowingGoal pi typ) = (narrowingGoalProblem pi.) . mkDPProblem typ
 
 narrowingGoal        g = NarrowingGoal (mkGoalAF g) Rewriting
 cnarrowingGoal       g = NarrowingGoal (mkGoalAF g) IRewriting
 narrowingGoalProblem g p = NarrowingGoalProblem (g `mappend` AF.init p) p
 
-deriving instance (Eq id, Eq (DPProblem p trs)) => Eq (DPProblem (NarrowingGoalGen id p) trs)
-deriving instance (Ord id, Ord (DPProblem p trs)) => Ord (DPProblem (NarrowingGoalGen id p) trs)
-deriving instance (Show id, Show (DPProblem p trs)) => Show (DPProblem (NarrowingGoalGen id p) trs)
+deriving instance (Eq id, Eq (DPProblem p trs)) => Eq (DPProblem (MkNarrowingGoal id p) trs)
+deriving instance (Ord id, Ord (DPProblem p trs)) => Ord (DPProblem (MkNarrowingGoal id p) trs)
+deriving instance (Show id, Show (DPProblem p trs)) => Show (DPProblem (MkNarrowingGoal id p) trs)
 
-instance Functor (DPProblem p) => Functor (DPProblem (NarrowingGoalGen id p)) where fmap f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (fmap f p)
-instance Foldable (DPProblem p) => Foldable (DPProblem (NarrowingGoalGen id p)) where foldMap f (NarrowingGoalProblem af p) = foldMap f p
-instance Traversable (DPProblem p) => Traversable (DPProblem (NarrowingGoalGen id p)) where traverse f (NarrowingGoalProblem af p) = NarrowingGoalProblem af <$> traverse f p
+-- Functor
 
-$(derive makeFunctor     ''NarrowingGoalGen)
-$(derive makeFoldable    ''NarrowingGoalGen)
-$(derive makeTraversable ''NarrowingGoalGen)
+instance Functor (DPProblem p) => Functor (DPProblem (MkNarrowingGoal id p)) where fmap f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (fmap f p)
+instance Foldable (DPProblem p) => Foldable (DPProblem (MkNarrowingGoal id p)) where foldMap f (NarrowingGoalProblem af p) = foldMap f p
+instance Traversable (DPProblem p) => Traversable (DPProblem (MkNarrowingGoal id p)) where traverse f (NarrowingGoalProblem af p) = NarrowingGoalProblem af <$> traverse f p
 
+$(derive makeFunctor     ''MkNarrowingGoal)
+$(derive makeFoldable    ''MkNarrowingGoal)
+$(derive makeTraversable ''MkNarrowingGoal)
 
-instance Ppr p => Ppr (NarrowingGoalGen id p) where
-    ppr NarrowingGoal{..} = text "NarrowingGoal" <+> ppr baseProblemType
+-- Output
 
-instance HTMLClass (NarrowingGoalGen id Rewriting) where htmlClass _ = theclass "IRew"
-instance HTMLClass (NarrowingGoalGen id IRewriting) where htmlClass _ = theclass "INarr"
+instance Pretty p => Pretty (MkNarrowingGoal id p) where
+    pPrint NarrowingGoal{..} = text "NarrowingGoal" <+> pPrint baseProblemType
 
-instance (Ord id, Ppr (Identifier id), MkNarradarProblem p id) =>
-    MkNarradarProblem (NarrowingGoalGen id p) id
- where
-   type Typ' (NarrowingGoalGen id p) id = NarrowingGoalGen (Identifier id) (Typ' p id)
-   mkNarradarProblem (NarrowingGoal pi typ) trs = narrowingGoalProblem (AF.extendToTupleSymbols pi) p where
-      p   = mkNarradarProblem typ trs
+instance HTMLClass (MkNarrowingGoal id Rewriting) where htmlClass _ = theclass "IRew"
+instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass "INarr"
 
-instance (Ord id, Ppr (Identifier id), MkNarradarProblem p id) =>
-    MkNarradarProblem (NarrowingGoalGen (Identifier id) p) id
- where
-   type Typ' (NarrowingGoalGen (Identifier id) p) id = NarrowingGoalGen (Identifier id) (Typ' p id)
-   mkNarradarProblem (NarrowingGoal pi typ) trs = narrowingGoalProblem pi p where
-      p   = mkNarradarProblem typ trs
+-- ICap
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-    ICap t v (NarrowingGoalGen id p, trs)
+    ICap t v (MkNarrowingGoal id p, trs)
   where
     icap (NarrowingGoal{..},trs) = icap (baseProblemType,trs)
 
+-- Usable Rules
 
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
-         ,ApplyAF (Term t v) id, ApplyAF trs id
+         ,ApplyAF (Term t v), ApplyAF trs
+         ,id ~ AFId trs, AFId (Term t v) ~ id, Ord id
          ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
-   IUsableRules t v (NarrowingGoalGen id p, trs)
+   IUsableRules t v (MkNarrowingGoal id p, trs)
  where
    iUsableRulesM p@(typ@NarrowingGoal{..}, trs) tt = do
       pi_tt <- getFresh (AF.apply pi_PType tt)

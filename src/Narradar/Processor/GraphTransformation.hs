@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
@@ -16,7 +17,7 @@ import Control.Monad.Logic
 import Data.Array.IArray hiding ( array )
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as Gr
-import Data.List (foldl1', isPrefixOf)
+import Data.List (foldl1', isPrefixOf, nub)
 import Data.Maybe
 import qualified Data.Set as Set
 import Data.Traversable (Traversable)
@@ -26,6 +27,7 @@ import Narradar.Types hiding ((!))
 import Narradar.Types.TRS
 import Narradar.Framework
 import Narradar.Framework.GraphViz
+import Narradar.Framework.Ppr
 import Narradar.Utils
 
 import Data.Term.Narrowing
@@ -37,78 +39,83 @@ data FInstantiation = FInstantiation
 
 -- Narrowing
 
-instance (Ppr (Identifier id), Ppr id, Ord id) =>
-    Processor NarrowingP (NarradarTRS (Identifier id) Var) Rewriting Rewriting where
+instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+         , Pretty (Identifier id)) =>
+    Processor NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
-instance (Ppr (Identifier id), Ppr id, Ord id) =>
-    Processor NarrowingP (NarradarTRS (Identifier id) Var) Narrowing Narrowing where
+instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+         ,Pretty (Identifier id)) =>
+    Processor NarrowingP (NarradarProblem Narrowing t) (NarradarProblem Narrowing t) where
   applySearch NarrowingP = narrowing
 
-instance (Ppr (Identifier id), Ppr id, Ord id) =>
-    Processor NarrowingP (NarradarTRS (Identifier id) Var) IRewriting IRewriting where
+instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+         ,Pretty (TermId t)) =>
+    Processor NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
   applySearch NarrowingP = narrowing_innermost
-instance (Ppr (Identifier id), Ppr id, Ord id) =>
-    Processor NarrowingP (NarradarTRS (Identifier id) Var) CNarrowing CNarrowing where
+
+instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+         ,Pretty (TermId t)) =>
+    Processor NarrowingP (NarradarProblem CNarrowing t) (NarradarProblem CNarrowing t) where
   applySearch NarrowingP = narrowing_innermost
 
 -- Instantiation
 
-instance (trs ~ NarradarTRS (Identifier id) v
-         ,t   ~ TermF (Identifier id)
+instance (trs ~ NarradarTRS t v
          ,v   ~ Var
-         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (DPProblem typ trs)
+         ,Identifier id ~ TermId t, HasId t
+         ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
+         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (NarradarProblem typ t)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
-         ,Ppr (Identifier id), Ppr id, Ord id
          ) =>
-    Processor Instantiation (NarradarTRS (Identifier id) Var) typ typ where
+    Processor Instantiation (NarradarProblem typ t) (NarradarProblem typ t) where
   applySearch Instantiation = instantiation
 
 
 -- Forward Instantiation
 
-instance (trs ~ NarradarTRS (Identifier id) v
-         ,t   ~ TermF (Identifier id)
+instance (trs ~ NarradarTRS t v
          ,v   ~ Var
-         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (DPProblem typ trs)
+         ,Identifier id ~ TermId t, HasId t
+         ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
+         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (NarradarProblem typ t)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
-         ,Ppr (Identifier id), Ppr id, Ord id
          ) =>
-    Processor FInstantiation (NarradarTRS (Identifier id) Var) typ typ where
+    Processor FInstantiation (NarradarProblem typ t) (NarradarProblem typ t) where
   applySearch FInstantiation = finstantiation
 
 
 -- -------
 -- Proofs
 -- -------
-data NarrowingProof where NarrowingProof :: Ppr (Rule t v) =>  Rule t v   -- ^ Old pair
+data NarrowingProof where NarrowingProof :: Pretty (Rule t v) =>  Rule t v   -- ^ Old pair
                                                            -> [Rule t v]  -- ^ New pairs
                                                            -> NarrowingProof
 
 instance ProofInfo NarrowingProof
-instance Ppr NarrowingProof where
-  ppr (NarrowingProof old new) = text "Narrowing Processor." <+>
-                                 text "Pair" <+> ppr old <+> text "replaced by" <+> ppr new
+instance Pretty NarrowingProof where
+  pPrint (NarrowingProof old new) = text "Narrowing Processor." <+>
+                                 text "Pair" <+> pPrint old <+> text "replaced by" <+> pPrint new
 
-data InstantiationProof where InstantiationProof :: Ppr (Rule t v) =>  Rule t v   -- ^ Old pair
+data InstantiationProof where InstantiationProof :: Pretty (Rule t v) =>  Rule t v   -- ^ Old pair
                                                            -> [Rule t v]  -- ^ New pairs
                                                            -> InstantiationProof
 
 instance ProofInfo InstantiationProof
-instance Ppr InstantiationProof where
-  ppr (InstantiationProof old new) = text "Instantiation Processor." <+>
-                                 text "Pair" <+> ppr old <+> text "replaced by" <+> ppr new
+instance Pretty InstantiationProof where
+  pPrint (InstantiationProof old new) = text "Instantiation Processor." <+>
+                                 text "Pair" <+> pPrint old <+> text "replaced by" <+> pPrint new
 
-data FInstantiationProof where FInstantiationProof :: Ppr (Rule t v) =>  Rule t v   -- ^ Old pair
+data FInstantiationProof where FInstantiationProof :: Pretty (Rule t v) =>  Rule t v   -- ^ Old pair
                                                            -> [Rule t v]  -- ^ New pairs
                                                            -> FInstantiationProof
 
 instance ProofInfo FInstantiationProof
-instance Ppr FInstantiationProof where
-  ppr (FInstantiationProof old new) = text "FInstantiation Processor." <+>
-                                 text "Pair" <+> ppr old <+> text "replaced by" <+> ppr new
+instance Pretty FInstantiationProof where
+  pPrint (FInstantiationProof old new) = text "FInstantiation Processor." <+>
+                                 text "Pair" <+> pPrint old <+> text "replaced by" <+> pPrint new
 
 -- ----------------
 -- Implementation
@@ -116,16 +123,17 @@ instance Ppr FInstantiationProof where
 -- Narrowing
 
 narrowing, narrowing_innermost
-          :: (p  ~ NarradarProblem typ (Identifier id)
-             ,t  ~ TermF (Identifier id)
-             ,v  ~ Var, Enum v
-             ,trs ~ NarradarTRS (Identifier id) v
+          :: (p  ~ DPProblem typ trs
+             ,trs ~ NarradarTRS t v
+             ,TermId t  ~ Identifier id, HasId t, Unify t
+             ,Enum v, GetVars v v, Ord (Term t v)
              ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo p
-             , Ppr (Identifier id), Ppr id, Ord id, HTML p, Ppr p
              ,IUsableRules t v (typ, trs), ICap t v (typ,trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ,[Rule t v])
+             ,Pretty (Term t v), Pretty v, Pretty typ
+             ,Monad mp
              ) =>
-             NarradarProblem typ (Identifier id) -> [Proof (NarradarProblem typ (Identifier id))]
+             DPProblem typ trs -> [Proof mp (DPProblem typ trs)]
 
 narrowing p0
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
@@ -196,16 +204,18 @@ narrow1DP rr (l :-> r) = [ (applySubst theta l :-> r', p)
 -- Instantiation
 
 instantiation, finstantiation
-          :: (p  ~ NarradarProblem typ (Identifier id), ProblemInfo p
-             ,t  ~ TermF (Identifier id)
-             ,v  ~ Var, Enum v
-             ,trs ~ NarradarTRS (Identifier id) v
+          :: forall typ trs mp t v p id.
+             (p  ~ DPProblem typ trs, ProblemInfo p
+             ,trs ~ NarradarTRS t v
+             ,TermId t ~ Identifier id, HasId t, Unify t
+             ,Enum v, GetVars v v
              ,IsDPProblem typ, Traversable (DPProblem typ)
-             , Ppr (Identifier id), Ppr id, Ord id, HTML p, Ppr p
+             ,Pretty (Term t v), Ord(Term t v), Pretty v, Pretty typ
              ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+             ,Monad mp
              ) =>
-             NarradarProblem typ (Identifier id) -> [Proof (NarradarProblem typ (Identifier id))]
+             DPProblem typ trs -> [Proof mp (DPProblem typ trs)]
 
 instantiation p
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
@@ -219,11 +229,12 @@ instantiation p
          dps  = elems dpsA
          dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                     , all (not.null) dps]
+         f :: (Int, Rule t v) -> [(Int, Rule t v)]
          f  (i,olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
             where newdps = [ (i, applySubst sigma s :-> applySubst sigma t)
-                           | Just sigma <- snub [dpUnify (getP p) i m | (m,n) <- Gr.edges gr, n == i]]
+                            | Just sigma <- snub [dpUnify (getP p) i m | (m,n) <- Gr.edges gr, n == i]]
 
 --instantiation p = [return p]
 
@@ -241,6 +252,7 @@ finstantiation p
          dps  = elems dpsA
          dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                     , all (not.null) dps]
+         f :: (Int, Rule t v) -> [(Int, Rule t v)]
          f (i, olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []

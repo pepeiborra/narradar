@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -49,7 +49,7 @@ mpoAF_DP col p = rpoAF_DP' col (mpo) p
 {-
 rpoAF_DP' :: (p  ~ DPProblem typ [Rule t v], HasSignature p
              ,p' ~ DPProblem typ [Rule t' v], HasSignature p'
-             ,t  ~ f id, Ord id, Ppr id, MapId f, TermId t ~ id
+             ,t  ~ f id, Ord id, Pretty id, MapId f, TermId t ~ id
              ,t' ~ f id', HasId t', Foldable t',  TermId t' ~ id'
              ,Ord id', SATOrd id', Extend id', UsableSymbol id', AFSymbol id', Decode id' (SymbolRes id)
              ,Ord (Term t' v)
@@ -101,7 +101,7 @@ rpoAF_NDP allowCol con p = runRPOAF con allowCol (getSignature p) $ \dict -> do
     return ([ r | (r,False) <- zip [0..] decreasing]
            ,[ r | (r,False) <- zip [0..] af_ground])
 
-runRPOAF con allowCol sig f = isSAT $ do
+runRPOAF con allowCol sig f = runSAT $ do
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (con sig) ids
   if allowCol
@@ -126,8 +126,8 @@ data SymbolRes a = SymbolRes { the_symbolR:: a
                              , filtering  :: Either Int [Int] }
   deriving (Eq, Ord)
 
-instance Ppr a => Ppr (SymbolRes a) where
-    ppr SymbolRes{the_symbolR} = ppr the_symbolR
+instance Pretty a => Pretty (SymbolRes a) where
+    pPrint SymbolRes{the_symbolR} = pPrint the_symbolR
 
 data Symbol a = Symbol { the_symbol   :: a
                        , encodePrec   :: Number
@@ -141,8 +141,8 @@ data Symbol a = Symbol { the_symbol   :: a
 instance Show a => Show (Symbol a) where
     show Symbol{the_symbol} = show the_symbol
 
-instance Ppr a => Ppr (Symbol a) where
-    ppr Symbol{the_symbol} = ppr the_symbol
+instance Pretty a => Pretty (Symbol a) where
+    pPrint Symbol{the_symbol} = pPrint the_symbol
 
 instance Eq   a => Eq   (Symbol a) where
     a@Symbol{} == b@Symbol{} = the_symbol a == the_symbol b
@@ -253,7 +253,10 @@ instance UsableSymbol (LPOSsymbol a) where usable = return . encodeUsable . unLP
 
 -- LPO
 newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd)
-instance Decode (LPOsymbol a) (SymbolRes a) where decode = decode . unLPO
+instance Decode (LPOsymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
+
+removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
+removePerm symbolRes = symbolRes
 
 lpo sig x = do
   s <- rpos sig x
@@ -464,8 +467,61 @@ mulgen id_f id_g (i, j) k = do
 -- ------------------------
 -- Usable Rules with AF
 -- ------------------------
+class OmegaUsable thing where omega :: thing -> SAT Boolean
 
-omega :: forall p typ t v trs id.
+instance (p  ~ DPProblem IRewriting, HasSignature (p trs)
+         ,id ~ TermId t, TermId t ~ SignatureId trs
+         ,Traversable p
+         ,IsTRS t v trs, GetVars v trs, HasSignature trs
+         ,Ord v, Enum v
+         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Foldable t, HasId t, Ord (Term t v)
+         ,IUsableRules t v (p trs)
+         ) =>
+    OmegaUsable (DPProblem IRewriting trs)
+ where
+  omega p = omegaGen (constant True) p
+
+instance (p  ~ DPProblem CNarrowing, HasSignature (p trs)
+         ,id ~ TermId t, TermId t ~ SignatureId trs
+         ,Traversable p
+         ,IsTRS t v trs, GetVars v trs, HasSignature trs
+         ,Ord v, Enum v
+         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Foldable t, HasId t, Ord (Term t v)
+         ,IUsableRules t v (p trs)
+         ) =>
+    OmegaUsable (DPProblem CNarrowing trs)
+ where
+  omega p = omegaGen (constant True) p
+
+instance (p  ~ DPProblem Rewriting, HasSignature (p trs)
+         ,id ~ TermId t, TermId t ~ SignatureId trs
+         ,Traversable p
+         ,IsTRS t v trs, GetVars v trs, HasSignature trs
+         ,Ord v, Enum v
+         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Foldable t, HasId t, Ord (Term t v)
+         ,IUsableRules t v (p trs)
+         ) =>
+    OmegaUsable (DPProblem Rewriting trs)
+ where
+  omega p = omegaGen (andM $ map usable $ toList $ getDefinedSymbols p) p
+
+instance (p  ~ DPProblem Narrowing, HasSignature (p trs)
+         ,id ~ TermId t, TermId t ~ SignatureId trs
+         ,Traversable p
+         ,IsTRS t v trs, GetVars v trs, HasSignature trs
+         ,Ord v, Enum v
+         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Foldable t, HasId t, Ord (Term t v)
+         ,IUsableRules t v (p trs)
+         ) =>
+    OmegaUsable (DPProblem Narrowing trs)
+ where
+  omega p = omegaGen (andM $ map usable $ toList $ getDefinedSymbols p) p
+
+omegaGen ::  forall p typ trs id t v.
          (p  ~ DPProblem typ, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
          ,IsDPProblem typ, Traversable (DPProblem typ)
@@ -474,10 +530,11 @@ omega :: forall p typ t v trs id.
          ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
-         ) => p trs -> SAT Boolean
-omega p =
-      andM [andM [go r trs | _:->r <- rules dps]
-           ,andM [ usable f ==>> andM [ l > r | l:->r <- rulesFor f trs]
+         ) => SAT Boolean -> p trs -> SAT Boolean
+
+omegaGen varcase p =
+      andM [andM [go r trs | _:->r <- dps]
+           ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
                   | f <- Set.toList dd ]
            ]
 
@@ -486,14 +543,14 @@ omega p =
     sig = getSignature (getR p)
     dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps))
 
-    go (Pure x) _ = constant True
+    go (Pure x) _ = varcase
     go t trs
       | id_t `Set.notMember` getDefinedSymbols sig
       = andM [ inAF i id_t ==>> go t_i trs
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
       = andM [ usable id_t
-             , andM [ go r trs' | _:->r <- rls, let trs' = (trs \\ rls) :: [Rule t v]]
+             , andM [ go r trs' | let trs' = (trs \\ rls :: [Rule t v]), _:->r <- rls ]
              , andM [ inAF i id_t ==>> go t_i trs
                           | (i, t_i) <- zip [1..] tt ]
              ]

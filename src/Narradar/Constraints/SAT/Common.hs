@@ -36,11 +36,13 @@ class Extend a where
     exgt :: (SATOrd a', Eq a') => a -> a -> [a'] -> [a'] -> SAT Boolean
     exeq :: (SATOrd a', Eq a') => a -> a -> [a'] -> [a'] -> SAT Boolean
 
-data Status   = Mul | Lex [Int] deriving (Eq, Ord, Show)
+data Status   = Mul | Lex (Maybe [Int]) deriving (Eq, Ord, Show)
 mkStatus mul perm
  | mul       = Mul
- | otherwise = Lex [head ([i | (i,True) <- zip [1..] perm_i] ++ [-1])
-                        | perm_i <- perm ]
+ | otherwise = Lex (Just [head ([i | (i,True) <- zip [1..] perm_i] ++ [-1])
+                             | perm_i <- perm])
+
+
 -- -----
 -- Utils
 -- -----
@@ -63,7 +65,7 @@ oneM vv = do
 zip5 (a:aa) (b:bb) (c:cc) (d:dd) (e:ee) = (a,b,c,d,e) : zip5 aa bb cc dd ee
 zip5 _ _ _ _ _ = []
 
-traceGt i1 i2 = pprTrace (ppr i1 <+> text ">" <+> ppr i2)
+traceGt i1 i2 = pprTrace (pPrint i1 <+> text ">" <+> pPrint i2)
 
 notM x  = not <$> x
 orM  xx = or  =<< sequence xx
@@ -90,9 +92,6 @@ a <==> b = -- andM [a ==> b, b ==> a]
 infix 0 <<==>>
 a <<==>> b = -- andM [a ==>> b, b ==>> a]
             orM [andM[a,b], andM[notM a, notM b]]
-
-isSAT :: SAT a -> SAT a
-isSAT = id
 
 -- Testing
 -- ---------

@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -40,13 +40,16 @@ data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deri
 instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
   data DPProblem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::DPProblem p trs}
   getProblemType (RelativeProblem r0 p) = Relative r0 (getProblemType p)
-  mkDPProblem (Relative trs0 p) = (RelativeProblem trs0 .) . mkDPProblem p
   getR (RelativeProblem _ p) = getR p
   getP (RelativeProblem _ p) = getP p
   mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
   mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
+instance MkDPProblem p trs => MkDPProblem (Relative trs p) trs where
+  mkDPProblem (Relative trs0 p) = (RelativeProblem trs0 .) . mkDPProblem p
 
-relativeProblem          = RelativeProblem
+
+relative = Relative
+relativeProblem = RelativeProblem
 
 deriving instance (Eq trs, Eq (DPProblem p trs)) => Eq (DPProblem (Relative trs p) trs)
 deriving instance (Ord trs, Ord (DPProblem p trs)) => Ord (DPProblem (Relative trs p) trs)
@@ -71,38 +74,37 @@ instance (IsDPProblem p, Ord (SignatureId trs), HasSignature (DPProblem p trs), 
 
 -- Output
 
-instance Ppr p => Ppr (Relative trs p)
+instance Pretty p => Pretty (Relative trs p)
     where
-         ppr (Relative _ p) = text "Relative termination of" <+> ppr p
-
--- Construction
-
-instance (Ord id, HasRules (TermF id) Var trs0, MkNarradarProblem p id) =>
-    MkNarradarProblem (Relative trs0 p) id
- where
-  type Typ' (Relative trs0 p) id = Relative (NarradarTRS (Identifier id) Var) (Typ' p id)
-  mkNarradarProblem (Relative trs0 typ) trs = relativeProblem trs0' p where
-      p     = mkNarradarProblem typ trs
-      trs0' = tRS $ mapTermSymbols IdFunction <$$> rules trs0
-
+         pPrint (Relative _ p) = text "Relative termination of" <+> pPrint p
 
 -- ICap
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-         ICap t v (Relative trs p, trs)
+instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>
+         ICap t v (Relative trs p, trs')
  where
          icap (Relative _ p,trs) = icap (p,trs)
 
 -- Usable Rules
 
 instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v (typ, trs)) =>
-   IUsableRules t v (DPProblem (Relative trs typ) trs)
+   IUsableRules t v (Relative trs typ, trs)
     where
-      iUsableRulesM (RelativeProblem r0 p) tt = do
-            let rr  = getR p
-            (_, usableRulesTRS) <- iUsableRulesM (getProblemType p, r0 `mappend` rr) tt
+      iUsableRulesM (Relative r0 p, rr) tt = do
+            (_, usableRulesTRS) <- iUsableRulesM (p, r0 `mappend` rr) tt
             let usableRulesSet = Set.fromList (rules usableRulesTRS :: [Rule t v])
                 rr' = tRS $ toList (Set.fromList (rules rr) `Set.intersection` usableRulesSet)
                 r0' = tRS $ toList (Set.fromList (rules r0) `Set.intersection` usableRulesSet)
-            return (RelativeProblem r0' (setR rr' p))
-      iUsableRulesVar (RelativeProblem r0 p) = iUsableRulesVar (getProblemType p, r0 `mappend` getR p)
+            return (Relative r0' p,  rr')
+      iUsableRulesVar (Relative r0 p, rr) = iUsableRulesVar (p, r0 `mappend` rr)
+
+instance (Ord v, Ord (Term t v), IsTRS t v trs, IsTRS t v trs', IsDPProblem typ, IUsableRules t v (typ, [Rule t v])) =>
+   IUsableRules t v (Relative trs typ, trs')
+    where
+      iUsableRulesM (Relative r0 p, rr) tt = do
+            (_, usableRulesTRS) <- iUsableRulesM (p, rules r0 `mappend` rules rr) tt
+            let usableRulesSet = Set.fromList (rules usableRulesTRS :: [Rule t v])
+                rr' = tRS $ toList (Set.fromList (rules rr) `Set.intersection` usableRulesSet)
+                r0' = tRS $ toList (Set.fromList (rules r0) `Set.intersection` usableRulesSet)
+            return (Relative r0' p, rr')
+      iUsableRulesVar (Relative r0 p, rr) = iUsableRulesVar (p, rules r0 `mappend` rules rr)

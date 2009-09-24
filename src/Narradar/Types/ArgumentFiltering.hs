@@ -27,7 +27,6 @@ import qualified Data.Set as Set
 import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
 import Data.Monoid
-import Text.PrettyPrint
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
@@ -66,8 +65,8 @@ toList    :: AF_ id -> [(id,[Int])]
 toList'   :: AF_ id -> [(id,Either Int [Int])]
 lookup    :: (Ord id, Monad m) => id -> AF_ id -> m [Int]
 lookup'   :: (Ord id, Monad m) => id -> AF_ id -> m (Either Int [Int])
-cut       :: (Ppr id, Ord id) => id -> Int -> AF_ id -> AF_ id
-cutAll    :: (Ppr id, Ord id) => [(id, Int)] -> AF_ id -> AF_ id
+cut       :: (Pretty id, Ord id) => id -> Int -> AF_ id -> AF_ id
+cutAll    :: (Pretty id, Ord id) => [(id, Int)] -> AF_ id -> AF_ id
 map       :: (id -> [Int] -> [Int]) -> AF_ id -> AF_ id
 map'      :: (id -> Either Int [Int] -> Either Int [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
@@ -76,10 +75,10 @@ filter    :: Ord id => (id -> Either Int (Set Int) -> Bool) -> AF_ id -> AF_ id
 invert    :: (HasSignature sig) => sig -> AF_ (SignatureId sig) -> AF_ (SignatureId sig)
 restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
-splitCD   :: (HasSignature sig, id ~ SignatureId sig, Ppr id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
+splitCD   :: (HasSignature sig, id ~ SignatureId sig, Pretty id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
 
 cut id i (AF m)  = case Map.lookup id m of
-                     Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show (ppr id))
+                     Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show (pPrint id))
                      Just _ -> AF $ Map.insertWith (flip difference) id (Right $ Set.singleton i) m
 cutAll xx af     = Prelude.foldr (uncurry cut) af xx
 lookup' id (AF m)= maybe (fail "not found") (return . mapRight Set.toList) (Map.lookup id m)
@@ -119,9 +118,9 @@ splitCD sig (AF af) = (af_c, af_d) where
     af_d = AF (Map.filterWithKey (\k _ -> k `Set.member` getDefinedSymbols     sig) af)
 
 
-instance Ppr id => Ppr (AF_ id) where
-    ppr af =  fsep $punctuate comma
-              [ ppr f <> colon <+> either (ppr.id) (ppr . Set.toList) aa | (f, aa) <-  Map.toList $ fromAF af]
+instance Pretty id => Pretty (AF_ id) where
+    pPrint af =  fsep $punctuate comma
+              [ pPrint f <> colon <+> either (pPrint.id) (pPrint . Set.toList) aa | (f, aa) <-  Map.toList $ fromAF af]
 
 -- | bottom is ill defined
 --   It fails the law bottom `join` x = x       (join left identity)
@@ -172,8 +171,15 @@ difference (Left x) (Left y)     = if x == y
 -- ----------------------
 -- Regular AF Application
 -- ----------------------
-class    Ord id => ApplyAF t id | t ->  id where apply :: AF_ id -> t -> t
-instance Ord id => ApplyAF (TermN id v) id where apply = applyTerm
+class ApplyAF (t :: *) where
+   type AFId t :: *
+   apply :: Ord (AFId t) => AF_ (AFId t) -> t -> t
+
+-- type TermN id v = Term (TermF id) v
+
+instance ApplyAF (Term (TermF id) v) where
+   type AFId (Term (TermF id) v) = id
+   apply = applyTerm
 
 applyTerm :: forall v id . Ord id => AF_ id -> TermN id v -> TermN id v
 applyTerm af = foldTerm return f
@@ -183,11 +189,16 @@ applyTerm af = foldTerm return f
                                                   ii
                | otherwise = Impure t
 
-instance ApplyAF a id => ApplyAF [a] id where apply af = fmap (apply af)
-instance (Ord id, ApplyAF a id) => ApplyAF (RuleF a) id where apply af = fmap (apply af)
-instance (Functor f, ApplyAF t id) => ApplyAF (f t) id  where apply af = fmap (apply af)
+instance ApplyAF a => ApplyAF [a] where
+    type AFId [a] = AFId a
+    apply af = fmap (apply af)
 
-instance (Ord id) => ApplyAF (Term (WithNote1 n (TermF id)) v) id  where
+instance (ApplyAF a) => ApplyAF (RuleF a) where
+    type AFId (RuleF a) = AFId a
+    apply af = fmap (apply af)
+
+instance ApplyAF (Term (WithNote1 n (TermF id)) v) where
+    type AFId (Term (WithNote1 n (TermF id)) v) = id
     apply af = foldTerm return f where
       f t@(Note1 (n,Term id tt))
                | Just ii <- lookup' id af = Impure (Note1 (n, Term id (either (\i  -> [tt !! pred i])
@@ -213,6 +224,7 @@ selectBest = unfoldr findOne where
 -- ----------
 -- Soundness
 -- ----------
+isSoundAF :: (ExtraVars v t, Ord (AFId t), ApplyAF t) => AF_ (AFId t) -> t -> Bool
 isSoundAF     af trs = null (extraVars $ apply af trs)
 
 
@@ -220,27 +232,27 @@ isSoundAF     af trs = null (extraVars $ apply af trs)
 -- * Heuristics
 -- -----------
 -- | The type of heuristics
-data Heuristic id t = Heuristic { runHeu :: forall v. AF_ id -> Term t v -> Position -> Set (id, Int), isSafeOnDPs::Bool }
-type HeuristicN id = Heuristic id (TermF id)
+data Heuristic (id :: *) = Heuristic { runHeu :: forall v t. (Foldable t, HasId t, TermId t ~ id) =>
+                                                             AF_ id -> Term t v -> Position -> Set (id, Int)
+                                     , isSafeOnDPs :: Bool }
 
 -- | Heuristics with overloading
-class PolyHeuristic tag id t where runPolyHeu :: tag id t -> Heuristic id t
-class PolyHeuristic tag id (TermF id) => PolyHeuristicN tag id; instance PolyHeuristic tag id (TermF id) => PolyHeuristicN tag id
+class PolyHeuristic tag id where runPolyHeu :: tag id -> Heuristic id
 
 -- | Wrapper for heuristics which depend on the problem signature
-data MkHeu tag = MkHeu { mkTag :: (HasSignature sig, id ~ SignatureId sig, PolyHeuristic tag id f) => sig -> tag id f }
+data MkHeu tag = MkHeu { mkTag :: (HasSignature sig, id ~ SignatureId sig, PolyHeuristic tag id) => sig -> tag id }
 
 -- | Wrapper around a non-overloaded heuristic
-data WrapHeu id f = WrapHeu ((Foldable f, HasId f, id ~ TermId f, Ppr id) => Heuristic id f)
-instance (Foldable f, HasId f, id ~ TermId f, Ppr id) => PolyHeuristic WrapHeu id f where runPolyHeu (WrapHeu run) = run
+data WrapHeu id = WrapHeu ((Ord id) => Heuristic id)
+instance (Ord id) => PolyHeuristic WrapHeu id where runPolyHeu (WrapHeu run) = run
 
-simpleHeu ::  (forall id f. (Foldable f, HasId f, Ppr (TermId f)) => Heuristic (TermId f) f) -> MkHeu WrapHeu
+simpleHeu ::  (forall id . (Ord id) => Heuristic id) -> MkHeu WrapHeu
 simpleHeu h = MkHeu (\_sig -> WrapHeu h)
 
-simpleHeu' ::  (forall id f sig. (Foldable f, Ppr id, HasSignature sig, id ~ SignatureId sig ) => sig -> Heuristic id f) -> MkHeu WrapHeu
+simpleHeu' ::  (forall id sig. (HasSignature sig, id ~ SignatureId sig ) => sig -> Heuristic id) -> MkHeu WrapHeu
 simpleHeu' h = MkHeu (\sig -> WrapHeu (h sig))
 
-mkHeu :: (PolyHeuristic tag id f, HasSignature sig, id ~ SignatureId sig) => MkHeu tag -> sig -> Heuristic id f
+mkHeu :: (PolyHeuristic tag id, HasSignature sig, id ~ SignatureId sig) => MkHeu tag -> sig -> Heuristic id
 mkHeu (MkHeu mkTag) sig = runPolyHeu (mkTag sig)
 
 
@@ -252,7 +264,9 @@ bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
      `or`
 -}
 
+innermost, outermost :: forall id . Ord id => Heuristic id
 innermost = Heuristic f True where
+--   f :: forall v t . (HasId t, Foldable t, TermId t ~ id) => AF_ id -> Term t v -> Position -> Set (id, Int)
    f _ _ [] = mempty
    f _ t pos | Just root <- rootSymbol (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
@@ -277,18 +291,22 @@ allOuter _ t pos =  [(root, last sub_p)
                                     | sub_p <- tail $ inits pos
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 
+
+
 typeHeu assig = MkHeu $ \_ -> (TypeHeu assig)
 
-data TypeHeu id (f :: * -> *) = TypeHeu (SharingAssignment String)
+data TypeHeu id = TypeHeu (SharingAssignment String)
 
-instance (HasId f, TermId f ~ String, Foldable f) => PolyHeuristic TypeHeu String f
+instance PolyHeuristic TypeHeu String
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
 
-instance (HasId f, id ~ TermId f, Ppr (TermId f), Foldable f) => PolyHeuristic TypeHeu id f
+instance (Ord id, Pretty id) => PolyHeuristic TypeHeu id
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
-           isUnbounded (show.ppr -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
+           isUnbounded (show.pPrint -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
 
+
+typeHeu_f :: forall id. Ord id => SharingAssignment String -> ( (id, Int) -> Set (String,Int) -> Bool) -> Heuristic id
 typeHeu_f assig isUnbounded = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
   where f (p,i)            = not $ isUnbounded (p,i) unboundedPositions
         unboundedPositions = fix unboundedF reflexivePositions
@@ -304,10 +322,21 @@ typeHeu_f assig isUnbounded = Heuristic (predHeuOne allInner (const f) `or` runH
         getArity g | Just i <- Map.lookup g arities = i
         arities = Map.fromListWith max (concatMap F.toList assig) -- :: Map Ident Int
 
---typeHeu :: Foldable f => Signature Ident -> TypeAssignment -> Heuristic id f
-typeHeu2 assig = simpleHeu $ Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
-  where f (show.ppr -> p,i)  = Set.notMember (p,i) reflexivePositions
-        reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
+
+typeHeu2 assig = MkHeu $ \_ -> TypeHeu2 assig
+
+data TypeHeu2 id = TypeHeu2 (SharingAssignment String)
+
+instance PolyHeuristic TypeHeu2 String
+   where runPolyHeu (TypeHeu2 assig) = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
+             where f (p,i)  = Set.notMember (p,i) reflexivePositions
+                   reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
+
+
+instance (Ord id, Pretty id) => PolyHeuristic TypeHeu2 id
+   where runPolyHeu (TypeHeu2 assig) = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
+             where f (show.pPrint -> p,i)  = Set.notMember (p,i) reflexivePositions
+                   reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
 
 -- Predicates
 -- ----------
@@ -345,5 +374,5 @@ mapRight f = bimap id f
 
 #ifdef HOOD
 --instance Observable id => Observable (AF_ id) where observer (AF m) = observer m
-deriving instance (Ppr id, Observable id) => Observable (AF_ id)
+deriving instance (Pretty id, Observable id) => Observable (AF_ id)
 #endif

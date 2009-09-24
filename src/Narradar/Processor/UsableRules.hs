@@ -10,12 +10,12 @@ import Narradar.Framework.Ppr
 
 data UsableRulesProof = UsableRulesProof deriving (Eq,Show,Ord)
 
-instance Ppr UsableRulesProof where ppr _ = text "Usable rules proof"
+instance Pretty UsableRulesProof where pPrint _ = text "Usable rules proof"
 
 instance ProofInfo UsableRulesProof
 
 {-
-usableRulesP :: (Ppr v, Ppr id, Ord v, Ord a, Enum v, id ~ Identifier a) => Problem id v -> ProblemProofG id v
+usableRulesP :: (Pretty v, Pretty id, Ord v, Ord a, Enum v, id ~ Identifier a) => Problem id v -> ProblemProofG id v
 
 usableRulesP p@(Problem typ trs dps)
   | (isBNarrowing .|. isGNarrowing) typ = step UsableRulesP p (iUsableRules p pi' (rhs <$> rules dps))

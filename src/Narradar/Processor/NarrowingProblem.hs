@@ -23,7 +23,7 @@ import Data.Set (Set)
 import Prelude hiding (mapM, pi)
 
 import Narradar.Constraints.VariableCondition
-import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristicN, HeuristicN, MkHeu, mkHeu, isSoundAF)
+import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristic, Heuristic, MkHeu, mkHeu, isSoundAF, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Framework.GraphViz hiding (note)
@@ -42,8 +42,8 @@ data NarrowingToRewritingICLP08 heu = NarrowingToRewritingICLP08 (MkHeu heu)
                                     | NarrowingToRewritingICLP08_SCC (MkHeu heu)
 
 
-instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
-    Processor (NarrowingToRewritingICLP08 heu) (NarradarTRS id Var) Narrowing Rewriting where
+instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
+    Processor (NarrowingToRewritingICLP08 heu) (DPProblem Narrowing (NTRS id Var) ) (DPProblem Rewriting (NTRS id Var) ) where
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
     | otherwise = orProblems
@@ -53,7 +53,7 @@ instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
           afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkNewProblem Rewriting p')
+                                AF.apply af (mkDerivedProblem Rewriting p')
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
@@ -65,11 +65,12 @@ instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
           afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p' $
-                                AF.apply af (mkNewProblem Rewriting p')
+                                AF.apply af (mkDerivedProblem Rewriting p')
                         | af <- Set.toList afs]
 
-instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
-    Processor (NarrowingToRewritingICLP08 heu) (NarradarTRS id Var) CNarrowing IRewriting where
+instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
+    Processor (NarrowingToRewritingICLP08 heu) (DPProblem CNarrowing (NTRS id Var)) (DPProblem IRewriting (NTRS id Var))
+ where
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
     | otherwise = orProblems
@@ -79,7 +80,7 @@ instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
           afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkNewProblem IRewriting p')
+                                AF.apply af (mkDerivedProblem IRewriting p')
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
@@ -91,14 +92,17 @@ instance (PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id) =>
           afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p' $
-                                AF.apply af (mkNewProblem IRewriting p')
+                                AF.apply af (mkDerivedProblem IRewriting p')
                         | af <- Set.toList afs]
 
 
-instance (p ~ NarradarProblem (NarrowingGoalGen id typ0) id
-         ,PolyHeuristicN heu id, Lattice (AF_ id), Ord id, Ppr id
-         ,IsDPProblem typ0, ProblemInfo p, Traversable (DPProblem typ0)) =>
-    Processor (NarrowingToRewritingICLP08 heu) (NarradarTRS id Var) (NarrowingGoalGen id typ0) typ0 where
+instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
+         ,ProblemInfo (NarradarProblem(MkNarrowingGoal id typ0) (TermF id))
+         ,MkDPProblem typ0 (NTRS id Var), Traversable (DPProblem typ0)) =>
+    Processor (NarrowingToRewritingICLP08 heu)
+              (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
+              (NarradarProblem typ0 (TermF id))
+ where
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
     | otherwise = orProblems
@@ -110,7 +114,7 @@ instance (p ~ NarradarProblem (NarrowingGoalGen id typ0) id
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
                   embed $ findGroundAF' heu pi_groundInfo af0 p R.=<< Set.fromList(rules $ getP p)
           orProblems = [ singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkNewProblem typ0 p)
+                                AF.apply af (mkDerivedProblem typ0 p)
                         | af <- Set.toList afs]
 
 
@@ -122,15 +126,15 @@ data NarrowingToRewritingProof id where
     NarrowingToRewritingICLP08Proof :: AF_ id -> NarrowingToRewritingProof id
     NarrowingToRewritingICLP08Fail  :: NarrowingToRewritingProof ()
 
-instance Ppr id => Ppr (NarrowingToRewritingProof id) where
-    ppr NarrowingToRewritingICLP08Fail = text "Failed to find an argument filtering that satisfies" $$
+instance Pretty id => Pretty (NarrowingToRewritingProof id) where
+    pPrint NarrowingToRewritingICLP08Fail = text "Failed to find an argument filtering that satisfies" $$
                                          text "the one pair with a ground right hand side condition."
-    ppr (NarrowingToRewritingICLP08Proof af) = text "Termination of the following rewriting DP problem" $$
+    pPrint (NarrowingToRewritingICLP08Proof af) = text "Termination of the following rewriting DP problem" $$
                                                text "implies termination of the original problem." $$
                                                text "The following argument filtering was used:" $$
-                                               ppr af
+                                               pPrint af
 
-instance Ppr id =>  ProofInfo (NarrowingToRewritingProof id)
+instance Pretty id =>  ProofInfo (NarrowingToRewritingProof id)
 
 
 -- ---------------
@@ -145,11 +149,17 @@ findGroundAF heu af0 p (_:->r)
 
 
 -- | Takes a heuristic, an af with groundness information, an af to use as starting point, a problem and a rule,
-findGroundAF' :: (IsDPProblem typ, HasSignature (NarradarProblem typ id), Ord id, Ppr id, Lattice (AF_ id), Foldable (DPProblem typ)) =>
-                HeuristicN id
+findGroundAF' :: ( IsDPProblem typ, HasSignature (NarradarProblem typ t)
+                 , Traversable t, HasId t, ApplyAF (Term t Var), Ord (Term t Var)
+                 , id ~ TermId t, id ~ AFId (Term t Var)
+                 , Ord id, Pretty id, Lattice (AF_ id), Foldable (DPProblem typ)
+                 , ApplyAF (Term (WithNote1 Position t) (WithNote Position Var))
+                 , AFId (Term (WithNote1 Position t) (WithNote Position Var)) ~ id
+                 ) =>
+                Heuristic id
              -> AF_ id         -- ^ Groundness information
              -> AF_ id         -- ^ the argument filtering to constrain
-             -> NarradarProblem typ id
+             -> NarradarProblem typ t
              -> RuleN id Var     -- ^ the rule to make ground
              -> Set (AF_ id)
 findGroundAF' heu pi_groundInfo af0 p (_:->r)

@@ -38,29 +38,29 @@ data Rewriting = Rewriting                          deriving (Eq, Ord, Show)
 instance IsDPProblem Rewriting where
   data DPProblem Rewriting a = RewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Rewriting
-  mkDPProblem    _ = rewritingProblem
   getR (RewritingProblem r _) = r
   getP (RewritingProblem _ p) = p
   mapR f (RewritingProblem r p) = RewritingProblem (f r) p
   mapP f (RewritingProblem r p) = RewritingProblem r (f p)
+instance MkDPProblem Rewriting trs  where mkDPProblem _ = rewritingProblem
 
 data IRewriting = IRewriting                          deriving (Eq, Ord, Show)
 instance IsDPProblem IRewriting where
   data DPProblem IRewriting a = IRewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = IRewriting
-  mkDPProblem    _ = iRewritingProblem
   getR (IRewritingProblem r _) = r
   getP (IRewritingProblem _ p) = p
   mapR f (IRewritingProblem r p) = IRewritingProblem (f r) p
   mapP f (IRewritingProblem r p) = IRewritingProblem r (f p)
+instance MkDPProblem IRewriting trs where mkDPProblem _ = iRewritingProblem
 
 rewritingProblem         = RewritingProblem
 iRewritingProblem        = IRewritingProblem
 
 -- Functor
 
-instance Functor (DPProblem Rewriting) where fmap f (RewritingProblem r p) = RewritingProblem (f r) (f p)
-instance Foldable (DPProblem Rewriting) where foldMap f (RewritingProblem r p) = f r `mappend` f p
+instance Functor (DPProblem Rewriting)     where fmap f (RewritingProblem r p) = RewritingProblem (f r) (f p)
+instance Foldable (DPProblem Rewriting)    where foldMap f (RewritingProblem r p) = f r `mappend` f p
 instance Traversable (DPProblem Rewriting) where traverse f (RewritingProblem r p) = RewritingProblem <$> f r <*> f p
 
 instance Functor (DPProblem IRewriting) where fmap f (IRewritingProblem r p) = IRewritingProblem (f r) (f p)
@@ -69,8 +69,8 @@ instance Traversable (DPProblem IRewriting) where traverse f (IRewritingProblem 
 
 -- Output
 
-instance Ppr Rewriting where ppr _ = text "Rewriting"
-instance Ppr IRewriting where ppr _ = text "Innermost Rewriting"
+instance Pretty Rewriting where pPrint _ = text "Rewriting"
+instance Pretty IRewriting where pPrint _ = text "Innermost Rewriting"
 
 instance HTML Rewriting where toHtml _ = toHtml "Rewriting Problem"
 instance HTML IRewriting where toHtml _ = toHtml "Innermost Rewriting Problem"
@@ -78,28 +78,15 @@ instance HTML IRewriting where toHtml _ = toHtml "Innermost Rewriting Problem"
 instance HTMLClass Rewriting where htmlClass _ = theclass "DP"
 instance HTMLClass IRewriting where htmlClass _ = theclass "IDP"
 
-
--- Construction
-
-instance Ord id => MkNarradarProblem Rewriting id where
-  type Typ' Rewriting id = Rewriting
-  mkNarradarProblem typ trs = mkDPProblem typ (tRS rr) dps where
-      dps = dpTRS typ rr (getPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
-
-instance Ord id => MkNarradarProblem IRewriting id where
-  type Typ' IRewriting id = IRewriting
-  mkNarradarProblem typ trs = mkDPProblem typ (tRS rr) dps where
-      dps = dpTRS typ rr (getPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
-
-
 -- ICap
 
-instance (HasRules t v trs, GetVars v trs, Unify t, ICap t v trs) => ICap t v (Rewriting, trs) where icap (_,trs) = icap trs
+instance (Unify t, Ord v) => ICap t v (Rewriting, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
+instance (Unify t, Ord v) => ICap t v (IRewriting, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
 
+instance (Ord v, Unify t) => ICap t v (Rewriting, [Rule t v]) where
+  icap (_,trs) = icap trs
 
-instance (HasRules t v trs, Unify t, GetVars v trs) => ICap t v (IRewriting, trs) where
+instance (Ord v, Unify t) => ICap t v (IRewriting, [Rule t v]) where
   icap (_,trs) t = do
 #ifdef DEBUG
     when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
@@ -113,17 +100,16 @@ instance (HasRules t v trs, Unify t, GetVars v trs) => ICap t v (IRewriting, trs
         doVar v = return2 v
     foldTermM doVar go t
 
-
 -- Usable Rules
 
-instance (Ord(Term t v), Unify t, IsTRS t v trs, GetVars v trs, ICap t v trs) => IUsableRules t v (Rewriting, trs) where
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (Rewriting, NarradarTRS t v) where
 --iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
   iUsableRulesM p@(Rewriting, trs) tt = do
     trs' <- f_UsableRules p (iUsableRulesVar p) =<< getFresh tt
-    return (Rewriting, trs)
+    return (Rewriting, tRS $ toList trs')
   iUsableRulesVar (_,trs) _ = Set.fromList $ rules trs
 
-instance (Enum v, Ord (Term t v), Unify t, IsTRS t v trs, GetVars v trs) => IUsableRules t v (IRewriting, trs) where
+instance (Ord (Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (IRewriting, NarradarTRS t v) where
   iUsableRulesM p@(IRewriting, trs) tt = do
     trs' <- f_UsableRules p (iUsableRulesVar p) =<< getFresh tt
     return (IRewriting, tRS $ toList trs')

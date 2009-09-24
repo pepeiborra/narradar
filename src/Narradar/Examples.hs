@@ -3,6 +3,7 @@ module Narradar.Examples where
 import Prelude hiding (div,succ, quot)
 
 import Narradar.Types.Problem
+import Narradar.Types.Problem.Rewriting
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Term
 import Narradar.Types.Var
@@ -73,7 +74,7 @@ minusquot = mapTermSymbols IdFunction <$$>
        , quot (succ x) (succ y) :-> succ (quot (x -: y) (succ y)) ])
 
 
-minusquotPairs = getPairs minusquot
+minusquotPairs = getPairs Rewriting minusquot
 
 {-
 minusquotP  = mkProblem Rewriting minusquot minusquotPairs

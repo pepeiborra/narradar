@@ -40,10 +40,10 @@ fromSimple (Simple.Term id tt) = Term id tt
 
 
 class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]
-instance (Ord v, Ord (Term t v), Functor t, Foldable t, HasRules t v trs) => ExtraVars v trs where
+instance (Ord v, Functor t, Foldable t, HasRules t v trs) => ExtraVars v trs where
     extraVars = concatMap extraVars . rules
 
-instance (Ord v, Functor t, Ord (Term t v), Foldable t) => ExtraVars v (Rule t v) where
+instance (Ord v, Functor t, Foldable t) => ExtraVars v (Rule t v) where
     extraVars (l:->r) = Set.toList (Set.fromList(vars r) `Set.difference` Set.fromList(vars l))
 
 
@@ -88,23 +88,23 @@ instance Traversable (TermF id) where
 
 instance Bifunctor TermF where bimap f g (Term a tt) = Term (f a) (map g tt)
 
--- Ppr
+-- Pretty
 -- ---
-instance (Ppr id, Ppr v) => Ppr (TermN id v) where
- ppr (Pure a)   = ppr a
- ppr (Impure t) = pprT t
+instance (Pretty id, Pretty v) => Pretty (TermN id v) where
+ pPrint (Pure a)   = pPrint a
+ pPrint (Impure t) = pPrintT t
   where
-    pprT (Term n []) = ppr n
-    pprT (Term n [x,y]) | not (any isAlpha $ show $ ppr n) = ppr x <+> ppr n <+> ppr y
-    pprT (Term n tt) = ppr n <> parens (hcat$ punctuate comma$ map ppr tt)
+    pPrintT (Term n []) = pPrint n
+    pPrintT (Term n [x,y]) | not (any isAlpha $ show $ pPrint n) = pPrint x <+> pPrint n <+> pPrint y
+    pPrintT (Term n tt) = pPrint n <> parens (hcat$ punctuate comma$ map pPrint tt)
 
 
-instance (Ppr a, Ppr id) => Ppr (TermF id a) where
-    ppr (Term n []) = ppr n
-    ppr (Term n [x,y]) | not (any isAlpha $ show $ ppr n) = ppr x <+> ppr n <+> ppr y
-    ppr (Term n tt) = ppr n <> parens (hcat$ punctuate comma$ map ppr tt)
+instance (Pretty a, Pretty id) => Pretty (TermF id a) where
+    pPrint (Term n []) = pPrint n
+    pPrint (Term n [x,y]) | not (any isAlpha $ show $ pPrint n) = pPrint x <+> pPrint n <+> pPrint y
+    pPrint (Term n tt) = pPrint n <> parens (hcat$ punctuate comma$ map pPrint tt)
 
-instance Ppr a => Ppr (TermF String a) where
-    ppr (Term n []) = text n
-    ppr (Term n [x,y]) | not (any isAlpha n) = ppr x <+> text n <+> ppr y
-    ppr (Term n tt) = text n <> parens (hcat$ punctuate comma $ map ppr tt)
+instance Pretty a => Pretty (TermF String a) where
+    pPrint (Term n []) = text n
+    pPrint (Term n [x,y]) | not (any isAlpha n) = pPrint x <+> text n <+> pPrint y
+    pPrint (Term n tt) = text n <> parens (hcat$ punctuate comma $ map pPrint tt)

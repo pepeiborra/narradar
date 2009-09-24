@@ -36,7 +36,6 @@ import Data.Suitable
 import Data.Traversable
 import System.IO
 import System.Directory
-import Text.PrettyPrint (render)
 
 import Data.Term.Rules as Term
 import Narradar.Framework.Ppr
@@ -114,7 +113,7 @@ fst4 (a,_,_,_) = a
 firstM f (x,y) = f x >>= \x' -> return (x',y)
 secondM f (x,y) = f y >>= \y' -> return (x,y')
 
-showPpr = show . ppr
+showPpr = show . pPrint
 
 snub :: Ord a => [a] -> [a]
 snub = go Set.empty where

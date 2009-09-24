@@ -12,7 +12,7 @@ import Control.Applicative
 import qualified Control.Exception as CE
 import Control.Monad
 import Data.Foldable (Foldable, toList)
-import Data.List (transpose)
+import Data.List (transpose,(\\))
 import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -53,8 +53,8 @@ rpoGen inn p = isSAT $ do
 -- The Recursive Path Ordering, parametric w.r.t the extension
 -- ----------------------------------------------------------------
 
-instance (Eq v, Eq (Term f v), Foldable f,
-          HasId f, SATOrd (TermId f), Ppr (TermId f), Extend (TermId f)) =>
+instance (Eq v, Eq (Term f v), Foldable f, Pretty (Term f v)
+         ,HasId f, SATOrd (TermId f), Pretty (TermId f), Extend (TermId f)) =>
     SATOrd (Term f v) where
   s ~~ t | s == t = constant True
   s ~~ t = fromMaybe (constant False) $ do
@@ -69,7 +69,7 @@ instance (Eq v, Eq (Term f v), Foldable f,
    = orM [ anyM (>~ t) tt_s
          , if id_s == id_t
               then andM [allM (s >) tt_t, exgt id_s id_t tt_s tt_t]
-              else traceGt id_s id_t $
+              else -- traceGt id_s id_t $
                    andM [allM (s >) tt_t, id_s > id_t]
 
          ]
@@ -98,11 +98,11 @@ data SymbolRes a = SymbolRes { the_symbolR :: a
 instance Show a => Show (Symbol a) where
     show Symbol{the_symbol} = show the_symbol
 
-instance Ppr a => Ppr (Symbol a) where
-    ppr Symbol{the_symbol} = ppr the_symbol
+instance Pretty a => Pretty (Symbol a) where
+    pPrint Symbol{the_symbol} = pPrint the_symbol
 
-instance Ppr a => Ppr (SymbolRes a) where
-    ppr SymbolRes{the_symbolR} = ppr the_symbolR
+instance Pretty a => Pretty (SymbolRes a) where
+    pPrint SymbolRes{the_symbolR} = pPrint the_symbolR
 
 instance Eq   a => Eq   (Symbol a) where
     a@Symbol{} == b@Symbol{} = the_symbol a == the_symbol b
@@ -145,11 +145,14 @@ instance Eq a => SATOrd (Symbol a) where
 -- LPO and MPO
 -- ------------
 
-newtype LPOSymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, Ppr, SATOrd)
-newtype MPOSymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, Ppr, SATOrd)
+newtype LPOSymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd)
+newtype MPOSymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd)
 
-instance Decode (LPOSymbol a) (SymbolRes a) where decode = decode . unLPO
+instance Decode (LPOSymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
 instance Decode (MPOSymbol a) (SymbolRes a) where decode = decode . unMPO
+
+removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
+removePerm symbolRes = symbolRes
 
 lpoSymbol sig = liftM LPO . symbol sig
 mpoSymbol sig = liftM MPO . symbol sig
@@ -213,7 +216,7 @@ mulgen (i, j) k = do
 -- ---------------------
 -- LPO with permutation
 -- ---------------------
-newtype LPOPSymbol a = LPOP{unLPOP::Symbol a} deriving (Eq, Ord, Show, Ppr, SATOrd)
+newtype LPOPSymbol a = LPOP{unLPOP::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd)
 
 instance Decode (LPOPSymbol a) (SymbolRes a) where decode = decode . unLPOP
 

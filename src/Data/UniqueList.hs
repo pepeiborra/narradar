@@ -10,7 +10,7 @@ import Data.Traversable
 import Narradar.Framework.Ppr
 import Prelude
 
-instance Ppr [a] => Ppr (UniqueList a) where ppr = ppr . toList
+instance Pretty [a] => Pretty (UniqueList a) where pPrint = pPrint . toList
 
 newtype UniqueList a = UniqueList {toList :: [a]}
   deriving (Eq, Ord, Read, Show)

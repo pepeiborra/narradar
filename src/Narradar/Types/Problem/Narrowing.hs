@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -39,21 +39,23 @@ data Narrowing = Narrowing                          deriving (Eq, Ord, Show)
 instance IsDPProblem Narrowing where
   data DPProblem Narrowing a = NarrowingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Narrowing
-  mkDPProblem    _ = NarrowingProblem
   getR (NarrowingProblem r _) = r
   getP (NarrowingProblem _ p) = p
   mapR f (NarrowingProblem r p) = NarrowingProblem (f r) p
   mapP f (NarrowingProblem r p) = NarrowingProblem r (f p)
+instance MkDPProblem Narrowing trs where mkDPProblem _ = NarrowingProblem
+
 
 data CNarrowing = CNarrowing                          deriving (Eq, Ord, Show)
 instance IsDPProblem CNarrowing where
   data DPProblem CNarrowing a = CNarrowingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = CNarrowing
-  mkDPProblem    _ = CNarrowingProblem
   getR (CNarrowingProblem r _) = r
   getP (CNarrowingProblem _ p) = p
   mapR f (CNarrowingProblem r p) = CNarrowingProblem (f r) p
   mapP f (CNarrowingProblem r p) = CNarrowingProblem r (f p)
+instance MkDPProblem CNarrowing trs where mkDPProblem _ = CNarrowingProblem
+
 
 narrowingProblem         = NarrowingProblem
 cNarrowingProblem        = CNarrowingProblem
@@ -67,41 +69,35 @@ instance Foldable (DPProblem CNarrowing) where foldMap f (CNarrowingProblem r p)
 instance Traversable (DPProblem CNarrowing) where traverse f (CNarrowingProblem r p) = CNarrowingProblem <$> f r <*> f p
 
 
-instance Ppr Narrowing where ppr _ = text "Narrowing"
-instance Ppr CNarrowing where ppr _ = text "Constructor Narrowing"
+instance Pretty Narrowing where pPrint _ = text "Narrowing"
+instance Pretty CNarrowing where pPrint _ = text "Constructor Narrowing"
 
 instance HTML Narrowing where toHtml _ = toHtml "Narrowing Problem"
 instance HTML CNarrowing where toHtml _ = toHtml "Constructor Narrowing Problem"
 instance HTMLClass Narrowing where htmlClass _ = theclass "NDP"
 instance HTMLClass CNarrowing where htmlClass _ = theclass "GNDP"
 
+instance GetPairs Narrowing where getPairs _ = getNPairs
 
-instance Ord id => MkNarradarProblem Narrowing id where
-  type Typ' Narrowing id = Narrowing
-  mkNarradarProblem typ trs = assert (isValidUnif p) p where
-      p   = mkDPProblem typ (tRS rr) dps
-      dps = dpTRS typ rr (getNPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
+getNPairs trs = getPairs Rewriting trs ++ getLPairs trs
+getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
 
-instance Ord id => MkNarradarProblem CNarrowing id where
-  type Typ' CNarrowing id = CNarrowing
-  mkNarradarProblem typ trs = mkDPProblem typ (tRS rr) dps where
-      dps = dpTRS typ rr (getPairs rr) emptyArray
-      rr  = mapTermSymbols IdFunction <$$> rules trs
+-- ICap
 
+instance (Ord v, Unify t) => ICap t v (Narrowing, NarradarTRS t v) where icap (_,trs) = icap (Rewriting,trs)
+instance (Ord v, Unify t) => ICap t v (CNarrowing, NarradarTRS t v) where icap (_,trs) = icap (IRewriting,trs)
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v trs) => ICap t v (Narrowing, trs) where icap (_,trs) = icap (Rewriting,trs)
-instance (HasRules t v trs, Unify t, GetVars v trs) => ICap t v (CNarrowing, trs) where icap (_,trs) = icap (IRewriting,trs)
+-- Usable Rules
 
-instance (Enum v, Ord (Term t v), Unify t, IsTRS t v trs, GetVars v trs, ICap t v trs) =>
-  IUsableRules t v (Narrowing, trs) where
+instance (Enum v, Ord (Term t v), Ord v, HasId t, Unify t) =>
+  IUsableRules t v (Narrowing, NarradarTRS t v) where
    iUsableRulesM (typ,trs) tt = do
       (_, trs') <- iUsableRulesM (Rewriting, trs) tt
       return (typ, trs')
    iUsableRulesVar (_, trs) = iUsableRulesVar (Rewriting, trs)
 
-instance (Enum v, Ord (Term t v), Unify t, IsTRS t v trs, GetVars v trs) =>
-  IUsableRules t v (CNarrowing, trs) where
+instance (Enum v, Ord (Term t v), Ord v, HasId t, Unify t) =>
+  IUsableRules t v (CNarrowing, NarradarTRS t v) where
    iUsableRulesM (typ,trs) tt = do
       (_, trs') <- iUsableRulesM (IRewriting, trs) tt
       return (typ, trs')
