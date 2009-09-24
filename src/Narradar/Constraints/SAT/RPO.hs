@@ -8,9 +8,9 @@
 
 module Narradar.Constraints.SAT.RPO where
 
-import Control.Applicative
+import Control.Applicative ((<$>))
 import qualified Control.Exception as CE
-import Control.Monad
+import Control.Monad.State
 import Data.Foldable (Foldable, toList)
 import Data.List (transpose,(\\))
 import Data.Maybe
@@ -30,7 +30,7 @@ mpoDP  = rpoGen mpoSymbol
 lposDP = rpoGen lpopSymbol
 rpoDP  = rpoGen symbol
 
-rpoGen inn p = do
+rpoGen inn p = runSAT $ do
   let sig = getSignature p
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (inn sig) ids
@@ -39,8 +39,8 @@ rpoGen inn p = do
       symb_pairs = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules (getP p)
 
   decreasing_dps <- replicateM (length symb_pairs) boolean
-  assertAll [andM [ l >~ r | l:->r <- symb_rules]
-            ,andM [ l >~ r | l:->r <- symb_pairs]
+  assertAll [trace "encoding rules" $ andM [ trace ("encoding rule " ++ showPpr (l :-> r)) (l >~ r) | l:->r <- symb_rules]
+            ,trace "encoding pairs" $ andM [ trace ("encoding pair " ++ showPpr (l:-> r)) (l >~ r) | l:->r <- symb_pairs]
             ,andM [(l > r) <<==>> return dec | (l:->r, dec) <- zip symb_pairs decreasing_dps]
            , or decreasing_dps]
 
@@ -64,11 +64,11 @@ rpoTestGen inn rr = do
 -- The Recursive Path Ordering, parametric w.r.t the extension
 -- ----------------------------------------------------------------
 
-instance (Eq v, Eq (Term f v), Foldable f, Pretty (Term f v)
-         ,HasId f, SATOrd (TermId f), Pretty (TermId f), Extend (TermId f)) =>
-    SATOrd (Term f v) where
+instance (Eq v, Ord (Term f v), Foldable f, Pretty (Term f v)
+         ,HasId f, SATOrd (Term f v) (TermId f), Pretty (TermId f), Extend (TermId f)) =>
+    SATOrd (Term f v) (Term f v) where
   s ~~ t | s == t = constant True
-  s ~~ t = fromMaybe (constant False) $ do
+  s ~~ t =  memo (s :~~ t) $ fromMaybe (constant False) $ do
              id_s <- rootSymbol s
              id_t <- rootSymbol t
              return $ andM [ id_s ~~ id_t
@@ -78,18 +78,20 @@ instance (Eq v, Eq (Term f v), Foldable f, Pretty (Term f v)
    | s == t = constant False
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
    , Just id_s <- rootSymbol s, tt_s <- directSubterms s
-   = orM [ anyM (>~ t) tt_s
-         , if id_s == id_t
-              then andM [allM (s >) tt_t, exgt id_s id_t tt_s tt_t]
-              else -- traceGt id_s id_t $
-                   andM [allM (s >) tt_t, id_s > id_t]
-
-         ]
+   = memo (s :> t) $ orM [ anyM (>~ t) tt_s
+                         , if id_s == id_t
+                             then andM [allM (s >) tt_t, exgt id_s id_t tt_s tt_t]
+                             else -- traceGt id_s id_t $
+                                  andM [allM (s >) tt_t, id_s > id_t]
+                         ]
    | Just id_s <- rootSymbol s, tt_s <- directSubterms s
-   = anyM (>~ t) tt_s
+   = memo (s :> t) $ anyM (>~ t) tt_s
 
    | otherwise = constant False
 
+  s >~ t
+   | s == t = constant True
+   | otherwise = memo (s :>~ t) $ orM [s > t, s ~~ t]
 
 -- -------------------------------------------------
 -- The symbol datatype encoding all the constraints
@@ -148,7 +150,7 @@ symbol sig x = do
                  return (SymbolRes x n (mkStatus multiset perm_bools))
              }
 
-instance Eq a => SATOrd (Symbol a) where
+instance Eq a => SATOrd t (Symbol a) where
     a ~~ b = encodePrec a `eq` encodePrec b
     a >  b = encodePrec a `gt` encodePrec b
 
@@ -157,8 +159,8 @@ instance Eq a => SATOrd (Symbol a) where
 -- LPO and MPO
 -- ------------
 
-newtype LPOSymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd)
-newtype MPOSymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd)
+newtype LPOSymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd t)
+newtype MPOSymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd t)
 
 instance Decode (LPOSymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
 instance Decode (MPOSymbol a) (SymbolRes a) where decode = decode . unMPO
@@ -178,7 +180,7 @@ instance Eq a => Extend (MPOSymbol a) where
     exeq _ _ = muleq
 
 
-lexgt, lexeq, lexge :: (SATOrd a, Eq a) => [a] -> [a] -> SAT Boolean
+lexgt, lexeq, lexge :: (SATOrd t a, Eq a) => [a] -> [a] -> SAT t Boolean
 
 lexgt []     _      = constant False
 lexgt _      []     = constant True
@@ -192,7 +194,7 @@ lexeq _      _      = constant False
 lexge ff gg     = orM [lexeq ff gg, lexgt ff gg]
 
 
-muleq, mulge, mulgt :: (SATOrd a, Eq a) => [a] -> [a] -> SAT Boolean
+muleq, mulge, mulgt :: (SATOrd t a, Eq a) => [a] -> [a] -> SAT t Boolean
 
 mulge ff gg = mulgen (i, j) $ mulgeF ff gg
  where
@@ -228,7 +230,7 @@ mulgen (i, j) k = do
 -- ---------------------
 -- LPO with permutation
 -- ---------------------
-newtype LPOPSymbol a = LPOP{unLPOP::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd)
+newtype LPOPSymbol a = LPOP{unLPOP::Symbol a} deriving (Eq, Ord, Show, Pretty, SATOrd t)
 
 instance Decode (LPOPSymbol a) (SymbolRes a) where decode = decode . unLPOP
 
@@ -241,26 +243,27 @@ instance Eq a => Extend (LPOPSymbol a) where
 lexpeq ff gg ss tt
       | n /= m = constant False
       | otherwise
-      = andM [ and [f_ik, g_jk] ==>> s_i ~~ t_j
-             | (s_i, f_i) <- zip ss ff
-             , (t_j, g_j) <- zip tt gg
-             , (f_ik, g_jk) <- zip f_i g_j]
+      = andM [ [f_ik, g_jk] *==> s_i ~~ t_j
+                 | (s_i, f_i) <- zip ss ff
+                 , (t_j, g_j) <- zip tt gg
+                 , (f_ik, g_jk) <- zip f_i g_j]
      where (n,m) = (length ss, length tt)
 
-lexpgt ff gg ss tt = exgt_k (transpose ff) (transpose gg)
+lexpgt enc_f enc_g ss tt = exgt_k (transpose enc_f) (transpose enc_g)
      where
        n = length ss
        m = length tt
        exgt_k [] _ = constant False
        exgt_k _ [] = constant True
        exgt_k (f_k:ff) (g_k:gg)
-         = orM [andM [ return f_ik
-                     , andM [ g_jk ==>
+         = orM [andMemo [f_ik] $
+                withFalse ((f_k \\ [f_ik]) ++ (f_i \\ [f_ik])) False $
+                      andM [ [g_jk] *==>
                                orM [ s_i > t_j
-                                    , andM [ s_i ~~ t_j
-                                           , exgt_k ff gg]]
-                            | (g_jk, t_j) <- zip g_k tt]]
-                | (f_ik, s_i) <- zip f_k ss]
+                                  , andM [ s_i ~~ t_j
+                                         , exgt_k ff gg]]
+                            | (g_jk, t_j) <- zip g_k tt]
+                | (f_i,f_ik, s_i) <- zip3 enc_f f_k ss]
 
 -- ------------
 -- All together

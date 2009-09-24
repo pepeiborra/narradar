@@ -101,13 +101,13 @@ rpoAF_NDP allowCol con p = runRPOAF con allowCol (getSignature p) $ \dict -> do
     return ([ r | (r,False) <- zip [0..] decreasing]
            ,[ r | (r,False) <- zip [0..] af_ground])
 
-runRPOAF con allowCol sig f = do
+runRPOAF con allowCol sig f = runSAT $ do
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (con sig) ids
   if allowCol
     then assertAll [notM(listAF s) ==>> oneM [inAF i s | i <- [1..a]]
                     | (s,a) <- zip symbols (getArity sig <$> ids)]
-    else mapM_ (listAF >=> assertOne) symbols
+    else mapM_ (listAF >=> (assert . (:[]))) symbols
 
   let dict       = Map.fromList (zip ids symbols)
   res <- f dict
@@ -202,18 +202,18 @@ rpos sig x = do
              }
 
 class AFSymbol a where
-    listAF :: a -> SAT Boolean
-    inAF, isAF :: Int -> a -> SAT Boolean
+    listAF :: a -> SAT t Boolean
+    inAF, isAF :: Int -> a -> SAT t Boolean
     isAF j sym = andM [inAF j sym, notM (listAF sym)]
 
 instance AFSymbol (Symbol a) where
    listAF     = return . encodeAFlist
    inAF j sym = return (encodeAFpos sym !! (j-1))
 
-class UsableSymbol a where usable :: a -> SAT Boolean
+class UsableSymbol a where usable :: a -> SAT bla Boolean
 instance UsableSymbol (Symbol a) where usable = return . encodeUsable
 
-instance SATOrd (Symbol a) where
+instance SATOrd t (Symbol a) where
   a > b  = encodePrec a `gt` encodePrec b
   a ~~ b = encodePrec a `eq` encodePrec b
 
@@ -235,7 +235,7 @@ instance Eq a => Extend (Symbol a) where
 
 -- LPO with status
 
-newtype LPOSsymbol a = LPOS{unLPOS::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
+newtype LPOSsymbol a = LPOS{unLPOS::Symbol a} deriving (Eq, Ord, Show, SATOrd t, AFSymbol, UsableSymbol)
 instance Decode (LPOSsymbol a) (SymbolRes a) where decode = decode . unLPOS
 
 lpos sig = liftM LPOS . rpos sig
@@ -245,7 +245,8 @@ instance Eq a => Extend (LPOSsymbol a) where
   exgt s t = lexpgt (unLPOS s) (unLPOS t)
 
 
-newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
+
+newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd t, AFSymbol, UsableSymbol)
 instance Decode (LPOsymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
 
 removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
@@ -260,12 +261,12 @@ instance Eq a => Extend (LPOsymbol a) where
   exgt s t = lexgt (unLPO s) (unLPO t)
 
 -- MPO
-newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
+newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd t, AFSymbol, UsableSymbol)
 instance Decode (MPOsymbol a) (SymbolRes a) where decode = decode . unMPO
 
 mpo sig x = do
   s <- rpos sig x
-  assertOne (encodeUseMset s)
+  assert [encodeUseMset s]
   return (MPO s)
 
 instance Eq a => Extend (MPOsymbol a) where
@@ -275,9 +276,9 @@ instance Eq a => Extend (MPOsymbol a) where
 -- -----------
 -- RPO with AF
 -- -----------
-instance (Eq v, Eq (Term f v), Foldable f, HasId f, TermId f ~ id
-         ,SATOrd id, AFSymbol id, Extend id) =>
-    SATOrd (Term f v) where
+instance (Eq v, Ord (Term f v), Foldable f, HasId f, TermId f ~ id
+         ,SATOrd (Term f v) id, AFSymbol id, Extend id) =>
+    SATOrd (Term f v) (Term f v) where
  s > t
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
    , Just id_s <- rootSymbol s, tt_s <- directSubterms s
@@ -449,18 +450,18 @@ mulgen id_f id_g (i, j) k = do
 -- ------------------------
 -- Usable Rules with AF
 -- ------------------------
-class OmegaUsable thing where omega :: thing -> SAT Boolean
+class OmegaUsable bla thing where omega :: thing -> SAT bla Boolean
 
 instance (p  ~ DPProblem IRewriting, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
          ,Ord v, Enum v
-         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (DPProblem IRewriting trs)
+    OmegaUsable (Term t v) (DPProblem IRewriting trs)
  where
   omega p = omegaGen (constant True) p
 
@@ -469,11 +470,11 @@ instance (p  ~ DPProblem CNarrowing, HasSignature (p trs)
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
          ,Ord v, Enum v
-         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (DPProblem CNarrowing trs)
+    OmegaUsable (Term t v) (DPProblem CNarrowing trs)
  where
   omega p = omegaGen (constant True) p
 
@@ -482,11 +483,11 @@ instance (p  ~ DPProblem Rewriting, HasSignature (p trs)
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
          ,Ord v, Enum v
-         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (DPProblem Rewriting trs)
+    OmegaUsable (Term t v) (DPProblem Rewriting trs)
  where
   omega p = omegaGen (andM $ map usable $ toList $ getDefinedSymbols p) p
 
@@ -495,11 +496,11 @@ instance (p  ~ DPProblem Narrowing, HasSignature (p trs)
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
          ,Ord v, Enum v
-         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (DPProblem Narrowing trs)
+    OmegaUsable (Term t v) (DPProblem Narrowing trs)
  where
   omega p = omegaGen (andM $ map usable $ toList $ getDefinedSymbols p) p
 
@@ -509,10 +510,10 @@ omegaGen ::  forall p typ trs id t v.
          ,IsDPProblem typ, Traversable (DPProblem typ)
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
          ,Ord v, Enum v
-         ,Ord id, SATOrd id, Extend id, AFSymbol id, UsableSymbol id
+         ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
-         ) => SAT Boolean -> p trs -> SAT Boolean
+         ) => SAT (Term t v) Boolean -> p trs -> SAT (Term t v) Boolean
 
 omegaGen varcase p =
       andM [andM [go r trs | _:->r <- dps]
