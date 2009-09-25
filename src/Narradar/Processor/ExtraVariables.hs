@@ -20,53 +20,57 @@ instance Pretty ExtraVarsProof where
     pPrint EVFail   = text "The TRS contains extra variables."
     pPrint EVAFFail = text "Failed to find an argument filtering which filters out the extra variables"
 
-instance ProofInfo ExtraVarsProof
 
-instance (ExtraVars v trs, Ord v
-         ,ProblemInfo (DPProblem Rewriting trs)) =>
-          Processor ExtraVarsP (DPProblem Rewriting trs) (DPProblem Rewriting trs)
+instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
+          Processor info ExtraVarsP (DPProblem Rewriting trs) (DPProblem Rewriting trs)
   where
     apply _ p
        | null (extraVars p) = return p
        | otherwise  = failP EVFail p
 
 
-instance (ExtraVars v trs, Ord v
-         ,ProblemInfo (DPProblem IRewriting trs)) =>
-          Processor ExtraVarsP (DPProblem IRewriting trs) (DPProblem IRewriting trs)
+instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
+          Processor info ExtraVarsP (DPProblem IRewriting trs) (DPProblem IRewriting trs)
   where
     apply _ p
        | null (extraVars p) = return p
        | otherwise  = failP EVFail p
 
 
-instance (Processor ExtraVarsP (DPProblem base trs) (DPProblem base' trs)) =>
-          Processor ExtraVarsP (DPProblem (InitialGoal t base) trs) (DPProblem (InitialGoal t base') trs)
+instance ( Processor info ExtraVarsP (DPProblem base trs) (DPProblem base' trs)
+         , Info info ExtraVarsProof
+         , Info info (DPProblem base  trs)
+         , Info info (DPProblem base' trs)
+         ) =>
+          Processor info ExtraVarsP (DPProblem (InitialGoal t base) trs) (DPProblem (InitialGoal t base') trs)
   where
     apply ExtraVarsP p@InitialGoalProblem{..} = updateInitialGoalProblem p `fmap` apply ExtraVarsP baseProblem
 
 
-instance (Processor ExtraVarsP (DPProblem base trs) (DPProblem base' trs)) =>
-          Processor ExtraVarsP (DPProblem (Relative trs base) trs) (DPProblem (Relative trs base') trs)
+instance ( Processor info ExtraVarsP (DPProblem base trs) (DPProblem base' trs)
+         , Info info ExtraVarsProof
+         , Info info (DPProblem base  trs)
+         , Info info (DPProblem base' trs)
+         ) =>
+          Processor info ExtraVarsP (DPProblem (Relative trs base) trs) (DPProblem (Relative trs base') trs)
   where
     apply ExtraVarsP p@RelativeProblem{..} = (\p0' -> p{baseProblem=p0'}) `fmap` apply ExtraVarsP baseProblem
 
 
 -- In this case we don't need to do anything since Narrowing can terminate with extra variables
-instance Processor ExtraVarsP (MkNarrowingGoal id p) (MkNarrowingGoal id p)
+instance Info info ExtraVarsProof
+       => Processor info ExtraVarsP (DPProblem (MkNarrowingGoal id p) trs) (DPProblem (MkNarrowingGoal id p) trs)
   where
     apply ExtraVarsP = return
 
-instance (ExtraVars v trs, Ord v
-         ,ProblemInfo (DPProblem Narrowing trs)) =>
-         Processor ExtraVarsP (DPProblem Narrowing trs) (DPProblem Narrowing trs) where
+instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
+         Processor info ExtraVarsP (DPProblem Narrowing trs) (DPProblem Narrowing trs) where
     apply _ p
        | null (extraVars p) = return p
        | otherwise  = failP EVFail p
 
-instance (ExtraVars v trs, Ord v
-         ,ProblemInfo (DPProblem CNarrowing trs)) =>
-         Processor ExtraVarsP (DPProblem CNarrowing trs) (DPProblem CNarrowing trs) where
+instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
+         Processor info ExtraVarsP (DPProblem CNarrowing trs) (DPProblem CNarrowing trs) where
     apply _ p
        | null (extraVars p) = return p
        | otherwise  = failP EVFail p

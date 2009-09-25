@@ -41,14 +41,17 @@ import Narradar.Utils.Html
 
 data AProveReductionPairProcessor heu = AProveReductionPairProcessor (MkHeu heu) Int
 
-instance (p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
+instance (p0  ~ DPProblem typ trs, Ord p0, PprTPDB p0
          ,trs ~ NTRS id Var
          ,t   ~ TermF id, Pretty (t Doc)
-         ,MkDPProblem typ (NTRS id Var), Pretty typ, Traversable(DPProblem typ)
+         ,MkDPProblem typ (NTRS id Var), Traversable(DPProblem typ)
          ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
-         ,Pretty id, Ord id, Lattice (AF_ id), PolyHeuristic heu id
-         ,HTMLClass (MkNarrowingGoal id typ)) =>
-    Processor (AProveReductionPairProcessor heu)
+         ,Ord id, Pretty id, Lattice (AF_ id), PolyHeuristic heu id
+         ,Info info p0
+         ,Info info UsableRulesProof
+         ,Info info (AProveReductionPairProof id)
+         ) =>
+    Processor info (AProveReductionPairProcessor heu)
               (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
               (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
  where
@@ -75,7 +78,7 @@ instance (p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
          let mb_nonDecreasingDPs = findResultingPairs xml
          in case mb_nonDecreasingDPs of
               Nothing -> singleP (AProveReductionPairProof the_af [OutputXml $ pack xml]) p' rp P.>>= \p'' ->
-                         failP AProveReductionPairFail p''
+                         failP (AProveReductionPairFail :: AProveReductionPairProof id) p''
               Just basic_nonDecreasingDPs ->
                let text_nonDecreasingDPs = Set.fromList(show <$> (pPrint <$$> basic_nonDecreasingDPs))
                    nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- [0..] `zip` rules (getP up)
@@ -99,17 +102,18 @@ instance (p0  ~ DPProblem typ trs, PprTPDB p0, Ord p0, ProofInfo p0
 -- Proof
 -- -------
 
-data AProveReductionPairProof id where AProveReductionPairProof :: AF_ id -> [Output] -> AProveReductionPairProof id
-                                       AProveReductionPairFail :: AProveReductionPairProof ()
+data AProveReductionPairProof id where
+    AProveReductionPairProof :: AF_ id -> [Output] -> AProveReductionPairProof id
+    AProveReductionPairFail  :: AProveReductionPairProof id
 
 
-instance Pretty (AProveReductionPairProof id) where pPrint _ = text "External: Aprove (Reduction Pair)"
+instance Pretty (AProveReductionPairProof id) where
+    pPrint _ = text "External: Aprove (Reduction Pair)"
 
 instance HTML (AProveReductionPairProof id) where
  toHtml (AProveReductionPairProof _ outputs)
-     | Just (OutputHtml html) <- find isOutputHtml outputs = thickbox (unpack html) << spani "seeproof" << "(see proof)"
-
-instance ProofInfo (AProveReductionPairProof id)
+     | Just (OutputHtml html) <- find isOutputHtml outputs
+     = thickbox (unpack html) << spani "seeproof" << "(see proof)"
 
 -- ----------------
 -- Implementation

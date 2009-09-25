@@ -42,10 +42,15 @@ data NarrowingToRewritingICLP08 heu = NarrowingToRewritingICLP08 (MkHeu heu)
                                     | NarrowingToRewritingICLP08_SCC (MkHeu heu)
 
 
-instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
-    Processor (NarrowingToRewritingICLP08 heu) (DPProblem Narrowing (NTRS id Var) ) (DPProblem Rewriting (NTRS id Var) ) where
+instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
+         , Info info (DPProblem Narrowing (NTRS id Var))
+         , Info info (DPProblem Rewriting (NTRS id Var))
+         , Info info UsableRulesProof
+         , Info info (NarrowingToRewritingProof id)
+         ) =>
+    Processor info (NarrowingToRewritingICLP08 heu) (DPProblem Narrowing (NTRS id Var) ) (DPProblem Rewriting (NTRS id Var) ) where
   applySearch (NarrowingToRewritingICLP08 mk) p
-    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
@@ -57,7 +62,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
-    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
@@ -68,11 +73,16 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
                                 AF.apply af (mkDerivedProblem Rewriting p')
                         | af <- Set.toList afs]
 
-instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
-    Processor (NarrowingToRewritingICLP08 heu) (DPProblem CNarrowing (NTRS id Var)) (DPProblem IRewriting (NTRS id Var))
+instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
+         , Info info (NarradarProblem CNarrowing (TermF id))
+         , Info info (NarradarProblem IRewriting (TermF id))
+         , Info info (NarrowingToRewritingProof id)
+         , Info info UsableRulesProof
+         ) =>
+    Processor info (NarrowingToRewritingICLP08 heu) (DPProblem CNarrowing (NTRS id Var)) (DPProblem IRewriting (NTRS id Var))
  where
   applySearch (NarrowingToRewritingICLP08 mk) p
-    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
@@ -84,7 +94,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
-    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
@@ -96,15 +106,17 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
                         | af <- Set.toList afs]
 
 
-instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,ProblemInfo (NarradarProblem(MkNarrowingGoal id typ0) (TermF id))
-         ,MkDPProblem typ0 (NTRS id Var), Traversable (DPProblem typ0)) =>
-    Processor (NarrowingToRewritingICLP08 heu)
-              (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
-              (NarradarProblem typ0 (TermF id))
+instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
+         , Info info (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
+         , Info info (NarradarProblem typ0 (TermF id))
+         , Info info (NarrowingToRewritingProof id)
+         , MkDPProblem typ0 (NTRS id Var), Traversable (DPProblem typ0)) =>
+    Processor info (NarrowingToRewritingICLP08 heu)
+                   (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
+                   (NarradarProblem typ0 (TermF id))
  where
   applySearch (NarrowingToRewritingICLP08 mk) p
-    | null orProblems = [failP NarrowingToRewritingICLP08Fail p]
+    | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where heu = mkHeu mk p
           NarrowingGoal pi_groundInfo0 typ0 = getProblemType p
@@ -124,7 +136,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
 
 data NarrowingToRewritingProof id where
     NarrowingToRewritingICLP08Proof :: AF_ id -> NarrowingToRewritingProof id
-    NarrowingToRewritingICLP08Fail  :: NarrowingToRewritingProof ()
+    NarrowingToRewritingICLP08Fail  :: NarrowingToRewritingProof id
 
 instance Pretty id => Pretty (NarrowingToRewritingProof id) where
     pPrint NarrowingToRewritingICLP08Fail = text "Failed to find an argument filtering that satisfies" $$
@@ -133,8 +145,6 @@ instance Pretty id => Pretty (NarrowingToRewritingProof id) where
                                                text "implies termination of the original problem." $$
                                                text "The following argument filtering was used:" $$
                                                pPrint af
-
-instance Pretty id =>  ProofInfo (NarrowingToRewritingProof id)
 
 
 -- ---------------

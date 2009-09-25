@@ -41,24 +41,26 @@ data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
 
 
 instance ( trs ~ NarradarTRS t Var
-         , problem ~ DPProblem typ trs, ProblemInfo problem
+         , problem ~ DPProblem typ trs, Info info problem
          , MkDPProblem typ (NarradarTRS t Var), Traversable (DPProblem typ)
          , Unify t, ICap t Var (typ,trs)
          , Pretty (Term t Var), Pretty typ
+         , Info info DependencyGraphProof
          ) =>
-    Processor DependencyGraphSCC (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
+    Processor info DependencyGraphSCC (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
   apply DependencyGraphSCC = sccProcessor
 
 
 instance ( TermId t ~ Identifier id0, Ord id0
          , trs ~ NarradarTRS t Var
-         , problem ~ DPProblem (InitialGoal t typ0) trs, ProblemInfo problem
+         , problem ~ DPProblem (InitialGoal t typ0) trs, Info info problem
          , MkDPProblem typ0 (NarradarTRS t Var), Traversable (DPProblem typ0)
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (Term t Var), Pretty typ0
          , ICap t Var (typ0,trs), ProblemColor problem, PprTPDBDot problem
+         , Info info DependencyGraphProof
          ) =>
-    Processor DependencyGraphSCC
+    Processor info DependencyGraphSCC
              (DPProblem (InitialGoal t typ0) (NarradarTRS t Var))
              (DPProblem (InitialGoal t typ0) (NarradarTRS t Var))
  where
@@ -66,13 +68,14 @@ instance ( TermId t ~ Identifier id0, Ord id0
 
 
 instance ( trs ~ NarradarTRS t Var
-         , problem ~ DPProblem typ trs, ProblemInfo problem
+         , problem ~ DPProblem typ trs, Info info problem
          , MkDPProblem typ (NarradarTRS t Var), Traversable (DPProblem typ)
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (Term t Var), Pretty typ
          , ICap t Var (typ,trs), ProblemColor problem, PprTPDBDot problem
+         , Info info DependencyGraphProof
          ) =>
-    Processor DependencyGraphCycles (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
+    Processor info DependencyGraphCycles (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
   apply DependencyGraphCycles = cycleProcessor
 
 -- --------------
@@ -118,20 +121,19 @@ instance DotRep DependencyGraphProof where
 
   dot NoCycles = Text (text "There are no cycles, so the system is terminating.") []
 
-instance ProofInfo DependencyGraphProof
-
 -- ---------------
 -- Implementation
 -- ---------------
-type GraphProcessor typ t mp =   (problem ~ DPProblem typ trs, ProblemInfo problem
+type GraphProcessor typ t mp =   (problem ~ DPProblem typ trs, Info info problem
                                  ,trs     ~ NarradarTRS t Var
                                  ,MkDPProblem typ (NarradarTRS t Var)
                                  ,Traversable (DPProblem typ)
                                  ,Pretty (Term t Var), Pretty typ
                                  ,Unify t, ICap t Var (typ, trs)
+                                 ,Info info DependencyGraphProof
                                  ,Monad mp
                                  ) =>
-                                    DPProblem typ (NarradarTRS t Var) -> Proof mp problem
+                                    DPProblem typ (NarradarTRS t Var) -> Proof info mp problem
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 usableSCCsProcessor :: (Identifier a ~ TermId t, Ord a) => GraphProcessor (InitialGoal t  typ0) t mp

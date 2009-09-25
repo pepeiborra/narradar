@@ -39,24 +39,28 @@ data FInstantiation = FInstantiation
 
 -- Narrowing
 
-instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
-         , Pretty (Identifier id)) =>
-    Processor NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
+instance ( Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+         , Info info GraphTransformationProof
+         ) =>
+    Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
 instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
-         ,Pretty (Identifier id)) =>
-    Processor NarrowingP (NarradarProblem Narrowing t) (NarradarProblem Narrowing t) where
+         , Info info GraphTransformationProof
+         ) =>
+    Processor info NarrowingP (NarradarProblem Narrowing t) (NarradarProblem Narrowing t) where
   applySearch NarrowingP = narrowing
 
 instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
-         ,Pretty (TermId t)) =>
-    Processor NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
+         , Info info GraphTransformationProof
+         ) =>
+    Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
   applySearch NarrowingP = narrowing_innermost
 
 instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
-         ,Pretty (TermId t)) =>
-    Processor NarrowingP (NarradarProblem CNarrowing t) (NarradarProblem CNarrowing t) where
+         , Info info GraphTransformationProof
+         ) =>
+    Processor info NarrowingP (NarradarProblem CNarrowing t) (NarradarProblem CNarrowing t) where
   applySearch NarrowingP = narrowing_innermost
 
 -- Instantiation
@@ -65,11 +69,12 @@ instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
          ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
-         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (NarradarProblem typ t)
+         ,IsDPProblem typ, Traversable (DPProblem typ)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+         ,Info info GraphTransformationProof
          ) =>
-    Processor Instantiation (NarradarProblem typ t) (NarradarProblem typ t) where
+    Processor info Instantiation (NarradarProblem typ t) (NarradarProblem typ t) where
   applySearch Instantiation = instantiation
 
 
@@ -79,42 +84,44 @@ instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
          ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
-         ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo (NarradarProblem typ t)
+         ,IsDPProblem typ, Traversable (DPProblem typ)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+         ,Info info GraphTransformationProof
          ) =>
-    Processor FInstantiation (NarradarProblem typ t) (NarradarProblem typ t) where
+    Processor info FInstantiation (NarradarProblem typ t) (NarradarProblem typ t) where
   applySearch FInstantiation = finstantiation
 
 
 -- -------
 -- Proofs
 -- -------
-data NarrowingProof where NarrowingProof :: Pretty (Rule t v) =>  Rule t v   -- ^ Old pair
-                                                           -> [Rule t v]  -- ^ New pairs
-                                                           -> NarrowingProof
 
-instance ProofInfo NarrowingProof
-instance Pretty NarrowingProof where
-  pPrint (NarrowingProof old new) = text "Narrowing Processor." <+>
+data GraphTransformationProof where
+    NarrowingProof :: Pretty (Rule t v) =>
+                      Rule t v            -- ^ Old pair
+                   -> [Rule t v]          -- ^ New pairs
+                   -> GraphTransformationProof
+    InstantiationProof :: Pretty (Rule t v) =>
+                      Rule t v            -- ^ Old pair
+                   -> [Rule t v]          -- ^ New pairs
+                   -> GraphTransformationProof
+    FInstantiationProof :: Pretty (Rule t v) =>
+                      Rule t v            -- ^ Old pair
+                   -> [Rule t v]          -- ^ New pairs
+                   -> GraphTransformationProof
+
+instance Pretty GraphTransformationProof where
+  pPrint (NarrowingProof old new) =
+                                 text "Narrowing Processor." <+>
                                  text "Pair" <+> pPrint old <+> text "replaced by" <+> pPrint new
 
-data InstantiationProof where InstantiationProof :: Pretty (Rule t v) =>  Rule t v   -- ^ Old pair
-                                                           -> [Rule t v]  -- ^ New pairs
-                                                           -> InstantiationProof
-
-instance ProofInfo InstantiationProof
-instance Pretty InstantiationProof where
-  pPrint (InstantiationProof old new) = text "Instantiation Processor." <+>
+  pPrint (InstantiationProof old new) =
+                                 text "Instantiation Processor." <+>
                                  text "Pair" <+> pPrint old <+> text "replaced by" <+> pPrint new
 
-data FInstantiationProof where FInstantiationProof :: Pretty (Rule t v) =>  Rule t v   -- ^ Old pair
-                                                           -> [Rule t v]  -- ^ New pairs
-                                                           -> FInstantiationProof
-
-instance ProofInfo FInstantiationProof
-instance Pretty FInstantiationProof where
-  pPrint (FInstantiationProof old new) = text "FInstantiation Processor." <+>
+  pPrint (FInstantiationProof old new) =
+                                 text "FInstantiation Processor." <+>
                                  text "Pair" <+> pPrint old <+> text "replaced by" <+> pPrint new
 
 -- ----------------
@@ -127,13 +134,15 @@ narrowing, narrowing_innermost
              ,trs ~ NarradarTRS t v
              ,TermId t  ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)
-             ,IsDPProblem typ, Traversable (DPProblem typ), ProblemInfo p
+             ,IsDPProblem typ, Traversable (DPProblem typ)
              ,IUsableRules t v (typ, trs), ICap t v (typ,trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ,[Rule t v])
              ,Pretty (Term t v), Pretty v, Pretty typ
+             ,Info info p
+             ,Info info GraphTransformationProof
              ,Monad mp
              ) =>
-             DPProblem typ trs -> [Proof mp (DPProblem typ trs)]
+             DPProblem typ trs -> [Proof info mp (DPProblem typ trs)]
 
 narrowing p0
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
@@ -204,8 +213,8 @@ narrow1DP rr (l :-> r) = [ (applySubst theta l :-> r', p)
 -- Instantiation
 
 instantiation, finstantiation
-          :: forall typ trs mp t v p id.
-             (p  ~ DPProblem typ trs, ProblemInfo p
+          :: forall typ trs mp t v p id info.
+             (p  ~ DPProblem typ trs, Info info p
              ,trs ~ NarradarTRS t v
              ,TermId t ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v
@@ -213,9 +222,10 @@ instantiation, finstantiation
              ,Pretty (Term t v), Ord(Term t v), Pretty v, Pretty typ
              ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+             ,Info info GraphTransformationProof
              ,Monad mp
              ) =>
-             DPProblem typ trs -> [Proof mp (DPProblem typ trs)]
+             DPProblem typ trs -> [Proof info mp (DPProblem typ trs)]
 
 instantiation p
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"

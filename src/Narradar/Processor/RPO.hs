@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module Narradar.Processor.RPO where
@@ -28,7 +29,8 @@ import qualified Satchmo.Solver.Minisat as MiniSat
 -- -------------------
 -- RPO SAT Processor
 -- -------------------
-rpo :: MonadPlus mp => Processor RPOProc i o => i -> Proof mp o
+rpo :: (MonadPlus mp, Info info i, Info info o, Processor info RPOProc i o) =>
+       i -> Proof info mp o
 rpo = apply (RPOProc RPOSAF MiniSat)
 
 
@@ -36,7 +38,13 @@ data RPOProc = RPOProc Extension Solver
 data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF | LPOS | LPO | MPO
 data Solver = Yices | MiniSat -- | Funsat
 
-instance (Ord id, Pretty id) => Processor RPOProc (DPProblem Rewriting  (NarradarTRS (TermF id) Var)) (DPProblem Rewriting  (NarradarTRS (TermF id) Var)) where
+instance (Ord id, Pretty id
+         ,Info info (RPOProof id)
+         ) =>
+    Processor info RPOProc
+                  (DPProblem Rewriting  (NarradarTRS (TermF id) Var))
+                  (DPProblem Rewriting  (NarradarTRS (TermF id) Var))
+   where
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
     apply (RPOProc LPOAF Yices)  p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpo  p)
@@ -53,7 +61,12 @@ instance (Ord id, Pretty id) => Processor RPOProc (DPProblem Rewriting  (Narrada
     apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
     apply (RPOProc MPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.mpoDP p)
 
-instance (Ord id, Pretty id) => Processor RPOProc (DPProblem IRewriting  (NarradarTRS (TermF id) Var)) (DPProblem IRewriting  (NarradarTRS (TermF id) Var)) where
+instance (Ord id, Pretty id
+         ,Info info (RPOProof id)
+         ) => Processor info RPOProc
+                             (DPProblem IRewriting (NarradarTRS (TermF id) Var))
+                             (DPProblem IRewriting  (NarradarTRS (TermF id) Var))
+   where
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
     apply (RPOProc LPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpo  p)
@@ -75,9 +88,10 @@ instance (Ord id, Pretty id) => Processor RPOProc (DPProblem IRewriting  (Narrad
 --      Instead we need to create two problems, one without the decreasing pairs and one
 --      without the ground right hand sides
 instance (Ord id, Pretty id
-         ) => Processor RPOProc
-                        (DPProblem Narrowing (NarradarTRS (TermF id) Var))
-                        (DPProblem Narrowing (NarradarTRS (TermF id) Var))
+         ,Info info (RPOProof id)
+         ) => Processor info RPOProc
+                             (DPProblem Narrowing (NarradarTRS (TermF id) Var))
+                             (DPProblem Narrowing (NarradarTRS (TermF id) Var))
   where
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
@@ -90,7 +104,8 @@ instance (Ord id, Pretty id
     apply (RPOProc MPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.mpo  p)
 
 instance (Ord id, Pretty id
-         ) => Processor RPOProc
+         ,Info info (RPOProof id)
+         ) => Processor info RPOProc
                         (DPProblem CNarrowing (NarradarTRS (TermF id) Var))
                         (DPProblem CNarrowing (NarradarTRS (TermF id) Var))
   where
@@ -106,7 +121,7 @@ instance (Ord id, Pretty id
 
 
 procAF p m = case unsafePerformIO m of
-                  Nothing -> dontKnow RPOFail p
+                  Nothing -> dontKnow (rpoFail p) p
                   Just (dps', symbols) ->
                       let proof = RPOAFProof decreasingDps usableRules symbols
                           decreasingDps = select (rules dps) ([0..length (rules dps)] \\ dps')
@@ -117,7 +132,7 @@ procAF p m = case unsafePerformIO m of
        where dps = getP p
 
 procNAF p m = case unsafePerformIO m of
-                  Nothing -> dontKnow RPOFail p
+                  Nothing -> dontKnow (rpoFail p) p
                   Just ((non_dec_dps, non_rhsground_dps), symbols) ->
                       let proof = RPOAFProof decreasingDps usableRules symbols
                           decreasingDps = select (rules dps) ([0..length (rules dps)] \\ non_dec_dps)
@@ -129,7 +144,7 @@ procNAF p m = case unsafePerformIO m of
        where dps = getP p
 
 proc p m = case unsafePerformIO m of
-                  Nothing -> dontKnow RPOFail p
+                  Nothing -> dontKnow (rpoFail p) p
                   Just (dps', symbols) ->
                       let proof = RPOProof decreasingDps [] symbols
                           decreasingDps = select (rules dps) ([0..length (rules dps)] \\ dps')
@@ -141,20 +156,23 @@ proc p m = case unsafePerformIO m of
 -- RPO Proofs
 -- -------------
 
-data RPOAFProof id where RPOAFProof :: Pretty (Rule t v) =>
-                                       [Rule t v]             --  ^ Strictly Decreasing dps
-                                    -> [Rule t v]       --  ^ Usable Rules
-                                    -> [RPOAF.SymbolRes id]
-                                    -> RPOAFProof id
-                         RPOProof   :: Pretty (Rule t v) =>
-                                       [Rule t v]       --  ^ Strictly Decreasing dps
-                                    -> [Rule t v]       --  ^ Usable Rules
-                                    -> [RPO.SymbolRes id]
-                                    -> RPOAFProof id
-                         RPOFail :: RPOAFProof ()
+data RPOProof id where
+     RPOAFProof :: Pretty (Rule t v) =>
+                   [Rule t v]       --  ^ Strictly Decreasing dps
+                -> [Rule t v]       --  ^ Usable Rules
+                -> [RPOAF.SymbolRes id]
+                -> RPOProof id
+     RPOProof   :: Pretty (Rule t v) =>
+                   [Rule t v]       --  ^ Strictly Decreasing dps
+                -> [Rule t v]       --  ^ Usable Rules
+                -> [RPO.SymbolRes id]
+                -> RPOProof id
+     RPOFail :: RPOProof id
 
+rpoFail :: DPProblem typ (NTRS id Var) -> RPOProof id
+rpoFail _ = RPOFail
 
-instance (Ord id, Pretty id) => Pretty (RPOAFProof id) where
+instance (Ord id, Pretty id) => Pretty (RPOProof id) where
     pPrint (RPOAFProof dps rr ss) =
         text "RPO reduction pair" $$
         text "The following pairs are strictly decreasing:" $$
@@ -187,7 +205,6 @@ instance (Ord id, Pretty id) => Pretty (RPOAFProof id) where
 
     pPrint RPOFail = text "RPO Reduction Pair : failed to synthetize a suitable ordering"
 
-instance (Ord id, Pretty id) => ProofInfo (RPOAFProof id)
 
 -- ----------------------
 -- Implementation

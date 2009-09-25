@@ -7,7 +7,7 @@
 
 module Narradar ( narradarMain, Options(..), defOpts
                 , module Narradar.Framework
---                , module Narradar.Solver
+                , PprTPDBDot(..)      -- module Narradar.Framework.GraphViz
                 , module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
                 , module Narradar.Processor.ReductionPair
@@ -91,7 +91,7 @@ narradarMain :: forall mp.
 narradarMain run = do
   (flags@Options{..}, _, _errors) <- getOptions
 
-  let printDiagram :: Proof mp a -> IO ()
+  let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
       printDiagram proof = withTempFile "." "narradar.dot" $ \fp h -> do
         let dotSrc = dotProof' DotProof{showFailedPaths = verbose > 1} proof
         hPutStrLn h dotSrc

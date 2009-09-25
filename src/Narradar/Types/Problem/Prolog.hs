@@ -126,8 +126,6 @@ instance Pretty (PrologProblem String) where
             text "Clauses:" <+> pPrint program $$
             text "Goals:" <+> pPrint goals
 
-instance ProblemInfo (PrologProblem String)
-
 
 -- ------------------------------------------
 -- Representation of Prolog clauses as rules
@@ -224,10 +222,12 @@ prologTRS'' pr sig = PrologTRS pr' sig where
 -- --------------
 
 prologP_sk :: ( Monad m
+              , Info info PrologToNarrowingProof
+              , Info info (PrologProblem String)
               ) =>
               PrologProblem String
-           -> Proof m (NarradarProblem (InitialGoal (Narradar.TermF DRP) CNarrowing)
-                                       (Narradar.TermF DRP))
+           -> Proof info m (NarradarProblem (InitialGoal (Narradar.TermF DRP) CNarrowing)
+                                            (Narradar.TermF DRP))
 
 prologP_sk p0@PrologProblem{..} =
    andP PrologToTRSSKNarrowingProof p0
@@ -298,7 +298,7 @@ instance Pretty PrologToNarrowingProof where
                                      text "(Schneider-Kamp transformation)"
   pPrint PrologToTRSSKNarrowingProof  = text "Termination of LP as termination of Narrowing proof" $$
                                      text "(Schneider-Kamp transformation)"
-instance ProofInfo PrologToNarrowingProof
+
 
 -- ---------
 -- Analysis

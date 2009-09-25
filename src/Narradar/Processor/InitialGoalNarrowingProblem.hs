@@ -38,16 +38,20 @@ data InitialGoalNarrowingToInfinitaryRewriting = InitialGoalNarrowingToInfinitar
 -- | This is the approach of Iborra, Nishida & Vidal
 data InitialGoalNarrowingToRelativeRewriting = InitialGoalNarrowingToRelativeRewriting deriving (Eq, Show)
 
-instance (HasId t, Foldable t, TermId t ~ id, SignatureId trs ~ id, Ord id, Ord (Term t Var), HasSignature trs) =>
-    Processor InitialGoalNarrowingToNarrowingGoal
+instance ( HasId t, Foldable t, TermId t ~ id, SignatureId trs ~ id
+         , Ord id, Ord (Term t Var), HasSignature trs
+         ) =>
+    Processor info InitialGoalNarrowingToNarrowingGoal
               (DPProblem (InitialGoal t Narrowing) trs)
               (DPProblem (NarrowingGoal id) trs)
  where
   apply _ p = mprod [mkDerivedProblem (narrowingGoal g) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
-instance (HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var), HasSignature trs, SignatureId trs ~ id) =>
-    Processor InitialGoalNarrowingToNarrowingGoal
+instance ( HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var)
+         , HasSignature trs, SignatureId trs ~ id
+         ) =>
+    Processor info InitialGoalNarrowingToNarrowingGoal
               (DPProblem (InitialGoal t CNarrowing) trs)
               (DPProblem (CNarrowingGoal id) trs)
  where
@@ -55,8 +59,12 @@ instance (HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var), HasSigna
     where InitialGoal gg _ _ = getProblemType p
 
 
-instance (HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id, HasSignature trs, SignatureId trs ~ id) =>
-    Processor InitialGoalNarrowingToInfinitaryRewriting
+instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
+         , Info info (DPProblem (InitialGoal t Narrowing) trs)
+         , HasSignature trs, SignatureId trs ~ id
+         , Info info InitialGoalNarrowingToInfinitaryRewritingProof
+         ) =>
+    Processor info InitialGoalNarrowingToInfinitaryRewriting
               (DPProblem (InitialGoal t Narrowing) trs)
               (DPProblem (Infinitary id Rewriting) trs)
  where
@@ -88,7 +96,7 @@ instance (trsGDP ~ NarradarTRS gdp Var
    apply = initialGoalNarrowingToRelativeRewriting
 -}
 initialGoalNarrowingToRelativeRewriting ::
-              forall typ typ' tag id mp gid gdp trsG trsGDP.
+              forall typ typ' tag id mp gid gdp trsG trsGDP info.
             ( gid ~ GenTermF id
             , gdp ~ GenTermF (Identifier id)
             , typ' ~ InitialGoal gdp (Relative trsGDP NarrowingGen)
@@ -98,7 +106,7 @@ initialGoalNarrowingToRelativeRewriting ::
 --            ,MkDPProblem (Relative trs NarrowingGen) trsGDP
             , Monad mp
             ) => tag -> DPProblem (InitialGoal (TermF (Identifier id)) Narrowing) (NarradarTRS (TermF (Identifier id)) Var)
-                     -> Proof mp (DPProblem typ' trsGDP)
+                     -> Proof info mp (DPProblem typ' trsGDP)
 
 initialGoalNarrowingToRelativeRewriting _ p =
               mprod [mkNewProblem (initialGoal [goal] (relative genRules narrowingGen))

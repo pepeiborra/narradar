@@ -12,7 +12,6 @@ data UsableRulesProof = UsableRulesProof deriving (Eq,Show,Ord)
 
 instance Pretty UsableRulesProof where pPrint _ = text "Usable rules proof"
 
-instance ProofInfo UsableRulesProof
 
 {-
 usableRulesP :: (Pretty v, Pretty id, Ord v, Ord a, Enum v, id ~ Identifier a) => Problem id v -> ProblemProofG id v

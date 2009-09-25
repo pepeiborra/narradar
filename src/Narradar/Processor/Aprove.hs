@@ -21,7 +21,7 @@ import Data.HashTable (hashString)
 import Data.List
 import Data.Maybe
 import Network
-import Network.Curl
+import Network.Curl hiding (Info)
 import System.FilePath
 import System.IO
 import System.IO.Unsafe
@@ -34,13 +34,9 @@ import Text.ParserCombinators.Parsec.Tag
 
 import Paths_narradar
 
-import MuTerm.Framework.DotRep
-import MuTerm.Framework.Proof
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Processor
+import Narradar.Framework hiding ((.|.), (.&.))
 import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr
-
 import Narradar.Types
 import Narradar.Types.Problem.Rewriting
 import Narradar.Utils
@@ -78,33 +74,33 @@ instance HTML AproveProof where
  toHtml (AproveProof outputs)
      | Just (OutputHtml html) <- find isOutputHtml outputs = thickbox (unpack html) << spani "seeproof" << "(see proof)"
 
-instance DotRep AproveProof where dot p = Text (pPrint p) []
-
-instance ProofInfo AproveProof
-
-
 -- ------------------
 -- Allowed instances
 -- ------------------
 instance ( p ~ DPProblem Rewriting trs
-         , ProblemInfo p, PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
+         , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
+         , Info info AproveProof
          ) =>
-    Processor Aprove (DPProblem Rewriting trs) (DPProblem Rewriting trs)
+    Processor info Aprove (DPProblem Rewriting trs) (DPProblem Rewriting trs)
   where
     apply AproveWeb{..}    = unsafePerformIO . aproveWebProc
     apply AproveBinary{..} = unsafePerformIO . aproveProc path
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
-instance (p ~ DPProblem IRewriting trs
-         , ProblemInfo p, PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
+instance ( p ~ DPProblem IRewriting trs
+         , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
+         , Info info AproveProof
          ) =>
-    Processor Aprove (DPProblem IRewriting trs) (DPProblem IRewriting trs)
+    Processor info Aprove (DPProblem IRewriting trs) (DPProblem IRewriting trs)
   where
     apply AproveWeb{..} = unsafePerformIO . aproveWebProc
     apply AproveBinary{..} = unsafePerformIO . aproveProc path
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
-instance Processor Aprove (DPProblem i trs) o => Processor Aprove (DPProblem (InitialGoal t i) trs) o where
+instance ( Info info (DPProblem i trs)
+         , Processor info Aprove (DPProblem i trs) o
+         ) =>
+    Processor info Aprove (DPProblem (InitialGoal t i) trs) o where
     apply mode InitialGoalProblem{..} = apply mode baseProblem
 
 -- ------------------
@@ -112,11 +108,11 @@ instance Processor Aprove (DPProblem i trs) o => Processor Aprove (DPProblem (In
 -- ------------------
 
 aproveWebProc :: ( p ~ DPProblem typ trs
-                 , IsDPProblem typ, Eq p, ProblemInfo p, PprTPDB p
-                 , Pretty trs, Pretty typ, HTML typ, HTMLClass typ
+                 , IsDPProblem typ, Eq p, PprTPDB p
                  , HasRules t v trs, Pretty (Term t v)
+                 , Info info p, Info info AproveProof
                  , Monad mp
-                 ) => p -> IO (Proof mp b)
+                 ) => p -> IO (Proof info mp b)
 aproveWebProc = memoExternalProc go where
   go prob = do
     curl <- initialize

@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -29,15 +30,17 @@ data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu)
 data NarrowingGoalToInfinitary = NarrowingGoalToInfinitary
 
 
--- This is the infinitary constructor rewriting AF processor described in
--- "Termination of Logic Programs ..." (Schneider-Kamp et al)
-instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
-    Processor (InfinitaryToRewriting heu)
+-- | This is the infinitary constructor rewriting AF processor described in
+--   "Termination of Logic Programs ..." (Schneider-Kamp et al)
+instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
+         ,Info info (InfinitaryToRewritingProof id)
+         ) =>
+    Processor info (InfinitaryToRewriting heu)
               (DPProblem (Infinitary id Rewriting) (NTRS id Var))
               (DPProblem Rewriting (NTRS id Var))
   where
   applySearch (InfinitaryToRewriting mk) p
-    | null orProblems = [failP InfinitaryToRewritingFail p]
+    | null orProblems = [failP (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
     | otherwise = orProblems
    where
      orProblems = do
@@ -48,22 +51,22 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id) =>
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
 
--- This is the infinitary constructor rewriting AF processor described in
--- "Termination of Logic Programs ..." (Schneider-Kamp et al)
+-- | This is the infinitary constructor rewriting AF processor described in
+--   "Termination of Logic Programs ..." (Schneider-Kamp et al)
 instance (t   ~ TermF id
          ,v   ~ Var
          ,trs ~ NTRS id Var
          ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
-         ,ProblemInfo (DPProblem (Infinitary id typ) (NTRS id Var))
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id Var), Traversable (DPProblem typ)
+         ,Info info (InfinitaryToRewritingProof id)
          ) =>
-    Processor (InfinitaryToRewriting heu)
+    Processor info (InfinitaryToRewriting heu)
               (DPProblem (Infinitary id typ) (NTRS id Var))
               (DPProblem typ (NTRS id Var))
   where
   applySearch (InfinitaryToRewriting mk) p
-    | null orProblems = [failP InfinitaryToRewritingFail p]
+    | null orProblems = [failP (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
     | otherwise = orProblems
    where
      orProblems = do
@@ -75,10 +78,12 @@ instance (t   ~ TermF id
 
 
 
-instance (Ord id, Pretty id, MkDPProblem typ (NTRS id Var), Pretty typ, HTMLClass (MkNarrowingGoal id typ)) =>
-    Processor NarrowingGoalToInfinitary
-              (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
-              (DPProblem (Infinitary id typ) (NTRS id Var))
+instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id Var), Pretty typ, HTMLClass (MkNarrowingGoal id typ)
+         , Info info NarrowingGoalToInfinitaryProof
+         ) =>
+    Processor info NarrowingGoalToInfinitary
+                  (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
+                  (DPProblem (Infinitary id typ) (NTRS id Var))
    where
     apply _ p@(getProblemType -> NarrowingGoal pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkDerivedProblem (Infinitary pi p0) p
 
@@ -88,7 +93,7 @@ instance (Ord id, Pretty id, MkDPProblem typ (NTRS id Var), Pretty typ, HTMLClas
 
 data InfinitaryToRewritingProof id where
     InfinitaryToRewritingProof :: AF_ id -> InfinitaryToRewritingProof id
-    InfinitaryToRewritingFail  :: InfinitaryToRewritingProof ()
+    InfinitaryToRewritingFail  :: InfinitaryToRewritingProof id
 
 instance Pretty id => Pretty (InfinitaryToRewritingProof id) where
     pPrint InfinitaryToRewritingFail = text "Failed to find an argument filtering that satisfies" <>
@@ -97,12 +102,9 @@ instance Pretty id => Pretty (InfinitaryToRewritingProof id) where
                                                text "implies termination of the original problem." $$
                                                text "The argument filtering used is:" $$
                                                pPrint af
-instance Pretty id => ProofInfo (InfinitaryToRewritingProof id)
 
 data NarrowingGoalToInfinitaryProof = NarrowingGoalToInfinitaryProof deriving (Eq, Ord, Show)
 
 instance Pretty NarrowingGoalToInfinitaryProof where
  pPrint _ = text "Termination of this infinitary rewriting problem" $$
          text "implies termination of the original problem"
-
-instance ProofInfo NarrowingGoalToInfinitaryProof
