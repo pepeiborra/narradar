@@ -35,6 +35,14 @@ data InitialGoalNarrowingToNarrowingGoal = InitialGoalNarrowingToNarrowingGoal d
 --   But an equivalent approach is formalized by Vidal in FLOPS'08
 data InitialGoalNarrowingToInfinitaryRewriting = InitialGoalNarrowingToInfinitaryRewriting deriving (Eq, Show)
 
+data InitialGoalNarrowingToInfinitaryRewritingProof = InitialGoalNarrowingToInfinitaryRewritingProof deriving (Eq, Show)
+
+instance Pretty InitialGoalNarrowingToInfinitaryRewritingProof where
+  pPrint InitialGoalNarrowingToInfinitaryRewritingProof =
+     text "Termination of Infinitary Rewriting" $$
+     text "implies Termination of Constructor Narrowing."
+
+
 -- | This is the approach of Iborra, Nishida & Vidal
 data InitialGoalNarrowingToRelativeRewriting = InitialGoalNarrowingToRelativeRewriting deriving (Eq, Show)
 
@@ -68,15 +76,20 @@ instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
               (DPProblem (InitialGoal t Narrowing) trs)
               (DPProblem (Infinitary id Rewriting) trs)
  where
-  apply _ p = mprod [mkDerivedProblem (infinitary g Rewriting) p | g <- gg]
+  apply _ p = andP InitialGoalNarrowingToInfinitaryRewritingProof p
+                [mkDerivedProblem (infinitary g Rewriting) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
-instance (HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id, HasSignature trs, SignatureId trs ~ id) =>
-    Processor InitialGoalNarrowingToInfinitaryRewriting
+instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
+         , HasSignature trs, SignatureId trs ~ id
+         , Info info InitialGoalNarrowingToInfinitaryRewritingProof
+         ) =>
+    Processor info InitialGoalNarrowingToInfinitaryRewriting
               (DPProblem (InitialGoal t CNarrowing) trs)
               (DPProblem (Infinitary id IRewriting) trs)
  where
-  apply _ p = mprod [mkDerivedProblem (infinitary g IRewriting) p | g <- gg]
+  apply _ p = andP InitialGoalNarrowingToInfinitaryRewritingProof p
+              [mkDerivedProblem (infinitary g IRewriting) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
 {-
