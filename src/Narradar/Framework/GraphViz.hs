@@ -90,9 +90,9 @@ instance (Pretty (Prolog.GoalF id (Prolog.Term id)), Pretty (Goal id)) => PprTPD
     vcat (map pPrint program) $$
     vcat [text "%Query: " <+> (pPrint g) | g <- goals]
 
-instance (IsDPProblem typ, HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
-         ,HasId t, Pretty (TermId t), Foldable t, Traversable (DPProblem typ)
-         ) => PprTPDBDot (DPProblem typ trs) where
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
+         ,HasId t, Pretty (TermId t), Foldable t
+         ) => PprTPDBDot (DPProblem Rewriting trs) where
   pprTPDBdot p = vcat
      [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars p))
      ,parens( text "PAIRS" $$
@@ -107,26 +107,39 @@ instance (IsDPProblem typ, HasRules t v trs, GetVars v trs, Pretty v, Pretty (Te
             | null tt = pPrint id
             | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
          where tt = toList t
-{-
+
+
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
+         ,HasId t, Pretty (TermId t), Foldable t
+         ) => PprTPDBDot (DPProblem IRewriting trs) where
+  pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY INNERMOST)"
+
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
+         ,HasId t, Pretty (TermId t), Foldable t
+         ) => PprTPDBDot (DPProblem Narrowing trs) where
+  pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY NARROWING)"
+
+
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
+         ,HasId t, Pretty (TermId t), Foldable t
+         ) => PprTPDBDot (DPProblem CNarrowing trs) where
+  pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY CNARROWING)"
+
+
+instance (Pretty (TermId t), PprTPDBDot (DPProblem typ trs)) =>
+    PprTPDBDot (DPProblem (InitialGoal t typ) trs) where
+    pprTPDBdot (InitialGoalProblem goals _ p) = pprTPDBdot p $$
+                                                parens (text "GOALS" <+> fsep (map pPrint goals))
+
+
 instance (Pretty id, PprTPDBDot (DPProblem typ trs)) =>
-    PprTPDBDot (DPProblem (InitialGoal id typ) trs) where
-    pprTPDBdot (InitialGoalProblem goal p) = pprTPDBdot p ++ "\\l" ++
-                                              "(AF\\l" ++ pprAF pi ++ ")" ++
-                                               "\\l"
--}
-
-instance (Pretty trs, PprTPDBDot (DPProblem Rewriting trs)) => PprTPDBDot (DPProblem Narrowing trs) where
-  pprTPDBdot p = pprTPDBdot (mkDPProblem Rewriting (getR p) (getP p)) $$
-                 text "(STRATEGY Narrowing)"
-
-instance (Pretty trs, PprTPDBDot (DPProblem typ trs)) =>
-  PprTPDBDot (DPProblem (Infinitary trs typ) trs) where
+  PprTPDBDot (DPProblem (Infinitary id typ) trs) where
    pprTPDBdot (InfinitaryProblem pi p) = pprTPDBdot p $$
                                          parens(text "AF" <+> pprAF pi)
 
 
 pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.id) (pPrint.toList) aa | (f, aa) <- xx])
-                      | xx <- chunks 4 $ Map.toList $ fromAF af]
+                      | xx <- chunks 3 $ Map.toList $ fromAF af]
 
 
 class ProblemColor p where problemColor :: p -> Color
