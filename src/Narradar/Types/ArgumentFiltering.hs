@@ -185,7 +185,7 @@ instance ApplyAF (Term (TermF id) v) where
 applyTerm :: forall v id . Ord id => AF_ id -> TermN id v -> TermN id v
 applyTerm af = foldTerm return f
      where   f t@(Term n tt)
-               | Just ii <- lookup' n af = either (\i  -> term n [tt !! pred i])
+               | Just ii <- lookup' n af = either (\i  -> tt !! pred i)
                                                   (\ii -> term n (select tt (pred <$> ii)))
                                                   ii
                | otherwise = Impure t
@@ -202,9 +202,9 @@ instance ApplyAF (Term (WithNote1 n (TermF id)) v) where
     type AFId (Term (WithNote1 n (TermF id)) v) = id
     apply af = foldTerm return f where
       f t@(Note1 (n,Term id tt))
-               | Just ii <- lookup' id af = Impure (Note1 (n, Term id (either (\i  -> [tt !! pred i])
-                                                                              (\ii -> select tt (pred <$> ii))
-                                                                              ii )))
+               | Just ii <- lookup' id af = either (\i  -> tt !! pred i)
+                                                   (\ii -> Impure (Note1 (n, Term id (select tt (pred <$> ii)))))
+                                                   ii
                | otherwise = Impure t
 
 -- -------
