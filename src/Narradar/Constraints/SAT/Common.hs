@@ -183,14 +183,14 @@ a <<==>> b = -- andM [a ==>> b, b ==>> a]
 andMemo bb m = do
   abort <- P.or <$> mapM isExcluded bb
   if abort
-     then trace "saved!" $ constant False
+     then constant False
      else do include bb
              andM(m : map return bb)<* remove bb
 
 andMemoNeg bb m = do
   abort <- P.or <$> mapM isIncluded bb
   if abort
-     then trace "saved!" $ constant False
+     then constant False
      else do exclude bb
              andM(m : map (return.not) bb) <* remove bb
 
@@ -213,7 +213,7 @@ withTrue bb orelse m = do
   abort1 <- P.or <$> mapM isExcluded yyaa
   abort2 <- P.or <$> mapM isIncluded nnaa
   if abort1 || abort2
-     then trace "Saved!" $ constant True
+     then constant True
      else and (map not nnaa ++ yyaa) ==>> b'
  where
   b' = do
