@@ -376,7 +376,7 @@ lexeq id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
 
 lexpeq id_f id_g ss tt =
   andM [ eqArity
-       , andM [ and [f_ik, g_jk] ==>> s_i ~~ t_j
+       , andM [ [f_ik, g_jk] *==> s_i ~~ t_j
               | (s_i, f_i) <- zip ss ff
               , (t_j, g_j) <- zip tt gg
               , (f_ik, g_jk) <- zip f_i g_j]]
@@ -386,20 +386,23 @@ lexpeq id_f id_g ss tt =
                       )
        m   = max (length ff) (length gg)
 
-lexpgt id_f id_g ss tt = exgt_k (transpose $ encodePerm id_f) (transpose $ encodePerm id_g)
+lexpgt id_f id_g ss tt = exgt_k (transpose $ enc_f) (transpose $ enc_g)
      where
+       enc_f = encodePerm id_f
+       enc_g = encodePerm id_g
        n = length ss
        m = length tt
        exgt_k [] _ = constant False
        exgt_k (f_k:_) [] = or f_k
        exgt_k (f_k:ff) (g_k:gg)
-         = orM [andM [ return f_ik
-                     , andM [ return g_jk ==>>
+         = orM [andMemo[f_ik] $
+                withFalse ((f_k \\ [f_ik]) ++ (f_i \\ [f_ik])) False $
+                       andM [ [g_jk] *==>
                                orM [ s_i > t_j
                                     , andM [ s_i ~~ t_j
                                            , exgt_k ff gg]]
-                            | (g_jk, t_j) <- zip g_k tt]]
-                | (f_ik, s_i) <- zip f_k ss]
+                            | (g_jk, t_j) <- zip g_k tt]
+                | (f_i,f_ik, s_i) <- zip3 enc_f f_k ss]
 
 -- ---------------------------
 -- Multiset extension with AF
