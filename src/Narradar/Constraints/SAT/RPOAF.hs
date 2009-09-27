@@ -411,24 +411,24 @@ mulge id_f id_g ff gg = mulgen id_f id_g (i, j) $ mulgeF ff gg
 
 mulgt id_f id_g ff gg = mulgen id_f id_g (i, j) $ \epsilons gammas ->
                      andM [mulgeF ff gg epsilons gammas
-                          ,notM $ andM [inAF i id_f ==>> return ep
-                                          | (i, ep) <- zip [1..] epsilons]]
+                          ,notM $ andM [inAF i id_f ==>> return ep_i
+                                          | (i, ep_i) <- zip [1..] epsilons]]
  where
   (i, j) = (length ff, length gg)
 
 
 muleq id_f id_g ff gg = mulgen id_f id_g (i, j) $ \epsilons gammas ->
                     andM [mulgeF ff gg epsilons gammas
-                         ,andM [inAF i id_f ==>> return ep
-                                    | (i, ep) <- zip [1..] epsilons]]
+                         ,andM [inAF i id_f ==>> return ep_i
+                                    | (i, ep_i) <- zip [1..] epsilons]]
  where
   (i, j) = (length ff, length gg)
 
 mulgeF ff gg epsilons gammasM =
-    andM [ gamma ==> ifM' epsilon (f_i ~~ g_j) (f_i > g_j)
-           | (epsilon, gammasR, f_i) <- CE.assert (length epsilons == length ff) $
+    andM [ gamma_ij ==> ifM' ep_i (f_i ~~ g_j) (f_i > g_j)
+           | (ep_i, gamma_i, f_i) <- CE.assert (length epsilons == length ff) $
                                         zip3 epsilons gammasM ff
-           , (gamma, g_j) <- zip gammasR gg]
+           , (gamma_ij, g_j) <- zip gamma_i gg]
 
 mulgen id_f id_g (i, j) k = do
     epsilons <- replicateM i boolean

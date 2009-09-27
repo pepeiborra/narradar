@@ -31,7 +31,7 @@ lposDP = rpoGen lpopSymbol
 rpoDP  = rpoGen symbol
 
 rpoGen inn p = do
-  let sig        = getSignature p
+  let sig = getSignature p
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (inn sig) ids
   let dict       = Map.fromList (zip ids symbols)
@@ -200,7 +200,7 @@ mulge ff gg = mulgen (i, j) $ mulgeF ff gg
 
 
 mulgt ff gg = mulgen (i, j) $ \epsilons gammas ->
-                     andM [notM $ and epsilons, mulgeF ff gg epsilons gammas]
+                     andM [mulgeF ff gg epsilons gammas, notM $ and epsilons]
  where
   (i, j) = (length ff, length gg)
 
@@ -211,10 +211,10 @@ muleq ff gg = mulgen (i, j) $ \epsilons gammas ->
   (i, j) = (length ff, length gg)
 
 mulgeF ff gg epsilons gammasM =
-    andM [ gamma ==> ifM' epsilon (f_i ~~ g_j) (f_i > g_j)
-           | (epsilon, gammasR, f_i) <- CE.assert (length epsilons == length ff) $
+    andM [ gamma_ij ==> ifM' ep_i (f_i ~~ g_j) (f_i > g_j)
+           | (ep_i, gamma_i, f_i) <- CE.assert (length epsilons == length ff) $
                                         zip3 epsilons gammasM ff
-           , (gamma, g_j) <- zip gammasR gg]
+           , (gamma_ij, g_j) <- zip gamma_i gg]
 
 mulgen (i, j) k = do
     epsilons <- replicateM i boolean
