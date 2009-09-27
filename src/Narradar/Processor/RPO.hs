@@ -181,7 +181,7 @@ instance (Ord id, Pretty id) => Pretty (RPOProof id) where
         nest 4 (pPrint the_af) $$
         text "The usable rules are" $$
         nest 4 (vcat $ map pPrint rr) $$
-        text "Precedence:" <+> (hsep $ punctuate (text " >") $ map (pPrint . the_symbolR) $ sortBy (flip compare) ss) $$
+        text "Precedence:" <+> (hsep $ punctuate (text " >") $ map (pPrint . the_symbolR) $ sortBy (flip compare `on` RPOAF.precedence) ss) $$
         text "Status function:" $$
         nest 2 (vcat [text "status" <> parens(pPrint s) <> text "=" <>
                         case status of
@@ -195,7 +195,7 @@ instance (Ord id, Pretty id) => Pretty (RPOProof id) where
         text "Monotonic RPO reduction pair" $$
         text "The following pairs are strictly decreasing:" $$
         nest 4 (vcat (map pPrint dps)) $$
-        text "Precedence:" <+> (hsep $ punctuate (text " >") $ map (pPrint . RPO.the_symbolR) $ sortBy (flip compare) ss) $$
+        text "Precedence:" <+> (hsep $ punctuate (text " >") $ map (pPrint . RPO.the_symbolR) $ sortBy (flip compare `on` RPO.precedence) ss) $$
         text "Status function:" $$
         nest 2 (vcat [text "status" <> parens(pPrint s) <> text "=" <>
                         case status of
