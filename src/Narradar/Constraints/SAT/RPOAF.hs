@@ -309,10 +309,19 @@ instance (Eq v, Ord (Term f v), Foldable f, HasId f, TermId f ~ id
  Pure s ~~ Pure t = constant(s == t)
  s ~~ t
    | s == t  = constant True
-   | isVar s = memo (s :~~ t) $ andMemoNeg [listAF id_t] $
-                                            allM (\(t_j,j) -> [inAF j id_t] *==> s ~~ t_j) (zip tt [1..])
-   | isVar t = memo (s :~~ t) $ andMemoNeg [listAF id_s] $
-                                            allM (\(s_i,i) -> [inAF i id_s] *==> s_i ~~ t) (zip ss [1..])
+   | isVar s = memo (s :~~ t) $
+               andMemoNeg [listAF id_t] $
+                           allM (\(t_j,j) -> [inAF j id_t] *==>
+                                             withFalse [inAF j' id_t | j' <- [1..length tt], j' /= j] False
+                                             (s ~~ t_j)
+                                )
+                                (zip tt [1..])
+   | isVar t = memo (s :~~ t) $
+               andMemoNeg [listAF id_s] $
+                          allM (\(s_i,i) -> [inAF i id_s] *==>
+                                             withFalse [inAF i' id_s | i' <- [1..length ss], i' /= i] False
+                                            (s_i ~~ t)
+                               ) (zip ss [1..])
    | otherwise
    = memo (s :~~ t) $
      andM[ [listAF id_s] !==> allM (\(s_i,i) -> [inAF i id_s] *==> s_i ~~ t) (zip ss [1..])
