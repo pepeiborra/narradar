@@ -442,15 +442,17 @@ mulgen id_f id_g (i, j) k = do
     epsilons <- replicateM i boolean
     gammasM  <- replicateM i (replicateM j boolean)
 
-    andM [andM [ inAF j id_g ==>> oneM (return <$> gammas_j)
+    assertAll [ inAF j id_g ==>> oneM (return <$> gammas_j)
                 | (j, gammas_j) <- zip [1..] (transpose gammasM) ]
-         ,andM [ notM(inAF i id_f) ==>> notM (or gammas_i)
+    assertAll [ notM(inAF i id_f) ==>> notM (or gammas_i)
                 | (i, gammas_i) <- zip [1..] gammasM]
-         ,andM [ notM(inAF j id_g) ==>> notM (or gammas_j)
+    assertAll [ notM(inAF j id_g) ==>> notM (or gammas_j)
+
                 | (j, gammas_j) <- zip [1..] (transpose gammasM)]
-         ,andM [ ep ==> oneM (return <$> gammasR)
-                     | (ep, gammasR) <- zip epsilons gammasM]
-         ,k epsilons gammasM]
+    assertAll [ ep_i ==> oneM (return <$> gamma_i)
+                     | (ep_i, gamma_i) <- zip epsilons gammasM]
+
+    k epsilons gammasM
 
 -- ------------------------
 -- Usable Rules with AF

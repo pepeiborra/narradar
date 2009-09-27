@@ -218,10 +218,10 @@ mulgen (i, j) k = do
     epsilons <- replicateM i boolean
     gammasM  <- replicateM i (replicateM j boolean)
 
-    andM [andM [ oneM (return <$> gammasC) | gammasC <- transpose gammasM ]
-         ,andM [ ep ==> oneM (return <$> gammasR)
-                     | (ep, gammasR) <- zip epsilons gammasM]
-         ,k epsilons gammasM]
+    assertAll [ oneM (return <$> gammasC) | gammasC <- transpose gammasM ]
+    assertAll [ ep_i ==> oneM (return <$> gamma_i)
+                     | (ep_i, gamma_i) <- zip epsilons gammasM]
+    k epsilons gammasM
 
 -- ---------------------
 -- LPO with permutation
