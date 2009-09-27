@@ -89,10 +89,6 @@ instance (Eq v, Ord (Term f v), Foldable f, Pretty (Term f v)
 
    | otherwise = constant False
 
-  s >~ t
-   | s == t = constant True
-   | otherwise = memo (s :>~ t) $ orM [s > t, s ~~ t]
-
 -- -------------------------------------------------
 -- The symbol datatype encoding all the constraints
 -- -------------------------------------------------
