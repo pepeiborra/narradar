@@ -105,9 +105,9 @@ runRPOAF con allowCol sig f = runSAT $ do
   let ids = Set.toList $ getAllSymbols sig
   symbols <- mapM (con sig) ids
   if allowCol
-    then assertAll [not (listAF s) ==> oneM [return(inAF i s) | i <- [1..a]]
+    then assertAll [[listAF s] !==> oneM [return(inAF i s) | i <- [1..a]]
                     | (s,a) <- zip symbols (getArity sig <$> ids)]
-    else mapM_ (assert . (:[]) . listAF) symbols
+    else mapM_ (assertMemo . listAF) symbols
 
   let dict       = Map.fromList (zip ids symbols)
   res <- f dict
@@ -289,36 +289,35 @@ instance (Eq v, Ord (Term f v), Foldable f, HasId f, TermId f ~ id
 
      where
        cond1 id_s id_t tt_s tt_t =
-           andM[ allM (\(t_j, j) -> inAF j id_t ==> s > t_j)
+           andM[ allM (\(t_j, j) -> [inAF j id_t] *==> s > t_j)
                       (zip tt_t [1..])
-               , listAF id_t ==> andM [return(listAF id_s)
-                                      , orM[ id_s > id_t
-                                           , andM[ id_s ~~ id_t
-                                                 , exgt id_s id_t tt_s tt_t]
-                                           ]
-                                      ]
+               , [listAF id_t] *==> andMemo [listAF id_s]
+                                            (orM[ id_s > id_t
+                                                , andM[ id_s ~~ id_t
+                                                      , exgt id_s id_t tt_s tt_t]
+                                                ])
                ]
 
        cond2 id_s tt_s =
           anyM (\(s_i,i) ->
-                 andM [ return $ inAF i id_s
-                      , orM[ s_i > t
-                           , andM [return$ listAF id_s, s_i ~~ t]]]
+                 andMemo [inAF i id_s] $
+                          orM[ s_i > t
+                             , andMemo[listAF id_s] (s_i ~~ t)]
                )
                (zip tt_s [1..])
 
  Pure s ~~ Pure t = constant(s == t)
  s ~~ t
    | s == t  = constant True
-   | isVar s = memo (s :~~ t) $ andM [return $ not(listAF id_t)
-                                     ,allM (\(t_j,j) -> inAF j id_t ==> s ~~ t_j) (zip tt [1..])]
-   | isVar t = memo (s :~~ t) $ andM [return $ not (listAF id_s)
-                                     ,allM (\(s_i,i) -> inAF i id_s ==> s_i ~~ t) (zip ss [1..])]
+   | isVar s = memo (s :~~ t) $ andMemoNeg [listAF id_t] $
+                                            allM (\(t_j,j) -> [inAF j id_t] *==> s ~~ t_j) (zip tt [1..])
+   | isVar t = memo (s :~~ t) $ andMemoNeg [listAF id_s] $
+                                            allM (\(s_i,i) -> [inAF i id_s] *==> s_i ~~ t) (zip ss [1..])
    | otherwise
    = memo (s :~~ t) $
-     andM[ not(listAF id_s) ==> allM (\(s_i,i) -> inAF i id_s ==> s_i ~~ t) (zip ss [1..])
-         , and [listAF id_s,not(listAF id_t)] ==>> allM (\(t_j,j) -> inAF j id_t ==> t_j ~~ s) (zip tt [1..])
-         , and[listAF id_s,listAF id_t] ==>> andM[ id_s ~~ id_t, exeq id_s id_t ss tt]
+     andM[ [listAF id_s] !==> allM (\(s_i,i) -> [inAF i id_s] *==> s_i ~~ t) (zip ss [1..])
+         , ([listAF id_s],[listAF id_t]) *!==> allM (\(t_j,j) -> [inAF j id_t] *==> t_j ~~ s) (zip tt [1..])
+         , [listAF id_s,listAF id_t] *==>  andM[ id_s ~~ id_t, exeq id_s id_t ss tt]
          ]
    where
         ss = directSubterms s
@@ -345,13 +344,13 @@ lexgt id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
   go ((f,i):ff) ((g,j):gg)
  -- If the symbols are the same, there is only one filtering to consider
     | id_f == id_g =
-        orM [ andM [return $ inAF i id_f, f > g]
-            , andM [inAF i id_f ==> f ~~ g, go ff gg]
+        orM [ andMemo [inAF i id_f] (f > g)
+            , andM [[inAF i id_f] *==> f ~~ g, go ff gg]
             ]
 -- otherwise, we must consider two different filterings!
     | otherwise
-    =  ifM'(inAF i id_f)
-             (ifM' (inAF j id_g)
+    =  ifMemo(inAF i id_f)
+             (ifMemo (inAF j id_g)
                      (orM[f >~ g, go ff gg])
                      (go ((f,i):ff) gg))
              (go ff ((g,j):gg))
@@ -362,12 +361,12 @@ lexgt id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
 lexeq id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
   go []         []         = constant True
   go ((f,i):ff) ((g,j):gg)
-    | id_f == id_g = andM [inAF i id_f ==> f ~~ g, go ff gg]
-    | otherwise    = ifM' (inAF i id_f)
-                          (ifM' (inAF j id_g)
-                                (andM [f ~~ g, go ff gg])
-                                (go ((f,i):ff) gg))
-                          (go ff ((g,j):gg))
+    | id_f == id_g = andM [[inAF i id_f] *==> f ~~ g, go ff gg]
+    | otherwise    = ifMemo (inAF i id_f)
+                            (ifMemo (inAF j id_g)
+                                    (andM [f ~~ g, go ff gg])
+                                    (go ((f,i):ff) gg))
+                            (go ff ((g,j):gg))
   go _          _  = constant False
 
 lexpeq id_f id_g ss tt =
@@ -529,12 +528,12 @@ omegaGen varcase p =
     go (Pure x) _ = varcase
     go t trs
       | id_t `Set.notMember` getDefinedSymbols sig
-      = andM [ inAF i id_t ==> go t_i trs
+      = andM [ [inAF i id_t] *==> go t_i trs
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
       = andM [ usable id_t
              , andM [ go r trs' | let trs' = (trs \\ rls :: [Rule t v]), _:->r <- rls ]
-             , andM [ inAF i id_t ==> go t_i trs
+             , andM [ [inAF i id_t] *==> go t_i trs
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where
