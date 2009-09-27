@@ -35,7 +35,7 @@ rpo = apply (RPOProc RPOSAF MiniSat)
 
 
 data RPOProc = RPOProc Extension Solver
-data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF | LPOS | LPO | MPO
+data Extension = RPOSAF | LPOSAF | MPOAF  | LPOS | LPO | MPO
 data Solver = Yices | MiniSat -- | Funsat
 
 instance (Ord id, Pretty id
@@ -47,7 +47,6 @@ instance (Ord id, Pretty id
    where
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOAF Yices)  p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpo  p)
     apply (RPOProc MPOAF Yices)  p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS  Yices)  p = proc   p (Yices.solve $ RPO.lposDP p)
     apply (RPOProc LPO   Yices)  p = proc   p (Yices.solve $ RPO.lpoDP p)
@@ -55,7 +54,6 @@ instance (Ord id, Pretty id
 
     apply (RPOProc RPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOAF MiniSat)  p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpo  p)
     apply (RPOProc MPOAF MiniSat)  p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS  MiniSat)  p = proc   p (MiniSat.solve $ RPO.lposDP p)
     apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
@@ -69,7 +67,6 @@ instance (Ord id, Pretty id
    where
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpo  p)
     apply (RPOProc MPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS  Yices)  p = proc   p (Yices.solve $ RPO.lposDP p)
     apply (RPOProc LPO   Yices)  p = proc   p (Yices.solve $ RPO.lpoDP p)
@@ -77,7 +74,6 @@ instance (Ord id, Pretty id
 
     apply (RPOProc RPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpo  p)
     apply (RPOProc MPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS  MiniSat)  p = proc   p (MiniSat.solve $ RPO.lposDP p)
     apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
@@ -95,12 +91,10 @@ instance (Ord id, Pretty id
   where
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpo  p)
     apply (RPOProc MPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.mpo  p)
 
     apply (RPOProc RPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpo  p)
     apply (RPOProc MPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.mpo  p)
 
 instance (Ord id, Pretty id
@@ -111,12 +105,10 @@ instance (Ord id, Pretty id
   where
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpo  p)
     apply (RPOProc MPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.mpo  p)
 
     apply (RPOProc RPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpo  p)
     apply (RPOProc MPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.mpo  p)
 
 
