@@ -379,9 +379,11 @@ lexpeq id_f id_g ss tt =
               | (s_i, f_i) <- zip ss ff
               , (t_j, g_j) <- zip tt gg
               , (f_ik, g_jk) <- zip f_i g_j]]
- where (n,m)   = (length ss, length tt)
-       (ff,gg) = (encodePerm id_f, encodePerm id_g)
-       eqArity = andM [ or f_k <<==>> or g_k | (f_k, g_k) <- zip (transpose ff) (transpose gg)]
+ where (ff,gg) = (encodePerm id_f, encodePerm id_g)
+       eqArity = andM (take m $ zipWith (<<==>>) (map or (transpose ff) ++ repeat (constant False))
+                                                 (map or (transpose gg) ++ repeat (constant False))
+                      )
+       m   = max (length ff) (length gg)
 
 lexpgt id_f id_g ss tt = exgt_k (transpose $ encodePerm id_f) (transpose $ encodePerm id_g)
      where
