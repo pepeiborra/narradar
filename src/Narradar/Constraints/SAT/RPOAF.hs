@@ -280,12 +280,13 @@ instance (Eq v, Ord (Term f v), Foldable f, HasId f, TermId f ~ id
          ,SATOrd (Term f v) id, AFSymbol id, Extend id) =>
     SATOrd (Term f v) (Term f v) where
  s > t
+   | s == t = constant False
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
    , Just id_s <- rootSymbol s, tt_s <- directSubterms s
-   = orM [cond1 id_s id_t tt_s tt_t,  cond2 id_s tt_s]
+   = memo (s:>t) $ orM [cond1 id_s id_t tt_s tt_t,  cond2 id_s tt_s]
 
    | Just id_s <- rootSymbol s, tt_s <- directSubterms s
-   = cond2 id_s tt_s
+   = memo (s:>t) $ cond2 id_s tt_s
 
    | otherwise = constant False
 
@@ -315,10 +316,11 @@ instance (Eq v, Ord (Term f v), Foldable f, HasId f, TermId f ~ id
  Pure s ~~ Pure t = constant(s == t)
  s ~~ t
    | s == t  = constant True
-   | isVar s = andM [notM$listAF id_t, allM (\(t_j,j) -> inAF j id_t ==>> s ~~ t_j) (zip tt [1..])]
-   | isVar t = andM [notM$listAF id_s, allM (\(s_i,i) -> inAF i id_s ==>> s_i ~~ t) (zip ss [1..])]
+   | isVar s = memo (s :~~ t) $ andM [notM$listAF id_t, allM (\(t_j,j) -> inAF j id_t ==>> s ~~ t_j) (zip tt [1..])]
+   | isVar t = memo (s :~~ t) $ andM [notM$listAF id_s, allM (\(s_i,i) -> inAF i id_s ==>> s_i ~~ t) (zip ss [1..])]
    | otherwise
-   = andM[ notM(listAF id_s) ==>> allM (\(s_i,i) -> inAF i id_s ==>> s_i ~~ t) (zip ss [1..])
+   = memo (s :~~ t) $
+     andM[ notM(listAF id_s) ==>> allM (\(s_i,i) -> inAF i id_s ==>> s_i ~~ t) (zip ss [1..])
          , andM[listAF id_s
                ,notM(listAF id_t)] ==>> allM (\(t_j,j) -> inAF j id_t ==>> t_j ~~ s) (zip tt [1..])
          , andM[listAF id_s
