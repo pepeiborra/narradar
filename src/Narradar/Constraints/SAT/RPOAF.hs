@@ -242,7 +242,7 @@ lpos sig = liftM LPOS . rpos sig
 
 instance Eq a => Extend (LPOSsymbol a) where
   exeq s t = lexpeq (unLPOS s) (unLPOS t)
-  exgt s t = exgt (unLPOS s) (unLPOS t)
+  exgt s t = lexpgt (unLPOS s) (unLPOS t)
 
 
 newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
@@ -257,7 +257,7 @@ lpo sig x = do
 
 instance Eq a => Extend (LPOsymbol a) where
   exeq s t = lexeq (unLPO s) (unLPO t)
-  exgt s t = exgt (unLPO s) (unLPO t)
+  exgt s t = lexgt (unLPO s) (unLPO t)
 
 -- MPO
 newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
@@ -269,8 +269,8 @@ mpo sig x = do
   return (MPO s)
 
 instance Eq a => Extend (MPOsymbol a) where
-  exeq s t = lexpeq (unMPO s) (unMPO t)
-  exgt s t = exgt (unMPO s) (unMPO t)
+  exeq s t = muleq (unMPO s) (unMPO t)
+  exgt s t = mulgt (unMPO s) (unMPO t)
 
 -- -----------
 -- RPO with AF
