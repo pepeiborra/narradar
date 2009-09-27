@@ -8,7 +8,7 @@ module Narradar.Processor.RPO where
 
 import Control.Applicative
 import Control.Monad
-import Data.List ((\\), sortBy, inits)
+import Data.List ((\\), groupBy, sortBy, inits)
 import qualified Data.Set as Set
 
 import Narradar.Framework.GraphViz
@@ -181,7 +181,7 @@ instance (Ord id, Pretty id) => Pretty (RPOProof id) where
         nest 4 (pPrint the_af) $$
         text "The usable rules are" $$
         nest 4 (vcat $ map pPrint rr) $$
-        text "Precedence:" <+> (hsep $ punctuate (text " >") $ map (pPrint . the_symbolR) $ sortBy (flip compare `on` RPOAF.precedence) ss) $$
+        text "Precedence:" <+> printPrec RPOAF.precedence RPOAF.the_symbolR ss $$
         text "Status function:" $$
         nest 2 (vcat [text "status" <> parens(pPrint s) <> text "=" <>
                         case status of
@@ -195,7 +195,7 @@ instance (Ord id, Pretty id) => Pretty (RPOProof id) where
         text "Monotonic RPO reduction pair" $$
         text "The following pairs are strictly decreasing:" $$
         nest 4 (vcat (map pPrint dps)) $$
-        text "Precedence:" <+> (hsep $ punctuate (text " >") $ map (pPrint . RPO.the_symbolR) $ sortBy (flip compare `on` RPO.precedence) ss) $$
+        text "Precedence:" <+> printPrec RPO.precedence RPO.the_symbolR ss $$
         text "Status function:" $$
         nest 2 (vcat [text "status" <> parens(pPrint s) <> text "=" <>
                         case status of
@@ -206,5 +206,10 @@ instance (Ord id, Pretty id) => Pretty (RPOProof id) where
     pPrint RPOFail = text "RPO Reduction Pair : failed to synthetize a suitable ordering"
 
 
--- ----------------------
--- Implementation
+printPrec f symb    = hsep
+                    . punctuate (text " >")
+                    . fmap ( hsep
+                           . punctuate (text (" ="))
+                           . fmap (pPrint . symb))
+                    . groupBy ((==) `on` f)
+                    . sortBy (flip compare `on` f)
