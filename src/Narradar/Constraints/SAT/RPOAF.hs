@@ -32,7 +32,7 @@ import Prelude hiding (lex, not, and, or, quot, (>))
 
 -- | RPO + AF
 
-rpoAF allowCol trs = runRPOAF rpos allowCol (getSignature trs) $ \dict -> do
+rpoAF rpo allowCol trs = runRPOAF rpo allowCol (getSignature trs) $ \dict -> do
   let symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
   assertAll [ l > r | l:->r <- symb_rules]
   return (return ())

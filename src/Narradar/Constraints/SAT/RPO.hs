@@ -49,6 +49,17 @@ rpoGen inn p = do
               let non_dec_pairs = [ r | (r,False) <- zip [0..] dec_bools]
               return (non_dec_pairs, syms)
 
+rpoTestGen inn rr = do
+  let sig = getSignature rr
+  let ids = Set.toList $ getAllSymbols sig
+  symbols <- mapM (inn sig) ids
+  let dict       = Map.fromList (zip ids symbols)
+      symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules rr
+
+  assertAll [ (l > r) | l:->r <- symb_rules]
+
+  return $ mapM decode symbols
+
 -- ----------------------------------------------------------------
 -- The Recursive Path Ordering, parametric w.r.t the extension
 -- ----------------------------------------------------------------
@@ -64,6 +75,7 @@ instance (Eq v, Eq (Term f v), Foldable f, Pretty (Term f v)
                            , exeq id_s id_t (directSubterms s) (directSubterms t)]
 
   s > t
+   | s == t = constant False
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
    , Just id_s <- rootSymbol s, tt_s <- directSubterms s
    = orM [ anyM (>~ t) tt_s
