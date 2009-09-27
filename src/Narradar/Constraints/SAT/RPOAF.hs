@@ -235,7 +235,7 @@ instance Eq a => Extend (Symbol a) where
 
 -- LPO with status
 
-newtype LPOSsymbol a = LPOS{unLPOS::Symbol a} deriving (Eq, Ord, Show, SATOrd)
+newtype LPOSsymbol a = LPOS{unLPOS::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
 instance Decode (LPOSsymbol a) (SymbolRes a) where decode = decode . unLPOS
 
 lpos sig = liftM LPOS . rpos sig
@@ -245,14 +245,7 @@ instance Eq a => Extend (LPOSsymbol a) where
   exgt s t = exgt (unLPOS s) (unLPOS t)
 
 
-instance AFSymbol (LPOSsymbol a) where
-   listAF     = return . encodeAFlist . unLPOS
-   inAF j sym = return (encodeAFpos (unLPOS sym) !! (j-1))
-
-instance UsableSymbol (LPOSsymbol a) where usable = return . encodeUsable . unLPOS
-
--- LPO
-newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd)
+newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
 instance Decode (LPOsymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
 
 removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
@@ -266,15 +259,8 @@ instance Eq a => Extend (LPOsymbol a) where
   exeq s t = lexeq (unLPO s) (unLPO t)
   exgt s t = exgt (unLPO s) (unLPO t)
 
-instance AFSymbol (LPOsymbol a) where
-   listAF     = return . encodeAFlist . unLPO
-   inAF j sym = return (encodeAFpos (unLPO sym) !! (j-1))
-
-instance UsableSymbol (LPOsymbol a) where usable = return . encodeUsable . unLPO
-
-
 -- MPO
-newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd)
+newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd, AFSymbol, UsableSymbol)
 instance Decode (MPOsymbol a) (SymbolRes a) where decode = decode . unMPO
 
 mpo sig x = do
@@ -285,12 +271,6 @@ mpo sig x = do
 instance Eq a => Extend (MPOsymbol a) where
   exeq s t = lexpeq (unMPO s) (unMPO t)
   exgt s t = exgt (unMPO s) (unMPO t)
-
-instance AFSymbol (MPOsymbol a) where
-   listAF     = return . encodeAFlist . unMPO
-   inAF j sym = return (encodeAFpos (unMPO sym) !! (j-1))
-
-instance UsableSymbol (MPOsymbol a) where usable = return . encodeUsable . unMPO
 
 -- -----------
 -- RPO with AF
