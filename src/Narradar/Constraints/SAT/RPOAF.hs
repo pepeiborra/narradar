@@ -403,35 +403,21 @@ lexpgt id_f id_g ss tt = exgt_k (transpose $ enc_f) (transpose $ enc_g)
 -- Multiset extension with AF
 -- ---------------------------
 
---muleq, mulge, mulgt :: (SATOrd a, Eq a) => [a] -> [a] -> SAT Boolean
+mulgt _    _    [tf] [tg] = tf > tg
+mulgt id_f id_g ff gg =
+    mulgen id_f id_g ff gg (\epsilons ->
+                                notM $ andM [inAF i id_f ==> return ep_i
+                                             | (i, ep_i) <- zip [1..] epsilons])
 
-mulge id_f id_g ff gg = mulgen id_f id_g (i, j) $ mulgeF ff gg
- where
-  (i, j) = (length ff, length gg)
-
-
-mulgt id_f id_g ff gg = mulgen id_f id_g (i, j) $ \epsilons gammas ->
-                     andM [mulgeF ff gg epsilons gammas
-                          ,notM $ andM [inAF i id_f ==> return ep_i
-                                          | (i, ep_i) <- zip [1..] epsilons]]
- where
-  (i, j) = (length ff, length gg)
+muleq _    _    [f] [g] = f ~~ g
+muleq id_f id_g ff gg = do
+    mulgen id_f id_g ff gg (\epsilons ->
+                                andM [inAF i id_f ==> return ep_i
+                                      | (i, ep_i) <- zip [1..] epsilons])
 
 
-muleq id_f id_g ff gg = mulgen id_f id_g (i, j) $ \epsilons gammas ->
-                    andM [mulgeF ff gg epsilons gammas
-                         ,andM [inAF i id_f ==> return ep_i
-                                    | (i, ep_i) <- zip [1..] epsilons]]
- where
-  (i, j) = (length ff, length gg)
-
-mulgeF ff gg epsilons gammasM =
-    andM [ gamma_ij ==> ifM' ep_i (f_i ~~ g_j) (f_i > g_j)
-           | (ep_i, gamma_i, f_i) <- CE.assert (length epsilons == length ff) $
-                                        zip3 epsilons gammasM ff
-           , (gamma_ij, g_j) <- zip gamma_i gg]
-
-mulgen id_f id_g (i, j) k = do
+mulgen id_f id_g ff gg k = do
+    let (i,j) = (length ff, length gg)
     epsilons <- replicateM i boolean
     gammasM  <- replicateM i (replicateM j boolean)
 
