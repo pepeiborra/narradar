@@ -322,8 +322,8 @@ instance (Eq v, Ord (Term f v), Foldable f, HasId f, TermId f ~ id
    where
         ss = directSubterms s
         tt = directSubterms t
-        Just id_s = rootSymbol s
-        Just id_t = rootSymbol t
+        ~(Just id_s) = rootSymbol s
+        ~(Just id_t) = rootSymbol t
 
 -- -------------------------
 -- Narrowing related stuff
