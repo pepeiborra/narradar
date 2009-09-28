@@ -13,7 +13,7 @@ import Control.Applicative
 import qualified Control.Exception as CE
 import Control.Monad
 import Data.Foldable (Foldable, toList)
-import Data.List ((\\), transpose, inits)
+import Data.List ((\\), transpose, inits, zip4)
 import Data.Maybe
 import Data.Monoid
 import qualified Data.Map as Map
@@ -431,10 +431,10 @@ mulgen id_f id_g ff gg k = do
                      | (ep_i, gamma_i) <- zip epsilons gammasM]
          ,k epsilons
          , andM [ gamma_ij ==>
-                  ifM' ep_i (f_i ~~ g_j)
-                            (f_i > g_j)
-                  | (ep_i, gamma_i, f_i) <- zip3 epsilons gammasM ff
-                  , (gamma_ij, g_j)      <- zip gamma_i gg]
+                  ifM' ep_i (withTrue [inAF i id_f, inAF j id_g] False (f_i ~~ g_j))
+                            (withTrue [inAF i id_f, inAF j id_g] False (f_i > g_j))
+                  | (i, ep_i, gamma_i, f_i) <- zip4 [1..] epsilons gammasM ff
+                  , (j, gamma_ij, g_j)      <- zip3 [1..] gamma_i gg]
          ]
 
 
