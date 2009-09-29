@@ -6,7 +6,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.Types.Problem.Rewriting where
+module Narradar.Types.Problem.Rewriting (DPProblem(..), Rewriting(..), IRewriting(..), rewritingProblem, iRewritingProblem) where
 
 import Control.Applicative
 import Control.Exception (assert)
@@ -22,6 +22,7 @@ import Data.Term
 import Data.Term.Rules
 
 import MuTerm.Framework.Problem
+import MuTerm.Framework.Problem.Types
 import MuTerm.Framework.Proof
 
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
@@ -34,7 +35,6 @@ import Narradar.Types.Var
 import Narradar.Utils
 import Narradar.Framework.Ppr
 
-data Rewriting = Rewriting                          deriving (Eq, Ord, Show)
 instance IsDPProblem Rewriting where
   data DPProblem Rewriting a = RewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Rewriting
@@ -44,7 +44,6 @@ instance IsDPProblem Rewriting where
   mapP f (RewritingProblem r p) = RewritingProblem r (f p)
 instance MkDPProblem Rewriting trs  where mkDPProblem _ = rewritingProblem
 
-data IRewriting = IRewriting                          deriving (Eq, Ord, Show)
 instance IsDPProblem IRewriting where
   data DPProblem IRewriting a = IRewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = IRewriting
