@@ -143,5 +143,5 @@ opts = [ Option ""  ["nodiagrams"] (NoArg $ \opts  -> P.return opts{diagrams = F
 
 setTimeout arg opts = do
   scheduleAlarm (read arg)
-  installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure (-1)))) Nothing
+  installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure 2))) Nothing
   P.return opts
