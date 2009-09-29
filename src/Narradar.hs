@@ -57,26 +57,6 @@ import Narradar.Processor.ReductionPair
 import Narradar.Processor.ExtraVariables
 
 
-{-
-narradarMain solver = do
-  (flags@Options{..}, _, _errors) <- getOptions
-  ~(yes, sol, log) <- (solver flags input)
-  when (verbose > 0) (  hSetBuffering stdout NoBuffering P.>> putStrLn log)
-  putStrLn$ if yes then "YES" else "MAYBE"
-  when (verbose>0 && yes) $ print $ dotProof sol
-  when (diagrams && (yes || verbose > 0)) $ withTempFile "." "narradar.dot" $ \fp h -> do
-        hPutStrLn h (dotProof' DotProof{showFailedPaths = verbose > 1} sol)
-        hFlush h
-#ifdef DEBUG
-        when (verbose > 1) $ do
-          writeFile (problemFile ++ ".dot") (dotProof sol)
-          putStrLn (".dot file recorded at " ++ problemFile ++ ".dot")
-#endif
-        system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
-        -- hPutStrLn stderr (printf "Log written to %s.pdf" file)
-        P.return ()
--}
-
 narradarMain :: forall mp.
                  (IsMZero mp, Foldable mp
                  ,Dispatch (DPProblem  (InitialGoal (TermF (Identifier String)) CNarrowing) (NTRS (Identifier String) Var))
@@ -144,8 +124,6 @@ getOptions = do
       P.return (opts{problemFile,input}, nonOptions, errors)
     _  -> putStrLn ("Error: " ++ unwords errors) >> putStrLn (usageInfo usage opts) >> exitWith (ExitFailure (-1))
 
--- data Options where Options :: (TRSC f, Ppr f) => FilePath -> PPT id f Html IO -> Bool -> Options
-
 data Options =  Options { problemFile :: FilePath
                         , input       :: String
                         , diagrams    :: Bool
@@ -162,8 +140,6 @@ opts = [ Option ""  ["nodiagrams"] (NoArg $ \opts  -> P.return opts{diagrams = F
        , Option "v" ["verbose"] (OptArg (\i opts -> maybe (P.return 1) readIO i P.>>= \i' -> P.return opts{verbose=i'}) "LEVEL") "Verbosity level (0-2)"
        , Option "h?" ["help"]   (NoArg  (\   _     -> putStrLn(usageInfo usage opts) P.>> exitSuccess)) "Displays this help screen"
        ]
-
--- data NiceSolver where NiceSolver :: (TRSC f, Ppr f) => PPT id f Html IO -> (ProblemProofG id Html f -> String) -> NiceSolver
 
 setTimeout arg opts = do
   scheduleAlarm (read arg)
