@@ -36,23 +36,27 @@ import Narradar.Framework.Ppr
 
 
 data Narrowing = Narrowing                          deriving (Eq, Ord, Show)
-instance IsDPProblem Narrowing where
-  data DPProblem Narrowing a = NarrowingProblem a a deriving (Eq, Ord, Show)
+instance IsProblem Narrowing where
+  data Problem Narrowing a = NarrowingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Narrowing
   getR (NarrowingProblem r _) = r
-  getP (NarrowingProblem _ p) = p
   mapR f (NarrowingProblem r p) = NarrowingProblem (f r) p
+
+instance IsDPProblem Narrowing where
+  getP (NarrowingProblem _ p) = p
   mapP f (NarrowingProblem r p) = NarrowingProblem r (f p)
 instance MkDPProblem Narrowing trs where mkDPProblem _ = NarrowingProblem
 
 
 data CNarrowing = CNarrowing                          deriving (Eq, Ord, Show)
-instance IsDPProblem CNarrowing where
-  data DPProblem CNarrowing a = CNarrowingProblem a a deriving (Eq, Ord, Show)
+instance IsProblem CNarrowing where
+  data Problem CNarrowing a = CNarrowingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = CNarrowing
   getR (CNarrowingProblem r _) = r
-  getP (CNarrowingProblem _ p) = p
   mapR f (CNarrowingProblem r p) = CNarrowingProblem (f r) p
+
+instance IsDPProblem CNarrowing where
+  getP (CNarrowingProblem _ p) = p
   mapP f (CNarrowingProblem r p) = CNarrowingProblem r (f p)
 instance MkDPProblem CNarrowing trs where mkDPProblem _ = CNarrowingProblem
 
@@ -60,13 +64,13 @@ instance MkDPProblem CNarrowing trs where mkDPProblem _ = CNarrowingProblem
 narrowingProblem         = NarrowingProblem
 cNarrowingProblem        = CNarrowingProblem
 
-instance Functor (DPProblem Narrowing) where fmap f (NarrowingProblem r p) = NarrowingProblem (f r) (f p)
-instance Foldable (DPProblem Narrowing) where foldMap f (NarrowingProblem r p) = f r `mappend` f p
-instance Traversable (DPProblem Narrowing) where traverse f (NarrowingProblem r p) = NarrowingProblem <$> f r <*> f p
+instance Functor (Problem Narrowing) where fmap f (NarrowingProblem r p) = NarrowingProblem (f r) (f p)
+instance Foldable (Problem Narrowing) where foldMap f (NarrowingProblem r p) = f r `mappend` f p
+instance Traversable (Problem Narrowing) where traverse f (NarrowingProblem r p) = NarrowingProblem <$> f r <*> f p
 
-instance Functor (DPProblem CNarrowing) where fmap f (CNarrowingProblem r p) = CNarrowingProblem (f r) (f p)
-instance Foldable (DPProblem CNarrowing) where foldMap f (CNarrowingProblem r p) = f r `mappend` f p
-instance Traversable (DPProblem CNarrowing) where traverse f (CNarrowingProblem r p) = CNarrowingProblem <$> f r <*> f p
+instance Functor (Problem CNarrowing) where fmap f (CNarrowingProblem r p) = CNarrowingProblem (f r) (f p)
+instance Foldable (Problem CNarrowing) where foldMap f (CNarrowingProblem r p) = f r `mappend` f p
+instance Traversable (Problem CNarrowing) where traverse f (CNarrowingProblem r p) = CNarrowingProblem <$> f r <*> f p
 
 
 instance Pretty Narrowing where pPrint _ = text "Narrowing"

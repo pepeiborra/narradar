@@ -9,6 +9,7 @@
 
 import Control.Monad
 import Data.Maybe
+import qualified Language.Prolog.Syntax as Prolog
 import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem
@@ -26,31 +27,31 @@ main = narradarMain listToMaybe
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
-instance Dispatch (PrologProblem String) where
-    dispatch = prologP_sk >=> dispatch
+instance Dispatch PrologProblem where
+    dispatch = apply SKTransform >=> dispatch
 
-instance (IsDPProblem typ, Pretty typ) => Dispatch (DPProblem typ trs) where
+instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
     dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getProblemType p))
 
 
-instance () => Dispatch (DPProblem Rewriting (NTRS (Identifier String) Var)) where
+instance () => Dispatch (Problem Rewriting (NTRS (Identifier String) Var)) where
   dispatch = mkDispatcher $ fixSolver (try DependencyGraphSCC >=> try (RPOProc LPO Yices))
 
-instance (id ~ Identifier a, Pretty id, Ord a) => Dispatch (DPProblem IRewriting (NTRS id Var)) where
+instance (id ~ Identifier a, Pretty id, Ord a) => Dispatch (Problem IRewriting (NTRS id Var)) where
   dispatch = mkDispatcher rpoPlusTransforms
 
 
 instance (Pretty id, Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) =>
-    Dispatch (DPProblem  Narrowing (NTRS (Identifier id) Var)) where
+    Dispatch (Problem  Narrowing (NTRS (Identifier id) Var)) where
   dispatch = mkDispatcher rpoPlusTransforms
 
-instance (Pretty id, Ord id, Lattice (AF_ id), Dispatch (DPProblem  Rewriting (NTRS id Var))) =>
-    Dispatch (DPProblem  (InitialGoal (TermF id) Narrowing) (NTRS id Var)) where
+instance (Pretty id, Ord id, Lattice (AF_ id), Dispatch (Problem  Rewriting (NTRS id Var))) =>
+    Dispatch (Problem  (InitialGoal (TermF id) Narrowing) (NTRS id Var)) where
   dispatch = mkDispatcher goalNarrowingByInfinitary
 
 instance (Pretty id, Ord id, Lattice (AF_ id),
-                 Dispatch (DPProblem IRewriting (NTRS id Var))) =>
-    Dispatch (DPProblem  (InitialGoal (TermF id) CNarrowing) (NTRS id Var)) where
+                 Dispatch (Problem IRewriting (NTRS id Var))) =>
+    Dispatch (Problem  (InitialGoal (TermF id) CNarrowing) (NTRS id Var)) where
   dispatch = mkDispatcher goalNarrowingByInfinitary
 
 goalNarrowingByInfinitary =

@@ -43,12 +43,12 @@ data NarrowingToRewritingICLP08 heu = NarrowingToRewritingICLP08 (MkHeu heu)
 
 
 instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         , Info info (DPProblem Narrowing (NTRS id Var))
-         , Info info (DPProblem Rewriting (NTRS id Var))
+         , Info info (Problem Narrowing (NTRS id Var))
+         , Info info (Problem Rewriting (NTRS id Var))
          , Info info UsableRulesProof
          , Info info (NarrowingToRewritingProof id)
          ) =>
-    Processor info (NarrowingToRewritingICLP08 heu) (DPProblem Narrowing (NTRS id Var) ) (DPProblem Rewriting (NTRS id Var) ) where
+    Processor info (NarrowingToRewritingICLP08 heu) (Problem Narrowing (NTRS id Var) ) (Problem Rewriting (NTRS id Var) ) where
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
@@ -79,7 +79,7 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          , Info info (NarrowingToRewritingProof id)
          , Info info UsableRulesProof
          ) =>
-    Processor info (NarrowingToRewritingICLP08 heu) (DPProblem CNarrowing (NTRS id Var)) (DPProblem IRewriting (NTRS id Var))
+    Processor info (NarrowingToRewritingICLP08 heu) (Problem CNarrowing (NTRS id Var)) (Problem IRewriting (NTRS id Var))
  where
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [failP (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
@@ -110,7 +110,7 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          , Info info (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
          , Info info (NarradarProblem typ0 (TermF id))
          , Info info (NarrowingToRewritingProof id)
-         , MkDPProblem typ0 (NTRS id Var), Traversable (DPProblem typ0)) =>
+         , MkDPProblem typ0 (NTRS id Var), Traversable (Problem typ0)) =>
     Processor info (NarrowingToRewritingICLP08 heu)
                    (NarradarProblem (MkNarrowingGoal id typ0) (TermF id))
                    (NarradarProblem typ0 (TermF id))
@@ -162,7 +162,7 @@ findGroundAF heu af0 p (_:->r)
 findGroundAF' :: ( IsDPProblem typ, HasSignature (NarradarProblem typ t)
                  , Traversable t, HasId t, ApplyAF (Term t Var), Ord (Term t Var)
                  , id ~ TermId t, id ~ AFId (Term t Var)
-                 , Ord id, Pretty id, Lattice (AF_ id), Foldable (DPProblem typ)
+                 , Ord id, Pretty id, Lattice (AF_ id), Foldable (Problem typ)
                  , ApplyAF (Term (WithNote1 Position t) (WithNote Position Var))
                  , AFId (Term (WithNote1 Position t) (WithNote Position Var)) ~ id
                  ) =>

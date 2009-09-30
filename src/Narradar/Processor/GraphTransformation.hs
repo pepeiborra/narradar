@@ -69,7 +69,7 @@ instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
          ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
-         ,IsDPProblem typ, Traversable (DPProblem typ)
+         ,IsDPProblem typ, Traversable (Problem typ)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
          ,Info info GraphTransformationProof
@@ -84,7 +84,7 @@ instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
          ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
-         ,IsDPProblem typ, Traversable (DPProblem typ)
+         ,IsDPProblem typ, Traversable (Problem typ)
          ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
          ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
          ,Info info GraphTransformationProof
@@ -130,11 +130,11 @@ instance Pretty GraphTransformationProof where
 -- Narrowing
 
 narrowing, narrowing_innermost
-          :: (p  ~ DPProblem typ trs
+          :: (p  ~ Problem typ trs
              ,trs ~ NarradarTRS t v
              ,TermId t  ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)
-             ,IsDPProblem typ, Traversable (DPProblem typ)
+             ,IsDPProblem typ, Traversable (Problem typ)
              ,IUsableRules t v (typ, trs), ICap t v (typ,trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ,[Rule t v])
              ,Pretty (Term t v), Pretty v, Pretty typ
@@ -142,7 +142,7 @@ narrowing, narrowing_innermost
              ,Info info GraphTransformationProof
              ,Monad mp
              ) =>
-             DPProblem typ trs -> [Proof info mp (DPProblem typ trs)]
+             Problem typ trs -> [Proof info mp (Problem typ trs)]
 
 narrowing p0
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
@@ -214,18 +214,18 @@ narrow1DP rr (l :-> r) = [ (applySubst theta l :-> r', p)
 
 instantiation, finstantiation
           :: forall typ trs mp t v p id info.
-             (p  ~ DPProblem typ trs, Info info p
+             (p  ~ Problem typ trs, Info info p
              ,trs ~ NarradarTRS t v
              ,TermId t ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v
-             ,IsDPProblem typ, Traversable (DPProblem typ)
+             ,IsDPProblem typ, Traversable (Problem typ)
              ,Pretty (Term t v), Ord(Term t v), Pretty v, Pretty typ
              ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
              ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
              ,Info info GraphTransformationProof
              ,Monad mp
              ) =>
-             DPProblem typ trs -> [Proof info mp (DPProblem typ trs)]
+             Problem typ trs -> [Proof info mp (Problem typ trs)]
 
 instantiation p
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"

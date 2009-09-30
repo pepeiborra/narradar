@@ -47,20 +47,20 @@ lpoAF_DP col p = rpoAF_DP' col (lpo) p
 mpoAF_DP col p = rpoAF_DP' col (mpo) p
 
 {-
-rpoAF_DP' :: (p  ~ DPProblem typ [Rule t v], HasSignature p
-             ,p' ~ DPProblem typ [Rule t' v], HasSignature p'
+rpoAF_DP' :: (p  ~ Problem typ [Rule t v], HasSignature p
+             ,p' ~ Problem typ [Rule t' v], HasSignature p'
              ,t  ~ f id, Ord id, Pretty id, MapId f, TermId t ~ id
              ,t' ~ f id', HasId t', Foldable t',  TermId t' ~ id'
              ,Ord id', SATOrd id', Extend id', UsableSymbol id', AFSymbol id', Decode id' (SymbolRes id)
              ,Ord (Term t' v)
-             ,IsDPProblem typ, Traversable (DPProblem typ)
+             ,IsDPProblem typ, Traversable (Problem typ)
              ,Functor t, Enum v, Ord v
              ,IUsableRules t' v p'
              ) =>
              Bool
           -> (Signature id -> id -> SAT id')
-          -> DPProblem typ [Rule (f id) v]
-          -> (DPProblem typ [Rule (f id') v] -> [SAT Boolean])
+          -> Problem typ [Rule (f id) v]
+          -> (Problem typ [Rule (f id') v] -> [SAT Boolean])
           -> SAT (Decoder ([Int], [SymbolRes id]))
 -}
 -- | Returns the indexes of non decreasing pairs and the symbols used
@@ -452,7 +452,7 @@ mulgen id_f id_g ff gg k = do
 -- ------------------------
 class OmegaUsable bla thing where omega :: thing -> SAT bla Boolean
 
-instance (p  ~ DPProblem IRewriting, HasSignature (p trs)
+instance (p  ~ Problem IRewriting, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
@@ -461,11 +461,11 @@ instance (p  ~ DPProblem IRewriting, HasSignature (p trs)
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (Term t v) (DPProblem IRewriting trs)
+    OmegaUsable (Term t v) (Problem IRewriting trs)
  where
   omega p = omegaGen (constant True) p
 
-instance (p  ~ DPProblem CNarrowing, HasSignature (p trs)
+instance (p  ~ Problem CNarrowing, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
@@ -474,11 +474,11 @@ instance (p  ~ DPProblem CNarrowing, HasSignature (p trs)
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (Term t v) (DPProblem CNarrowing trs)
+    OmegaUsable (Term t v) (Problem CNarrowing trs)
  where
   omega p = omegaGen (constant True) p
 
-instance (p  ~ DPProblem Rewriting, HasSignature (p trs)
+instance (p  ~ Problem Rewriting, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
@@ -487,11 +487,11 @@ instance (p  ~ DPProblem Rewriting, HasSignature (p trs)
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (Term t v) (DPProblem Rewriting trs)
+    OmegaUsable (Term t v) (Problem Rewriting trs)
  where
   omega p = omegaGen (andM $ map usable $ toList $ getDefinedSymbols p) p
 
-instance (p  ~ DPProblem Narrowing, HasSignature (p trs)
+instance (p  ~ Problem Narrowing, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
          ,Traversable p
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
@@ -500,14 +500,14 @@ instance (p  ~ DPProblem Narrowing, HasSignature (p trs)
          ,Foldable t, HasId t, Ord (Term t v)
          ,IUsableRules t v (p trs)
          ) =>
-    OmegaUsable (Term t v) (DPProblem Narrowing trs)
+    OmegaUsable (Term t v) (Problem Narrowing trs)
  where
   omega p = omegaGen (andM $ map usable $ toList $ getDefinedSymbols p) p
 
 omegaGen ::  forall p typ trs id t v .
-         (p  ~ DPProblem typ, HasSignature (p trs)
+         (p  ~ Problem typ, HasSignature (p trs)
          ,id ~ TermId t, TermId t ~ SignatureId trs
-         ,IsDPProblem typ, Traversable (DPProblem typ)
+         ,IsDPProblem typ, Traversable (Problem typ)
          ,IsTRS t v trs, GetVars v trs, HasSignature trs
          ,Ord v, Enum v
          ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id

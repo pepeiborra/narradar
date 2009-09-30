@@ -17,7 +17,7 @@ module Narradar ( narradarMain, Options(..), defOpts
                 , module Narradar.Processor.NarrowingProblem
                 , module Narradar.Processor.InitialGoalNarrowingProblem
                 , module Narradar.Processor.ExtraVariables
---                , module Narradar.Processor.PrologProblem
+                , module Narradar.Processor.PrologProblem
                 , module Narradar.Types
                 ) where
 
@@ -35,6 +35,7 @@ import System.Posix.Signals
 import System.Console.GetOpt
 import Text.ParserCombinators.Parsec (parse, runParser)
 import Text.Printf
+import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude as P
 
@@ -55,18 +56,19 @@ import Narradar.Processor.InitialGoalNarrowingProblem
 import Narradar.Processor.UsableRules
 import Narradar.Processor.ReductionPair
 import Narradar.Processor.ExtraVariables
+import Narradar.Processor.PrologProblem
 
 
 narradarMain :: forall mp.
                  (IsMZero mp, Foldable mp
-                 ,Dispatch (DPProblem  (InitialGoal (TermF (Identifier String)) CNarrowing) (NTRS (Identifier String) Var))
-                 ,Dispatch (DPProblem  (InitialGoal (TermF (Identifier String))  Narrowing) (NTRS (Identifier String) Var))
-                 ,Dispatch (DPProblem  (Relative (NTRS (Identifier String) Var) Rewriting) (NTRS (Identifier String) Var))
-                 ,Dispatch (DPProblem  Narrowing  (NTRS (Identifier String) Var))
-                 ,Dispatch (DPProblem  CNarrowing (NTRS (Identifier String) Var))
-                 ,Dispatch (DPProblem  Rewriting  (NTRS (Identifier String) Var))
-                 ,Dispatch (DPProblem  IRewriting (NTRS (Identifier String) Var))
-                 ,Dispatch (PrologProblem String)
+                 ,Dispatch (Problem  (InitialGoal (TermF (Identifier String)) CNarrowing) (NTRS (Identifier String) Var))
+                 ,Dispatch (Problem  (InitialGoal (TermF (Identifier String))  Narrowing) (NTRS (Identifier String) Var))
+                 ,Dispatch (Problem  (Relative (NTRS (Identifier String) Var) Rewriting) (NTRS (Identifier String) Var))
+                 ,Dispatch (Problem  Narrowing  (NTRS (Identifier String) Var))
+                 ,Dispatch (Problem  CNarrowing (NTRS (Identifier String) Var))
+                 ,Dispatch (Problem  Rewriting  (NTRS (Identifier String) Var))
+                 ,Dispatch (Problem  IRewriting (NTRS (Identifier String) Var))
+                 ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = do
   (flags@Options{..}, _, _errors) <- getOptions

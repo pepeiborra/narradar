@@ -41,10 +41,10 @@ import Narradar.Utils.Html
 
 data AProveReductionPairProcessor heu = AProveReductionPairProcessor (MkHeu heu) Int
 
-instance (p0  ~ DPProblem typ trs, Ord p0, PprTPDB p0
+instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
          ,trs ~ NTRS id Var
          ,t   ~ TermF id, Pretty (t Doc)
-         ,MkDPProblem typ (NTRS id Var), Traversable(DPProblem typ)
+         ,MkDPProblem typ (NTRS id Var), Traversable(Problem typ)
          ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
          ,Ord id, Pretty id, Lattice (AF_ id), PolyHeuristic heu id
          ,Info info p0
@@ -52,8 +52,8 @@ instance (p0  ~ DPProblem typ trs, Ord p0, PprTPDB p0
          ,Info info (AProveReductionPairProof id)
          ) =>
     Processor info (AProveReductionPairProcessor heu)
-              (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
-              (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
+              (Problem (MkNarrowingGoal id typ) (NTRS id Var))
+              (Problem (MkNarrowingGoal id typ) (NTRS id Var))
  where
   applySearch (AProveReductionPairProcessor mkH timeout) p
     = orProblems
@@ -119,7 +119,7 @@ instance HTML (AProveReductionPairProof id) where
 -- Implementation
 -- ----------------
 
---aproveXML :: (Ord v, Pretty v, Enum v, Ord id, Pretty id, Lattice (AF_ id)) => Int -> DPProblem typ trs -> IO String
+--aproveXML :: (Ord v, Pretty v, Enum v, Ord id, Pretty id, Lattice (AF_ id)) => Int -> Problem typ trs -> IO String
 aproveXML timeout = memoExternalProc (aproveSrvXML OnlyReductionPair timeout)
 
 newtype Tuple31 a b c = Tuple31 {tuple31::(a,b,c)}

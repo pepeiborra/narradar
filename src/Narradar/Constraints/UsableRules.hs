@@ -22,7 +22,7 @@ class IUsableRules t v thing | thing -> t v where
     iUsableRulesVar :: thing -> v -> Set (Rule t v)
 
 iUsableRules :: ( term ~ Term t v
-                , p    ~ DPProblem typ
+                , p    ~ Problem typ
                 , Ord term, Enum v
                 , IsDPProblem typ, Traversable p, IUsableRules t v (p trs)
                 , IsTRS t v trs, GetVars v trs
@@ -32,7 +32,7 @@ iUsableRules p tt = runIcap p $ iUsableRulesM p tt
 
 
 
-instance (IsDPProblem typ, IsTRS t v trs, IUsableRules t v (typ,trs)) => IUsableRules t v (DPProblem typ trs)
+instance (IsDPProblem typ, IsTRS t v trs, IUsableRules t v (typ,trs)) => IUsableRules t v (Problem typ trs)
     where
       iUsableRulesM p tt = do
             (_, trs') <- iUsableRulesM (getProblemType p, getR p) tt

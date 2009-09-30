@@ -59,7 +59,7 @@ import Data.Term.Rules
 -- -------------------------
 -- Constructing DP problems
 -- -------------------------
-type NarradarProblem typ t = DPProblem typ (NarradarTRS t Var)
+type NarradarProblem typ t = Problem typ (NarradarTRS t Var)
 
 mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
    rr' = mapTermSymbols IdFunction <$$> rules trs
@@ -70,11 +70,11 @@ mkDPProblem' :: ( v ~ Var
                 , rr ~ [Rule t v]
                 , ntrs ~ NarradarTRS t v
                 , Unify t, HasId t, Ord (Term t v)
-                , MkDPProblem typ (NarradarTRS t v), Traversable (DPProblem typ)
+                , MkDPProblem typ (NarradarTRS t v), Traversable (Problem typ)
                 , ICap t v (typ, ntrs)
                 , IUsableRules t v (typ, ntrs)
                 , Pretty (Term t v), Pretty typ
-                ) => typ -> [Rule t v] -> [Rule t v] -> DPProblem typ (NarradarTRS t v)
+                ) => typ -> [Rule t v] -> [Rule t v] -> Problem typ (NarradarTRS t v)
 mkDPProblem' typ rr dps = p where
       p     = mkDPProblem typ (tRS rr) dptrs
       dptrs = dpTRS typ rr dps (getEDG p)
@@ -99,16 +99,16 @@ instance GetPairs typ where
 
 getEDG p = filterSEDG p $ getdirectEDG p
 
-getdirectEDG :: (Traversable (DPProblem typ)
+getdirectEDG :: (Traversable (Problem typ)
                 ,IsDPProblem typ, Enum v, Ord v, Unify t
                 ,ICap t v (typ, NarradarTRS t v)
                 ,Pretty v, Pretty (Term t v), Pretty typ
-                ) => DPProblem typ (NarradarTRS t v) -> G.Graph
+                ) => Problem typ (NarradarTRS t v) -> G.Graph
 getdirectEDG p@(getP -> DPTRS dps _ (unif :!: _) _) =
     assert (isValidUnif p) $
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
-filterSEDG :: (IsDPProblem typ) => DPProblem typ (NarradarTRS t v) -> G.Graph -> G.Graph
+filterSEDG :: (IsDPProblem typ) => Problem typ (NarradarTRS t v) -> G.Graph -> G.Graph
 filterSEDG (getP -> dptrs@DPTRS{}) gr =
     G.buildG (A.bounds gr)
                [ (i,j) | (i,j) <- G.edges gr
@@ -121,14 +121,14 @@ emptyArray = A.listArray (0,-1) []
 -- Output
 -- ----------------
 
-instance (IsDPProblem p, Pretty p, Pretty trs) => Pretty (DPProblem p trs) where
+instance (IsDPProblem p, Pretty p, Pretty trs) => Pretty (Problem p trs) where
     pPrint p =
             pPrint (getProblemType p) <+> text "Problem" $$
             text "TRS:" <+> pPrint (getR p) $$
             text "DPS:" <+> pPrint (getP p)
 
 instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Pretty (Term t v)
-         ) => HTML (DPProblem typ trs) where
+         ) => HTML (Problem typ trs) where
     toHtml p
      | null $ rules (getP p) =
         H.table H.! [htmlClass typ] << (
@@ -162,34 +162,34 @@ class HTMLClass a where htmlClass :: a -> HtmlAttr
 -- Narradar instances
 -- -------------------
 
-instance (Ord v, ExtraVars v trs, IsDPProblem p) =>  ExtraVars v (DPProblem p trs) where
+instance (Ord v, ExtraVars v trs, IsDPProblem p) =>  ExtraVars v (Problem p trs) where
   extraVars p = extraVars (getP p) `mappend` extraVars (getR p)
 
-instance (ApplyAF trs, IsDPProblem p) => ApplyAF (DPProblem p trs) where
-    type AFId (DPProblem p trs) = AFId trs
+instance (ApplyAF trs, IsDPProblem p) => ApplyAF (Problem p trs) where
+    type AFId (Problem p trs) = AFId trs
     apply af = fmap (apply af)
 
 -- ------------------------------
 -- Data.Term framework instances
 -- ------------------------------
 
-instance (IsDPProblem typ, HasSignature trs) => HasSignature (DPProblem typ trs) where
-  type SignatureId (DPProblem typ trs) = SignatureId trs
+instance (IsDPProblem typ, HasSignature trs) => HasSignature (Problem typ trs) where
+  type SignatureId (Problem typ trs) = SignatureId trs
   getSignature p = getSignature (getR p) `mappend` getSignature (getP p)
 
-instance (Ord v, IsDPProblem typ, HasRules t v trs, Foldable (DPProblem typ)) => HasRules t v (DPProblem typ trs) where
+instance (Ord v, IsDPProblem typ, HasRules t v trs, Foldable (Problem typ)) => HasRules t v (Problem typ trs) where
     rules = foldMap rules
 
-instance (Ord v, GetFresh t v trs, Traversable (DPProblem typ)) => GetFresh t v (DPProblem typ trs) where getFreshM = getFreshMdefault
+instance (Ord v, GetFresh t v trs, Traversable (Problem typ)) => GetFresh t v (Problem typ trs) where getFreshM = getFreshMdefault
 
-instance (Ord v, GetVars v trs, Traversable (DPProblem typ)) => GetVars v (DPProblem typ trs) where getVars = foldMap getVars
+instance (Ord v, GetVars v trs, Traversable (Problem typ)) => GetVars v (Problem typ trs) where getVars = foldMap getVars
 
 
 -- ------------------------------------
 -- Dealing with the pairs in a problem
 -- ------------------------------------
 
-expandDPair :: ( problem ~ DPProblem typ
+expandDPair :: ( problem ~ Problem typ
                , HasId t, Foldable t, Unify t, Ord (Term t v), Ord v, Enum v
                , Traversable problem, IsDPProblem typ
                , ICap t v (typ, NarradarTRS t v)

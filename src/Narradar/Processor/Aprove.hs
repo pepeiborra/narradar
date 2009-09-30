@@ -77,37 +77,37 @@ instance HTML AproveProof where
 -- ------------------
 -- Allowed instances
 -- ------------------
-instance ( p ~ DPProblem Rewriting trs
+instance ( p ~ Problem Rewriting trs
          , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
          , Info info AproveProof
          ) =>
-    Processor info Aprove (DPProblem Rewriting trs) (DPProblem Rewriting trs)
+    Processor info Aprove (Problem Rewriting trs) (Problem Rewriting trs)
   where
     apply AproveWeb{..}    = unsafePerformIO . aproveWebProc
     apply AproveBinary{..} = unsafePerformIO . aproveProc path
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
-instance ( p ~ DPProblem IRewriting trs
+instance ( p ~ Problem IRewriting trs
          , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
          , Info info AproveProof
          ) =>
-    Processor info Aprove (DPProblem IRewriting trs) (DPProblem IRewriting trs)
+    Processor info Aprove (Problem IRewriting trs) (Problem IRewriting trs)
   where
     apply AproveWeb{..} = unsafePerformIO . aproveWebProc
     apply AproveBinary{..} = unsafePerformIO . aproveProc path
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
-instance ( Info info (DPProblem i trs)
-         , Processor info Aprove (DPProblem i trs) o
+instance ( Info info (Problem i trs)
+         , Processor info Aprove (Problem i trs) o
          ) =>
-    Processor info Aprove (DPProblem (InitialGoal t i) trs) o where
+    Processor info Aprove (Problem (InitialGoal t i) trs) o where
     apply mode InitialGoalProblem{..} = apply mode baseProblem
 
 -- ------------------
 -- Implementation
 -- ------------------
 
-aproveWebProc :: ( p ~ DPProblem typ trs
+aproveWebProc :: ( p ~ Problem typ trs
                  , IsDPProblem typ, Eq p, PprTPDB p
                  , HasRules t v trs, Pretty (Term t v)
                  , Info info p, Info info AproveProof
@@ -250,7 +250,7 @@ class PprTPDB p where pprTPDB :: p -> Doc
 
 instance (GetVars v trs, HasRules t v trs
          ,Pretty (Term t v), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
-         ) => PprTPDB (DPProblem Rewriting trs) where
+         ) => PprTPDB (Problem Rewriting trs) where
  pprTPDB p =
      vcat [ parens (text "VAR" <+> hsep (map pprVar (toList $ getVars p)))
           , parens (text "PAIRS" $$
@@ -272,7 +272,7 @@ instance (GetVars v trs, HasRules t v trs
 
 instance (GetVars v trs, HasRules t v trs
          ,Pretty (Term t v), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
-         ) => PprTPDB (DPProblem IRewriting trs) where
+         ) => PprTPDB (Problem IRewriting trs) where
  pprTPDB p = pprTPDB (mkDerivedProblem Rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 -- ----------------

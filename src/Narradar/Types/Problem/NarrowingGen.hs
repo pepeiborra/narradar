@@ -99,13 +99,16 @@ instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
 data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, Show)
 
-instance (IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (MkNarrowingGen p) where
-  data DPProblem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::DPProblem p a}
+instance IsProblem p => IsProblem (MkNarrowingGen p) where
+  data Problem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::Problem p a}
   getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
-  getP   (NarrowingGenProblem p) = getP p
   getR   (NarrowingGenProblem p) = getR p
   mapR f (NarrowingGenProblem p) = NarrowingGenProblem (mapR f p)
+
+instance IsDPProblem p => IsDPProblem (MkNarrowingGen p) where
+  getP   (NarrowingGenProblem p) = getP p
   mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
+
 instance MkDPProblem p trs => MkDPProblem (MkNarrowingGen p) trs where
   mkDPProblem (NarrowingGen typ) = (narrowingGenProblem.) . mkDPProblem typ
 
@@ -117,15 +120,15 @@ narrowingGenProblem = NarrowingGenProblem
 -- Instances
 -- ----------
 
-deriving instance (Eq (DPProblem p trs)) => Eq (DPProblem (MkNarrowingGen p) trs)
-deriving instance (Ord (DPProblem p trs)) => Ord (DPProblem (MkNarrowingGen p) trs)
-deriving instance (Show (DPProblem p trs)) => Show (DPProblem (MkNarrowingGen p) trs)
+deriving instance (Eq (Problem p trs)) => Eq (Problem (MkNarrowingGen p) trs)
+deriving instance (Ord (Problem p trs)) => Ord (Problem (MkNarrowingGen p) trs)
+deriving instance (Show (Problem p trs)) => Show (Problem (MkNarrowingGen p) trs)
 
 -- Functor
 
-instance Functor (DPProblem p) => Functor (DPProblem (MkNarrowingGen p)) where fmap f (NarrowingGenProblem p) = NarrowingGenProblem (fmap f p)
-instance Foldable (DPProblem p) => Foldable (DPProblem (MkNarrowingGen p)) where foldMap f (NarrowingGenProblem p) = foldMap f p
-instance Traversable (DPProblem p) => Traversable (DPProblem (MkNarrowingGen p)) where traverse f (NarrowingGenProblem p) = NarrowingGenProblem <$> traverse f p
+instance Functor (Problem p) => Functor (Problem (MkNarrowingGen p)) where fmap f (NarrowingGenProblem p) = NarrowingGenProblem (fmap f p)
+instance Foldable (Problem p) => Foldable (Problem (MkNarrowingGen p)) where foldMap f (NarrowingGenProblem p) = foldMap f p
+instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGen p)) where traverse f (NarrowingGenProblem p) = NarrowingGenProblem <$> traverse f p
 
 $(derive makeFunctor     ''MkNarrowingGen)
 $(derive makeFoldable    ''MkNarrowingGen)

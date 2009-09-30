@@ -36,8 +36,8 @@ instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,Info info (InfinitaryToRewritingProof id)
          ) =>
     Processor info (InfinitaryToRewriting heu)
-              (DPProblem (Infinitary id Rewriting) (NTRS id Var))
-              (DPProblem Rewriting (NTRS id Var))
+              (Problem (Infinitary id Rewriting) (NTRS id Var))
+              (Problem Rewriting (NTRS id Var))
   where
   applySearch (InfinitaryToRewriting mk) p
     | null orProblems = [failP (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
@@ -58,12 +58,12 @@ instance (t   ~ TermF id
          ,trs ~ NTRS id Var
          ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,MkDPProblem typ (NTRS id Var), Traversable (DPProblem typ)
+         ,MkDPProblem typ (NTRS id Var), Traversable (Problem typ)
          ,Info info (InfinitaryToRewritingProof id)
          ) =>
     Processor info (InfinitaryToRewriting heu)
-              (DPProblem (Infinitary id typ) (NTRS id Var))
-              (DPProblem typ (NTRS id Var))
+              (Problem (Infinitary id typ) (NTRS id Var))
+              (Problem typ (NTRS id Var))
   where
   applySearch (InfinitaryToRewriting mk) p
     | null orProblems = [failP (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
@@ -82,8 +82,8 @@ instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id Var), Pretty typ, HTMLCla
          , Info info NarrowingGoalToInfinitaryProof
          ) =>
     Processor info NarrowingGoalToInfinitary
-                  (DPProblem (MkNarrowingGoal id typ) (NTRS id Var))
-                  (DPProblem (Infinitary id typ) (NTRS id Var))
+                  (Problem (MkNarrowingGoal id typ) (NTRS id Var))
+                  (Problem (Infinitary id typ) (NTRS id Var))
    where
     apply _ p@(getProblemType -> NarrowingGoal pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkDerivedProblem (Infinitary pi p0) p
 

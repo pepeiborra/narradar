@@ -61,14 +61,16 @@ instance (Show p, Show (TermId t)) => Show (InitialGoal t p) where
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
-instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
-  data DPProblem (InitialGoal t p) a = InitialGoalProblem { goals       :: [Goal (TermId t)]
+instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
+  data Problem (InitialGoal t p) a = InitialGoalProblem { goals       :: [Goal (TermId t)]
                                                           , dgraph      :: DGraph t Var
-                                                          , baseProblem :: DPProblem p a}
+                                                          , baseProblem :: Problem p a}
   getProblemType (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getProblemType p)
-  getP   (InitialGoalProblem _     _ p) = getP p
   getR   (InitialGoalProblem _     _ p) = getR p
   mapR f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapR f p)
+
+instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
+  getP   (InitialGoalProblem _     _ p) = getP p
   mapP f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapP f p)
 
 instance (HasId t, Foldable t, MkDPProblem p trs
@@ -81,7 +83,7 @@ initialGoal gg = InitialGoal gg Nothing
 initialGoalProblem :: (IsTRS t Var trs, HasId t, Ord (Term t Var), IsDPProblem typ) =>
                       [Goal (TermId t)]
                    -> Maybe(DGraph t Var)
-                   -> DPProblem typ trs -> DPProblem (InitialGoal t typ) trs
+                   -> Problem typ trs -> Problem (InitialGoal t typ) trs
 
 initialGoalProblem gg Nothing   p = InitialGoalProblem gg (mkDGraph gg p) p
 initialGoalProblem gg (Just dg) p = InitialGoalProblem gg dg p
@@ -92,15 +94,15 @@ updateInitialGoalProblem p p0 = p{baseProblem = p0}
 -- Instances
 -- ---------
 
-deriving instance (Eq (Term t Var), Eq (TermId t), Eq (DPProblem p trs)) => Eq (DPProblem (InitialGoal t p) trs)
-deriving instance (Ord (t(Term t Var)),  Ord (TermId t), Ord (DPProblem p trs)) => Ord (DPProblem (InitialGoal t p) trs)
-deriving instance (Show (TermId t), Show (Term t Var), Show (DPProblem p trs)) => Show (DPProblem (InitialGoal t p) trs)
+deriving instance (Eq (Term t Var), Eq (TermId t), Eq (Problem p trs)) => Eq (Problem (InitialGoal t p) trs)
+deriving instance (Ord (t(Term t Var)),  Ord (TermId t), Ord (Problem p trs)) => Ord (Problem (InitialGoal t p) trs)
+deriving instance (Show (TermId t), Show (Term t Var), Show (Problem p trs)) => Show (Problem (InitialGoal t p) trs)
 
 -- Functor
 
-instance Functor (DPProblem p) => Functor (DPProblem (InitialGoal id p)) where fmap f (InitialGoalProblem gg g p) = InitialGoalProblem gg g (fmap f p)
-instance Foldable (DPProblem p) => Foldable (DPProblem (InitialGoal id p)) where foldMap f (InitialGoalProblem gg g p) = foldMap f p
-instance Traversable (DPProblem p) => Traversable (DPProblem (InitialGoal id p)) where traverse f (InitialGoalProblem gg g p) = InitialGoalProblem gg g <$> traverse f p
+instance Functor (Problem p) => Functor (Problem (InitialGoal id p)) where fmap f (InitialGoalProblem gg g p) = InitialGoalProblem gg g (fmap f p)
+instance Foldable (Problem p) => Foldable (Problem (InitialGoal id p)) where foldMap f (InitialGoalProblem gg g p) = foldMap f p
+instance Traversable (Problem p) => Traversable (Problem (InitialGoal id p)) where traverse f (InitialGoalProblem gg g p) = InitialGoalProblem gg g <$> traverse f p
 
 -- Output
 
@@ -122,8 +124,8 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
 -- Usable Rules
 
 {-
-instance IUsableRules t v (DPProblem p trs) =>
-    IUsableRules t v (DPProblem (InitialGoal id p) trs)
+instance IUsableRules t v (Problem p trs) =>
+    IUsableRules t v (Problem (InitialGoal id p) trs)
   where
     iUsableRulesVar InitialGoalProblem{..} = iUsableRulesVar baseProblem
     -- DUMMY IMPLEMENTATION
@@ -151,8 +153,8 @@ instance IUsableRules t v (p, trs) => IUsableRules t v (InitialGoal id p, trs)
 
 instance ( IsDPProblem p, Ord id
          , IUsableRules t Var (p, NarradarTRS id Var)
-         , IUsableRules t Var (DPProblem p (NarradarTRS id Var))) =>
-    IUsableRules t Var (DPProblem (InitialGoal id p) (NarradarTRS id Var))
+         , IUsableRules t Var (Problem p (NarradarTRS id Var))) =>
+    IUsableRules t Var (Problem (InitialGoal id p) (NarradarTRS id Var))
   where
     iUsableRulesVar InitialGoalProblem{..} = iUsableRulesVar baseProblem
 
@@ -176,7 +178,7 @@ instance ( IsDPProblem p, Ord id
     -}
 
 -- TODO implementation
--- instance IUsableRules t v (DPProblem (InitialGoal id (Infinitary p)) (NarradarTRS id v))
+-- instance IUsableRules t v (Problem (InitialGoal id (Infinitary p)) (NarradarTRS id v))
 
 
 -- -------------------------------
@@ -208,7 +210,7 @@ lookupNode p dg = fromMaybe (error "lookupPair: Pair not in graph") $
 lookupPair n dg = pairs dg A.! n
 
 mkDGraph :: (IsDPProblem typ, IsTRS t v trs, HasId t, Ord (Term t v)
-            ) => [Goal (TermId t)] -> DPProblem typ trs -> DGraph t v
+            ) => [Goal (TermId t)] -> Problem typ trs -> DGraph t v
 mkDGraph goals p = DGraph dps_a dps_map initialPairs graph
  where
   dps       = rules $ getP p

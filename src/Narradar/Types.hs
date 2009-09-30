@@ -111,14 +111,14 @@ narradarParser = trsParser <|> prologParser' where
 -- -----------------
 
 data AProblem t trs where
-    ARewritingProblem   :: DPProblem Rewriting trs  -> AProblem t trs
-    AIRewritingProblem  :: DPProblem IRewriting trs -> AProblem t trs
-    ANarrowingProblem   :: DPProblem Narrowing trs  -> AProblem t trs
-    ACNarrowingProblem  :: DPProblem CNarrowing trs -> AProblem t trs
-    ARelativeRewritingProblem :: DPProblem (Relative trs Rewriting) trs -> AProblem t trs
-    AGoalNarrowingProblem     :: DPProblem (InitialGoal t Narrowing) trs -> AProblem t trs
-    AGoalCNarrowingProblem    :: DPProblem (InitialGoal t CNarrowing) trs -> AProblem t trs
-    APrologProblem            :: PrologProblem String -> AProblem t trs
+    ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
+    AIRewritingProblem        :: Problem IRewriting trs -> AProblem t trs
+    ANarrowingProblem         :: Problem Narrowing trs  -> AProblem t trs
+    ACNarrowingProblem        :: Problem CNarrowing trs -> AProblem t trs
+    ARelativeRewritingProblem :: Problem (Relative trs Rewriting) trs -> AProblem t trs
+    AGoalNarrowingProblem     :: Problem (InitialGoal t Narrowing) trs -> AProblem t trs
+    AGoalCNarrowingProblem    :: Problem (InitialGoal t CNarrowing) trs -> AProblem t trs
+    APrologProblem            :: PrologProblem -> AProblem t trs
 
 parseTRS :: (trs ~ NTRS id Var, id ~ Identifier String, Monad m) =>
              String -> m (AProblem (TermF id) trs)

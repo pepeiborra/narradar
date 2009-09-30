@@ -45,7 +45,7 @@ instance (Ord v, Unify t) => ICap t v [Rule t v] where
     foldTermM doVar go t
 
 
-instance (IsDPProblem typ, ICap t v (typ, trs)) => ICap t v (DPProblem typ trs) where
+instance (IsDPProblem typ, ICap t v (typ, trs)) => ICap t v (Problem typ trs) where
   icap p t = icap (getProblemType p, getR p) t
 
 

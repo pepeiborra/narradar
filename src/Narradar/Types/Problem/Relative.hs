@@ -37,13 +37,17 @@ import Narradar.Utils
 import Narradar.Framework.Ppr
 
 data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deriving (Eq, Ord, Show)
-instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
-  data DPProblem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::DPProblem p trs}
+
+instance IsProblem p => IsProblem (Relative trs0 p) where
+  data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs}
   getProblemType (RelativeProblem r0 p) = Relative r0 (getProblemType p)
   getR (RelativeProblem _ p) = getR p
-  getP (RelativeProblem _ p) = getP p
   mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
+
+instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
+  getP (RelativeProblem _ p) = getP p
   mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
+
 instance MkDPProblem p trs => MkDPProblem (Relative trs p) trs where
   mkDPProblem (Relative trs0 p) = (RelativeProblem trs0 .) . mkDPProblem p
 
@@ -51,13 +55,13 @@ instance MkDPProblem p trs => MkDPProblem (Relative trs p) trs where
 relative = Relative
 relativeProblem = RelativeProblem
 
-deriving instance (Eq trs, Eq (DPProblem p trs)) => Eq (DPProblem (Relative trs p) trs)
-deriving instance (Ord trs, Ord (DPProblem p trs)) => Ord (DPProblem (Relative trs p) trs)
-deriving instance (Show trs, Show (DPProblem p trs)) => Show (DPProblem (Relative trs p) trs)
+deriving instance (Eq trs, Eq (Problem p trs)) => Eq (Problem (Relative trs p) trs)
+deriving instance (Ord trs, Ord (Problem p trs)) => Ord (Problem (Relative trs p) trs)
+deriving instance (Show trs, Show (Problem p trs)) => Show (Problem (Relative trs p) trs)
 
-instance Functor (DPProblem p) => Functor (DPProblem (Relative trs0 p)) where fmap f (RelativeProblem r0 p) = RelativeProblem r0 (fmap f p)
-instance Foldable (DPProblem p) => Foldable (DPProblem (Relative trs0 p)) where foldMap f (RelativeProblem r0 p) = foldMap f p
-instance Traversable (DPProblem p) => Traversable (DPProblem (Relative trs0 p)) where traverse f (RelativeProblem r0 p) = RelativeProblem r0 <$> traverse f p
+instance Functor (Problem p) => Functor (Problem (Relative trs0 p)) where fmap f (RelativeProblem r0 p) = RelativeProblem r0 (fmap f p)
+instance Foldable (Problem p) => Foldable (Problem (Relative trs0 p)) where foldMap f (RelativeProblem r0 p) = foldMap f p
+instance Traversable (Problem p) => Traversable (Problem (Relative trs0 p)) where traverse f (RelativeProblem r0 p) = RelativeProblem r0 <$> traverse f p
 
 
 $(derive makeFunctor     ''Relative)
@@ -65,10 +69,10 @@ $(derive makeFoldable    ''Relative)
 $(derive makeTraversable ''Relative)
 
 
-instance (IsDPProblem p, Ord (SignatureId trs), HasSignature (DPProblem p trs), Monoid trs) =>
-    HasSignature (DPProblem (Relative trs p) trs)
+instance (IsDPProblem p, Ord (SignatureId trs), HasSignature (Problem p trs), Monoid trs) =>
+    HasSignature (Problem (Relative trs p) trs)
   where
---    type SignatureId (DPProblem (Relative trs p) trs) = SignatureId trs
+--    type SignatureId (Problem (Relative trs p) trs) = SignatureId trs
     getSignature (RelativeProblem r0 p) = getSignature (mapR (`mappend` r0) p)
 
 

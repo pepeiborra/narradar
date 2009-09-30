@@ -313,7 +313,7 @@ instance HasRules t v a => HasRules t v (Map k a) where rules = foldMap rules . 
 -- -------------
 -- Sanity Checks
 -- -------------
-isValidUnif :: ( p   ~ DPProblem typ
+isValidUnif :: ( p   ~ Problem typ
                , Ord v, Enum v, Unify t
                , Traversable p, IsDPProblem typ, Pretty typ
                , ICap t v (typ,NarradarTRS t v)

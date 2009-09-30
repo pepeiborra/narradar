@@ -6,14 +6,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.Types.Problem.Rewriting (DPProblem(..), Rewriting(..), IRewriting(..), rewritingProblem, iRewritingProblem) where
+module Narradar.Types.Problem.Rewriting (Problem(..), Rewriting(..), IRewriting(..), rewritingProblem, iRewritingProblem) where
 
 import Control.Applicative
+import Control.Monad
 import Control.Exception (assert)
-import Control.Monad.Free
 import Data.Foldable as F (Foldable(..), toList)
-import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
+import Data.Traversable as T (Traversable(..), mapM)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Text.XHtml (HTML(..), theclass)
@@ -25,9 +25,6 @@ import MuTerm.Framework.Problem
 import MuTerm.Framework.Problem.Types
 import MuTerm.Framework.Proof
 
-import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
-import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types.DPIdentifiers
 import Narradar.Types.Problem
 import Narradar.Types.TRS
 import Narradar.Types.Term
@@ -35,21 +32,26 @@ import Narradar.Types.Var
 import Narradar.Utils
 import Narradar.Framework.Ppr
 
-instance IsDPProblem Rewriting where
-  data DPProblem Rewriting a = RewritingProblem a a deriving (Eq, Ord, Show)
+instance IsProblem Rewriting where
+  data Problem Rewriting a = RewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Rewriting
   getR (RewritingProblem r _) = r
-  getP (RewritingProblem _ p) = p
   mapR f (RewritingProblem r p) = RewritingProblem (f r) p
+
+instance IsDPProblem Rewriting where
+  getP   (RewritingProblem _ p) = p
   mapP f (RewritingProblem r p) = RewritingProblem r (f p)
+
 instance MkDPProblem Rewriting trs  where mkDPProblem _ = rewritingProblem
 
-instance IsDPProblem IRewriting where
-  data DPProblem IRewriting a = IRewritingProblem a a deriving (Eq, Ord, Show)
+instance IsProblem IRewriting where
+  data Problem IRewriting a = IRewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = IRewriting
   getR (IRewritingProblem r _) = r
-  getP (IRewritingProblem _ p) = p
   mapR f (IRewritingProblem r p) = IRewritingProblem (f r) p
+
+instance IsDPProblem IRewriting where
+  getP (IRewritingProblem _ p) = p
   mapP f (IRewritingProblem r p) = IRewritingProblem r (f p)
 instance MkDPProblem IRewriting trs where mkDPProblem _ = iRewritingProblem
 
@@ -58,13 +60,13 @@ iRewritingProblem        = IRewritingProblem
 
 -- Functor
 
-instance Functor (DPProblem Rewriting)     where fmap f (RewritingProblem r p) = RewritingProblem (f r) (f p)
-instance Foldable (DPProblem Rewriting)    where foldMap f (RewritingProblem r p) = f r `mappend` f p
-instance Traversable (DPProblem Rewriting) where traverse f (RewritingProblem r p) = RewritingProblem <$> f r <*> f p
+instance Functor (Problem Rewriting)     where fmap f (RewritingProblem r p) = RewritingProblem (f r) (f p)
+instance Foldable (Problem Rewriting)    where foldMap f (RewritingProblem r p) = f r `mappend` f p
+instance Traversable (Problem Rewriting) where traverse f (RewritingProblem r p) = RewritingProblem <$> f r <*> f p
 
-instance Functor (DPProblem IRewriting) where fmap f (IRewritingProblem r p) = IRewritingProblem (f r) (f p)
-instance Foldable (DPProblem IRewriting) where foldMap f (IRewritingProblem r p) = f r `mappend` f p
-instance Traversable (DPProblem IRewriting) where traverse f (IRewritingProblem r p) = IRewritingProblem <$> f r <*> f p
+instance Functor (Problem IRewriting) where fmap f (IRewritingProblem r p) = IRewritingProblem (f r) (f p)
+instance Foldable (Problem IRewriting) where foldMap f (IRewritingProblem r p) = f r `mappend` f p
+instance Traversable (Problem IRewriting) where traverse f (IRewritingProblem r p) = IRewritingProblem <$> f r <*> f p
 
 -- Output
 

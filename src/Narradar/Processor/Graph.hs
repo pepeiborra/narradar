@@ -41,41 +41,41 @@ data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
 
 
 instance ( trs ~ NarradarTRS t Var
-         , problem ~ DPProblem typ trs, Info info problem
-         , MkDPProblem typ (NarradarTRS t Var), Traversable (DPProblem typ)
+         , problem ~ Problem typ trs, Info info problem
+         , MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
          , Unify t, ICap t Var (typ,trs)
          , Pretty (Term t Var), Pretty typ
          , Info info DependencyGraphProof
          ) =>
-    Processor info DependencyGraphSCC (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
+    Processor info DependencyGraphSCC (Problem typ (NarradarTRS t Var)) (Problem typ (NarradarTRS t Var)) where
   apply DependencyGraphSCC = sccProcessor
 
 
 instance ( TermId t ~ Identifier id0, Ord id0
          , trs ~ NarradarTRS t Var
-         , problem ~ DPProblem (InitialGoal t typ0) trs, Info info problem
-         , MkDPProblem typ0 (NarradarTRS t Var), Traversable (DPProblem typ0)
+         , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
+         , MkDPProblem typ0 (NarradarTRS t Var), Traversable (Problem typ0)
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (Term t Var), Pretty typ0
          , ICap t Var (typ0,trs), ProblemColor problem, PprTPDBDot problem
          , Info info DependencyGraphProof
          ) =>
     Processor info DependencyGraphSCC
-             (DPProblem (InitialGoal t typ0) (NarradarTRS t Var))
-             (DPProblem (InitialGoal t typ0) (NarradarTRS t Var))
+             (Problem (InitialGoal t typ0) (NarradarTRS t Var))
+             (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
   apply DependencyGraphSCC    = usableSCCsProcessor
 
 
 instance ( trs ~ NarradarTRS t Var
-         , problem ~ DPProblem typ trs, Info info problem
-         , MkDPProblem typ (NarradarTRS t Var), Traversable (DPProblem typ)
+         , problem ~ Problem typ trs, Info info problem
+         , MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (Term t Var), Pretty typ
          , ICap t Var (typ,trs), ProblemColor problem, PprTPDBDot problem
          , Info info DependencyGraphProof
          ) =>
-    Processor info DependencyGraphCycles (DPProblem typ (NarradarTRS t Var)) (DPProblem typ (NarradarTRS t Var)) where
+    Processor info DependencyGraphCycles (Problem typ (NarradarTRS t Var)) (Problem typ (NarradarTRS t Var)) where
   apply DependencyGraphCycles = cycleProcessor
 
 -- --------------
@@ -124,16 +124,16 @@ instance DotRep DependencyGraphProof where
 -- ---------------
 -- Implementation
 -- ---------------
-type GraphProcessor typ t mp =   (problem ~ DPProblem typ trs, Info info problem
+type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
                                  ,trs     ~ NarradarTRS t Var
                                  ,MkDPProblem typ (NarradarTRS t Var)
-                                 ,Traversable (DPProblem typ)
+                                 ,Traversable (Problem typ)
                                  ,Pretty (Term t Var), Pretty typ
                                  ,Unify t, ICap t Var (typ, trs)
                                  ,Info info DependencyGraphProof
                                  ,Monad mp
                                  ) =>
-                                    DPProblem typ (NarradarTRS t Var) -> Proof info mp problem
+                                    Problem typ (NarradarTRS t Var) -> Proof info mp problem
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 usableSCCsProcessor :: (Identifier a ~ TermId t, Ord a) => GraphProcessor (InitialGoal t  typ0) t mp
@@ -161,18 +161,18 @@ cycleProcessor problem@(getP -> DPTRS dd _ unif sig)
       trs = getR problem
 
 {-
-usableSCCsProcessor :: (problem ~ DPProblem typ trs
+usableSCCsProcessor :: (problem ~ Problem typ trs
                        ,trs     ~ NarradarTRS id v
                        ,t       ~ TermF id
                        ,v       ~ Var
                        ,typ     ~ InitialGoal id typ0
                        ,id      ~ Identifier id0
-                       ,IsDPProblem typ, Traversable (DPProblem typ)
+                       ,IsDPProblem typ, Traversable (Problem typ)
                        ,Ppr typ, HTML typ, HTMLClass typ
                        ,ICap t v problem
                        ,Ppr v, Ord v, Enum v, Ppr id, Ord id
                        ) =>
-                            DPProblem typ trs -> Proof problem
+                            Problem typ trs -> Proof problem
 -- TODO Think about the usableSCC processor.
 -}
 

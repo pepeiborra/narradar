@@ -43,13 +43,16 @@ import Prelude hiding (pi)
 
 
 data Infinitary id p = Infinitary {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
-instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (Infinitary id p)  where
-  data DPProblem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::DPProblem p a}
+instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
+  data Problem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::Problem p a}
   getProblemType (InfinitaryProblem af p) = Infinitary af (getProblemType p)
-  getP   (InfinitaryProblem _  p) = getP p
   getR   (InfinitaryProblem _  p) = getR p
   mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
+
+instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
+  getP   (InfinitaryProblem _  p) = getP p
   mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
+
 instance (id ~ SignatureId trs, HasSignature trs, Ord id, MkDPProblem p trs) => MkDPProblem (Infinitary id p) trs where
   mkDPProblem (Infinitary af base) dp rr = InfinitaryProblem (af `mappend` AF.init p) p
     where p = mkDPProblem base dp rr
@@ -58,15 +61,15 @@ instance (id ~ SignatureId trs, HasSignature trs, Ord id, MkDPProblem p trs) => 
 infinitary        g p = Infinitary (mkGoalAF g) p
 infinitaryProblem g p = InfinitaryProblem (g `mappend` AF.init p) p
 
-deriving instance (Eq id, Eq (DPProblem p trs)) => Eq (DPProblem (Infinitary id p) trs)
-deriving instance (Ord id, Ord (DPProblem p trs)) => Ord (DPProblem (Infinitary id p) trs)
-deriving instance (Show id, Show (DPProblem p trs)) => Show (DPProblem (Infinitary id p) trs)
+deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (Infinitary id p) trs)
+deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (Infinitary id p) trs)
+deriving instance (Show id, Show (Problem p trs)) => Show (Problem (Infinitary id p) trs)
 
 -- Functor
 
-instance Functor (DPProblem p) => Functor (DPProblem (Infinitary id p)) where fmap f (InfinitaryProblem af p) = InfinitaryProblem af (fmap f p)
-instance Foldable (DPProblem p) => Foldable (DPProblem (Infinitary id p)) where foldMap f (InfinitaryProblem af p) = foldMap f p
-instance Traversable (DPProblem p) => Traversable (DPProblem (Infinitary id p)) where traverse f (InfinitaryProblem af p) = InfinitaryProblem af <$> traverse f p
+instance Functor (Problem p) => Functor (Problem (Infinitary id p)) where fmap f (InfinitaryProblem af p) = InfinitaryProblem af (fmap f p)
+instance Foldable (Problem p) => Foldable (Problem (Infinitary id p)) where foldMap f (InfinitaryProblem af p) = foldMap f p
+instance Traversable (Problem p) => Traversable (Problem (Infinitary id p)) where traverse f (InfinitaryProblem af p) = InfinitaryProblem af <$> traverse f p
 
 $(derive makeFunctor     ''Infinitary)
 $(derive makeFoldable    ''Infinitary)

@@ -42,8 +42,8 @@ instance (Ord id, Pretty id
          ,Info info (RPOProof id)
          ) =>
     Processor info RPOProc
-                  (DPProblem Rewriting  (NarradarTRS (TermF id) Var))
-                  (DPProblem Rewriting  (NarradarTRS (TermF id) Var))
+                  (Problem Rewriting  (NarradarTRS (TermF id) Var))
+                  (Problem Rewriting  (NarradarTRS (TermF id) Var))
    where
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
@@ -62,8 +62,8 @@ instance (Ord id, Pretty id
 instance (Ord id, Pretty id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
-                             (DPProblem IRewriting (NarradarTRS (TermF id) Var))
-                             (DPProblem IRewriting  (NarradarTRS (TermF id) Var))
+                             (Problem IRewriting (NarradarTRS (TermF id) Var))
+                             (Problem IRewriting  (NarradarTRS (TermF id) Var))
    where
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
@@ -86,8 +86,8 @@ instance (Ord id, Pretty id
 instance (Ord id, Pretty id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
-                             (DPProblem Narrowing (NarradarTRS (TermF id) Var))
-                             (DPProblem Narrowing (NarradarTRS (TermF id) Var))
+                             (Problem Narrowing (NarradarTRS (TermF id) Var))
+                             (Problem Narrowing (NarradarTRS (TermF id) Var))
   where
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
@@ -100,8 +100,8 @@ instance (Ord id, Pretty id
 instance (Ord id, Pretty id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
-                        (DPProblem CNarrowing (NarradarTRS (TermF id) Var))
-                        (DPProblem CNarrowing (NarradarTRS (TermF id) Var))
+                        (Problem CNarrowing (NarradarTRS (TermF id) Var))
+                        (Problem CNarrowing (NarradarTRS (TermF id) Var))
   where
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
@@ -161,7 +161,7 @@ data RPOProof id where
                 -> RPOProof id
      RPOFail :: RPOProof id
 
-rpoFail :: DPProblem typ (NTRS id Var) -> RPOProof id
+rpoFail :: Problem typ (NTRS id Var) -> RPOProof id
 rpoFail _ = RPOFail
 
 instance (Ord id, Pretty id) => Pretty (RPOProof id) where

@@ -47,13 +47,17 @@ type CNarrowingGoal id = MkNarrowingGoal id IRewriting
 instance GetPairs (NarrowingGoal id) where getPairs _ = getNPairs
 
 data MkNarrowingGoal id p = NarrowingGoal {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
-instance (Ord id, IsDPProblem p, Functor (DPProblem p)) => IsDPProblem (MkNarrowingGoal id p) where
-  data DPProblem (MkNarrowingGoal id p) trs = NarrowingGoalProblem {pi::AF_ id, baseProblem::DPProblem p trs}
+
+instance (Ord id, IsProblem p) => IsProblem (MkNarrowingGoal id p) where
+  data Problem (MkNarrowingGoal id p) trs = NarrowingGoalProblem {pi::AF_ id, baseProblem::Problem p trs}
   getProblemType (NarrowingGoalProblem af p) = NarrowingGoal af (getProblemType p)
-  getP   (NarrowingGoalProblem _  p) = getP p
   getR   (NarrowingGoalProblem _  p) = getR p
   mapR f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (mapR f p)
+
+instance (Ord id, IsDPProblem p) => IsDPProblem (MkNarrowingGoal id p) where
+  getP   (NarrowingGoalProblem _  p) = getP p
   mapP f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (mapP f p)
+
 instance (HasSignature trs, id ~ SignatureId trs, Ord id, MkDPProblem p trs) => MkDPProblem (MkNarrowingGoal id p) trs where
   mkDPProblem (NarrowingGoal pi typ) = (narrowingGoalProblem pi.) . mkDPProblem typ
 
@@ -61,15 +65,15 @@ narrowingGoal        g = NarrowingGoal (mkGoalAF g) Rewriting
 cnarrowingGoal       g = NarrowingGoal (mkGoalAF g) IRewriting
 narrowingGoalProblem g p = NarrowingGoalProblem (g `mappend` AF.init p) p
 
-deriving instance (Eq id, Eq (DPProblem p trs)) => Eq (DPProblem (MkNarrowingGoal id p) trs)
-deriving instance (Ord id, Ord (DPProblem p trs)) => Ord (DPProblem (MkNarrowingGoal id p) trs)
-deriving instance (Show id, Show (DPProblem p trs)) => Show (DPProblem (MkNarrowingGoal id p) trs)
+deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (MkNarrowingGoal id p) trs)
+deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (MkNarrowingGoal id p) trs)
+deriving instance (Show id, Show (Problem p trs)) => Show (Problem (MkNarrowingGoal id p) trs)
 
 -- Functor
 
-instance Functor (DPProblem p) => Functor (DPProblem (MkNarrowingGoal id p)) where fmap f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (fmap f p)
-instance Foldable (DPProblem p) => Foldable (DPProblem (MkNarrowingGoal id p)) where foldMap f (NarrowingGoalProblem af p) = foldMap f p
-instance Traversable (DPProblem p) => Traversable (DPProblem (MkNarrowingGoal id p)) where traverse f (NarrowingGoalProblem af p) = NarrowingGoalProblem af <$> traverse f p
+instance Functor (Problem p) => Functor (Problem (MkNarrowingGoal id p)) where fmap f (NarrowingGoalProblem af p) = NarrowingGoalProblem af (fmap f p)
+instance Foldable (Problem p) => Foldable (Problem (MkNarrowingGoal id p)) where foldMap f (NarrowingGoalProblem af p) = foldMap f p
+instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGoal id p)) where traverse f (NarrowingGoalProblem af p) = NarrowingGoalProblem af <$> traverse f p
 
 $(derive makeFunctor     ''MkNarrowingGoal)
 $(derive makeFoldable    ''MkNarrowingGoal)
