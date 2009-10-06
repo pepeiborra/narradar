@@ -52,7 +52,11 @@ instance Ord (Expr p) => RemovePrologId (Expr p) where
   type WithoutPrologId (Expr p) = Expr p
   removePrologId = Just
 
-class IsPrologId id where
+instance DPSymbol a => DPSymbol (PrologId a) where
+    markDPSymbol = fmap markDPSymbol
+    unmarkDPSymbol = fmap unmarkDPSymbol
+
+class PrologSymbol id where
     isInId      :: id -> Bool
     isOutId     :: id -> Bool
     isFunctorId :: id -> Bool
@@ -63,14 +67,14 @@ class IsPrologId id where
 
 setUId i = mapUId (const i)
 
-instance IsPrologId (PrologId a) where
+instance PrologSymbol (PrologId a) where
     isOutId OutId{} = True; isOutId  _ = False
     isInId InId{}   = True; isInId   _ = False
     getUId   (UId i) = Just i         ; getUId   _ = Nothing
     mapUId f (UId i) = Just(UId $ f i); mapUId _ _ = Nothing
     isFunctorId FunctorId{} = True; isFunctorId _ = False
 
-instance (Traversable l, IsPrologId a) => IsPrologId (l a) where
+instance (Traversable l, PrologSymbol a) => PrologSymbol (l a) where
     isInId      = getAny . foldMap (Any . isInId)
     isOutId     = getAny . foldMap (Any . isOutId)
     getUId   x | [x'] <- toList x = getUId   x'; getUId   _ = Nothing

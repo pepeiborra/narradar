@@ -1,9 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.Types.Problem.Relative where
@@ -42,15 +43,17 @@ instance IsProblem p => IsProblem (Relative trs0 p) where
   data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs}
   getProblemType (RelativeProblem r0 p) = Relative r0 (getProblemType p)
   getR (RelativeProblem _ p) = getR p
-  mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
 
 instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
   getP (RelativeProblem _ p) = getP p
-  mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
+
+instance MkProblem p trs => MkProblem (Relative trs p) trs where
+  mkProblem (Relative r0 p) rr = RelativeProblem r0 (mkProblem p rr)
+  mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
 
 instance MkDPProblem p trs => MkDPProblem (Relative trs p) trs where
+  mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
   mkDPProblem (Relative trs0 p) = (RelativeProblem trs0 .) . mkDPProblem p
-
 
 relative = Relative
 relativeProblem = RelativeProblem
@@ -69,11 +72,13 @@ $(derive makeFoldable    ''Relative)
 $(derive makeTraversable ''Relative)
 
 
-instance (IsDPProblem p, Ord (SignatureId trs), HasSignature (Problem p trs), Monoid trs) =>
+-- Data.Term instances
+
+instance (IsDPProblem p, Ord (SignatureId trs), HasSignature trs, Monoid trs) =>
     HasSignature (Problem (Relative trs p) trs)
   where
---    type SignatureId (Problem (Relative trs p) trs) = SignatureId trs
-    getSignature (RelativeProblem r0 p) = getSignature (mapR (`mappend` r0) p)
+    type SignatureId (Problem (Relative trs p) trs) = SignatureId trs
+    getSignature (RelativeProblem r0 p) = getSignature (getR p `mappend` r0 `mappend` getP p)
 
 
 -- Output
@@ -82,6 +87,14 @@ instance Pretty p => Pretty (Relative trs p)
     where
          pPrint (Relative _ p) = text "Relative termination of" <+> pPrint p
 
+
+instance (HasRules t v trs, Pretty (Term t v), Pretty (Problem base trs)) =>
+    Pretty (Problem (Relative trs base) trs)
+ where
+  pPrint RelativeProblem{..} =
+      pPrint baseProblem $$
+      text "TRS':" <+> vcat [pPrint l <+> text "->=" <+> pPrint r
+                              | l :-> r <- rules relativeTRS]
 -- ICap
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>
@@ -91,24 +104,32 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>
 
 -- Usable Rules
 
-instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v (typ, trs)) =>
-   IUsableRules t v (Relative trs typ, trs)
+instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v (typ, trs, trs)) =>
+   IUsableRules t v (Relative trs typ, trs, trs)
     where
-      iUsableRulesM (Relative r0 p, rr) tt = do
-            (_, usableRulesTRS) <- iUsableRulesM (p, r0 `mappend` rr) tt
+      iUsableRulesM (Relative r0 p, rr, dps) tt = do
+            (_, usableRulesTRS, _) <- iUsableRulesM (p, r0 `mappend` rr, dps) tt
             let usableRulesSet = Set.fromList (rules usableRulesTRS :: [Rule t v])
                 rr' = tRS $ toList (Set.fromList (rules rr) `Set.intersection` usableRulesSet)
                 r0' = tRS $ toList (Set.fromList (rules r0) `Set.intersection` usableRulesSet)
-            return (Relative r0' p,  rr')
-      iUsableRulesVar (Relative r0 p, rr) = iUsableRulesVar (p, r0 `mappend` rr)
+            return (Relative r0' p,  rr', dps)
+      iUsableRulesVarM (Relative r0 p, rr, dps) = iUsableRulesVarM (p, r0 `mappend` rr, dps)
 
-instance (Ord v, Ord (Term t v), IsTRS t v trs, IsTRS t v trs', IsDPProblem typ, IUsableRules t v (typ, [Rule t v])) =>
-   IUsableRules t v (Relative trs typ, trs')
+{-
+instance (Ord v, Ord (Term t v), IsTRS t v trs, IsTRS t v trs', IsDPProblem typ, IUsableRules t v (typ, [Rule t v], [Rule t v])) =>
+   IUsableRules t v (Relative trs typ, trs', trs')
     where
-      iUsableRulesM (Relative r0 p, rr) tt = do
-            (_, usableRulesTRS) <- iUsableRulesM (p, rules r0 `mappend` rules rr) tt
+      iUsableRulesM (Relative r0 p, rr, dps) tt = do
+            (_, usableRulesTRS) <- iUsableRulesM (p, rules r0 `mappend` rules rr, dps) tt
             let usableRulesSet = Set.fromList (rules usableRulesTRS :: [Rule t v])
                 rr' = tRS $ toList (Set.fromList (rules rr) `Set.intersection` usableRulesSet)
                 r0' = tRS $ toList (Set.fromList (rules r0) `Set.intersection` usableRulesSet)
-            return (Relative r0' p, rr')
-      iUsableRulesVar (Relative r0 p, rr) = iUsableRulesVar (p, rules r0 `mappend` rules rr)
+            return (Relative r0' p, rr', dps)
+      iUsableRulesVarM (Relative r0 p, rr, dps) = iUsableRulesVarM (p, rules r0 `mappend` rules rr, dps)
+-}
+
+
+-- Insert Pairs
+
+instance (MkDPProblem (Relative trs base) (NTRS id), InsertDPairs base (NTRS id)) => InsertDPairs (Relative trs base) (NTRS id) where
+  insertDPairs RelativeProblem{..} newPairs = RelativeProblem{baseProblem = insertDPairs baseProblem newPairs, ..}

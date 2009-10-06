@@ -6,7 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
 module Narradar.Processor.GraphTransformation where
@@ -39,54 +39,106 @@ data FInstantiation = FInstantiation
 
 -- Narrowing
 
-instance ( Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+instance ( Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
-instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Narrowing t) (NarradarProblem Narrowing t) where
   applySearch NarrowingP = narrowing
 
-instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+instance (Ord id, GenSymbol id, Pretty (Identifier id)
+         ,Info info GraphTransformationProof
+         ) =>
+    Processor info NarrowingP (NProblem NarrowingGen (Identifier id)) (NProblem NarrowingGen (Identifier id)) where
+  applySearch NarrowingP = narrowing
+
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
   applySearch NarrowingP = narrowing_innermost
 
-instance (Ord (Term t Var), Pretty (Term t Var), Unify t, HasId t, TermId t ~ Identifier id
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier (GenId id)
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem CNarrowing t) (NarradarProblem CNarrowing t) where
   applySearch NarrowingP = narrowing_innermost
+
+instance (Ord id, GenSymbol id, Pretty (Identifier id)
+         ,Info info GraphTransformationProof
+         ) =>
+    Processor info NarrowingP (NProblem CNarrowingGen (Identifier id)) (NProblem CNarrowingGen (Identifier id)) where
+  applySearch NarrowingP = narrowing_innermost
+
+instance ( Processor info NarrowingP (Problem base trs) (Problem base trs)
+         , Info info (Problem base trs)
+         )=> Processor info NarrowingP (Problem (InitialGoal t base) trs) (Problem (InitialGoal t base) trs)
+  where
+   apply = liftProcessor
 
 -- Instantiation
 
 instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
-         ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
-         ,IsDPProblem typ, Traversable (Problem typ)
-         ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
-         ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+         ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (Term t Var)
+         ,MkDPProblem typ trs, Traversable (Problem typ)
+         ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
          ,Info info GraphTransformationProof
          ) =>
     Processor info Instantiation (NarradarProblem typ t) (NarradarProblem typ t) where
   applySearch Instantiation = instantiation
 
 
+-- Initial Goal
+
+instance (trs ~ NarradarTRS t v
+         ,v   ~ Var
+         ,t   ~ f id
+         ,id  ~ TermId t, HasId t, MapId f, DPSymbol id
+         ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (t(Term t Var))
+         ,MkDPProblem typ trs, Traversable (Problem typ)
+         ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
+         ,Info info GraphTransformationProof
+         ) =>
+    Processor info Instantiation (NarradarProblem (InitialGoal (f id) typ) (f id)) (NarradarProblem (InitialGoal (f id) typ) (f id)) where
+  applySearch Instantiation p@InitialGoalProblem{..}
+   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
+   | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
+   | otherwise = [ singleP (InstantiationProof olddp newdps) p
+                             (mkDerivedProblem typ' (expandDPair p i newdps))
+                     | (i,dps') <- dpss
+                     , let olddp  = dpsA  ! i
+                     , let newdps = dps' !! i
+                     , let dgraph' = expandDGraph p olddp newdps
+                     , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
+                 ]
+
+   where
+         (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
+         dps  = elems dpsA
+         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+                                    , all (not.null) dps]
+         f :: (Int, Rule t v) -> [(Int, Rule t v)]
+         f  (i,olddp@(s :-> t))
+                  | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
+                  | otherwise = []
+            where newdps = [ (i, applySubst sigma s :-> applySubst sigma t)
+                            | Just sigma <- snub [dpUnify (getP p) i m | (m,n) <- Gr.edges gr, n == i]]
+
 -- Forward Instantiation
 
 instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,Identifier id ~ TermId t, HasId t
-         ,Unify t, Pretty (Term t Var), Pretty typ, Ord (Term t Var)
-         ,IsDPProblem typ, Traversable (Problem typ)
-         ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
-         ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+         ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (Term t Var)
+         ,MkDPProblem typ trs, Traversable (Problem typ)
+         ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
          ,Info info GraphTransformationProof
          ) =>
     Processor info FInstantiation (NarradarProblem typ t) (NarradarProblem typ t) where
@@ -134,10 +186,9 @@ narrowing, narrowing_innermost
              ,trs ~ NarradarTRS t v
              ,TermId t  ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)
-             ,IsDPProblem typ, Traversable (Problem typ)
-             ,IUsableRules t v (typ, trs), ICap t v (typ,trs)
-             ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ,[Rule t v])
-             ,Pretty (Term t v), Pretty v, Pretty typ
+             ,MkDPProblem typ trs, Traversable (Problem typ)
+             ,IUsableRules t v (typ, trs, trs), ICap t v (typ,trs)
+             ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info p
              ,Info info GraphTransformationProof
              ,Monad mp
@@ -150,7 +201,7 @@ narrowing p0
                      | (i,dps') <- dpss
                      , let olddp  = dpsA ! i
                      , let newdps = dps' !! i]
-    where --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
+    where
           (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
           dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                           , all (not.null) dps]
@@ -218,10 +269,9 @@ instantiation, finstantiation
              ,trs ~ NarradarTRS t v
              ,TermId t ~ Identifier id, HasId t, Unify t
              ,Enum v, GetVars v v
-             ,IsDPProblem typ, Traversable (Problem typ)
-             ,Pretty (Term t v), Ord(Term t v), Pretty v, Pretty typ
-             ,IUsableRules t v (typ, trs), ICap t v (typ, trs)
-             ,IUsableRules t v (typ, [Rule t v]), ICap t v (typ, [Rule t v])
+             ,MkDPProblem typ trs, Traversable (Problem typ)
+             ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
+             ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
              ,Info info GraphTransformationProof
              ,Monad mp
              ) =>

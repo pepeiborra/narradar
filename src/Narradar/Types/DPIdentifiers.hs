@@ -26,7 +26,7 @@ import Narradar.Framework.Ppr
 
 
 type Id = Identifier String
-type DP a v = RuleN (Identifier a) v
+type DP a = RuleN (Identifier a)
 
 -- -----------------------
 -- Concrete DP Identifiers
@@ -64,15 +64,11 @@ $(derive makeTraversable ''Identifier)
 -- ------------
 isDPSymbol (IdDP _ ) = True
 isDPSymbol _         = False
-markDPSymbol (IdFunction f) = IdDP f
-markDPSymbol f = f
-unmarkDPSymbol (IdDP n) = IdFunction n
-unmarkDPSymbol n = n
 
 functionSymbol = IdFunction; dpSymbol = IdDP
 symbol (IdFunction f) = f; symbol(IdDP f) = f
 
-markDP, unmarkDP :: (MapId f, Functor (f (Identifier id))) => Term (f (Identifier id)) v -> Term (f (Identifier id)) v
+markDP, unmarkDP :: (MapId t, Functor (t id), DPSymbol id) => Term (t id) v -> Term (t id) v
 markDP   = evalTerm return (Impure . mapId markDPSymbol)
 unmarkDP = evalTerm return (Impure . mapId unmarkDPSymbol)
 returnDP = foldTerm return (Impure . mapId IdFunction)
@@ -81,3 +77,9 @@ returnDP = foldTerm return (Impure . mapId IdFunction)
 markDPRule   = fmap markDP
 unmarkDPRule = fmap unmarkDP
 
+class DPSymbol s where markDPSymbol, unmarkDPSymbol :: s -> s
+instance DPSymbol (Identifier id) where
+  markDPSymbol (IdFunction f) = IdDP f
+  markDPSymbol f = f
+  unmarkDPSymbol (IdDP n) = IdFunction n
+  unmarkDPSymbol n = n

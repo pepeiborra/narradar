@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
@@ -18,7 +18,9 @@ import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable (Foldable(..), toList)
+import Data.List (nub)
 import Data.Traversable as T (Traversable(..), mapM)
+import Data.Maybe
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -36,32 +38,16 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
-import Narradar.Types.Problem.Infinitary
+import Narradar.Types.Term
+import Narradar.Types.TRS
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
 import Prelude hiding (pi)
 
---data GenId id = TheGoal | Gen | NotGen id deriving (Eq, Ord, Show)
---genTerm = term Gen []
---goalTerm = Goal TheGoal
-
 -- -----------------------
 -- Terms with Gen and Goal
 -- -----------------------
-
-data GenTermF id a = Term id [a]
-                   | GenTerm
-                   | GoalTerm [a]
-   deriving (Eq, Ord, Show)
-
-genTerm  = Impure   GenTerm
-goalTerm = Impure . GoalTerm
-term id  = Impure . Term id
-
-$(derive makeFunctor     ''GenTermF)
-$(derive makeFoldable    ''GenTermF)
-$(derive makeTraversable ''GenTermF)
 
 data GenId id = AnId id | GenId | GoalId deriving (Eq, Ord, Show)
 
@@ -70,25 +56,17 @@ instance Pretty id => Pretty (GenId id) where
   pPrint GoalId = text "GOAL"
   pPrint (AnId id) = pPrint id
 
-instance Ord id => HasId (GenTermF id) where
-  type TermId (GenTermF id) = GenId id
-  getId (Term id  _) = Just (AnId id)
-  getId (GenTerm   ) = Just GenId
-  getId (GoalTerm _) = Just GoalId
+instance Pretty (GenId String) where
+  pPrint GenId  = text "GEN"
+  pPrint GoalId = text "GOAL"
+  pPrint (AnId id) = text id
 
-instance MapId GenTermF where
-  mapId f (Term id  tt) = Term (f id) tt
-  mapId _ (GenTerm    ) = GenTerm
-  mapId _ (GoalTerm tt) = GoalTerm tt
+class GenSymbol id where
+  goalSymbol :: id
+  genSymbol  :: id
 
-
-instance (Pretty a, Pretty id) => Pretty (GenTermF id a) where
-    pPrint (Term n []) = pPrint n
-    pPrint (Term n [x,y]) | not (any isAlpha $ show $ pPrint n) = pPrint x <+> pPrint n <+> pPrint y
-    pPrint (Term n tt) = pPrint n <> parens (hcat$ punctuate comma$ map pPrint tt)
-    pPrint (GoalTerm tt) = text "GOAL" <> parens (hcat $ punctuate comma $ map pPrint tt)
-    pPrint GenTerm     = text "GEN"
-
+instance GenSymbol (GenId id) where genSymbol = GenId; goalSymbol = GoalId
+instance GenSymbol a => GenSymbol (Identifier a) where genSymbol = IdFunction genSymbol; goalSymbol = IdFunction goalSymbol
 
 -- --------------------------------------------------------------
 -- The class of Narrowing-as-Rewriting-with-Generators problems
@@ -103,14 +81,29 @@ instance IsProblem p => IsProblem (MkNarrowingGen p) where
   data Problem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::Problem p a}
   getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
   getR   (NarrowingGenProblem p) = getR p
+
+instance MkProblem p trs => MkProblem (MkNarrowingGen p) trs where
+  mkProblem (NarrowingGen p) rr = NarrowingGenProblem (mkProblem p rr)
   mapR f (NarrowingGenProblem p) = NarrowingGenProblem (mapR f p)
 
 instance IsDPProblem p => IsDPProblem (MkNarrowingGen p) where
   getP   (NarrowingGenProblem p) = getP p
-  mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
 
-instance MkDPProblem p trs => MkDPProblem (MkNarrowingGen p) trs where
-  mkDPProblem (NarrowingGen typ) = (narrowingGenProblem.) . mkDPProblem typ
+
+instance (Ord id, GenSymbol id, MkDPProblem p (NTRS id)) =>
+  MkDPProblem (MkNarrowingGen p) (NTRS id)
+ where
+  mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
+  mkDPProblem (NarrowingGen typ) trs dps = narrowingGenProblem $ mkDPProblem typ trs' dps'
+   where
+    trs' = mapNarradarTRS' id extraVarsToGen trs
+    dps' = mapNarradarTRS' id extraVarsToGen dps
+
+    extraVarsToGen (l :-> r) = l :-> applySubst sigma r
+     where
+      sigma = fromListSubst (evars `zip` repeat genTerm)
+      genTerm = term genSymbol []
+      evars = Set.toList(getVars r `Set.difference` getVars l)
 
 narrowingGen        = NarrowingGen  Rewriting
 cnarrowingGen       = NarrowingGen  IRewriting
@@ -134,29 +127,19 @@ $(derive makeFunctor     ''MkNarrowingGen)
 $(derive makeFoldable    ''MkNarrowingGen)
 $(derive makeTraversable ''MkNarrowingGen)
 
+-- Data.Term instances
+
+instance (HasSignature (Problem base trs)) => HasSignature (Problem (MkNarrowingGen base) trs) where
+  type SignatureId (Problem (MkNarrowingGen base) trs) = SignatureId (Problem base trs)
+  getSignature = getSignature . baseProblem
+
 -- Output
 
 instance Pretty p => Pretty (MkNarrowingGen p) where
     pPrint NarrowingGen{..} = text "NarrowingGen" <+> pPrint baseProblemType
 
-instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "IRew"
-instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "INarr"
-
-instance ApplyAF (Term (GenTermF id) v) where
-   type AFId (Term (GenTermF id) v) = GenId id
-   apply af = foldTerm return f
-     where
-       f t@(Term n tt)
-         | Just ii <- AF.lookup' (AnId n) af = either (\i  -> term n [tt !! pred i])
-                                               (\ii -> term n (select tt (pred <$> ii)))
-                                               ii
-         | otherwise = Impure t
-
-       f (GoalTerm tt)
-         | Just ii <- AF.lookup' GoalId af = either (\i  -> goalTerm [tt !! i])
-                                                    (\ii -> goalTerm (select tt (pred <$> ii)))
-                                                    ii
-       f GenTerm = genTerm
+instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenNarr"
+instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
 
 -- ICap
 
@@ -168,13 +151,16 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
 -- Usable Rules
 
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
-         ,ApplyAF (Term t v), ApplyAF trs
-         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id
-         ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
-   IUsableRules t v (MkNarrowingGen p, trs)
+         ,IUsableRules t v (p,trs, trs), ICap t v (p,trs)) =>
+   IUsableRules t v (MkNarrowingGen p, trs, trs)
  where
-   iUsableRulesM (typ@NarrowingGen{..}, trs) tt = do
-      (_,trs') <- iUsableRulesM (baseProblemType,trs) tt
-      return (typ, trs')
+   iUsableRulesM (typ@NarrowingGen{..}, trs, dps) tt = do
+      (_,trs',dps') <- iUsableRulesM (baseProblemType,trs,dps) tt
+      return (typ, trs',dps')
 
-   iUsableRulesVar (NarrowingGen{..},trs) = iUsableRulesVar (baseProblemType, trs)
+   iUsableRulesVarM (NarrowingGen{..},trs, dps) = iUsableRulesVarM (baseProblemType, trs, dps)
+
+-- Insert Pairs
+
+instance (MkDPProblem (MkNarrowingGen base) trs, InsertDPairs base trs) => InsertDPairs (MkNarrowingGen base) trs where
+  insertDPairs NarrowingGenProblem{..} = narrowingGenProblem . insertDPairs baseProblem

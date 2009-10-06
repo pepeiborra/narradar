@@ -1,12 +1,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.Types.Problem.Rewriting (Problem(..), Rewriting(..), IRewriting(..), rewritingProblem, iRewritingProblem) where
+module Narradar.Types.Problem.Rewriting (Problem(..), Rewriting(..), IRewriting(..), rewritingProblem, irewritingProblem) where
 
 import Control.Applicative
 import Control.Monad
@@ -36,27 +36,67 @@ instance IsProblem Rewriting where
   data Problem Rewriting a = RewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = Rewriting
   getR (RewritingProblem r _) = r
-  mapR f (RewritingProblem r p) = RewritingProblem (f r) p
 
 instance IsDPProblem Rewriting where
   getP   (RewritingProblem _ p) = p
+
+instance Monoid trs => MkProblem Rewriting trs where
+  mkProblem Rewriting rr = rewritingProblem rr mempty
+  mapR f (RewritingProblem r p) = RewritingProblem (f r) p
+
+
+instance MkProblem Rewriting trs => MkDPProblem Rewriting trs where
+  mkDPProblem Rewriting = rewritingProblem
   mapP f (RewritingProblem r p) = RewritingProblem r (f p)
 
-instance MkDPProblem Rewriting trs  where mkDPProblem _ = rewritingProblem
+instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
+  MkProblem Rewriting (NarradarTRS t v)
+ where
+  mkProblem Rewriting rr = rewritingProblem rr mempty
+  mapR f (RewritingProblem rr pp) = mkDPProblem' Rewriting (f rr) pp
+
+instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(Term t v))) =>
+  MkDPProblem Rewriting (NarradarTRS t v)
+ where
+  mkDPProblem Rewriting rr dd@DPTRS{} = rewritingProblem rr dd
+  mkDPProblem Rewriting rr dd = mkDPProblem' Rewriting rr dd
+  mapP f (RewritingProblem rr pp) = case f pp of
+                                    pp'@DPTRS{} -> RewritingProblem rr pp'
+                                    pp' -> mkDPProblem' Rewriting rr pp'
 
 instance IsProblem IRewriting where
   data Problem IRewriting a = IRewritingProblem a a deriving (Eq, Ord, Show)
   getProblemType _ = IRewriting
   getR (IRewritingProblem r _) = r
-  mapR f (IRewritingProblem r p) = IRewritingProblem (f r) p
 
 instance IsDPProblem IRewriting where
   getP (IRewritingProblem _ p) = p
+
+instance Monoid trs => MkProblem IRewriting trs where
+  mkProblem IRewriting rr = irewritingProblem rr mempty
+  mapR f (IRewritingProblem r p) = IRewritingProblem (f r) p
+
+instance MkProblem IRewriting trs => MkDPProblem IRewriting trs where
+  mkDPProblem _ = irewritingProblem
   mapP f (IRewritingProblem r p) = IRewritingProblem r (f p)
-instance MkDPProblem IRewriting trs where mkDPProblem _ = iRewritingProblem
+
+instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
+  MkProblem IRewriting (NarradarTRS t v)
+ where
+  mkProblem IRewriting rr = irewritingProblem rr mempty
+  mapR f (IRewritingProblem rr pp) = mkDPProblem' IRewriting (f rr) pp
+
+instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(Term t v))) =>
+  MkDPProblem IRewriting (NarradarTRS t v)
+ where
+  mkDPProblem IRewriting rr dd@DPTRS{} = irewritingProblem rr dd
+  mkDPProblem IRewriting rr dd = mkDPProblem' IRewriting rr dd
+  mapP f (IRewritingProblem rr pp) = case f pp of
+                                    pp'@DPTRS{} -> IRewritingProblem rr pp'
+                                    pp' -> mkDPProblem' IRewriting rr pp'
 
 rewritingProblem         = RewritingProblem
-iRewritingProblem        = IRewritingProblem
+irewritingProblem        = IRewritingProblem
 
 -- Functor
 
@@ -67,6 +107,16 @@ instance Traversable (Problem Rewriting) where traverse f (RewritingProblem r p)
 instance Functor (Problem IRewriting) where fmap f (IRewritingProblem r p) = IRewritingProblem (f r) (f p)
 instance Foldable (Problem IRewriting) where foldMap f (IRewritingProblem r p) = f r `mappend` f p
 instance Traversable (Problem IRewriting) where traverse f (IRewritingProblem r p) = IRewritingProblem <$> f r <*> f p
+
+-- Data.Term
+
+instance (HasSignature trs) => HasSignature (Problem Rewriting trs) where
+  type SignatureId (Problem Rewriting trs) = SignatureId trs
+  getSignature = getSignatureProblem
+
+instance (HasSignature trs) => HasSignature (Problem IRewriting trs) where
+  type SignatureId (Problem IRewriting trs) = SignatureId trs
+  getSignature = getSignatureProblem
 
 -- Output
 
@@ -106,21 +156,21 @@ instance (Ord v, Unify t) => ICap t v (IRewriting, [Rule t v]) where
 instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (Rewriting, NarradarTRS t v) where
 --iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
   iUsableRulesM p@(Rewriting, trs) tt = do
-    trs' <- f_UsableRules p (iUsableRulesVar p) =<< getFresh tt
+    trs' <- f_UsableRules p (iUsableRulesVarM p) =<< getFresh tt
     return (Rewriting, tRS $ toList trs')
-  iUsableRulesVar (_,trs) _ = Set.fromList $ rules trs
+  iUsableRulesVarM (_,trs) _ = return $ Set.fromList $ rules trs
 
 instance (Ord (Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (IRewriting, NarradarTRS t v) where
   iUsableRulesM p@(IRewriting, trs) tt = do
-    trs' <- f_UsableRules p (iUsableRulesVar p) =<< getFresh tt
+    trs' <- f_UsableRules p (iUsableRulesVarM p) =<< getFresh tt
     return (IRewriting, tRS $ toList trs')
-  iUsableRulesVar _ _ = mempty
+  iUsableRulesVarM _ _ = return mempty
 
 f_UsableRules :: forall term vk acc t v trs typ problem m.
                  ( Ord (Term t v), Unify t, Ord v
                  , problem ~ (typ, trs)
                  , term ~ Term t v
-                 , vk ~ (v -> acc)
+                 , vk ~ (v -> m acc)
                  , acc ~ Set (Rule t v)
                  , HasRules t v trs, GetVars v trs
                  , ICap t v problem
@@ -130,7 +180,7 @@ f_UsableRules :: forall term vk acc t v trs typ problem m.
 f_UsableRules p@(_,trs) _  tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined
 f_UsableRules p@(_,trs) vk tt = go mempty tt where
   go acc []       = return acc
-  go acc (t:rest) = evalTerm (\v -> go (vk v `mappend` acc) rest) tk t where
+  go acc (t:rest) = evalTerm (\v -> vk v >>= \vacc -> go (vacc `mappend` acc) rest) tk t where
         tk :: t (Term t v) -> m acc
         tk in_t = do
            t'  <- wrap `liftM` (icap p `T.mapM` in_t)
@@ -139,3 +189,11 @@ f_UsableRules p@(_,trs) vk tt = go mempty tt where
            rhsSubterms <- getFresh (rhs <$> F.toList new)
            go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
 
+
+-- Insert Pairs
+
+instance (Pretty id, Ord id) =>InsertDPairs Rewriting (NTRS id) where
+  insertDPairs = insertDPairsDefault
+
+instance (Pretty id, Ord id) =>InsertDPairs IRewriting (NTRS id) where
+  insertDPairs = insertDPairsDefault

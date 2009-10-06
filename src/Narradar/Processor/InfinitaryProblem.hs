@@ -30,43 +30,24 @@ data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu)
 data NarrowingGoalToInfinitary = NarrowingGoalToInfinitary
 
 
--- | This is the infinitary constructor rewriting AF processor described in
---   "Termination of Logic Programs ..." (Schneider-Kamp et al)
-instance (PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,Info info (InfinitaryToRewritingProof id)
-         ) =>
-    Processor info (InfinitaryToRewriting heu)
-              (Problem (Infinitary id Rewriting) (NTRS id Var))
-              (Problem Rewriting (NTRS id Var))
-  where
-  applySearch (InfinitaryToRewriting mk) p
-    | null orProblems = [failP (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
-    | otherwise = orProblems
-   where
-     orProblems = do
-       let (Infinitary af _) = getProblemType p
-           heu = mkHeu mk p
-       af' <-  Set.toList $ invariantEV heu p af
-       let p' = mkDerivedProblem Rewriting (iUsableRules p (rhs <$> rules (getP p)))
-       return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
-
 
 -- | This is the infinitary constructor rewriting AF processor described in
 --   "Termination of Logic Programs ..." (Schneider-Kamp et al)
 instance (t   ~ TermF id
          ,v   ~ Var
-         ,trs ~ NTRS id Var
+         ,trs ~ NTRS id
+         ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
          ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,MkDPProblem typ (NTRS id Var), Traversable (Problem typ)
+         ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,Info info (InfinitaryToRewritingProof id)
          ) =>
     Processor info (InfinitaryToRewriting heu)
-              (Problem (Infinitary id typ) (NTRS id Var))
-              (Problem typ (NTRS id Var))
+              (NProblem (Infinitary id typ) id)
+              (NProblem typ id)
   where
   applySearch (InfinitaryToRewriting mk) p
-    | null orProblems = [failP (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
+    | null orProblems = [dontKnow (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
     | otherwise = orProblems
    where
      orProblems = do
@@ -78,14 +59,15 @@ instance (t   ~ TermF id
 
 
 
-instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id Var), Pretty typ, HTMLClass (MkNarrowingGoal id typ)
+instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (MkNarrowingGoal id typ)
+         , HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
          , Info info NarrowingGoalToInfinitaryProof
          ) =>
     Processor info NarrowingGoalToInfinitary
-                  (Problem (MkNarrowingGoal id typ) (NTRS id Var))
-                  (Problem (Infinitary id typ) (NTRS id Var))
+                  (NProblem (MkNarrowingGoal id typ) id)
+                  (NProblem (Infinitary id typ) id)
    where
-    apply _ p@(getProblemType -> NarrowingGoal pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkDerivedProblem (Infinitary pi p0) p
+    apply _ p@(getProblemType -> NarrowingGoal _ pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkDerivedProblem (Infinitary pi p0) p
 
 -- -------------
 -- Proofs

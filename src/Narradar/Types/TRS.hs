@@ -82,7 +82,7 @@ data NarradarTRSF a where
 type Unifiers t v = Array (Int,Int) (Maybe (Substitution t v))
 
 type NarradarTRS t v = NarradarTRSF (Rule t v)
-type NTRS id v = NarradarTRS (TermF id) v
+type NTRS id = NarradarTRS (TermF id) Var
 
 instance Eq (NarradarTRS t v) where
     TRS rr1 _       == TRS rr2 _       = rr1 == rr2
@@ -111,10 +111,18 @@ instance (Ord (Term t v), HasId t, Foldable t) => Monoid (NarradarTRS t v) where
     mappend trs (TRS (Set.null -> True) _) = trs
     mappend x y = tRS (rules x `mappend` rules y)
 
-instance (Pretty (Term t v)) => Pretty (NarradarTRS t v) where
+instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
     pPrint trs@TRS{}       = vcat $ map pPrint $ rules trs
     pPrint trs@DPTRS{}     = vcat $ map pPrint $ rules trs
     pPrint trs@PrologTRS{} = vcat $ map pPrint $ rules trs
+
+
+isNarradarTRS :: NarradarTRS t v -> NarradarTRS t v
+isNarradarTRS = id
+
+
+isNarradarTRS1 :: NarradarTRS (t id) v -> NarradarTRS (t id) v
+isNarradarTRS1 = id
 
 
 -- ------------------------------
@@ -167,9 +175,12 @@ instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
 instance (ICap t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap t v (typ, [Rule t v]) where
     icap (typ, p) = icap (typ, mkTRS p)
 
-instance (IUsableRules t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => IUsableRules t v (typ, [Rule t v]) where
-    iUsableRulesM   (typ, p) = liftM (second rules) . iUsableRulesM (typ, mkTRS p)
-    iUsableRulesVar (typ,p)  = iUsableRulesVar (typ, mkTRS p)
+instance (trs ~ NarradarTRS t v
+         ,IUsableRules t v (typ, trs, trs), Ord (Term t v), Foldable t, HasId t) =>
+    IUsableRules t v (typ, [Rule t v], [Rule t v]) where
+    iUsableRulesM   (typ, r, p) = liftM (second3 rules . third3 rules)
+                                . iUsableRulesM (typ, mkTRS r, mkTRS p)
+    iUsableRulesVarM (typ, r, p)  = iUsableRulesVarM (typ, mkTRS r, mkTRS p)
 
 -- ------------
 -- Constructors
@@ -194,8 +205,8 @@ narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 dpTRS :: ( SignatureId trs ~ TermId t
          , Ord (Term t v), HasId t, Unify t, Enum v
          , HasRules t v trs, HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
-         , IsDPProblem typ, IUsableRules t v (typ, trs), ICap t v (typ, trs)
-         , Pretty trs, Pretty (Term t v), Pretty v
+         , IsDPProblem typ, IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
+         , Pretty trs, Pretty (t(Term t v)), Pretty v
          ) =>
          typ -> trs -> trs -> Graph -> NarradarTRS t v
 
@@ -220,11 +231,20 @@ mapNarradarTRS f (PrologTRS rr sig) = error "mapNarradarTRS: PrologTRS - sorry, 
 mapNarradarTRS f (DPTRS rr g (u1 :!: u2) _) = let rr' = fmap2 f rr
                                               in DPTRS rr' g (fmap3 f u1 :!: fmap3 f u2) (getSignature $ A.elems rr')
 
+mapNarradarTRS' :: (Ord (Term t v), Ord (Term t' v), Foldable t', HasId t') =>
+                   (Term t v -> Term t' v) -> (Rule t v -> Rule t' v) -> NarradarTRS t v -> NarradarTRS t' v
+mapNarradarTRS' _ fr (TRS rr sig) = let rr' = Set.map fr rr in TRS rr' (getSignature rr')
+mapNarradarTRS' _ fr (PrologTRS rr sig) = error "mapNarradarTRS': PrologTRS - sorry, can't do it"
+                                  -- prologTRS (Map.mapKeys f' $ Map.map (fmap f) rr)where f' id = let id' = f (term
+mapNarradarTRS' ft fr (DPTRS rr g (u1 :!: u2) _) = let rr' = fmap fr rr
+                                              in DPTRS rr' g (fmap3 ft u1 :!: fmap3 ft u2) (getSignature $ A.elems rr')
+
 isDPTRS :: NarradarTRSF a -> Bool
 isDPTRS DPTRS{} = True; isDPTRS _ = False
 
 restrictDPTRS :: Foldable t => NarradarTRS t v -> [Int] -> NarradarTRS t v
-restrictDPTRS (DPTRS dps gr (unif :!: unifInv) _) indexes = DPTRS dps' gr' unif' (getSignature $ elems dps')
+restrictDPTRS (DPTRS dps gr (unif :!: unifInv) _) indexes
+  = DPTRS dps' gr' unif' (getSignature $ elems dps')
   where
    newIndexes = Map.fromList (zip indexes [0..])
    nindexes   = length indexes -1
@@ -255,19 +275,20 @@ computeDPUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
                      , Enum v, Ord v, Ord term, Unify t
-                     , IUsableRules t v (typ, trs), ICap t v (typ, trs)
                      , HasRules t v trs, IsTRS t v trs, GetFresh t v trs, GetVars v trs
-                     , Pretty (Term t v), Pretty v, Pretty trs
+                     , Pretty (t(Term t v)), Pretty v, Pretty trs
+                     , IUsableRules t v (typ, trs, trs)
+                     , ICap t v (typ, trs)
                      , MonadFresh v m) =>
                      typ -> trs -> trs -> m(unif :!: unif)
 --computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
 computeDPUnifiers typ trs dps = do
    trs_f <- getFresh trs
-   let p_f = (typ, trs_f)
+   let p_f = (typ, trs_f, dps)
 
-   u_rr <- listArray (0,ldps) `liftM` P.sequence [snd `liftM` iUsableRulesM p_f [r] | _:->r <- the_dps]
+   u_rr <- listArray (0,ldps) `liftM` P.sequence [snd3 `liftM` iUsableRulesM p_f [r] | _:->r <- the_dps]
 
-   unif <- computeDirectUnifiers p_f dps
+   unif <- computeDirectUnifiers (typ, trs_f) dps
    unifInv <- runListT $ do
                 (x, _ :-> r) <- liftL $ zip [0..] the_dps
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
@@ -294,6 +315,7 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
    return $ array ( (0,0), (ldps, ldps) ) unif
  where liftL = ListT . return
        ldps  = length the_dps - 1
+
 -- -------------------------------
 -- Auxiliary Data.Term instances
 -- -------------------------------
@@ -316,8 +338,8 @@ instance HasRules t v a => HasRules t v (Map k a) where rules = foldMap rules . 
 isValidUnif :: ( p   ~ Problem typ
                , Ord v, Enum v, Unify t
                , Traversable p, IsDPProblem typ, Pretty typ
-               , ICap t v (typ,NarradarTRS t v)
-               , Pretty v, Pretty (Term t v)
+               , ICap t v (typ, NarradarTRS t v)
+               , Pretty v, Pretty (t(Term t v))
                ) => p (NarradarTRS t v) -> Bool
 isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _)
   | valid = True

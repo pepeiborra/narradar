@@ -176,13 +176,11 @@ class ApplyAF (t :: *) where
    type AFId t :: *
    apply :: Ord (AFId t) => AF_ (AFId t) -> t -> t
 
--- type TermN id v = Term (TermF id) v
-
-instance ApplyAF (Term (TermF id) v) where
-   type AFId (Term (TermF id) v) = id
+instance ApplyAF (TermN id) where
+   type AFId (TermN id) = id
    apply = applyTerm
 
-applyTerm :: forall v id . Ord id => AF_ id -> TermN id v -> TermN id v
+applyTerm :: forall id . Ord id => AF_ id -> TermN id -> TermN id
 applyTerm af = foldTerm return f
      where   f t@(Term n tt)
                | Just ii <- lookup' n af = either (\i  -> tt !! pred i)

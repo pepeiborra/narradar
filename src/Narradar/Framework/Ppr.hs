@@ -7,7 +7,7 @@ import Data.Array
 
 import Text.PrettyPrint.HughesPJClass
                         ( Pretty(..), Doc, (<>), (<+>), ($$), ($+$), vcat, cat, hcat, sep, hsep, fsep, equals,
-                          text, int, char, parens, punctuate, comma, nest, colon, empty, render)
+                          text, int, char, parens, brackets, punctuate, comma, nest, colon, empty, render)
 
 import Data.Term.Rules ()
 import Data.Term.Ppr ()

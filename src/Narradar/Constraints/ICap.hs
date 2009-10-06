@@ -13,7 +13,10 @@ import Data.Traversable (Traversable)
 
 import Data.Term hiding (unifies)
 import Data.Term.Rules
+
 import Narradar.Constraints.Unify
+import Narradar.Types.Term
+import Narradar.Types.Var
 import MuTerm.Framework.Problem
 
 -- -----------------
@@ -45,10 +48,17 @@ instance (Ord v, Unify t) => ICap t v [Rule t v] where
     foldTermM doVar go t
 
 
-instance (IsDPProblem typ, ICap t v (typ, trs)) => ICap t v (Problem typ trs) where
-  icap p t = icap (getProblemType p, getR p) t
+instance (IsDPProblem typ, ICap t v (typ, trs, trs)) => ICap t v (Problem typ trs) where
+  icap p t = icap (getProblemType p, getR p, getP p) t
+
+instance (IsDPProblem typ, ICap t v (typ, trs)) => ICap t v (typ, trs, trs) where
+  icap (typ, trs, _dps) t = icap (typ, trs) t
 
 
 runIcap :: (Enum v, GetVars v thing) => thing -> State (Substitution t (Either v v), [v]) a -> a
 runIcap t m = evalState m (emptySubst, freshVars) where
     freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
+
+
+class ICap (TermF id) Var p => NCap id p | p -> id
+instance ICap (TermF id) Var p => NCap id p

@@ -42,9 +42,10 @@ import Narradar.Utils.Html
 data AProveReductionPairProcessor heu = AProveReductionPairProcessor (MkHeu heu) Int
 
 instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
-         ,trs ~ NTRS id Var
+         ,trs ~ NTRS id
          ,t   ~ TermF id, Pretty (t Doc)
-         ,MkDPProblem typ (NTRS id Var), Traversable(Problem typ)
+         ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
+         ,MkDPProblem typ (NTRS id), Traversable(Problem typ)
          ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
          ,Ord id, Pretty id, Lattice (AF_ id), PolyHeuristic heu id
          ,Info info p0
@@ -52,22 +53,22 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
          ,Info info (AProveReductionPairProof id)
          ) =>
     Processor info (AProveReductionPairProcessor heu)
-              (Problem (MkNarrowingGoal id typ) (NTRS id Var))
-              (Problem (MkNarrowingGoal id typ) (NTRS id Var))
+              (NProblem (MkNarrowingGoal id typ) id)
+              (NProblem (MkNarrowingGoal id typ) id)
  where
   applySearch (AProveReductionPairProcessor mkH timeout) p
     = orProblems
    where
-    NarrowingGoal pi_g basetyp = getProblemType p
+    NarrowingGoal goal pi_g basetyp = getProblemType p
     dps = getP p
     (af_constructors, pi_groundInfo) = AF.splitCD p pi_g
     af_init = AF.init p `mappend` af_constructors
     afs = unEmbed $ do
        let p_f = getVariant p dps
        af0    <- embed (findGroundAF' heu pi_groundInfo af_init p R.=<< Set.fromList (rules dps))
-       let u_p = iUsableRules (mkDerivedProblem (NarrowingGoal af0 basetyp) p_f) (rhs <$> rules dps)
+       let u_p = iUsableRules (mkDerivedProblem (NarrowingGoal goal af0 basetyp) p_f) (rhs <$> rules dps)
        af1    <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
-       let u_p' = iUsableRules (mkDerivedProblem (NarrowingGoal af1 basetyp) u_p) (rhs <$> rules dps)
+       let u_p' = iUsableRules (mkDerivedProblem (NarrowingGoal goal af1 basetyp) u_p) (rhs <$> rules dps)
            rp   = AF.apply af1 (mkDerivedProblem basetyp u_p')
        return (Tuple31 (rp, af1, u_p'))   -- forcing unicity of the rewriting problem
 
@@ -78,7 +79,7 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
          let mb_nonDecreasingDPs = findResultingPairs xml
          in case mb_nonDecreasingDPs of
               Nothing -> singleP (AProveReductionPairProof the_af [OutputXml $ pack xml]) p' rp P.>>= \p'' ->
-                         failP (AProveReductionPairFail :: AProveReductionPairProof id) p''
+                         dontKnow (AProveReductionPairFail :: AProveReductionPairProof id) p''
               Just basic_nonDecreasingDPs ->
                let text_nonDecreasingDPs = Set.fromList(show <$> (pPrint <$$> basic_nonDecreasingDPs))
                    nonDecreasingDPs      = Set.fromList [ i | (i,dp) <- [0..] `zip` rules (getP up)

@@ -12,7 +12,10 @@
 {-# LANGUAGE TransformListComp #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-module Narradar.Processor.PrologProblem (SKTransform(..), SKTransformProof(..)) where
+module Narradar.Processor.PrologProblem (
+  SKTransformInfinitary(..), SKTransformNarrowing(..), SKTransformProof(..)
+ ,RP, DRP, LP, DLRP
+  ) where
 
 import Control.Applicative
 import Control.Arrow (first, second, (***))
@@ -73,15 +76,15 @@ import Narradar.Types.Term as Narradar
 import Narradar.Types.Var  as Narradar
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Prolog
-import Narradar.Types.Problem.InitialGoal hiding (goals)
-import Narradar.Types.Problem.Narrowing
+import Narradar.Types.Problem.Rewriting
+import Narradar.Types.Problem.Infinitary
+import Narradar.Types.Problem.NarrowingGoal
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Utils
 
 
-import Language.Prolog.Syntax (Program, Program'', Clause, ClauseF(..), cHead, cBody, GoalF(..),
-                               TermF(Cons, Nil, Tuple, Wildcard, String, Int, Float), mapPredId)
+import Language.Prolog.Syntax hiding (Goal, TermF, Term, term)
 import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.Parser as Prolog (program)
 import Language.Prolog.Signature
@@ -105,18 +108,43 @@ import qualified Prelude as P
 -- Transformational processors
 -- ---------------------------
 
--- This is the vanilla S-K transformation
-data SKTransform = SKTransform deriving (Eq, Show,Ord)
+-- | This is the vanilla S-K transformation
+data SKTransformNarrowing = SKTransformNarrowing
+       deriving (Eq, Show,Ord)
+
+-- | This is the vanilla S-K transformation
+data SKTransformInfinitary = SKTransformInfinitary
+       deriving (Eq, Show,Ord)
 
 instance (Info info SKTransformProof
-         ,Info info PrologProblem
          ) =>
-         Processor info SKTransform
-                        PrologProblem
-                        (NarradarProblem (InitialGoal (Narradar.TermF DRP) CNarrowing)
-                                         (Narradar.TermF DRP))
-  where
-   apply SKTransform = prologP_sk
+         Processor info SKTransformNarrowing
+                   PrologProblem {- ==> -} (NProblem (CNarrowingGoal DRP) DRP)
+ where
+  apply SKTransformNarrowing p0@PrologProblem{..} =
+   andP SKTransformNarrowingProof p0
+     [ mkNewProblem (cnarrowingGoal (IdFunction <$> skTransformGoal goal)) sk_p
+         | let sk_p          = prologTRS'' rr (getSignature rr)
+               rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
+         , goal            <- goals
+         , let goalAF        = skTransformAF program (mkGoalAF goal)
+               af_groundinfo = AF.init sk_p `mappend` goalAF
+     ]
+
+instance (Info info SKTransformProof
+         ) =>
+         Processor info SKTransformInfinitary
+                   PrologProblem {- ==> -} (NProblem (Infinitary DRP IRewriting) DRP)
+ where
+  apply SKTransformInfinitary p0@PrologProblem{..} =
+   andP SKTransformInfinitaryProof p0
+     [ mkNewProblem (infinitary (IdFunction <$> skTransformGoal goal) IRewriting) sk_p
+         | let sk_p          = prologTRS'' rr (getSignature rr)
+               rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
+         , goal            <- goals
+         , let goalAF        = skTransformAF program (mkGoalAF goal)
+               af_groundinfo = AF.init sk_p `mappend` goalAF
+     ]
 
 -- -------
 -- Proofs
@@ -225,37 +253,19 @@ instance (Ord k, Traversable t, GetFresh t v thing) => GetFresh t v (Map k thing
 --instance (Traversable t, GetFresh t v thing1, GetFresh t v thing2) => GetFresh t v (thing1, thing2) where
 --    getFreshM (t1,t2) = do {t1' <- getFreshM t1; t2'<- getFreshM t2; return (t1',t2')}
 
-instance (Pretty id, Pretty v) => Pretty (ClauseRules (RuleN id v)) where pPrint = vcat . map pPrint . rules
+instance (Pretty (Term (TermF id) v)) => Pretty (ClauseRules (Rule (TermF id) v)) where pPrint = vcat . map pPrint . rules
 
 
-type PrologRules id v = Map (Prolog.Clause'' (WithoutPrologId id) (TermN (WithoutPrologId id) v))
-                            (ClauseRules (RuleN id v))
+type PrologRules id v = Map (Prolog.Clause'' (WithoutPrologId id) (Term (TermF (WithoutPrologId id)) v))
+                            (ClauseRules (Rule (TermF id) v))
 
-prologTRS'' :: (RemovePrologId id, Ord id, Ord v) => PrologRules id v -> Signature id -> NTRS id v
+prologTRS'' :: (RemovePrologId id, Ord id, Ord v) => PrologRules id v -> Signature id -> NarradarTRS (TermF id) v
 prologTRS'' pr sig = PrologTRS pr' sig where
     pr' = (Map.mapKeysWith mappend (\(Pred h _:-_) -> h) . Map.map (Set.fromList . toList)) pr
 
 -- --------------
--- Processors
+-- Disabled Processors
 -- --------------
-
-prologP_sk :: ( Monad m
-              , Info info SKTransformProof
-              , Info info PrologProblem
-              ) =>
-              PrologProblem
-           -> Proof info m (NarradarProblem (InitialGoal (Narradar.TermF DRP) CNarrowing)
-                                            (Narradar.TermF DRP))
-
-prologP_sk p0@PrologProblem{..} =
-   andP SKTransformNarrowingProof p0
-     [ mkNewProblem (initialGoal [IdFunction <$> skTransformGoal goal] CNarrowing) sk_p
-         | let sk_p          = prologTRS'' rr (getSignature rr)
-               rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
-         , goal            <- goals
-         , let goalAF        = skTransformAF program (mkGoalAF goal)
-               af_groundinfo = AF.init sk_p `mappend` goalAF
-     ]
 {-
 prologP_labelling_sk :: (PolyHeuristicN heu LRP, PolyHeuristicN heu DLRP, MonadFree ProofF m, v ~ Narradar.Var) =>
                         MkHeu heu -> PrologProblem v -> m (Problem DLRP v)
@@ -315,20 +325,25 @@ inferType PrologProblem{program} = infer program
 -- Transformations
 -- ----------------
 
-skTransform :: (Ord id, Ord v, Pretty id) => [Prolog.Clause'' id (TermN id v)] -> PrologRules (PrologId id) v
+--skTransform :: (Ord id, Ord v, Pretty id) =>
+--               [Prolog.Clause'' id (Term (TermF id) v)] -> PrologRules (PrologId id) v
 skTransform = runSk . skTransformWithM id
 
 --skTransformWith :: (Prolog.Clause'' id (TermN id v) -> ) -> [Prolog.Clause'' id (TermN id v)] -> PrologRules' (PrologId id) v
 skTransformWith  mkIndex = runSk . skTransformWithM mkIndex
 
-
+skTransformWithM :: forall m ix id v.
+                   (Ord v, Ord ix, Eq id, MonadSupply Int m) =>
+                   (Clause'' id (Term (TermF id) v) -> ix)
+                -> [Clause'' id (Term (TermF id) v)]
+                -> m (Map ix (ClauseRules (Rule (TermF (PrologId id)) v)))
 skTransformWithM mkIndex clauses = do
   clauseRules <- mapM (runClause . toRule) clauses
   return (Map.fromList clauseRules)
  where   -- The counter for u_i is global,
          -- the list of vars is local to each clause.
        runClause = (`evalStateT` mempty)
-
+       toRule :: Clause'' id (Term (TermF id) v) -> StateT (Set v) m (ix, ClauseRules (Rule (TermF (PrologId id)) v))
        toRule c@(Pred id tt :- (filter (/= Cut) -> [])) = do
          let tt' = mapTermSymbols FunctorId <$> tt
          return (mkIndex c, FactRule (term (InId id) tt' :-> term (OutId id) tt'))
@@ -376,7 +391,7 @@ instance SkTransformAF (Labelled String) LRP where
                                          else Labelling l (FunctorId (mkT t)))
   skTransformGoal = fmap2 (InId . mkT)
 
-prepareProgram :: Program id -> Program'' (Expr (PF' id)) (TermN (Expr (PF' id)) Narradar.Var)
+prepareProgram :: Program id -> Program'' (Expr (PF' id)) (TermN (Expr (PF' id)))
 prepareProgram = (`evalState` mempty) . (`evalStateT` (toEnum <$> [0..]))
                  . representProgram toVar term (Pure <$> freshVar)
     where
@@ -1023,7 +1038,7 @@ amatches t@(getId -> Just (Labelling ll (FunctorId c))) (Al.match -> Just (Compo
 amatches _ _ = False
 -}
 {-
-fixSymbols' :: Ord v => NTRS (PrologId (Expr (T (Labelled String) :+: P))) v -> NTRS LRP v
+fixSymbols' :: Ord v => NarradarTRS (TermF (PrologId (Expr (T (Labelled String) :+: P)))) v -> NarradarTRS (TermF LRP) v
 fixSymbols' (PrologTRS rr sig) = prologTRS' rr'  where
   rr'         = Set.map (second (fmap (mapTermSymbols fixSymbol))) rr
   fixSymbol t = case runWriter (T.mapM (foldExprM removeLabelF) t) of
@@ -1043,11 +1058,11 @@ instance (T id :<: g) => RemoveLabelF (T (Labelled id)) g where
 -- ---------------------
 -- the PrologM monad
 -- ---------------------
-type PrologKey' id v = (Prolog.Clause'' (WithoutPrologId id) (TermN (WithoutPrologId id) v), [TermN (WithoutPrologId id) v])
+type PrologKey' id v = (Prolog.Clause'' (WithoutPrologId id) (Term (TermF (WithoutPrologId id)) v), [Term (TermF (WithoutPrologId id)) v])
 type PrologKeyModulo' id v =
-    (Prolog.Clause'' (WithoutPrologId id) (TermN (WithoutPrologId id) v), EqModulo [TermN (WithoutPrologId id) v])
+    (Prolog.Clause'' (WithoutPrologId id) (Term (TermF (WithoutPrologId id)) v), EqModulo [Term (TermF (WithoutPrologId id)) v])
 type PrologRules' id v = Map (PrologKey' id v)
-                             (ClauseRules (RuleN id v))
+                             (ClauseRules (Rule (TermF id) v))
 
 data PrologMState id v = PrologMState { prologM_kk  :: UniqueList(PrologKeyModulo' id v)
                                       , prologM_af  :: AF_ id
@@ -1122,7 +1137,7 @@ addUCounter   n = do {st<- getSt; putSt st{prologM_u   = prologM_u st + n}}
 --putRR new_rr = modifyRR' (const new_rr)
 putDepth d   = do {st<-getSt; putSt st{prologM_maxdepth = d }}
 
-appendRR :: PrologKey' LRP Narradar.Var -> ClauseRules (RuleN LRP Narradar.Var) -> PrologM LRP Narradar.Var ()
+appendRR :: PrologKey' LRP Narradar.Var -> ClauseRules (RuleN LRP) -> PrologM LRP Narradar.Var ()
 appendRR k rr = do -- traceUpdatesM Ppr.empty $ do
   kk <- getKK
   k' <- normalizeK k

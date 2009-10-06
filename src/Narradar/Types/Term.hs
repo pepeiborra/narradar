@@ -18,21 +18,23 @@ import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
 import Data.Term.Rules hiding (unifies', matches')
+
 import Narradar.Framework.Ppr
+import Narradar.Types.Var
 
 data TermF id f = Term id [f] deriving (Eq,Ord,Show)
-type TermN id = Free (TermF id)
-type RuleN id v = Rule (TermF id) v
+type TermN id = Term (TermF id) Var
+type RuleN id = RuleF(TermN id)
 
-term :: id -> [TermN id a] -> TermN id a
+term :: id -> [Term (TermF id) a] -> Term (TermF id) a
 term f = Impure . Term f
 
 term1 f t = Impure (Term f [t])
 
-constant :: id -> TermN id a
+constant :: id -> Term (TermF id) a
 constant f = term f []
 
-termIds :: MonadPlus m => TermN id a -> m id
+termIds :: MonadPlus m => Term (TermF id) a -> m id
 termIds = foldTerm (const mzero) f where
     f (Term f tt) = return f `mplus` F.msum tt
 
@@ -90,7 +92,14 @@ instance Bifunctor TermF where bimap f g (Term a tt) = Term (f a) (map g tt)
 
 -- Pretty
 -- ---
-instance (Pretty id, Pretty v) => Pretty (TermN id v) where
+
+-- I believe the sole purpose of this instance is now to force late instance resolution of
+-- Pretty constraints on (Term t v).
+-- In absence of this instance there is no overlapping and GHC eagerly chooses the instance
+-- in Data.Term.Ppr, flattening it to the constraints and Pretty v and Pretty (t(Term t v)).
+-- This is undesirable since Pretty (Term t v) is more compact and declarative
+{-
+instance Pretty id => Pretty (TermN id) where
  pPrint (Pure a)   = pPrint a
  pPrint (Impure t) = pPrintT t
   where
@@ -98,13 +107,22 @@ instance (Pretty id, Pretty v) => Pretty (TermN id v) where
     pPrintT (Term n [x,y]) | not (any isAlpha $ show $ pPrint n) = pPrint x <+> pPrint n <+> pPrint y
     pPrintT (Term n tt) = pPrint n <> parens (hcat$ punctuate comma$ map pPrint tt)
 
+instance Pretty (TermN String) where
+ pPrint (Pure a)   = pPrint a
+ pPrint (Impure t) = pPrintT t
+  where
+    pPrintT (Term n []) = text n
+    pPrintT (Term n [x,y]) | not (any isAlpha n) = pPrint x <+> text n <+> pPrint y
+    pPrintT (Term n tt) = text n <> parens (hcat$ punctuate comma$ map pPrint tt)
+-}
 
 instance (Pretty a, Pretty id) => Pretty (TermF id a) where
     pPrint (Term n []) = pPrint n
     pPrint (Term n [x,y]) | not (any isAlpha $ show $ pPrint n) = pPrint x <+> pPrint n <+> pPrint y
     pPrint (Term n tt) = pPrint n <> parens (hcat$ punctuate comma$ map pPrint tt)
-
+{-
 instance Pretty a => Pretty (TermF String a) where
     pPrint (Term n []) = text n
     pPrint (Term n [x,y]) | not (any isAlpha n) = pPrint x <+> text n <+> pPrint y
     pPrint (Term n tt) = text n <> parens (hcat$ punctuate comma $ map pPrint tt)
+-}

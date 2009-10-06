@@ -27,6 +27,7 @@ import qualified Data.Graph  as G
 import qualified Data.HashTable as HT
 import Data.Int
 import Data.List (group, sort)
+import Data.Term (Term)
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -43,7 +44,6 @@ import Narradar.Framework.Ppr
 
 import Prelude hiding (mapM)
 
-
 -- Debugging
 -- ---------
 
@@ -58,6 +58,15 @@ trace _ x = x
 pprTrace = trace . render
 
 
+-- ----------
+-- Type hints
+-- ----------
+
+isTerm1 :: Term (f id) v -> Term (f id) v
+isTerm1 = id
+
+
+-- ----------------------------
 -- Type Constructor Composition
 -- ----------------------------
 newtype O f g x = O (f(g x))
@@ -108,7 +117,12 @@ ignore m = m >> return ()
 li = ListT . return
 
 fst3 (a,_,_) = a
+snd3 (_,b,_) = b
 fst4 (a,_,_,_) = a
+
+first3  f (a,b,c) = (f a, b, c)
+second3 f (a,b,c) = (a, f b, c)
+third3  f (a,b,c) = (a, b, f c)
 
 firstM f (x,y) = f x >>= \x' -> return (x',y)
 secondM f (x,y) = f y >>= \y' -> return (x,y')
@@ -159,6 +173,12 @@ propSelect xx ii = map (xx!!) ii' == select xx ii'
 
 asTypeOf1 :: f a -> f b -> f a
 asTypeOf1 x _ = x
+
+asTypeOfArg1 :: f a -> g a -> f a
+asTypeOfArg1 x _ = x
+
+asTypeOfArg21 :: f a b -> f' a b' -> f a b
+asTypeOfArg21 x _ = x
 
 tailSafe []     = []
 tailSafe (_:xx) = xx
@@ -244,6 +264,7 @@ infixr 3 .|.
 (..|..) = (liftM2.liftM2) (||)
 infixr 3 ..&..
 infixr 3 ..|..
+
 
 -- ---------------------------------------
 -- Missing Applicative instances

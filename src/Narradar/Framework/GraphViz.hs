@@ -1,8 +1,9 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, DisambiguateRecordFields #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# OPTIONS_GHC -fno-warn-unused-matches #-}
 
@@ -20,6 +21,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.List hiding (unlines)
 import Data.Maybe
+import Data.Monoid
 import Data.Traversable (Traversable)
 
 import Prelude hiding (unlines)
@@ -38,7 +40,8 @@ import MuTerm.Framework.Problem
 
 import Narradar.Types.ArgumentFiltering (fromAF)
 import Narradar.Types.Problem
-import Narradar.Types.Problem.Infinitary
+import Narradar.Types.Problem.Infinitary   as Inf
+import Narradar.Types.Problem.NarrowingGen as Gen
 import Narradar.Types
 import Narradar.Utils
 
@@ -96,7 +99,7 @@ instance DotRep PrologProblem where
 
 class PprTPDBDot p where pprTPDBdot :: p -> Doc
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t
          ) => PprTPDBDot (Problem Rewriting trs) where
   pprTPDBdot p = vcat
@@ -108,40 +111,71 @@ instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
      ]
    where
         pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
-        pprTerm = foldTerm pPrint f
+pprTerm = foldTerm pPrint f where
         f t@(getId -> Just id)
             | null tt = pPrint id
             | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
          where tt = toList t
 
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
-         ,HasId t, Pretty (TermId t), Foldable t
+instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem IRewriting trs) where
   pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY INNERMOST)"
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
-         ,HasId t, Pretty (TermId t), Foldable t
+instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem Narrowing trs) where
   pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY NARROWING)"
 
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (Term t v)
-         ,HasId t, Pretty (TermId t), Foldable t
+instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem CNarrowing trs) where
   pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY CNARROWING)"
 
 
-instance (Pretty (TermId t), PprTPDBDot (Problem typ trs)) =>
-    PprTPDBDot (Problem (InitialGoal t typ) trs) where
-    pprTPDBdot (InitialGoalProblem goals _ p) = pprTPDBdot p $$
-                                                parens (text "GOALS" <+> fsep (map pPrint goals))
 
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (TermId t), Foldable t
+         ,IsDPProblem base, PprTPDBDot (Problem base trs)
+         ) => PprTPDBDot (Problem (MkNarrowingGen base) trs) where
+  pprTPDBdot p@NarrowingGenProblem{..} = pprTPDBdot baseProblem
+
+
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, id ~ TermId t, Pretty id, Foldable t
+         ,PprTPDBDot (Problem base trs)
+         ) => PprTPDBDot (Problem (MkNarrowingGoal id base) trs) where
+  pprTPDBdot (NarrowingGoalProblem g pi p) =
+      pprTPDBdot p $$
+      parens (text "AF" <+> pprAF pi)
+
+
+instance ( HasRules t v trs, Pretty (t(Term t v))
+         , HasId t, Foldable t, Pretty (TermId t), Pretty v
+         , PprTPDBDot (Problem base trs)
+         ) => PprTPDBDot (Problem (Relative trs base) trs) where
+  pprTPDBdot RelativeProblem{..} =
+      pprTPDBdot baseProblem $$
+      parens(text "RULES" $$
+             nest 1 (vcat [ pprTerm l <+> text "->=" <+> pprTerm r
+                            | l :-> r <- rules relativeTRS]))
+
+
+instance (Pretty (Term t Var), PprTPDBDot (Problem typ trs)) =>
+    PprTPDBDot (Problem (InitialGoal t typ) trs)
+ where
+    pprTPDBdot (InitialGoalProblem goals _ p) =
+      pprTPDBdot p $$
+      parens (text "GOALS" <+> fsep (map pPrint goals))
 
 instance (Pretty id, PprTPDBDot (Problem typ trs)) =>
-  PprTPDBDot (Problem (Infinitary id typ) trs) where
-   pprTPDBdot (InfinitaryProblem pi p) = pprTPDBdot p $$
-                                         parens(text "AF" <+> pprAF pi)
+  PprTPDBDot (Problem (Infinitary id typ) trs)
+ where
+   pprTPDBdot (InfinitaryProblem pi p) =
+      pprTPDBdot p $$
+      parens(text "AF" <+> pprAF pi)
 
 
 pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.id) (pPrint.toList) aa | (f, aa) <- xx])

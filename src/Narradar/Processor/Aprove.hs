@@ -20,6 +20,7 @@ import Data.Foldable  (toList, Foldable)
 import Data.HashTable (hashString)
 import Data.List
 import Data.Maybe
+import Data.Monoid
 import Network
 import Network.Curl hiding (Info)
 import System.FilePath
@@ -78,7 +79,7 @@ instance HTML AproveProof where
 -- Allowed instances
 -- ------------------
 instance ( p ~ Problem Rewriting trs
-         , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
+         , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (t(Term t v))
          , Info info AproveProof
          ) =>
     Processor info Aprove (Problem Rewriting trs) (Problem Rewriting trs)
@@ -88,7 +89,7 @@ instance ( p ~ Problem Rewriting trs
     apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
 instance ( p ~ Problem IRewriting trs
-         , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (Term t v)
+         , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (t(Term t v))
          , Info info AproveProof
          ) =>
     Processor info Aprove (Problem IRewriting trs) (Problem IRewriting trs)
@@ -109,7 +110,7 @@ instance ( Info info (Problem i trs)
 
 aproveWebProc :: ( p ~ Problem typ trs
                  , IsDPProblem typ, Eq p, PprTPDB p
-                 , HasRules t v trs, Pretty (Term t v)
+                 , HasRules t v trs, Pretty (t(Term t v))
                  , Info info p, Info info AproveProof
                  , Monad mp
                  ) => p -> IO (Proof info mp b)
@@ -131,7 +132,7 @@ aproveWebProc = memoExternalProc go where
 #endif
     response :: CurlResponse <- perform_with_response_ curl
     let output = respBody response
-    return$ (if isTerminating output then success else failP)
+    return$ (if isTerminating output then success else dontKnow)
             (AproveProof [OutputHtml  (pack output)]) prob
 
 isTerminating (canonicalizeTags.parseTags -> tags) = let
@@ -153,7 +154,7 @@ aproveProc path = go where
               output            <- hGetContents out
               errors            <- hGetContents err
               unless (null errors) (error ("Aprove failed with the following error: \n" ++ errors))
-              return$ (if take 3 output == "YES" then success else failP)
+              return$ (if take 3 output == "YES" then success else dontKnow)
                         (AproveProof [OutputHtml(pack $ massage output)] ) prob
 
 aproveSrvPort    = 5250
@@ -186,7 +187,7 @@ aproveSrvProc timeout =  go where
 
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
-              _     -> failP
+              _     -> dontKnow
     evaluate (length res)
     hClose hAprove
     return (k (External $ Aprove "SRV") prob $ primHtml $ tail $ dropWhile (/= '\n') res)
@@ -229,7 +230,7 @@ aproveSrvProc2 strat (timeout :: Int) =  go where
     res <- aproveSrvXML strat timeout prob
     let k = case (take 3 $ headSafe "Aprove returned NULL" $ lines res) of
               "YES" -> success
-              _     -> failP
+              _     -> dontKnow
     return (k (AproveProof [OutputXml (pack $ tail $ dropWhile (/= '\n') res)]) prob)
     where headSafe err [] = error ("head: " ++ err)
           headSafe _   x  = head x
@@ -249,7 +250,7 @@ massage     = unlines . drop 8  . lines
 class PprTPDB p where pprTPDB :: p -> Doc
 
 instance (GetVars v trs, HasRules t v trs
-         ,Pretty (Term t v), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
+         ,Pretty (t(Term t v)), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
          ) => PprTPDB (Problem Rewriting trs) where
  pprTPDB p =
      vcat [ parens (text "VAR" <+> hsep (map pprVar (toList $ getVars p)))
@@ -270,15 +271,15 @@ instance (GetVars v trs, HasRules t v trs
 
 -- TODO Relative Termination
 
-instance (GetVars v trs, HasRules t v trs
-         ,Pretty (Term t v), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
+instance (GetVars v trs, HasRules t v trs, Monoid trs, MkDPProblem Rewriting trs
+         ,Pretty (t(Term t v)), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
          ) => PprTPDB (Problem IRewriting trs) where
  pprTPDB p = pprTPDB (mkDerivedProblem Rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 -- ----------------
 -- Parse XML
 -- ----------------
-findResultingPairs :: String -> Maybe [RuleN String Var]
+findResultingPairs :: String -> Maybe [RuleN String]
 findResultingPairs x = (eitherM . parse proofP "" . parseTags . dropLine) x
   where dropLine = tailSafe . dropWhile (/= '\n')
 

@@ -47,15 +47,20 @@ instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
   data Problem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::Problem p a}
   getProblemType (InfinitaryProblem af p) = Infinitary af (getProblemType p)
   getR   (InfinitaryProblem _  p) = getR p
+
+instance (Ord id, MkProblem p trs, HasSignature (Problem p trs), id ~ SignatureId (Problem p trs)) =>
+    MkProblem (Infinitary id p) trs where
+  mkProblem (Infinitary af base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
   mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
 
 instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
   getP   (InfinitaryProblem _  p) = getP p
-  mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
 
-instance (id ~ SignatureId trs, HasSignature trs, Ord id, MkDPProblem p trs) => MkDPProblem (Infinitary id p) trs where
-  mkDPProblem (Infinitary af base) dp rr = InfinitaryProblem (af `mappend` AF.init p) p
-    where p = mkDPProblem base dp rr
+instance (id ~ SignatureId (Problem p trs), HasSignature (Problem p trs), Ord id, MkDPProblem p trs) =>
+    MkDPProblem (Infinitary id p) trs where
+  mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
+  mkDPProblem (Infinitary af base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
+    where p = mkDPProblem base rr dp
 
 
 infinitary        g p = Infinitary (mkGoalAF g) p
@@ -74,6 +79,12 @@ instance Traversable (Problem p) => Traversable (Problem (Infinitary id p)) wher
 $(derive makeFunctor     ''Infinitary)
 $(derive makeFoldable    ''Infinitary)
 $(derive makeTraversable ''Infinitary)
+
+-- Data.Term instances
+
+instance (HasSignature (Problem base trs)) => HasSignature (Problem (Infinitary id base) trs) where
+  type SignatureId (Problem (Infinitary id base) trs) = SignatureId (Problem base trs)
+  getSignature = getSignature . baseProblem
 
 -- Output
 
@@ -102,15 +113,15 @@ instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
  where
    iUsableRulesM p@(typ@Infinitary{..}, trs) tt = do
       pi_tt <- getFresh (AF.apply pi_PType tt)
-      trs'  <- f_UsableRulesAF (baseProblemType, trs) pi_PType (iUsableRulesVar p) pi_tt
+      trs'  <- f_UsableRulesAF (baseProblemType, trs) pi_PType (iUsableRulesVarM p) pi_tt
       return (typ, tRS $ rules trs')
 
-   iUsableRulesVar (Infinitary{..},trs) = iUsableRulesVar (baseProblemType, trs)
+   iUsableRulesVarM (Infinitary{..},trs) = iUsableRulesVarM (baseProblemType, trs)
 
 f_UsableRulesAF :: forall term vk acc t id v trs typ problem m.
                  ( problem ~ (typ,trs)
                  , term    ~ Term t v
-                 , vk      ~ (v -> acc)
+                 , vk      ~ (v -> m acc)
                  , acc     ~ Set (Rule t v)
                  , id      ~ AFId trs, AFId term ~ id, Ord id
                  , Ord (Term t v), Unify t, Ord v, ApplyAF term
@@ -126,7 +137,7 @@ f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
     pi_trs   = AF.apply pi trs
   --go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
     go acc []       = return acc
-    go acc (t:rest) = evalTerm (\v -> go (vk v `mappend` acc) rest) tk t where
+    go acc (t:rest) = evalTerm (\v -> vk v >>= \vacc -> go (vacc `mappend` acc) rest) tk t where
      tk in_t = do
         t' <- wrap `liftM` (icap (typ, pi_trs) `T.mapM` in_t)
         let rr = Set.fromList

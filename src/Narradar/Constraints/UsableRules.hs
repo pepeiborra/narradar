@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE CPP #-}
 
@@ -14,30 +15,42 @@ import Data.Traversable (Traversable)
 
 import Data.Term
 import Data.Term.Rules
+
 import Narradar.Constraints.ICap
+import Narradar.Types.Term
+import Narradar.Types.Var
 import MuTerm.Framework.Problem
 
 class IUsableRules t v thing | thing -> t v where
     iUsableRulesM   :: MonadFresh v m => thing -> [Term t v] -> m thing
-    iUsableRulesVar :: thing -> v -> Set (Rule t v)
+    iUsableRulesVarM :: MonadFresh v m => thing -> v -> m(Set (Rule t v))
 
-iUsableRules :: ( term ~ Term t v
-                , p    ~ Problem typ
-                , Ord term, Enum v
+iUsableRules :: ( p ~ Problem typ
+                , Ord (Term t v), Enum v
                 , IsDPProblem typ, Traversable p, IUsableRules t v (p trs)
                 , IsTRS t v trs, GetVars v trs
                 ) =>
-                p trs -> [term] -> p trs
+                p trs -> [Term t v] -> p trs
 iUsableRules p tt = runIcap p $ iUsableRulesM p tt
 
+iUsableRulesVar p v = runIcap p $ iUsableRulesVarM p v
 
+class IUsableRules (TermF id) Var thing => NUsableRules id thing | thing -> id
+instance IUsableRules (TermF id) Var thing => NUsableRules id thing
 
-instance (IsDPProblem typ, IsTRS t v trs, IUsableRules t v (typ,trs)) => IUsableRules t v (Problem typ trs)
+instance (IsTRS t v trs, IUsableRules t v (typ, trs)) => IUsableRules t v (typ, trs, trs)
+    where
+      iUsableRulesM (typ, trs, _dps) tt = do
+            (typ', trs') <- iUsableRulesM (typ,trs) tt
+            return (typ', trs', _dps)
+      iUsableRulesVarM (typ, trs, _dps) = iUsableRulesVarM (typ, trs)
+
+instance (MkDPProblem typ trs, IsTRS t v trs, IUsableRules t v (typ,trs,trs)) => IUsableRules t v (Problem typ trs)
     where
       iUsableRulesM p tt = do
-            (_, trs') <- iUsableRulesM (getProblemType p, getR p) tt
+            (_, trs', _dps) <- iUsableRulesM (getProblemType p, getR p, getP p) tt
             return $ setR (tRS $ rules trs') p
-      iUsableRulesVar p = iUsableRulesVar (getProblemType p, getR p)
+      iUsableRulesVarM p = iUsableRulesVarM (getProblemType p, getR p, getP p)
 
 {-
 iUsableRules_correct trs (Just pi) = F.toList . go mempty where

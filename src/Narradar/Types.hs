@@ -13,10 +13,12 @@ module Narradar.Types ( module MuTerm.Framework.Problem
                       , module Narradar.Types.Problem
                       , module Narradar.Types.Problem.Rewriting
                       , module Narradar.Types.Problem.Narrowing
+                      , module Narradar.Types.Problem.NarrowingGen
                       , module Narradar.Types.Problem.Prolog
                       , module Narradar.Types.Problem.Relative
                       , module Narradar.Types.Problem.InitialGoal
                       , module Narradar.Types.Problem.NarrowingGoal
+                      , module Narradar.Types.Problem.NarrowingGen
                       , module Narradar.Types.Problem.Infinitary
                       , module Narradar.Types.DPIdentifiers
                       , module Narradar.Types.PrologIdentifiers
@@ -62,7 +64,8 @@ import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
-import Narradar.Types.Problem.NarrowingGoal hiding (pi, baseProblem, baseProblemType, pi_PType)
+import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem)
+import Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
 import Narradar.Types.Problem.Prolog        hiding (goals)
 import Narradar.Types.Problem.Relative      hiding (baseProblem, baseProblemType)
 import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseProblemType, goals)
@@ -116,15 +119,15 @@ data AProblem t trs where
     ANarrowingProblem         :: Problem Narrowing trs  -> AProblem t trs
     ACNarrowingProblem        :: Problem CNarrowing trs -> AProblem t trs
     ARelativeRewritingProblem :: Problem (Relative trs Rewriting) trs -> AProblem t trs
-    AGoalNarrowingProblem     :: Problem (InitialGoal t Narrowing) trs -> AProblem t trs
-    AGoalCNarrowingProblem    :: Problem (InitialGoal t CNarrowing) trs -> AProblem t trs
+    AGoalNarrowingProblem     :: Problem (NarrowingGoal (TermId t)) trs -> AProblem t trs
+    AGoalCNarrowingProblem    :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
     APrologProblem            :: PrologProblem -> AProblem t trs
 
-parseTRS :: (trs ~ NTRS id Var, id ~ Identifier String, Monad m) =>
+parseTRS :: (trs ~ NTRS id, id ~ Identifier String, Monad m) =>
              String -> m (AProblem (TermF id) trs)
 parseTRS s = eitherM (runParser trsParser mempty "<input>" s)
 
-trsParser :: TRS.TRSParser (AProblem (TermF (Identifier String)) (NTRS (Identifier String) Var))
+trsParser :: TRS.TRSParser (AProblem (TermF (Identifier String)) (NTRS (Identifier String)))
 
 trsParser = do
   Spec spec <- TRS.trsParser
@@ -167,7 +170,7 @@ trsParser = do
         -> return $ ACNarrowingProblem (mkNewProblem CNarrowing r)
 
     ([], [], [NarrowingG (TRS.Term id tt)])
-        -> return $ AGoalNarrowingProblem (mkNewProblem (initialGoal [Goal (IdFunction id) tt] Narrowing) r)
+        -> return $ AGoalNarrowingProblem (mkNewProblem (narrowingGoal (Goal (IdDP id) tt)) r)
 {-
     ([], [], [ConstructorNarrowingG (TRS.Term id tt)])
         -> return $ AGoalCNarrowingProblem (mkNarradarProblem (initialGoal [Goal id tt] CNarrowing) r)

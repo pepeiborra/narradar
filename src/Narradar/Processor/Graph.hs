@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns, ViewPatterns #-}
-{-# LANGUAGE UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
@@ -13,13 +13,14 @@ import Data.Array as A
 import Data.Graph as G
 import Data.Graph.SCC as GSCC
 import qualified Data.Graph.Inductive as FGL
-import Data.Foldable (Foldable, foldMap)
+import Data.Foldable (Foldable, foldMap, toList)
 import Data.List (find)
 import Data.Traversable (Traversable)
 import Data.Tree  as Tree
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Prelude hiding (pi)
 import Text.XHtml (HTML(..))
 
@@ -56,27 +57,32 @@ instance ( TermId t ~ Identifier id0, Ord id0
          , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
          , MkDPProblem typ0 (NarradarTRS t Var), Traversable (Problem typ0)
          , HasId t, Unify t, Ord (Term t Var)
-         , Pretty (Term t Var), Pretty typ0
-         , ICap t Var (typ0,trs), ProblemColor problem, PprTPDBDot problem
+         , Pretty (t(Term t Var)), Pretty typ0
+         , ICap t Var (typ0,trs)
+         , IUsableRules t Var (typ0,trs,trs)
+         , ProblemColor problem, PprTPDBDot problem
          , Info info DependencyGraphProof
          ) =>
     Processor info DependencyGraphSCC
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
-  apply DependencyGraphSCC    = usableSCCsProcessor
+  apply DependencyGraphSCC p@InitialGoalProblem{dgraph=dg@DGraph{..}, baseProblem = (getP -> dps@(DPTRS dd gr unif sig))}
+   = do
+    let nodes = Set.fromList $ catMaybes (map (`lookupNode` dg) (toList dd))
 
+        gr'   = buildG (bounds gr)
+                       [ (i,o) | (i,o) <- edges gr
+                               , i `Set.member` nodes
+                               , o `Set.member` nodes]
 
-instance ( trs ~ NarradarTRS t Var
-         , problem ~ Problem typ trs, Info info problem
-         , MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
-         , HasId t, Unify t, Ord (Term t Var)
-         , Pretty (Term t Var), Pretty typ
-         , ICap t Var (typ,trs), ProblemColor problem, PprTPDBDot problem
-         , Info info DependencyGraphProof
-         ) =>
-    Processor info DependencyGraphCycles (Problem typ (NarradarTRS t Var)) (Problem typ (NarradarTRS t Var)) where
-  apply DependencyGraphCycles = cycleProcessor
+        cc   = [vv | CyclicSCC vv <- GSCC.sccList gr']
+
+    if null cc
+     then success NoCycles p
+     else andP (UsableSCCs gr nodes) p
+               [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) p | ciclo <- cc]
+    where
 
 -- --------------
 -- Graph Proofs
@@ -89,6 +95,7 @@ data DependencyGraphProof = SCCs   Graph [Set Vertex]
                          deriving (Eq, Ord, Show)
 
 instance Pretty DependencyGraphProof where
+  pPrint UsableSCCs{} = text "Dependency Graph Processor (SCCs)"
   pPrint SCCs{}   = text "Dependency Graph Processor (SCCs)"
   pPrint Cycles{} = text "Dependency Graph Processor (cycles)"
   pPrint NoCycles = text "We need to prove termination for all the cycles." <+>
@@ -119,6 +126,18 @@ instance DotRep DependencyGraphProof where
                   ]
    colors = cycle $ map mkColor ["yellow","darkorange", "hotpink", "hotpink4", "purple", "brown","red","green"]
 
+-- TODO Improve the usable SCCs graphviz output
+  dot (UsableSCCs g sccs) = Nodes coloredGraph [] (fst $ head coloredNodes) (fst $ head coloredNodes) where
+   coloredGraph = FGL.mkGraph coloredNodes coloredEdges
+   coloredNodes = [ if n `Set.member` sccs
+                        then (n,[label (int n), LabelFontColor (head $ mkColor "yellow"), Color $ mkColor "yellow"])
+                        else (n,[label (int n)])
+                      | n <- G.vertices g]
+   coloredEdges = [ (a,b, if a `Set.member` sccs && b `Set.member` sccs
+                            then [Color $ mkColor "yellow"]
+                            else [])
+                    | (a,b) <- G.edges g]
+
   dot NoCycles = Text (text "There are no cycles, so the system is terminating.") []
 
 -- ---------------
@@ -136,60 +155,19 @@ type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
                                     Problem typ (NarradarTRS t Var) -> Proof info mp problem
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
-usableSCCsProcessor :: (Identifier a ~ TermId t, Ord a) => GraphProcessor (InitialGoal t  typ0) t mp
 
-
-sccProcessor problem@(getP -> dps@(DPTRS _ _ unif sig))
+sccProcessor problem@(getP -> dps@(DPTRS dd gr unif sig))
   | null cc   = success NoCycles problem
   | otherwise = andP (SCCs gr (map Set.fromList cc)) problem
-                 [mkDPProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
+                 [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
     where
-      typ = getProblemType problem
-      trs = getR problem
-      dd  = rulesArray dps
-      gr  = getEDG problem
       cc  = [vv | CyclicSCC vv <- GSCC.sccList gr]
 
-cycleProcessor problem@(getP -> DPTRS dd _ unif sig)
+cycleProcessor problem@(getP -> DPTRS dd gr unif sig)
   | null cc   = success NoCycles problem
   | otherwise = andP (Cycles gr) problem
-                 [mkDPProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo) | ciclo <- cc]
+                 [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
     where
       cc = cycles gr
-      gr = getEDG problem
-      typ = getProblemType problem
-      trs = getR problem
 
-{-
-usableSCCsProcessor :: (problem ~ Problem typ trs
-                       ,trs     ~ NarradarTRS id v
-                       ,t       ~ TermF id
-                       ,v       ~ Var
-                       ,typ     ~ InitialGoal id typ0
-                       ,id      ~ Identifier id0
-                       ,IsDPProblem typ, Traversable (Problem typ)
-                       ,Ppr typ, HTML typ, HTMLClass typ
-                       ,ICap t v problem
-                       ,Ppr v, Ord v, Enum v, Ppr id, Ord id
-                       ) =>
-                            Problem typ trs -> Proof problem
--- TODO Think about the usableSCC processor.
--}
-
-usableSCCsProcessor problem@(getP -> dps@(DPTRS dd _ unif sig))
-  | null cc   = success NoCycles problem
-  | otherwise =  andP (UsableSCCs gr reachable) problem
-                 [mkDPProblem typ trs (restrictDPTRS (DPTRS dd gr unif sig) ciclo)
-                      | ciclo <- cc, any (`Set.member` reachable) ciclo]
-  where
-   typ@InitialGoal{..} = getProblemType problem
-   trs         = getR problem
-   gr          = getEDG problem
-   cc          = [vv | CyclicSCC vv <- GSCC.sccList gr]
-   reachable   = Set.fromList (G.reachable gr =<< goal_pairs)
-   goal_pairs  = [ i | (i,r) <- [0..] `zip` rules dps
-                     , Just f <- [rootSymbol (lhs r)]
-                     , unmarkDPSymbol f `Set.member` Set.fromList (goalId <$> goals_PType)]
-
-usableSCCsProcessor p = sccProcessor p
 

@@ -18,6 +18,7 @@ module Narradar ( narradarMain, Options(..), defOpts
                 , module Narradar.Processor.InitialGoalNarrowingProblem
                 , module Narradar.Processor.ExtraVariables
                 , module Narradar.Processor.PrologProblem
+                , module Narradar.Processor.RelativeProblem
                 , module Narradar.Types
                 ) where
 
@@ -57,17 +58,19 @@ import Narradar.Processor.UsableRules
 import Narradar.Processor.ReductionPair
 import Narradar.Processor.ExtraVariables
 import Narradar.Processor.PrologProblem
-
+import Narradar.Processor.RelativeProblem
 
 narradarMain :: forall mp.
                  (IsMZero mp, Foldable mp
-                 ,Dispatch (Problem  (InitialGoal (TermF (Identifier String)) CNarrowing) (NTRS (Identifier String) Var))
-                 ,Dispatch (Problem  (InitialGoal (TermF (Identifier String))  Narrowing) (NTRS (Identifier String) Var))
-                 ,Dispatch (Problem  (Relative (NTRS (Identifier String) Var) Rewriting) (NTRS (Identifier String) Var))
-                 ,Dispatch (Problem  Narrowing  (NTRS (Identifier String) Var))
-                 ,Dispatch (Problem  CNarrowing (NTRS (Identifier String) Var))
-                 ,Dispatch (Problem  Rewriting  (NTRS (Identifier String) Var))
-                 ,Dispatch (Problem  IRewriting (NTRS (Identifier String) Var))
+--                 ,Dispatch (NProblem  (InitialGoal (TermF (Identifier String)) CNarrowing) (Identifier String))
+--                 ,Dispatch (NProblem  (InitialGoal (TermF (Identifier String))  Narrowing) (Identifier String))
+                 ,Dispatch (NProblem  (Relative  (NTRS (Identifier String)) Rewriting)  (Identifier String))
+                 ,Dispatch (NProblem  Narrowing  (Identifier String))
+                 ,Dispatch (NProblem  CNarrowing (Identifier String))
+                 ,Dispatch (NProblem  (NarrowingGoal (Identifier String)) (Identifier String))
+                 ,Dispatch (NProblem  (CNarrowingGoal (Identifier String)) (Identifier String))
+                 ,Dispatch (NProblem  Rewriting  (Identifier String))
+                 ,Dispatch (NProblem  IRewriting (Identifier String))
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = do

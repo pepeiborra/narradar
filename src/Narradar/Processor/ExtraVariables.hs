@@ -26,7 +26,7 @@ instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
   where
     apply _ p
        | null (extraVars p) = return p
-       | otherwise  = failP EVFail p
+       | otherwise  = refuted EVFail p
 
 
 instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
@@ -34,7 +34,7 @@ instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
   where
     apply _ p
        | null (extraVars p) = return p
-       | otherwise  = failP EVFail p
+       | otherwise  = refuted EVFail p
 
 
 instance ( Processor info ExtraVarsP (Problem base trs) (Problem base' trs)
@@ -67,13 +67,13 @@ instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
          Processor info ExtraVarsP (Problem Narrowing trs) (Problem Narrowing trs) where
     apply _ p
        | null (extraVars p) = return p
-       | otherwise  = failP EVFail p
+       | otherwise  = refuted EVFail p
 
 instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
          Processor info ExtraVarsP (Problem CNarrowing trs) (Problem CNarrowing trs) where
     apply _ p
        | null (extraVars p) = return p
-       | otherwise  = failP EVFail p
+       | otherwise  = refuted EVFail p
 
 
 {-

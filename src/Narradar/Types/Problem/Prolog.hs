@@ -13,21 +13,12 @@ import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Text.PrettyPrint.HughesPJClass
 import Text.XHtml (HTML(..), theclass)
 
-import Data.Term
-import Data.Term.Rules
-
 import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
 
 import Narradar.Types.Goal
-import Narradar.Types.Problem
-import Narradar.Types.TRS
-import Narradar.Types.Term
-import Narradar.Types.Var
-import Narradar.Utils
-import Narradar.Framework.Ppr
 
 import qualified Language.Prolog.Syntax as Prolog
 
