@@ -1,15 +1,15 @@
 [submodule "submodules/muterm-framework.git"]
 	path = submodules/muterm-framework.git
-	url = git@github.com:pepeiborra/muterm-framework.git
+	url = git://github.com/pepeiborra/muterm-framework.git
 [submodule "submodules/term.git"]
 	path = submodules/term.git
-	url = git@github.com:pepeiborra/term.git
+	url = git://github.com/pepeiborra/term.git
 [submodule "submodules/prolog.git"]
 	path = submodules/prolog.git
-	url = git@github.com:pepeiborra/prolog.git
+	url = git://github.com/pepeiborra/prolog.git
 [submodule "submodules/prolog-tools.git"]
 	path = submodules/prolog-tools.git
-	url = git@github.com:pepeiborra/prolog-tools.git
+	url = git://github.com/pepeiborra/prolog-tools.git
 [submodule "submodules/trsparser.git"]
 	path = submodules/trsparser.git
-	url = git@github.com:pepeiborra/trsparser.git
+	url = git://github.com/pepeiborra/trsparser.git
