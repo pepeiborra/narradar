@@ -35,7 +35,7 @@ import Narradar.Processor.NarrowingProblem (findGroundAF')
 import Narradar.Processor.UsableRules
 import Narradar.Types
 import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristic, MkHeu(..))
+import Narradar.Types.ArgumentFiltering (AF_, ApplyAF, PolyHeuristic, MkHeu(..))
 import Narradar.Utils
 import Narradar.Utils.Html
 
@@ -48,6 +48,7 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
          ,MkDPProblem typ (NTRS id), Traversable(Problem typ)
          ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
          ,Ord id, Pretty id, Lattice (AF_ id), PolyHeuristic heu id
+         ,ApplyAF (NProblem typ id)
          ,Info info p0
          ,Info info UsableRulesProof
          ,Info info (AProveReductionPairProof id)

@@ -16,7 +16,7 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 
 import Narradar.Constraints.VariableCondition
-import Narradar.Types.ArgumentFiltering (AF_, PolyHeuristic, Heuristic, MkHeu, mkHeu, isSoundAF)
+import Narradar.Types.ArgumentFiltering (AF_, ApplyAF, PolyHeuristic, Heuristic, MkHeu, mkHeu, isSoundAF)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types as Narradar
 import Narradar.Types.Problem.Infinitary
@@ -40,6 +40,7 @@ instance (t   ~ TermF id
          ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
+         ,ApplyAF (NProblem typ id)
          ,Info info (InfinitaryToRewritingProof id)
          ) =>
     Processor info (InfinitaryToRewriting heu)

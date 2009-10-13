@@ -18,7 +18,7 @@ module Narradar.Types ( module MuTerm.Framework.Problem
                       , module Narradar.Types.Problem.Relative
                       , module Narradar.Types.Problem.InitialGoal
                       , module Narradar.Types.Problem.NarrowingGoal
-                      , module Narradar.Types.Problem.NarrowingGen
+--                      , module Narradar.Types.Problem.NarrowingGen
                       , module Narradar.Types.Problem.Infinitary
                       , module Narradar.Types.DPIdentifiers
                       , module Narradar.Types.PrologIdentifiers

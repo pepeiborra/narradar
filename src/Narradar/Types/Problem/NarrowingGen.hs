@@ -99,12 +99,6 @@ instance (Ord id, GenSymbol id, MkDPProblem p (NTRS id)) =>
     trs' = mapNarradarTRS' id extraVarsToGen trs
     dps' = mapNarradarTRS' id extraVarsToGen dps
 
-    extraVarsToGen (l :-> r) = l :-> applySubst sigma r
-     where
-      sigma = fromListSubst (evars `zip` repeat genTerm)
-      genTerm = term genSymbol []
-      evars = Set.toList(getVars r `Set.difference` getVars l)
-
 narrowingGen        = NarrowingGen  Rewriting
 cnarrowingGen       = NarrowingGen  IRewriting
 narrowingGenProblem = NarrowingGenProblem
@@ -123,10 +117,6 @@ instance Functor (Problem p) => Functor (Problem (MkNarrowingGen p)) where fmap 
 instance Foldable (Problem p) => Foldable (Problem (MkNarrowingGen p)) where foldMap f (NarrowingGenProblem p) = foldMap f p
 instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGen p)) where traverse f (NarrowingGenProblem p) = NarrowingGenProblem <$> traverse f p
 
-$(derive makeFunctor     ''MkNarrowingGen)
-$(derive makeFoldable    ''MkNarrowingGen)
-$(derive makeTraversable ''MkNarrowingGen)
-
 -- Data.Term instances
 
 instance (HasSignature (Problem base trs)) => HasSignature (Problem (MkNarrowingGen base) trs) where
@@ -140,6 +130,14 @@ instance Pretty p => Pretty (MkNarrowingGen p) where
 
 instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenNarr"
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
+
+-- Custom Argument Filtering notion
+
+instance ( GenSymbol id, Ord id, Functor (Problem base)
+         , id ~ AFId (Problem (MkNarrowingGen base) (NTRS id))
+         ) => ApplyAF (Problem (MkNarrowingGen base) (NTRS id)) where
+  type AFId (Problem (MkNarrowingGen base) (NTRS id)) = AFId (NTRS id)
+  apply af = fmap (mapNarradarTRS' id extraVarsToGen . apply af)
 
 -- ICap
 
@@ -164,3 +162,22 @@ instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
 
 instance (MkDPProblem (MkNarrowingGen base) trs, InsertDPairs base trs) => InsertDPairs (MkNarrowingGen base) trs where
   insertDPairs NarrowingGenProblem{..} = narrowingGenProblem . insertDPairs baseProblem
+
+
+-- -------------------
+-- Support functions
+-- -------------------
+
+extraVarsToGen (l :-> r) = l :-> applySubst sigma r
+     where
+      sigma = fromListSubst (evars `zip` repeat genTerm)
+      genTerm = term genSymbol []
+      evars = Set.toList(getVars r `Set.difference` getVars l)
+
+-- -------------
+-- TH instances
+-- -------------
+
+$(derive makeFunctor     ''MkNarrowingGen)
+$(derive makeFoldable    ''MkNarrowingGen)
+$(derive makeTraversable ''MkNarrowingGen)

@@ -106,8 +106,9 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
                         | af <- Set.toList afs]
 
 
-instance ( HasSignature (Problem typ0 (NTRS id)), id ~ SignatureId (Problem typ0 (NTRS id))
+instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
          , PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (TermN id)
+         , ApplyAF (NProblem typ0 id)
          , Info info (NProblem (MkNarrowingGoal id typ0) id)
          , Info info (NProblem typ0 id)
          , Info info (NarrowingToRewritingProof id)
@@ -164,6 +165,7 @@ findGroundAF' :: ( IsDPProblem typ, HasSignature (Problem typ (NarradarTRS t Var
                  , Traversable t, HasId t, ApplyAF (Term t Var), Ord (Term t Var)
                  , id ~ TermId t, id ~ AFId (Term t Var), id ~ SignatureId (Problem typ (NarradarTRS t Var))
                  , Ord id, Pretty id, Lattice (AF_ id), Foldable (Problem typ)
+                 , ApplyAF (Problem typ (NarradarTRS t Var))
                  , ApplyAF (Term (WithNote1 Position t) (WithNote Position Var))
                  , AFId (Term (WithNote1 Position t) (WithNote Position Var)) ~ id
                  ) =>
