@@ -13,3 +13,6 @@
 [submodule "submodules/trsparser.git"]
 	path = submodules/trsparser.git
 	url = git://github.com/pepeiborra/trsparser.git
+[submodule "submodules/testsuite"]
+	path = submodules/testsuite
+	url = http://safe-tools.dsic.upv.es/narradar/testsuite.git
