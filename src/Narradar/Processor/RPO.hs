@@ -21,7 +21,7 @@ import Narradar.Types.Problem.NarrowingGen
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Constraints.SAT.Common
-import Narradar.Constraints.SAT.RPOAF (rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, inAF, isUsable, the_symbolR, filtering)
+import Narradar.Constraints.SAT.RPOAF (rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, Omega, inAF, isUsable, the_symbolR, filtering)
 import qualified Narradar.Constraints.SAT.RPO as RPO
 import qualified Narradar.Constraints.SAT.RPOAF as RPOAF
 import Narradar.Utils
@@ -43,11 +43,14 @@ data Extension = RPOSAF | LPOSAF | MPOAF  | LPOS | LPO | MPO
 data Solver    = Yices | MiniSat -- | Funsat
 
 instance (Traversable (Problem typ)
+         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
+         ,Info info (RPOProof id)
          ,rpo  ~ RPOAF.Symbol id
          ,mpo  ~ RPOAF.MPOsymbol id
          ,lpos ~ RPOAF.LPOSsymbol id
-         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
-         ,Info info (RPOProof id)
+         ,Omega typ (TermF rpo)
+         ,Omega typ (TermF mpo)
+         ,Omega typ (TermF lpos)
          ,NUsableRules rpo  (typ, NTRS rpo, NTRS rpo)
          ,NUsableRules mpo  (typ, NTRS mpo, NTRS mpo)
          ,NUsableRules lpos (typ, NTRS lpos, NTRS lpos)
@@ -83,6 +86,9 @@ instance (rpo  ~ RPOAF.Symbol id
          ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
          ,IsDPProblem base, Pretty base, Traversable (Problem base)
+         ,Omega (InitialGoal (TermF rpo) base) (TermF rpo)
+         ,Omega (InitialGoal (TermF mpo) base) (TermF mpo)
+         ,Omega (InitialGoal (TermF lpos) base) (TermF lpos)
          ,HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
          ,HasSignature (NProblem base rpo),  RPOAF.Symbol id ~ SignatureId (NProblem base rpo)
          ,HasSignature (NProblem  base mpo),  RPOAF.MPOsymbol id ~ SignatureId (NProblem base mpo)

@@ -9,6 +9,7 @@ module Narradar.Constraints.UsableRules where
 
 import Control.Exception
 import Control.Monad
+import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable (Traversable)
@@ -33,6 +34,12 @@ iUsableRules :: ( p ~ Problem typ
                 p trs -> [Term t v] -> p trs
 iUsableRules p tt = runIcap p $ iUsableRulesM p tt
 
+iUsableRulesVar :: ( p ~ Problem typ
+                , Ord (Term t v), Enum v
+                , IsDPProblem typ, Traversable p, IUsableRules t v (p trs)
+                , IsTRS t v trs, GetVars v trs
+                ) =>
+                p trs -> v -> Set(Rule t v)
 iUsableRulesVar p v = runIcap p $ iUsableRulesVarM p v
 
 class IUsableRules (TermF id) Var thing => NUsableRules id thing | thing -> id

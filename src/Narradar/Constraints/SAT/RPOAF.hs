@@ -78,6 +78,7 @@ rpoAF_IGDP :: (Ord id, Ord sid, Pretty sid, AFSymbol sid, UsableSymbol sid, Exte
               ,HasSignature (Problem base (NTRS sid)), sid ~ SignatureId (Problem base (NTRS sid))
               ,NUsableRules sid (base, NTRS sid, NTRS sid)
               ,NCap sid (base, NTRS sid)
+              ,Omega (InitialGoal (TermF sid) base) (TermF sid)
               ,DPSymbol id
               ) => Bool -> (Signature id -> id -> SAT (TermN sid) sid)
                 -> NProblem (InitialGoal (TermF id) base) id
@@ -504,8 +505,9 @@ mulgen id_f id_g ff gg k = do
 -- ------------------------
 -- Usable Rules with AF
 -- ------------------------
-omega :: forall p typ trs id t v.
-         (p  ~ Problem typ
+class Omega typ t where omega :: Problem typ (NarradarTRS t Var) -> SAT (Term t Var) Boolean
+
+instance (p  ~ Problem typ
          ,IsDPProblem typ
          ,HasSignature (p trs)
          ,id ~ TermId t, id ~ SignatureId (p trs)
@@ -515,20 +517,21 @@ omega :: forall p typ trs id t v.
          ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v), Pretty id
          ,IUsableRules t v (p trs)
-         ) => Problem typ (NarradarTRS t Var) -> SAT (Term t Var) Boolean
-omega p = pprTrace (text "dd = " <> pPrint dd) $
-      andM [andM [go r trs | _:->r <- dps]
-           ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
-                  | f <- Set.toList dd ]
---           ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
-           ]
+         ) => Omega typ t
+ where
+  omega p = pprTrace (text "dd = " <> pPrint dd) $
+             andM [andM [go r trs | _:->r <- dps]
+                  ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
+                              | f <- Set.toList dd ]
+           ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                  ]
 
    where
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
     dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps) :: p trs)
 
-    go (Pure x) _ = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
+    go (Pure x) _ = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar (p:: p trs) x)
 
     go t trs
       | id_t `Set.notMember` dd
@@ -538,6 +541,111 @@ omega p = pprTrace (text "dd = " <> pPrint dd) $
       = andM [ usable id_t
              , andM [ go r rest | _:->r <- rls ]
              , andM [ [inAF i id_t] *==> go t_i rest
+                          | (i, t_i) <- zip [1..] tt ]
+             ]
+       where
+         Just id_t = rootSymbol t
+         tt        = directSubterms t
+         rls       = rulesFor id_t trs
+         rest      = trs \\ rls  :: [Rule t Var]
+
+instance (p   ~ Problem (InitialGoal t typ)
+         ,id  ~ TermId t, id ~ SignatureId (Problem typ trs)
+         ,v   ~ Var
+         ,trs ~ NarradarTRS t v
+         ,MkDPProblem typ trs
+         ,HasSignature (Problem typ trs)
+         ,Traversable (Problem typ), Traversable t
+         ,Ord id, Ord(t(Term t v)), SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id
+         ,Foldable t, HasId t, Pretty id
+         ,IUsableRules t v (typ, trs, trs)
+         ) => Omega (InitialGoal t typ) t
+ where
+  omega p = pprTrace (text "dd = " <> pPrint dd) $
+             andM [andM [go l r trs | l:->r <- dps ++ reachablePairs p]
+                  ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
+                              | f <- Set.toList dd ]
+           ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                  ]
+
+   where
+    (trs,dps) = (rules $ getR p, rules $ getP p)
+    sig = getSignature (getR p)
+    dd  = getDefinedSymbols (reachableRules p)
+    p'  = setR (reachableRules p) (baseProblem p)
+
+    go l (Pure x) _ =
+      -- If there is an extra variable, everything is usable ! (short of calling the police)
+        everyM poss (\p ->
+                      or [ not(inAF i f)
+                          | n <- [0..length p - 1], let (pre, i:_) = splitAt n p
+                          , let f = fromMaybe (error "omega: fromJust") (rootSymbol (l!pre))])
+         ==>> andM(map usable $ toList $ getDefinedSymbols (getR p))
+
+     where
+      poss = occurrences (Pure x) l
+
+    go l t trs
+      | id_t `Set.notMember` dd
+      = andM [ [inAF i id_t] *==> go l t_i trs
+               | (i, t_i) <- zip [1..] tt ]
+      | otherwise
+      = andM [ usable id_t
+             , andM [ go l r rest | l:->r <- rls ]
+             , andM [ [inAF i id_t] *==> go l t_i rest
+                          | (i, t_i) <- zip [1..] tt ]
+             ]
+       where
+         Just id_t = rootSymbol t
+         tt        = directSubterms t
+         rls       = rulesFor id_t trs
+         rest      = trs \\ rls  :: [Rule t Var]
+
+instance (p   ~ Problem typ
+         ,typ ~ InitialGoal t (MkNarrowingGen base)
+         ,id  ~ TermId t, id ~ SignatureId (Problem base trs)
+         ,v   ~ Var
+         ,trs ~ NarradarTRS t v
+--         ,HasSignature (Problem (MkNarrowing base) trs)
+         ,Traversable (Problem base), Traversable t
+         ,Ord id, SATOrd (Term t v) id, Extend id, AFSymbol id, UsableSymbol id, GenSymbol id
+         ,Foldable t, HasId t, Ord (t(Term t v)), Pretty id
+         ,MkDPProblem (MkNarrowingGen base) trs
+         ,MkDPProblem  base trs
+         ,IUsableRules t v (MkNarrowingGen base, trs, trs)
+         ,IUsableRules t v (base, trs, trs)
+         ) => Omega (InitialGoal t (MkNarrowingGen base)) t
+ where
+  omega p = andM [andM [go l r trs | l:->r <- reachablePairs p]
+                 ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
+                              | f <- Set.toList dd ]
+                 ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                  ]
+
+   where
+    (trs,dps) = (rules $ getR p, rules $ getP p)
+    sig = getSignature (getR p)
+    dd  = getDefinedSymbols (reachableRules p)
+    genUsable = andM  [usable gen | gen <- toList(getDefinedSymbols (getR p))
+                                  , gen == genSymbol]
+
+    go l (Pure x) _ =
+        everyM poss (\p ->
+                           or [ not(inAF i f)
+                                 | n <- [0..length p - 1], let (pre, i:_) = splitAt n p
+                                 , let f = fromMaybe (error "omega: fromJust") (rootSymbol (l!pre))])
+        ==>>  genUsable
+     where
+      poss = occurrences (Pure x) l
+
+    go l t trs
+      | id_t `Set.notMember` dd
+      = andM [ [inAF i id_t] *==> go l t_i trs
+               | (i, t_i) <- zip [1..] tt ]
+      | otherwise
+      = andM [ usable id_t
+             , andM [ go l r rest | l:->r <- rls ]
+             , andM [ [inAF i id_t] *==> go l t_i rest
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where

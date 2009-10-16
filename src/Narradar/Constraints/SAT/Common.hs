@@ -1,6 +1,7 @@
 {-# LANGUAGE UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Narradar.Constraints.SAT.Common
@@ -149,6 +150,8 @@ andM xx = and =<< sequence xx
 
 allM f  = andM . map f
 anyM f  = orM  . map f
+everyM  = flip allM
+someM   = flip someM
 
 ifte cond te el = andM [cond     ==> return te
                        ,not cond ==> return el]
