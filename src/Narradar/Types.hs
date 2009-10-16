@@ -85,11 +85,6 @@ import Debug.Observe
 
 import Prelude as P hiding (sum, pi, mapM)
 
-isGround :: (Functor t, Foldable t) => Term t v -> Bool
-isGround = null . vars
-
-collapsing trs = any (isVar.rhs) (rules trs)
-
 data Output = OutputXml ByteString | OutputHtml ByteString | OutputTxt ByteString deriving Show
 
 $(derive makeIs ''Output)

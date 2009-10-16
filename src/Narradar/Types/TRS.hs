@@ -48,6 +48,11 @@ import Narradar.Utils
 import Debug.Observe
 #endif
 
+isGround :: (Functor t, Foldable t) => Term t v -> Bool
+isGround = null . vars
+
+isCollapsing trs = any (isVar.rhs) (rules trs)
+
 -- --------------------
 -- TRSs in our setting
 -- --------------------

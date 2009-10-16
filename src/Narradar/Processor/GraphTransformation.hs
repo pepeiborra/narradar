@@ -303,6 +303,7 @@ instantiation p
 finstantiation p
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
+  | isCollapsing (getR p) = mzero
   | otherwise = [ singleP (FInstantiationProof olddp newdps) p
                            (expandDPair p i newdps)
                      | (i, dps') <- dpss

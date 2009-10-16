@@ -149,6 +149,7 @@ filterSEDG :: (Ord v, Enum v
               ,ICap t v (typ, NarradarTRS t v)
               ,IUsableRules t v (typ, [Rule t v], [Rule t v])
               ) => Problem typ (NarradarTRS t v) -> G.Graph -> G.Graph
+filterSEDG p gr | isCollapsing (getP p) = gr
 filterSEDG (getP -> dptrs@DPTRS{}) gr =
     G.buildG (A.bounds gr)
                [ (i,j) | (i,j) <- G.edges gr
