@@ -20,7 +20,7 @@ import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
 import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
 import qualified Control.RMonad as R
 --import qualified "monad-param" Control.Monad.Parameterized as P
-import Data.Array.IArray
+import Data.Array as A
 import qualified Data.Foldable as F
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
@@ -159,14 +159,18 @@ mapMif p f= mapM (\x -> if p x then f x else return x)
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
 
-select :: (Ord t, Enum t, Num t) => [a] -> [t] -> [a]
-select xx ii = go 0 xx (sort ii)
-    where go _ [] _ = []
-          go _ _ [] = []
-          go n (x:xx) (i:ii) | n == i = x : go (succ n) xx ii
-                             | otherwise = go (succ n) xx (i:ii)
+select :: [Int] -> [a] -> [a]
+select ii xx
+  | len > 5   = map (safeIx (A.!) (A.listArray (0, len - 1) xx)) ii
+  | otherwise = map (safeIx (!!) xx) ii
+  where
+    len = length xx
+    safeIx (!!) xx i
+        | i > len - 1 = error "select: index too large"
+        | i < 0       = error "select: negative index"
+        | otherwise = xx !! i
 
-propSelect xx ii = map (xx!!) ii' == select xx ii'
+propSelect ii xx = map (xx!!) ii' == select ii' xx
   where _types = (xx::[Int], ii::[Int])
         ii'   = filter (< length xx) (map abs ii)
 
