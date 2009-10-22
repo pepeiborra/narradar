@@ -16,3 +16,6 @@
 [submodule "submodules/testsuite"]
 	path = submodules/testsuite
 	url = http://safe-tools.dsic.upv.es/narradar/testsuite.git
+[submodule "submodules/alacarte.git"]
+	path = submodules/alacarte.git
+	url = git://github.com/pepeiborra/alacarte.git
