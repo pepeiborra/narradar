@@ -17,6 +17,7 @@ import Control.Monad  (liftM2, ap)
 import Control.Monad.Identity(Identity(..))
 import Control.Monad.List (lift, ListT(..))
 import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
+import qualified Control.Monad.State.Strict as Strict
 import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
 import qualified Control.RMonad as R
 --import qualified "monad-param" Control.Monad.Parameterized as P
@@ -274,7 +275,9 @@ infixr 3 ..|..
 -- Missing Applicative instances
 -- ---------------------------------------
 instance Monad m => Applicative (StateT s m) where pure = return; (<*>) = ap
+instance Monad m => Applicative (Strict.StateT s m) where pure = return; (<*>) = ap
 instance Applicative (State s) where pure = return; (<*>) = ap
+instance Applicative (Strict.State s) where pure = return; (<*>) = ap
 
 instance (Monoid s, Monad m) => Applicative (WriterT s m) where pure = return; (<*>) = ap
 --instance Applicative (Writer s) where pure = return; (<*>) = ap
