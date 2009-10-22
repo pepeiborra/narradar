@@ -1,8 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns, ViewPatterns #-}
+{-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns, DisambiguateRecordFields, ViewPatterns #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Narradar.Processor.Graph where
@@ -67,32 +68,49 @@ instance ( TermId t ~ Identifier id0, Ord id0
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
-  apply DependencyGraphSCC p@InitialGoalProblem{dgraph=dg@DGraph{..}, baseProblem = (getP -> dps@(DPTRS dd gr unif sig))}
+  apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{..}
+                                               , baseProblem = (getP -> dps@(DPTRS dd gr unif sig))}
    = do
-    let nodes = Set.fromList $ catMaybes (map (`lookupNode` dg) (toList dd))
+    let reach_nodes = Set.fromList (fst <$> filter (isReachable.snd) (assocs dd))
+        isReachable = isJust . (`lookupNode` dg)
 
-        gr'   = buildG (bounds gr)
+        grForSccs   = buildG (bounds gr)
                        [ (i,o) | (i,o) <- edges gr
-                               , i `Set.member` nodes
-                               , o `Set.member` nodes]
+                               , i `Set.member` reach_nodes
+                               , o `Set.member` reach_nodes]
 
-        cc   = [vv | CyclicSCC vv <- GSCC.sccList gr']
+
+        cc   = [vv | CyclicSCC vv <- GSCC.sccList grForSccs]
+
+        initial_nodes = Set.fromList $ catMaybes [Map.lookup dp pairsMap | dp <- initialPairs p]
+        reach_nodes_ix = Set.fromList [ ix | dp <- toList dd, Just ix <- [lookupNode dp dg]]
+        usable_rules_ix= reachableNodes p
+        out_nodes_ix   = Set.fromList (vertices graph) `Set.difference` reach_nodes_ix
+        pairsMap = Map.fromList [ (n,dp) | (dp,n) <- A.assocs dd]
+
+        proof = UsableSCCs{ gr         = graph
+                          , reachable  = reach_nodes_ix
+                          , initial    = Set.fromList initialPairsG
+                          , outOfScope = out_nodes_ix
+                          , inPath     = Set.fromList (reachableNodes p)
+                          , the_pairs  = elems pairs}
 
     if null cc
      then success NoCycles p
-     else andP (UsableSCCs gr nodes) p
+     else andP proof p
                [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) p | ciclo <- cc]
-    where
 
 -- --------------
 -- Graph Proofs
 -- --------------
 
 data DependencyGraphProof = SCCs   Graph [Set Vertex]
-                          | UsableSCCs Graph (Set Vertex)
+                          | forall a. Pretty a =>
+                            UsableSCCs { gr :: Graph
+                                       , reachable, initial, outOfScope, inPath :: Set Vertex
+                                       , the_pairs :: [a]}
                           | Cycles Graph
                           | NoCycles
-                         deriving (Eq, Ord, Show)
 
 instance Pretty DependencyGraphProof where
   pPrint UsableSCCs{} = text "Dependency Graph Processor (SCCs)"
@@ -108,9 +126,14 @@ instance DotRep DependencyGraphProof where
                        graph = FGL.mkGraph nodes edges
                        nodes = [(n, [label (int n)]) | n <- G.vertices g]
                        edges = [(a,b,[]) | (a,b) <- G.edges g]
-                   in  Nodes graph [] n n
+                   in  Nodes {nodes=graph, attributes=[], incoming=n, outgoing=n, legend=Nothing}
 
-  dot (SCCs g sccs) = Nodes coloredGraph [] (fst $ head coloredNodes) (fst $ head coloredNodes) where
+  dot (SCCs g sccs) = Nodes {nodes      = coloredGraph
+                            ,attributes = []
+                            ,incoming   = fst $ head coloredNodes
+                            ,outgoing   = fst $ head coloredNodes
+                            ,legend     = Nothing}
+     where
    coloredGraph = FGL.mkGraph coloredNodes coloredEdges
    coloredNodes = [ case nodeColorsA ! n of
                         Nothing -> (n,[label (int n)])
@@ -124,21 +147,44 @@ instance DotRep DependencyGraphProof where
                                      (Just c1, Just c2) | c1 == c2 -> [Color c1]
                                      otherwise          -> []
                   ]
-   colors = cycle $ map mkColor ["yellow","darkorange", "hotpink", "hotpink4", "purple", "brown","red","green"]
 
 -- TODO Improve the usable SCCs graphviz output
-  dot (UsableSCCs g sccs) = Nodes coloredGraph [] (fst $ head coloredNodes) (fst $ head coloredNodes) where
+  dot UsableSCCs{..} = Nodes {nodes      = coloredGraph
+                             ,attributes = []
+                             ,incoming   = fst $ head coloredNodes
+                             ,outgoing   = fst $ head coloredNodes
+                             ,legend     = Just (vcat [ n <+> text "-" <+> p
+                                                        | (n,p) <- zip [0::Int ..] the_pairs]
+                                                ,[FontName "monospace"
+                                                 ,FontSize 9])
+                             }
+     where
    coloredGraph = FGL.mkGraph coloredNodes coloredEdges
-   coloredNodes = [ if n `Set.member` sccs
-                        then (n,[label (int n), LabelFontColor (head $ mkColor "yellow"), Color $ mkColor "yellow"])
-                        else (n,[label (int n)])
-                      | n <- G.vertices g]
-   coloredEdges = [ (a,b, if a `Set.member` sccs && b `Set.member` sccs
-                            then [Color $ mkColor "yellow"]
-                            else [])
-                    | (a,b) <- G.edges g]
+   coloredNodes = [ case True of
+                      _ | n `Set.member` initial ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "red"), Color $ mkColor "red"])
+                        | n `Set.member` reachable ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "green"), Color $ mkColor "green"])
+                        | n `Set.member` inPath ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "rosybrown1"), Color $ mkColor "rosybrown1"])
+                        | n `Set.member` outOfScope ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "gray"), Color $ mkColor "gray"])
+                        | otherwise -> (n,[label (int n)])
+                      | n <- G.vertices gr]
+   coloredEdges = [ (a,b, case True of
+                            _ | a `Set.member` reachable && b `Set.member` reachable ->
+                                 [Color $ mkColor "green"]
+                              | a `Set.member` inPath && b `Set.member` inPath ->
+                                 [Color $ mkColor "rosybrown1"]
+                              | a `Set.member` outOfScope || b `Set.member` outOfScope ->
+                                 [Color $ mkColor "gray"]
+                              | otherwise -> [])
+                    | (a,b) <- G.edges gr]
 
   dot NoCycles = Text (text "There are no cycles, so the system is terminating.") []
+
+
+colors = cycle $ map mkColor ["darkorange", "hotpink", "hotpink4", "purple", "brown","red","green","yellow"]
 
 -- ---------------
 -- Implementation

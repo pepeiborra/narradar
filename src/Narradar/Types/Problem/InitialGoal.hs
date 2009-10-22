@@ -122,11 +122,10 @@ updateInitialGoalProblem p p0 = p{baseProblem = p0}
 initialPairs :: Unify t => Problem (InitialGoal t base) trs -> [Rule t Var]
 initialPairs InitialGoalProblem{..} = dinitialPairs dgraph
 
-reachablePairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
-                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Rule t Var]
-reachablePairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
-  = map (`lookupPair` dg)
-        (flattenSCCs (map (sccs A.!) sccsInPath))
+reachableNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
+                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Vertex]
+reachableNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
+  = flattenSCCs (map (sccs A.!) sccsInPath)
  where
    sccsInvolved = Set.fromList $ catMaybes $ [ sccFor n dg
                                                    | p <- rules (getP p)
@@ -139,6 +138,11 @@ reachablePairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
                     from <- embed initialSccs
                     to   <- embed sccsInvolved
                     embed $ nodesInPathNaive sccGraph from to
+reachablePairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
+                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Rule t Var]
+reachablePairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
+  = map (`lookupPair` dg) (reachableNodes p)
+
 
 reachableRules :: (Ord(Term t Var), HasId t, Foldable t
                   ,IsDPProblem base, Traversable (Problem base)
@@ -357,7 +361,8 @@ mkDGraph' typ trs (rules -> dps) goals graph0 = runIcap (rules trs ++ dps) $ do
    assert (all (inRange (bounds pairs)) (Map.elems pairsMap)) $
   -- The scc index stored for a pair is within the range of the sccs array
    assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
-
+  -- No duplicate edges in the graph
+   assert (noDuplicateEdges graph) $
    return the_dgraph
 
   where liftL = ListT . return
@@ -372,7 +377,7 @@ insertDGraph p@InitialGoalProblem{..} (rules -> newdps)
 expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},..} olddp (rules -> newdps)
    | Nothing <- Map.lookup olddp pairsMap = dg
    | Just i  <- Map.lookup olddp pairsMap
-   , dps'    <- tRS([pairs A.! j | j <- range (bounds pairs), j /= i] ++ newdps)
+   , dps'    <- tRS([ dp | (j,dp) <- assocs pairs, j /= i] ++ newdps)
    , graph'  <- getEDG (setP dps' baseProblem)
 
    = mkDGraph' (getProblemType baseProblem) (getR p) dps' goals graph'
