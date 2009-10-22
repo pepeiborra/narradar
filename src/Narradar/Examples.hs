@@ -2,6 +2,7 @@ module Narradar.Examples where
 
 import Prelude hiding (div,succ, quot)
 
+import Narradar.Framework
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.DPIdentifiers
@@ -29,6 +30,10 @@ plus2 = [ x +: zero   :-> x
 
 plus3 = [ x +: zero   :-> x
          , x +: succ y :-> succ x +: y]
+
+peanoP = mkDPProblem Rewriting peanoRules peanoPairs
+  where peanoPairs = getPairs Rewriting peanoRules
+        peanoRules = mapTermSymbols IdFunction <$$> peano
 
 -- --------------------------------------------------------
 -- Normalization of formulas with propositional connectives
