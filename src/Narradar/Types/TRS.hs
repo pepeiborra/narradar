@@ -17,7 +17,7 @@ import Control.Monad.List
 import Data.Suitable
 import Data.Array as A
 import Data.Array.IArray as A (amap)
-import Data.Graph (Graph, buildG, edges)
+import Data.Graph as G (Graph, buildG, edges)
 import Data.Foldable as F (Foldable, toList, sum, foldMap)
 import Data.Maybe (catMaybes, isJust, isNothing)
 import Data.Monoid
@@ -170,7 +170,7 @@ instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTR
 
     apply af (PrologTRS rr _) = prologTRS' ((Map.map . Set.map) (AF.apply af) rr)
     apply af trs@TRS{}        = tRS$ AF.apply af <$$> rules trs
-    apply af (DPTRS a g uu _) = dpTRS' (AF.apply af <$$> a) g uu
+    apply af (DPTRS a g uu _) = let dps' = AF.apply af <$$> a in DPTRS dps' g uu (getSignature $ elems dps')
 
 instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
     extraVars (TRS rr _) = extraVars rr
@@ -213,15 +213,15 @@ dpTRS :: ( SignatureId trs ~ TermId t
          , IsDPProblem typ, IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
          , Pretty trs, Pretty (t(Term t v)), Pretty v
          ) =>
-         typ -> trs -> trs -> Graph -> NarradarTRS t v
+         typ -> trs -> trs -> NarradarTRS t v
 
-dpTRS typ trs dps edges = dpTRS' dps_a edges unifs
+dpTRS typ trs dps = dpTRS' dps_a unifs
     where dps_a   = listArray (0, length (rules dps) - 1) (rules dps)
           unifs   = runIcap dps (computeDPUnifiers typ trs dps)
 
 dpTRS' :: ( Foldable t, HasId t, Ord (Term t v)) =>
-         Array Int (Rule t v) -> Graph -> (Unifiers t v :!: Unifiers t v) -> NarradarTRS t v
-dpTRS' dps edges unifiers = DPTRS dps edges unifiers (getSignature $ elems dps)
+         Array Int (Rule t v) -> (Unifiers t v :!: Unifiers t v) -> NarradarTRS t v
+dpTRS' dps unifiers = DPTRS dps (getEDGfromUnifiers unifiers) unifiers (getSignature $ elems dps)
 
 
 -- ----------
@@ -321,6 +321,13 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
  where liftL = ListT . return
        ldps  = length the_dps - 1
 
+getEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
+  the_edges = [ xy | (xy, Just _) <- A.assocs unif
+                   , isJust (unifInv ! xy)
+                   ]
+  ((m,_),(n,_)) = bounds unif
+
+
 -- -------------------------------
 -- Auxiliary Data.Term instances
 -- -------------------------------
@@ -336,41 +343,5 @@ instance HasSignature [a] => HasSignature (Map k a) where
 instance (Ord a, GetFresh t v a) => GetFresh t v (Set a) where getFreshM = liftM Set.fromList . getFreshM . Set.toList
 instance HasRules t v a => HasRules t v (Set   a) where rules = foldMap rules . toList
 instance HasRules t v a => HasRules t v (Map k a) where rules = foldMap rules . Map.elems
-
--- -------------
--- Sanity Checks
--- -------------
-isValidUnif :: ( p   ~ Problem typ
-               , Ord v, Enum v, Unify t
-               , Traversable p, IsDPProblem typ, Pretty typ
-               , ICap t v (typ, NarradarTRS t v)
-               , Pretty v, Pretty (t(Term t v))
-               ) => p (NarradarTRS t v) -> Bool
-isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _)
-  | valid = True
-  | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
-                          text "Problem type:" <+> pPrint (getProblemType p) $$
-                          text "DPS:"      <+> pPrint (elems dps) $$
-                          text "Unifiers:" <+> pPrint unif        $+$ Ppr.empty $+$
-                          text "Computed:" <+> pPrint unif'       $+$ Ppr.empty $+$
-                          text "Expected:" <+> pPrint (amap (\b -> if b then "Y" else "N") validUnif)
-                         )
-                         valid
-  where
-  liftL = ListT . return
-  l     = length (rules $ getP p) - 1
-  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' -> computeDirectUnifiers (getProblemType p,rr') (getP p))
-  validUnif = array ( (0,0), (l,l)) $ runIcap p $ runListT $ do
-            (x, _ :-> r) <- liftL $ A.assocs dps
-            (y, l :-> _) <- liftL $ A.assocs dps
-            r' <- getFresh r >>= icap p
---            pprTrace (text "unify" <+> pPrint l <+> pPrint r') (return ())
-            return ((x,y),unifies l r')
-
-  valid = and $ zipWith (\subst unifies -> if unifies then isJust subst else isNothing subst) (elems unif) (elems validUnif)
-
-
-isValidUnif _ = True
-
 
 instance Pretty (Unifiers t v) where pPrint = pPrint . amap (maybe "N" (const "Y"))

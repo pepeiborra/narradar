@@ -27,7 +27,7 @@ import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, isNothing)
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -47,7 +47,7 @@ import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.TRS
-import Narradar.Framework.Ppr
+import Narradar.Framework.Ppr as Ppr
 import Narradar.Utils
 import Narradar.Types.Term hiding ((!))
 import Narradar.Constraints.ICap
@@ -91,9 +91,9 @@ mkDPProblem' :: ( Enum v, Ord v, Pretty v
                                ) =>
                                typ -> NTRS id -> NTRS id -> Problem typ (NTRS id) #-}
 
-mkDPProblem' typ (rules -> rr) (rules -> dps) = p where
-      p     = mkDPProblem typ (tRS rr) dptrs
-      dptrs = dpTRS typ rr dps (getEDG p)
+mkDPProblem' typ (rules -> rr) (rules -> dps) = mkDPProblem typ (tRS rr) dptrs
+  where
+      dptrs = dpTRS typ rr dps
 
 
 
@@ -255,11 +255,9 @@ expandDPair :: ( problem ~ Problem typ
                , Pretty (t(Term t v)), Pretty v, Pretty typ
                ) =>
                problem (NarradarTRS t v) -> Int -> [Rule t v] -> problem (NarradarTRS t v)
+
 expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
- = assert (isValidUnif p) $
-   assert (isValidUnif res) res
-  where
-   res = runIcap (rules p ++ newdps) $ do
+ = runIcap (rules p ++ newdps) $ do
     let dps'     = dps1 ++ dps2 ++ newdps
         l_dps'   = l_dps + l_newdps
         a_dps'   = A.listArray (0,l_dps') dps'
@@ -270,21 +268,21 @@ expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` e
                         concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
                                  | j <- new_nodes, k <- [0..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
-        gr'      = buildG (0, l_dps')
-                   ([(adjust x,adjust y) | (x,y) <- edges gr, x/=i, y/=i] ++
-                    [(n,n') | n' <- new_nodes
-                            , (n,m) <- edges gr, n/=i, m == i ] ++
-                    [(n',n) | n <- gr ! i, n' <- new_nodes] ++
-                    [(n',n'') | n' <- new_nodes, n'' <- new_nodes, i `elem` gr ! i])
         adjust x = if x < i then x else x-1
 
     unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (rules $ getR p) dps'
     let unif'    = mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
-        dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')
---        dptrs_new= dpTRS' a_dps' gr' (unif_new :!: unifInv_new)
-    return $ setP dptrs' p
+        dptrs'   = dpTRS' a_dps' (unif' :!: unifInv')
+--      dptrs_new= dpTRS' a_dps' (unif_new :!: unifInv_new)
 
+    let res = setP dptrs' p
+
+    assert (isValidUnif p) $
+     assert (isValidUnif res) $
+     return res
+
+ where
    (dps1,_:dps2) = splitAt i (elems dps)
    new_nodes= [l_dps .. l_dps + l_newdps]
    l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
@@ -326,10 +324,48 @@ insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs
       let unif'    = mkUnif unif unif_new
           unifInv' = mkUnif unifInv unifInv_new
 
-          dptrs'   = dpTRS' a_dps' gr' (unif' :!: unifInv')
+          dptrs'   = dpTRS' a_dps' (unif' :!: unifInv')
           p'       = setP dptrs' p
           gr'      = getEDG p'
 
       return p'
 
 
+
+-- -------------
+-- Sanity Checks
+-- -------------
+isValidUnif :: ( p   ~ Problem typ
+               , Ord v, Enum v, Unify t
+               , Traversable p, IsDPProblem typ, Pretty typ
+               , ICap t v (typ, NarradarTRS t v)
+               , Pretty v, Pretty (t(Term t v))
+               ) => p (NarradarTRS t v) -> Bool
+isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _)
+  | valid = True
+  | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
+                          text "Problem type:" <+> pPrint (getProblemType p) $$
+                          text "DPS:"      <+> pPrint (elems dps) $$
+                          text "Unifiers:" <+> pPrint unif        $+$ Ppr.empty $+$
+                          text "Computed:" <+> pPrint unif'       $+$ Ppr.empty $+$
+                          text "Expected:" <+> pPrint (fmap (\b -> if b then "Y" else "N") validUnif)
+                         )
+                         valid
+  where
+  liftL = ListT . return
+  l     = length (rules $ getP p) - 1
+  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' -> computeDirectUnifiers (getProblemType p,rr') (getP p))
+  validUnif = array ( (0,0), (l,l)) $ runIcap p $ runListT $ do
+            (x, _ :-> r) <- liftL $ A.assocs dps
+            (y, l :-> _) <- liftL $ A.assocs dps
+            r' <- getFresh r >>= icap p
+--            pprTrace (text "unify" <+> pPrint l <+> pPrint r') (return ())
+            return ((x,y),unifies l r')
+
+  valid = and $ zipWith (\subst unifies -> if unifies then isJust subst else isNothing subst) (elems unif) (elems validUnif)
+
+
+isValidUnif _ = True
+
+
+noDuplicateEdges gr = Set.size(Set.fromList (edges gr)) == length (edges gr)
