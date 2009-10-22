@@ -55,8 +55,8 @@ trace = Debug.Trace.trace
 trace _ x = x
 #endif
 
-pprTrace = trace . render
-
+pprTrace = trace . render . pPrint
+pprError = error . render . pPrint
 
 -- ----------
 -- Type hints
