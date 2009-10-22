@@ -28,7 +28,7 @@ import qualified Language.Prolog.Syntax as Prolog
 
 type PrologProblem = Problem (Prolog String) (Prolog.Program String)
 
-data Prolog id = Prolog {goals_Ptype :: [Goal id]}
+data Prolog id = Prolog {goals_Ptype :: [Goal id]} deriving (Eq,Show,Ord)
 instance IsProblem (Prolog id) where
   data Problem (Prolog id) trs = PrologProblem {goals::[Goal id], program :: trs}
   getProblemType = Prolog . goals
@@ -39,6 +39,9 @@ instance MkProblem (Prolog id) (Prolog.Program id) where mkProblem (Prolog gg) p
 prologProblem      = PrologProblem
 
 instance Functor (Problem (Prolog id)) where fmap f (PrologProblem gg a) = PrologProblem gg (f a)
+
+
+instance Pretty (Prolog id) where pPrint Prolog{..} = text "Prolog"
 
 instance Pretty PrologProblem where
     pPrint PrologProblem{..} =
