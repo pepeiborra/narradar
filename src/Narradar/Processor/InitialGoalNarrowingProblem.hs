@@ -29,12 +29,6 @@ import Narradar.Types.Problem.NarrowingGoal
 import Narradar.Types.Problem.NarrowingGen as Gen
 import Narradar.Utils
 
--- | This is the approach used for termination of logic programs by Schneider-Kamp et al.
---   It is also applicable to narrowing, however it has not been formalized anywhere.
---   But an equivalent approach is formalized by Vidal in FLOPS'08
-data NarrowingGoalToInfinitaryRewriting = NarrowingGoalToInfinitaryRewriting deriving (Eq, Show)
-data NarrowingGoalToInfinitaryRewritingProof = NarrowingGoalToInfinitaryRewritingProof deriving (Eq, Show)
-
 
 -- | This is the approach of Iborra, Nishida & Vidal
 data NarrowingGoalToRelativeRewriting = NarrowingGoalToRelativeRewriting deriving (Eq, Show)
@@ -193,12 +187,3 @@ initialGoalNarrowingToRelativeRewriting _ p =
                            | c <- toList $ getConstructorSymbols p
                            , let ar = getArity p c]
 -}
-
--- --------
--- Output
--- --------
-
-instance Pretty NarrowingGoalToInfinitaryRewritingProof where
-  pPrint NarrowingGoalToInfinitaryRewritingProof =
-     text "Termination of Infinitary Rewriting" $$
-     text "implies Termination of Constructor Narrowing."
