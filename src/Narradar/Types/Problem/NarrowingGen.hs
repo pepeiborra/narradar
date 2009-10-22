@@ -121,10 +121,6 @@ instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGen p)) whe
 
 -- Data.Term instances
 
-instance (HasSignature (Problem base trs)) => HasSignature (Problem (MkNarrowingGen base) trs) where
-  type SignatureId (Problem (MkNarrowingGen base) trs) = SignatureId (Problem base trs)
-  getSignature = getSignature . baseProblem
-
 -- Output
 
 instance Pretty p => Pretty (MkNarrowingGen p) where

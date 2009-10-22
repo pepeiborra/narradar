@@ -130,17 +130,6 @@ getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSub
 
 -- Data.Term instances
 
-
-instance (HasSignature trs) => HasSignature (Problem Narrowing trs) where
-  type SignatureId (Problem Narrowing trs) = SignatureId trs
-  getSignature = getSignatureProblem
-
-instance (HasSignature trs) => HasSignature (Problem CNarrowing trs) where
-  type SignatureId (Problem CNarrowing trs) = SignatureId trs
-  getSignature = getSignatureProblem
-
-
-
 -- ICap
 
 instance (Ord v, Unify t) => ICap t v (Narrowing, NarradarTRS t v) where icap (_,trs) = icap (Rewriting,trs)

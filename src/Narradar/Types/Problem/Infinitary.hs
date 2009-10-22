@@ -82,10 +82,6 @@ $(derive makeTraversable ''Infinitary)
 
 -- Data.Term instances
 
-instance (HasSignature (Problem base trs)) => HasSignature (Problem (Infinitary id base) trs) where
-  type SignatureId (Problem (Infinitary id base) trs) = SignatureId (Problem base trs)
-  getSignature = getSignature . baseProblem
-
 -- Output
 
 instance Pretty p => Pretty (Infinitary id p) where

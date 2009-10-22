@@ -74,12 +74,6 @@ $(derive makeTraversable ''Relative)
 
 -- Data.Term instances
 
-instance (IsDPProblem p, Ord (SignatureId trs), HasSignature trs, Monoid trs) =>
-    HasSignature (Problem (Relative trs p) trs)
-  where
-    type SignatureId (Problem (Relative trs p) trs) = SignatureId trs
-    getSignature (RelativeProblem r0 p) = getSignature (getR p `mappend` r0 `mappend` getP p)
-
 
 -- Output
 

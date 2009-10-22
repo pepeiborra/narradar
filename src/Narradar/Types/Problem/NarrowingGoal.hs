@@ -62,7 +62,7 @@ instance (Ord id, MkProblem p trs) => MkProblem (MkNarrowingGoal id p) trs where
 instance (Ord id, IsDPProblem p) => IsDPProblem (MkNarrowingGoal id p) where
   getP   (NarrowingGoalProblem _ _  p) = getP p
 
-instance (HasSignature (Problem p trs), id ~ SignatureId (Problem p trs), Ord id, MkDPProblem p trs) =>
+instance (HasSignature trs, id ~ SignatureId trs, Ord id, MkDPProblem p trs) =>
     MkDPProblem (MkNarrowingGoal id p) trs
  where
   mkDPProblem (NarrowingGoal g pi typ) = (narrowingGoalProblem g pi.) . mkDPProblem typ
@@ -87,10 +87,6 @@ $(derive makeFoldable    ''MkNarrowingGoal)
 $(derive makeTraversable ''MkNarrowingGoal)
 
 -- Data.Term instances
-
-instance (HasSignature (Problem base trs)) => HasSignature (Problem (MkNarrowingGoal id base) trs) where
-  type SignatureId (Problem (MkNarrowingGoal id base) trs) = SignatureId (Problem base trs)
-  getSignature = getSignature . baseProblem
 
 
 -- Output

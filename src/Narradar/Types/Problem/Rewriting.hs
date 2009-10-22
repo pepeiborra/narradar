@@ -110,13 +110,6 @@ instance Traversable (Problem IRewriting) where traverse f (IRewritingProblem r 
 
 -- Data.Term
 
-instance (HasSignature trs) => HasSignature (Problem Rewriting trs) where
-  type SignatureId (Problem Rewriting trs) = SignatureId trs
-  getSignature = getSignatureProblem
-
-instance (HasSignature trs) => HasSignature (Problem IRewriting trs) where
-  type SignatureId (Problem IRewriting trs) = SignatureId trs
-  getSignature = getSignatureProblem
 
 -- Output
 

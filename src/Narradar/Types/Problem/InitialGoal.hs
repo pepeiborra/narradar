@@ -159,10 +159,6 @@ instance Traversable (Problem p) => Traversable (Problem (InitialGoal id p)) whe
 
 -- Data.Term
 
-instance (HasSignature (Problem p trs)) => HasSignature (Problem (InitialGoal id p) trs) where
-  type SignatureId (Problem (InitialGoal id p) trs) = SignatureId (Problem p trs)
-  getSignature = getSignature . baseProblem
-
 -- Output
 
 instance Pretty p => Pretty (InitialGoal id p) where

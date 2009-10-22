@@ -238,6 +238,9 @@ instance (Ord v, GetFresh t v trs, Traversable (Problem typ)) => GetFresh t v (P
 
 instance (Ord v, GetVars v trs, Traversable (Problem typ)) => GetVars v (Problem typ trs) where getVars = foldMap getVars
 
+instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) where
+  type SignatureId (Problem typ trs) = SignatureId trs
+  getSignature p = getSignature (getR p) `mappend` getSignature (getP p)
 
 -- ------------------------------------
 -- Dealing with the pairs in a problem
