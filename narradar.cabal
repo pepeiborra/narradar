@@ -59,6 +59,7 @@ Library
      Narradar.Constraints.Unify,
      Narradar.Constraints.Modularity,
      Narradar.Constraints.VariableCondition,
+     Narradar.Constraints.RPO,
      Narradar.Constraints.SAT.Common,
      Narradar.Constraints.SAT.RPO,
      Narradar.Constraints.SAT.RPOAF,

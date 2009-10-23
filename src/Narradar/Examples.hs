@@ -7,6 +7,7 @@ import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Term
+import Narradar.Types.TRS
 import Narradar.Types.Var
 import Narradar.Utils
 
@@ -31,9 +32,7 @@ plus2 = [ x +: zero   :-> x
 plus3 = [ x +: zero   :-> x
          , x +: succ y :-> succ x +: y]
 
-peanoP = mkDPProblem Rewriting peanoRules peanoPairs
-  where peanoPairs = getPairs Rewriting peanoRules
-        peanoRules = mapTermSymbols IdFunction <$$> peano
+peanoP = mkNewProblem Rewriting peano
 
 -- --------------------------------------------------------
 -- Normalization of formulas with propositional connectives
@@ -81,11 +80,11 @@ minusquot = mapTermSymbols IdFunction <$$>
 
 minusquotPairs = getPairs Rewriting minusquot
 
-{-
-minusquotP  = mkProblem Rewriting minusquot minusquotPairs
-minusquotP1 = mkProblem Rewriting minusquot (take 1 minusquotPairs)
-minusquotP2 = mkProblem Rewriting minusquot [minusquotPairs !! 1]
--}
+
+minusquotP  = mkDPProblem Rewriting minusquot minusquotPairs
+minusquotP1 = mkDPProblem Rewriting minusquot (take 1 minusquotPairs)
+minusquotP2 = mkDPProblem Rewriting minusquot [minusquotPairs !! 1]
+
 -- -----
 -- large
 -- -----
@@ -109,6 +108,17 @@ large = minus ++
 nonterm1 = [term "f" [term "s" [x]] :-> term "f" [term "s" [x]]]
 nonterm2 = [term "f" [x] :-> term "f" [x]]
 
+
+-- --------------------------
+-- peano substraction and GEN
+-- --------------------------
+
+lessGen = mkDPProblem Rewriting (mkTRS rr) (mkTRS $ take 1 pp) where
+  rr = mapTermSymbols IdFunction <$$>
+       [succ (succ x) -: succ (succ y) :-> succ x -: succ y
+       ,gen :-> succ gen]
+  pp = getPairs Rewriting rr
+  gen = term "GEN" []
 
 -- -------
 -- lpairs

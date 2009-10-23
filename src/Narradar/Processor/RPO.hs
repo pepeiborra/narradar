@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -8,10 +9,14 @@
 module Narradar.Processor.RPO where
 
 import Control.Applicative
+import Control.Exception as CE (assert)
 import Control.Monad
 import Data.Foldable (Foldable)
+import Data.Typeable
 import Data.Traversable (Traversable)
 import Data.List ((\\), groupBy, sortBy, inits)
+import Data.Maybe (fromJust)
+import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 import Narradar.Framework.GraphViz
@@ -20,8 +25,10 @@ import Narradar.Types
 import Narradar.Types.Problem.NarrowingGen
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
+import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.SAT.Common
-import Narradar.Constraints.SAT.RPOAF (rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, Omega, inAF, isUsable, the_symbolR, filtering)
+import Narradar.Constraints.SAT.RPOAF (SymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, Omega, inAF, isUsable, the_symbolR, filtering, verifyRPOAF)
+import Narradar.Constraints.SAT.RPO   (verifyRPO)
 import qualified Narradar.Constraints.SAT.RPO as RPO
 import qualified Narradar.Constraints.SAT.RPOAF as RPOAF
 import Narradar.Utils
@@ -39,35 +46,44 @@ rpo = apply (RPOProc RPOSAF MiniSat)
 
 
 data RPOProc   = RPOProc Extension Solver
-data Extension = RPOSAF | LPOSAF | MPOAF  | LPOS | LPO | MPO
+data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
 data Solver    = Yices | MiniSat -- | Funsat
 
 instance (Traversable (Problem typ)
-         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
+         ,Ord id, Show id, Pretty id, DPSymbol id, Typeable id, Pretty (TermN id)
          ,Info info (RPOProof id)
          ,rpo  ~ RPOAF.Symbol id
          ,mpo  ~ RPOAF.MPOsymbol id
+         ,lpo  ~ RPOAF.LPOsymbol id
          ,lpos ~ RPOAF.LPOSsymbol id
+         ,res  ~ RPO.SymbolRes id
+         ,res' ~ RPOAF.SymbolRes id
          ,Omega typ (TermF rpo)
          ,Omega typ (TermF mpo)
+         ,Omega typ (TermF lpo)
          ,Omega typ (TermF lpos)
          ,NUsableRules rpo  (typ, NTRS rpo, NTRS rpo)
          ,NUsableRules mpo  (typ, NTRS mpo, NTRS mpo)
+         ,NUsableRules lpo  (typ, NTRS lpo, NTRS lpo)
          ,NUsableRules lpos (typ, NTRS lpos, NTRS lpos)
-         ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
-         ,HasSignature (NProblem typ rpo),  rpo  ~ SignatureId (NProblem typ rpo)
-         ,HasSignature (NProblem typ mpo),  mpo  ~ SignatureId (NProblem typ mpo)
-         ,HasSignature (NProblem typ lpos), lpos ~ SignatureId (NProblem typ lpos)
+         ,NUsableRules res  (typ, NTRS res,  NTRS res)
+         ,NUsableRules res' (typ, NTRS res', NTRS res')
          ,MkDPProblem typ (NTRS id)
          ,MkDPProblem typ (NTRS rpo)
          ,MkDPProblem typ (NTRS mpo)
+         ,MkDPProblem typ (NTRS lpo)
          ,MkDPProblem typ (NTRS lpos)
+         ,MkDPProblem typ (NTRS res)
+         ,MkDPProblem typ (NTRS res')
+         ,AF.ApplyAF (NProblem typ res')
          ) => Processor info RPOProc
                              (NProblem typ id)
                              (NProblem typ id)
    where
+
     apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpo  p)
     apply (RPOProc MPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS  Yices)  p = proc   p (Yices.solve $ RPO.lposDP p)
     apply (RPOProc LPO   Yices)  p = proc   p (Yices.solve $ RPO.lpoDP p)
@@ -75,51 +91,62 @@ instance (Traversable (Problem typ)
 
     apply (RPOProc RPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpo  p)
     apply (RPOProc MPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.mpo  p)
-    apply (RPOProc LPOS  MiniSat)  p = proc   p (MiniSat.solve $ RPO.lposDP p)
-    apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
-    apply (RPOProc MPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.mpoDP p)
+    apply (RPOProc LPOS   MiniSat) p = proc   p (MiniSat.solve $ RPO.lposDP p)
+    apply (RPOProc LPO    MiniSat) p = proc   p (MiniSat.solve $ RPO.lpoDP p)
+    apply (RPOProc MPO    MiniSat) p = proc   p (MiniSat.solve $ RPO.mpoDP p)
 
 instance (rpo  ~ RPOAF.Symbol id
          ,mpo  ~ RPOAF.MPOsymbol id
+         ,lpo  ~ RPOAF.LPOsymbol id
          ,lpos ~ RPOAF.LPOSsymbol id
-         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
+         ,sres ~ RPOAF.SymbolRes id
+         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id), Typeable id
          ,Info info (RPOProof id)
          ,IsDPProblem base, Pretty base, Traversable (Problem base)
          ,Omega (InitialGoal (TermF rpo) base) (TermF rpo)
          ,Omega (InitialGoal (TermF mpo) base) (TermF mpo)
          ,Omega (InitialGoal (TermF lpos) base) (TermF lpos)
+         ,Omega (InitialGoal (TermF lpo ) base) (TermF lpo )
          ,HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
          ,HasSignature (NProblem base rpo),  RPOAF.Symbol id ~ SignatureId (NProblem base rpo)
          ,HasSignature (NProblem  base mpo),  RPOAF.MPOsymbol id ~ SignatureId (NProblem base mpo)
+         ,HasSignature (NProblem  base lpo ), RPOAF.LPOsymbol id ~ SignatureId (NProblem base lpo )
          ,HasSignature (NProblem  base lpos), RPOAF.LPOSsymbol id ~ SignatureId (NProblem base lpos)
          ,NCap id   (base, NTRS id)
          ,NCap rpo  (base, NTRS rpo)
          ,NCap mpo  (base, NTRS mpo)
+         ,NCap lpo  (base, NTRS lpo)
          ,NCap lpos (base, NTRS lpos)
          ,NUsableRules id   (base, NTRS id,  NTRS id)
          ,NUsableRules rpo  (base, NTRS rpo, NTRS rpo)
          ,NUsableRules mpo  (base, NTRS mpo, NTRS mpo)
+         ,NUsableRules lpo  (base, NTRS lpo, NTRS lpo)
          ,NUsableRules lpos (base, NTRS lpos, NTRS lpos)
          ,MkDPProblem base (NTRS id)
          ,MkDPProblem base (NTRS rpo)
          ,MkDPProblem base (NTRS mpo)
+         ,MkDPProblem base (NTRS lpo)
          ,MkDPProblem base (NTRS lpos)
          ) => Processor info RPOProc
                              (NProblem (InitialGoal (TermF id) base) id)
                              (NProblem (InitialGoal (TermF id) base) id)
    where
-    apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc MPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_IGDP True RPOAF.mpo  p)
 
-    apply (RPOProc RPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc MPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_IGDP True RPOAF.mpo  p)
+    apply (RPOProc RPOSAF Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc LPOSAF Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.lpo  p)
+    apply (RPOProc MPOAF  Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.mpo  p)
+
+    apply (RPOProc RPOSAF MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc LPOSAF MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.lpo  p)
+    apply (RPOProc MPOAF  MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.mpo  p)
 
 
-{-
-instance (Ord id, Pretty id
+
+instance (Ord id, Pretty id, Show id, Typeable id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
                              (Problem IRewriting (NarradarTRS (TermF id) Var))
@@ -136,9 +163,8 @@ instance (Ord id, Pretty id
     apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpos p)
     apply (RPOProc MPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS  MiniSat)  p = proc   p (MiniSat.solve $ RPO.lposDP p)
-    apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
     apply (RPOProc MPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.mpoDP p)
--}
+    apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
 
 
 instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
@@ -161,6 +187,7 @@ instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
                         (Problem CNarrowing (NarradarTRS (TermF id) Var))
                         (Problem CNarrowing (NarradarTRS (TermF id) Var))
   where
+
     apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
     apply (RPOProc MPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.mpo  p)
@@ -183,15 +210,51 @@ instance ( Processor info RPOProc (Problem base trs) (Problem base trs)
 -- Implementations
 -- -----------------
 
+procAF :: (Monad m
+          ,sres  ~ SymbolRes id
+          ,Info info (NProblem typ id)
+          ,Info info (RPOProof id)
+          ,Pretty id, Ord id, Typeable id
+          ,HasSignature (NProblem typ sres), SignatureId (NProblem typ sres) ~ SymbolRes id
+          ,Traversable  (Problem typ)
+          ,MkDPProblem typ (NTRS sres)
+          ,MkDPProblem typ (NTRS id)
+          ,NUsableRules sres (typ, NTRS sres, NTRS sres)
+          ,AF.ApplyAF (NProblem typ sres)
+          )=> NProblem typ id -> (IO (Maybe ([Int], [SymbolRes id]))) -> Proof info m (NProblem typ id)
 procAF p m = case unsafePerformIO m of
                   Nothing -> dontKnow (rpoFail p) p
-                  Just (dps', symbols) ->
+                  Just (nondec_dps, symbols) ->
                       let proof = RPOAFProof decreasingDps usableRules symbols
-                          decreasingDps = select (rules dps) ([0..length (rules dps)] \\ dps')
+                          decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
-                          p'            = setP (restrictDPTRS dps dps') p
-                      in singleP proof p p'
+                          p'            = setP (restrictDPTRS dps nondec_dps) p
+#ifdef DEBUG
+                          verification  = verifyRPOAF p symbols nondec_dps
+                          isValidProof
+                            | isCorrect verification = True
+                            | otherwise = pprTrace (proof $+$ Ppr.empty $+$ verification) False
+#endif
+                      in
+#ifdef DEBUG 
+                         CE.assert isValidProof $
+#endif
+                         singleP proof p p'
+       where dps = getP p
+
+
+procAF_IG p m = case unsafePerformIO m of
+                  Nothing -> dontKnow (rpoFail p) p
+                  Just (nondec_dps, symbols) ->
+                      let proof = RPOAFProof decreasingDps usableRules symbols
+                          decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
+                          usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
+                          usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
+                          p'            = setP (restrictDPTRS dps nondec_dps) p
+
+                      in
+                         singleP proof p p'
        where dps = getP p
 
 -- For Narrowing we need to add the constraint that one of the dps is ground in the rhs
@@ -202,7 +265,7 @@ procNAF p m = case unsafePerformIO m of
                   Nothing -> dontKnow (rpoFail p) p
                   Just ((non_dec_dps, non_rhsground_dps), symbols) ->
                       let proof = RPOAFProof decreasingDps usableRules symbols
-                          decreasingDps = select (rules dps) ([0..length (rules dps)] \\ non_dec_dps)
+                          decreasingDps = select([0..length (rules dps) - 1] \\ non_dec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
                           p1            = setP (restrictDPTRS dps non_dec_dps) p
@@ -219,12 +282,20 @@ proc :: ( Pretty id
 -}
 proc p m = case unsafePerformIO m of
                   Nothing -> dontKnow (rpoFail p) p
-                  Just (dps', symbols) ->
-                      let proof = RPOProof decreasingDps [] symbols
-                          decreasingDps = select (rules dps) ([0..length (rules dps)] \\ dps')
-                          p'            = setP (restrictDPTRS dps dps') p
-                      in singleP proof p p'
-       where dps = getP p
+                  Just (nondec_dps, symbols) ->
+                      let proof         = RPOProof decreasingDps [] symbols
+                          dps           = getP p
+                          decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
+                          p'            = setP (restrictDPTRS dps nondec_dps) p
+                          verification  = verifyRPO p symbols nondec_dps
+                          isValidProof
+                            | isCorrect verification = True
+                            | otherwise = pprTrace (proof $+$ Ppr.empty $+$ verification) False
+                      in
+#ifdef DEBUG
+                         CE.assert isValidProof $
+#endif
+                         singleP proof p p'
 
 -- -------------
 -- RPO Proofs
