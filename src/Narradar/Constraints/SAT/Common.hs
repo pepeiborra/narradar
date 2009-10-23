@@ -110,6 +110,7 @@ isExcluded b = withSeenCache $ do
   (_ :!: ee) <- get
   return (b `Set.member` ee)
 
+assertMemo b = assert [b]
 assertMemo b = do
   include [b]
   assert [b]
@@ -224,6 +225,7 @@ infix 0 <<==>>
 (<<==>>) = (join.) . liftM2 (<==>)
 
 
+andMemo bb m = andM (m : map return bb)
 andMemo bb m = do
   abort <- P.or <$> mapM isExcluded bb
   if abort
@@ -231,6 +233,7 @@ andMemo bb m = do
      else do include bb
              andM(m : map return bb) <* remove bb
 
+andMemoNeg bb m = andM (m : map (return.not) bb)
 andMemoNeg bb m = do
   abort <- P.or <$> mapM isIncluded bb
   if abort
@@ -238,6 +241,7 @@ andMemoNeg bb m = do
      else do exclude bb
              andM(m : map (return.not) bb) <* remove bb
 
+withFalse _ _ m = m
 withFalse bb orelse m = do
   abort <- P.or <$> mapM isIncluded bb
   if abort
@@ -246,6 +250,7 @@ withFalse bb orelse m = do
           exclude bb
           m <* remove bb
 
+withTrue _ _ m = m
 withTrue bb orelse m = do
   abort <- P.or <$> mapM isExcluded bb
   if abort
@@ -253,6 +258,7 @@ withTrue bb orelse m = do
      else do include bb
              m <* remove bb
 
+(yyaa,nnaa) *!==> b = and (map not nnaa ++ yyaa) ==>> b
 (yyaa,nnaa) *!==> b
   | P.not (null(yyaa `intersect` nnaa)) = constant True
   | otherwise = do
