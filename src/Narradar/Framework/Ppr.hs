@@ -12,8 +12,8 @@ import Text.PrettyPrint.HughesPJClass
 
 import Data.Term.Rules ()
 import Data.Term.Ppr ()
+import Data.Strict(Pair(..), (:!:))
 import Language.Prolog.Syntax ()
-
 
 instance (Ix i, Ix j, Enum i, Enum j, Pretty a) => Pretty (Array (i,j) a) where
     pPrint a = vcat [ hsep [ pPrint (a ! (x,y))
@@ -28,6 +28,9 @@ instance (Ix i, Ix j, Enum i, Enum j) => Pretty (Array (i,j) String) where
                       | x <- [min_x .. max_x]]
      where
        ((min_x,min_y), (max_x,max_y)) = bounds a
+
+instance (Pretty a, Pretty b) => Pretty (Pair a b) where pPrint (a:!:b) = pPrint (a,b)
+
 
 (<+>) :: (Pretty a, Pretty b) => a -> b -> Doc
 a <+> b = pPrint a Ppr.<+> pPrint b

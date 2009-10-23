@@ -34,6 +34,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Sequence ((|>), singleton, viewl, viewr, ViewL(..), ViewR(..))
 import qualified Data.Sequence as Seq
+import Data.Strict (Pair(..), (:!:))
 import Data.Suitable
 import Data.Traversable
 import System.IO
@@ -330,3 +331,10 @@ instance (Monoid s) => R.RMonad (Writer s) where
    (>>=) = (>>=)
    fail = fail
 #endif
+-- -----------------------------
+-- Missing (:!:) Monoid instance
+-- -----------------------------
+
+instance (Monoid a, Monoid b) => Monoid (Pair a b) where
+  mempty = mempty :!: mempty
+  mappend (a :!: b) (a' :!: b') = mappend a a' :!: mappend b b'
