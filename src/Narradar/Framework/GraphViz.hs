@@ -89,10 +89,10 @@ instance (PprTPDBDot (Problem typ trs), ProblemColor (Problem typ trs)) =>
 
 instance DotRep PrologProblem where
   dot PrologProblem{..} = Text pgm [ Shape BoxShape
-                                     , Style (Stl Bold Nothing)
-                                     , FontName "monospace"
-                                     , FontSize 10
-                                     , Margin (PVal (PointD 0.2 0.2))]
+                                   , Style (Stl Bold Nothing)
+                                   , FontName "monospace"
+                                   , FontSize 10
+                                   , Margin (PVal (PointD 0.2 0.2))]
    where pgm = pPrint program $$
                vcat [text "%Query: " <+> (pPrint g) | g <- goals]
 
