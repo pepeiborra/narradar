@@ -50,9 +50,9 @@ instance (Pretty id, Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id
 
 -- Narrowing Goal
 instance (Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) => Dispatch (NProblem (NarrowingGoal (Identifier id)) (Identifier id)) where
-  dispatch = apply NarrowingGoalToInfinitary >=> dispatch
+  dispatch = apply (NarrowingGoalToInfinitary bestHeu) >=> dispatch
 instance (Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) => Dispatch (NProblem (CNarrowingGoal (Identifier id)) (Identifier id)) where
-  dispatch = apply NarrowingGoalToInfinitary >=> dispatch
+  dispatch = apply (NarrowingGoalToInfinitary bestHeu) >=> dispatch
 
 -- Infinitary
 instance (id  ~ Identifier a, Ord a, Lattice (AF_ id), Pretty id) =>

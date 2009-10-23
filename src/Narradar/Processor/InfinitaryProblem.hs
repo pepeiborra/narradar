@@ -9,6 +9,7 @@
 module Narradar.Processor.InfinitaryProblem where
 
 import Control.Applicative
+import Data.Foldable (Foldable)
 import Data.Traversable (Traversable)
 import qualified Data.Set as Set
 
@@ -25,10 +26,8 @@ import Narradar.Utils
 import Lattice
 
 
-
 data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu)
-data NarrowingGoalToInfinitary = NarrowingGoalToInfinitary
-
+data NarrowingGoalToInfinitary heu = NarrowingGoalToInfinitary (MkHeu heu)
 
 
 -- | This is the infinitary constructor rewriting AF processor described in
@@ -62,13 +61,21 @@ instance (t   ~ TermF id
 
 instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (MkNarrowingGoal id typ)
          , HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
+         , Lattice (AF_ id)
+         , PolyHeuristic heu id
+         , Foldable (Problem typ)
          , Info info NarrowingGoalToInfinitaryProof
          ) =>
-    Processor info NarrowingGoalToInfinitary
-                  (NProblem (MkNarrowingGoal id typ) id)
-                  (NProblem (Infinitary id typ) id)
+    Processor info (NarrowingGoalToInfinitary heu)
+                   (NProblem (MkNarrowingGoal id typ) id)
+                   (NProblem (Infinitary id typ) id)
    where
-    apply _ p@(getProblemType -> NarrowingGoal _ pi p0) = singleP NarrowingGoalToInfinitaryProof p $ mkDerivedProblem (Infinitary pi p0) p
+    applySearch (NarrowingGoalToInfinitary mk) p@(getProblemType -> NarrowingGoal _ pi p0) = do
+        pi' <- Set.toList $ invariantEV heu p pi
+        let p' = mkDerivedProblem (Infinitary pi' p0) p
+        return $ singleP NarrowingGoalToInfinitaryProof p p'
+     where
+      heu = mkHeu mk p
 
 -- -------------
 -- Proofs
