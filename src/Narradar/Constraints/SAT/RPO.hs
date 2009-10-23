@@ -214,7 +214,7 @@ instance Eq a => Extend (MPOSymbol a) where
     exeq _ _ = muleq
 
 
-lexgt, lexeq :: (SATOrd m a, Eq a) => [a] -> [a] -> m Boolean
+--lexgt, lexeq :: (SATOrd m a, Eq a) => [a] -> [a] -> m Boolean
 
 lexgt []     _      = constant False
 lexgt _      []     = constant True
@@ -225,7 +225,7 @@ lexeq []      []    = constant True
 lexeq (f:ff) (g:gg) = andM [ f ~~ g, lexeq ff gg]
 lexeq _      _      = constant False
 
-muleq, mulge, mulgt :: (SATOrd m a, Eq a) => [a] -> [a] -> m Boolean
+--muleq, mulge, mulgt :: (SATOrd m a, Eq a) => [a] -> [a] -> m Boolean
 
 mulge ff gg = mulgen (i, j) $ mulgeF ff gg
  where

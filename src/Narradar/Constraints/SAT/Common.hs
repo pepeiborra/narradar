@@ -29,7 +29,7 @@ import Data.Strict (Pair(..), (:!:))
 
 import Data.Term
 import qualified Satchmo.Boolean as Satchmo
-import Satchmo.Boolean(MonadSAT, Boolean(..), boolean, and, or, not, xor, constant, assert)
+import Satchmo.Boolean(MonadSAT, Boolean(..), boolean, not, xor, constant, assert)
 import Satchmo.Binary(Number(..), number, eq, gt)
 import Satchmo.Code
 import Satchmo.Data
@@ -42,7 +42,7 @@ import qualified Prelude as P
 
 class MonadSAT m => SATOrd m a | a -> m where
     (>), (~~), (>~) :: a -> a -> m Boolean
-    a >~ b = orM [a > b, a ~~ b]
+    a >~ b = Satchmo.or =<< sequence [a > b, a ~~ b]
 
 class Extend a where
     exgt, exeq :: (SATOrd (SAT id t) a', Eq a') => a -> a -> [a'] -> [a'] -> SAT id t Boolean
@@ -52,18 +52,23 @@ class Extend a where
 -- ---------------------
 data St  id t = St { symPrecCache :: Map (OrderConstraint id) Boolean
                    , termRPOcache :: Map (OrderConstraint t)  Boolean
-                   , seenCache    :: Trues :!: Falses}
+                   , seenCache    :: Trues :!: Falses
+                   , propCache    :: Map (Prop Boolean) Boolean}
 
 type Falses = Set Boolean
 type Trues  = Set Boolean
 
-emptySt = St Map.empty Map.empty mempty
+data Prop a = AND a a | OR a a | XOR a a | a :<->: a
+  deriving (Eq, Ord, Show)
+
+emptySt = St Map.empty Map.empty mempty mempty
 
 instance (Ord id, Ord t) => Monoid (St id t) where
-  mempty = St mempty mempty mempty
+  mempty = emptySt
   mappend st1 st2 = St{ symPrecCache = symPrecCache st1 `mappend` symPrecCache st2
                       , termRPOcache = termRPOcache st1 `mappend` termRPOcache st2
-                      , seenCache    = seenCache st1    `mappend` seenCache st2 }
+                      , seenCache    = seenCache st1    `mappend` seenCache st2
+                      , propCache    = propCache st1    `mappend` propCache st2}
 
 newtype SAT id t a = SAT {unSAT::StateT (St id t) Satchmo.SAT a}
     deriving (Functor, Monad, MonadSAT, MonadState (St id t), Applicative)
@@ -188,8 +193,37 @@ zip5 _ _ _ _ _ = []
 traceGt i1 i2 = pprTrace (pPrint i1 <+> text ">" <+> pPrint i2)
 
 notM x  = not <$> x
-orM  xx = or  =<< sequence xx
+
+orM  xx = or =<< sequence xx
+
+
+or []  = constant False
+or [x] = return x
+or (x:xx) = foldM or2 x xx
+
+or2 a b = do
+  st <- get
+  case Map.lookup (OR a b) (propCache st) of
+    Just b  -> return b
+    Nothing -> do
+            ab <- Satchmo.or [a,b]
+            put st{propCache = Map.insert (OR a b) ab (propCache st)}
+            return ab
+
 andM xx = and =<< sequence xx
+
+and []  = constant True
+and [x] = return x
+and (x:xx) = foldM and2 x xx
+
+and2 a b = do
+  st <- get
+  case Map.lookup (AND a b) (propCache st) of
+    Just b  -> return b
+    Nothing -> do
+            ab <- Satchmo.and [a,b]
+            put st{propCache = Map.insert (AND a b) ab (propCache st)}
+            return ab
 
 allM f  = andM . map f
 anyM f  = orM  . map f
