@@ -50,7 +50,7 @@ data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
 data Solver    = Yices | MiniSat -- | Funsat
 
 instance (Traversable (Problem typ)
-         ,Ord id, Show id, Pretty id, DPSymbol id, Typeable id, Pretty (TermN id)
+         ,Ord id, Show id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
          ,rpo  ~ RPOAF.Symbol id
          ,mpo  ~ RPOAF.MPOsymbol id
@@ -102,7 +102,7 @@ instance (rpo  ~ RPOAF.Symbol id
          ,lpo  ~ RPOAF.LPOsymbol id
          ,lpos ~ RPOAF.LPOSsymbol id
          ,sres ~ RPOAF.SymbolRes id
-         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id), Typeable id
+         ,Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
          ,IsDPProblem base, Pretty base, Traversable (Problem base)
          ,Omega (InitialGoal (TermF rpo) base) (TermF rpo)
@@ -146,7 +146,7 @@ instance (rpo  ~ RPOAF.Symbol id
 
 
 
-instance (Ord id, Pretty id, Show id, Typeable id
+instance (Ord id, Pretty id, Show id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
                              (Problem IRewriting (NarradarTRS (TermF id) Var))
@@ -214,7 +214,7 @@ procAF :: (Monad m
           ,sres  ~ SymbolRes id
           ,Info info (NProblem typ id)
           ,Info info (RPOProof id)
-          ,Pretty id, Ord id, Typeable id
+          ,Pretty id, Ord id
           ,HasSignature (NProblem typ sres), SignatureId (NProblem typ sres) ~ SymbolRes id
           ,Traversable  (Problem typ)
           ,MkDPProblem typ (NTRS sres)

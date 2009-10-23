@@ -696,7 +696,7 @@ verifyRPOAF :: forall typ trs t v a k.
           (Traversable (Problem typ)
           ,trs ~ NTRS (SymbolRes a)
           ,MkDPProblem typ trs
-          ,Ord a, Pretty a, Typeable a
+          ,Ord a, Pretty a
           ,AF.ApplyAF (Problem typ trs)
           ,HasSignature (Problem typ trs), SignatureId (Problem typ trs) ~ SymbolRes a
           ,NUsableRules (SymbolRes a) (typ, trs, trs)

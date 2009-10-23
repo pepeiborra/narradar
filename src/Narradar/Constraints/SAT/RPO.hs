@@ -332,7 +332,7 @@ check_lpo solver trs = do
 verifyRPO :: forall typ trs t v a k.
           (trs ~ NTRS (SymbolRes a)
           ,MkDPProblem typ trs
-          ,Ord a, Pretty a, Typeable a
+          ,Ord a, Pretty a
           ,HasSignature (Problem typ trs), SignatureId (Problem typ trs) ~ SymbolRes a
           ,NUsableRules (SymbolRes a) (typ, trs, trs)
           ) => Problem typ (NTRS a) -> [SymbolRes a] -> [Int] -> VerifyRPOAF (RuleN (SymbolRes a))
