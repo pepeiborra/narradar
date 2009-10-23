@@ -33,7 +33,7 @@ type DP a = RuleN (Identifier a)
 -- -----------------------
 -- Concrete DP Identifiers
 -- -----------------------
-data Identifier a = IdFunction a | IdDP a | AnyIdentifier deriving (Ord)
+data Identifier a = IdFunction a | IdDP a | AnyIdentifier deriving (Ord, Typeable)
 instance Eq a => Eq (Identifier a) where
     IdFunction f1 == IdFunction f2 = f1 == f2
     IdDP f1       == IdDP f2       = f1 == f2
