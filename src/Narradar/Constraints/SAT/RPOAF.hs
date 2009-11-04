@@ -488,37 +488,81 @@ lexpgt id_f id_g ss tt = exgt_k (transpose $ enc_f) (transpose $ enc_g)
 -- Multiset extension with AF
 -- ---------------------------
 
+-- We avoid memoizing constraints derived from multiset extensions,
+-- There is nothing to win since the involved gammas and epsilons are fresh for
+-- every multiset comparison and do not carry over to the rest of the problem
+
+mulgt id_f id_g [] _ = constant False
 mulgt id_f id_g ff gg =
     mulgen id_f id_g ff gg (\epsilons ->
-                                notM $ andM [inAF i id_f ==> return ep_i
-                                             | (i, ep_i) <- zip [1..] epsilons])
-
+                                notM $ andM [inAF i id_f ^==> return ep_i
+                                              | (i, ep_i) <- zip [1..] epsilons])
+muleq id_f id_g [] [] = constant True
 muleq id_f id_g ff gg = do
     mulgen id_f id_g ff gg (\epsilons ->
-                                andM [inAF i id_f ==> return ep_i
+                                andM_ [inAF i id_f ^==> return ep_i
                                       | (i, ep_i) <- zip [1..] epsilons])
 
+{-
+mulgen id_f id_g ff gg k = do
+    let (i,j) = (length ff, length gg)
+    epsilons <- replicateM i boolean
+    gammasM  <- replicateM i (replicateM j boolean)
+
+    andM_(k epsilons :
+          [ inAF j id_g ^==> oneM gammas_j
+            | (j, gammas_j) <- zip [1..] (transpose gammasM) ] ++
+          [ not(inAF i id_f) ^==> and_ (not <$> gammas_i)
+            | (i, gammas_i) <- zip [1..] gammasM] ++
+          [ not(inAF j id_g) ^==> and_ (not <$> gammas_j)
+            | (j, gammas_j) <- zip [1..] (transpose gammasM)] ++
+          [ ep_i ^==> oneM gamma_i
+                | (ep_i, gamma_i) <- zip epsilons  gammasM] ++
+          [ gamma_ij ^==>
+                  ifM_' ep_i (f_i ~~ g_j)
+                             (f_i > g_j)
+                  | (ep_i, gamma_i, f_i) <- zip3 epsilons gammasM ff
+                  , (gamma_ij, g_j)      <- zip  gamma_i gg]
+         )
+-}
 
 mulgen id_f id_g ff gg k = do
     let (i,j) = (length ff, length gg)
     epsilons <- replicateM i boolean
     gammasM  <- replicateM j (replicateM i boolean)
 
-    andM [andM [ inAF j id_g ==> oneM gammas_j
-                | (j, gammas_j) <- zip [1..] gammasM ]
-         ,andM [ not(inAF i id_f) ==> and (not <$> gammas_i)
-                | (i, gammas_i) <- zip [1..] (transpose gammasM)]
-         ,andM [ not(inAF j id_g) ==> and (not <$> gammas_j)
-                | (j, gammas_j) <- zip [1..] gammasM]
-         ,andM [ ep_i ==> oneM gamma_i
-                     | (ep_i, gamma_i) <- zip epsilons (transpose gammasM)]
-         ,k epsilons
-         , andM [ gamma_ij ==>
-                  ifM' ep_i (withTrue [inAF i id_f, inAF j id_g] False (f_i ~~ g_j))
-                            (withTrue [inAF i id_f, inAF j id_g] False (f_i > g_j))
-                  | (i, ep_i, gamma_i, f_i) <- zip4 [1..] epsilons (transpose gammasM) ff
-                  , (j, gamma_ij, g_j)      <- zip3 [1..] gamma_i gg]
-         ]
+    let gammasM_t = transpose gammasM
+
+        oneCoverForNonFilteredSubterm =
+          [ inAF j id_g ^==> oneM gammas_j
+            | (j, gammas_j) <- zip [1..] gammasM ]
+
+        filteredSubtermsCannotCover =
+          [ not(inAF i id_f) ^==> and_ (not <$> gammas_i)
+            | (i, gammas_i) <- zip [1..] gammasM_t]
+
+        noCoverForFilteredSubterms =
+          [ not(inAF j id_g) ^==> and_ (not <$> gammas_j)
+            | (j, gammas_j) <- zip [1..] gammasM]
+
+        subtermUsedForEqualityCanOnlyCoverOnce =
+          [ ep_i ^==> oneM gamma_i
+            | (ep_i, gamma_i) <- zip epsilons gammasM_t]
+
+        greaterOrEqualMultisetExtension =
+          [ gamma_ij ^==>
+                 (ifM_' ep_i (f_i ~~ g_j)
+                             (f_i >  g_j))
+                  | (ep_i, gamma_i, f_i) <- zip3 epsilons gammasM_t ff
+                  , (gamma_ij, g_j)      <- zip  gamma_i gg]
+
+    andM_ (  k epsilons
+          :  oneCoverForNonFilteredSubterm
+          ++ filteredSubtermsCannotCover
+          ++ noCoverForFilteredSubterms
+          ++ subtermUsedForEqualityCanOnlyCoverOnce
+          ++ greaterOrEqualMultisetExtension
+          )
 
 
 -- ------------------------
