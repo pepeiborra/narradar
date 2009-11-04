@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.Types.Problem.NarrowingGen where
@@ -22,6 +23,7 @@ import Data.List (nub)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Maybe
 import Data.Monoid
+import Data.Typeable
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Text.XHtml (theclass)
@@ -49,7 +51,7 @@ import Prelude hiding (pi)
 -- Terms with Gen and Goal
 -- -----------------------
 
-data GenId id = AnId id | GenId | GoalId deriving (Eq, Ord, Show)
+data GenId id = AnId id | GenId | GoalId deriving (Eq, Ord, Show, Typeable)
 
 instance Pretty id => Pretty (GenId id) where
   pPrint GenId  = text "GEN"

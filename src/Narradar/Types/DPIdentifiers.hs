@@ -6,6 +6,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 
@@ -19,6 +20,7 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable (Foldable(..))
 import Data.Traversable (Traversable(..))
+import Data.Typeable
 import Prelude
 
 import Narradar.Types.Term

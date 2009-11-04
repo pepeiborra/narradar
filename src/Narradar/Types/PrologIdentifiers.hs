@@ -5,7 +5,9 @@
 {-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
+
 
 module Narradar.Types.PrologIdentifiers where
 
@@ -20,6 +22,7 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Maybe
 import Data.Monoid
+import Data.Typeable
 
 import Narradar.Types.DPIdentifiers
 import Narradar.Framework.Ppr
@@ -27,7 +30,7 @@ import Narradar.Framework.Ppr
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
-data PrologId a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord)
+data PrologId a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord,Typeable)
 
 class Ord (WithoutPrologId id) => RemovePrologId id where
   type WithoutPrologId id :: *
