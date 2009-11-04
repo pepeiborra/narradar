@@ -40,6 +40,7 @@ import Satchmo.Boolean(MonadSAT, Boolean(..), boolean, not, constant, assert, as
 import Satchmo.Binary(Number(..), number, eq, gt)
 import Satchmo.Code
 import Satchmo.Data
+import qualified Satchmo.SAT.Weighted as Satchmo
 import Narradar.Utils
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO (Status(..), mkStatus, HasPrecedence(..), HasStatus(..))
@@ -76,11 +77,10 @@ instance (Ord id, Ord t) => Monoid (St id t) where
                       , andCache     = andCache     st1 `mappend` andCache st2
                       , eqCache      = eqCache      st1 `mappend` eqCache st2}
 
-newtype SAT id t a = SAT {unSAT::StateT (St id t) Satchmo.SAT a}
+newtype SAT id t a = SAT {unSAT::StateT (St id t) SatchmoSAT a}
     deriving (Functor, Monad, MonadSAT, MonadState (St id t), Applicative)
 
-runSAT :: Pretty t => SAT id t a -> Satchmo.SAT a
-runSAT = (`evalStateT` emptySt) . unSAT
+type SatchmoSAT = Satchmo.SAT
 
 #ifdef DEBUG
 runSAT (SAT m) = do

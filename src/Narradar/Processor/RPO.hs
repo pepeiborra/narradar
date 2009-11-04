@@ -35,7 +35,7 @@ import Narradar.Utils
 import System.IO.Unsafe
 
 import qualified Satchmo.Solver.Yices as Yices
-import qualified Satchmo.Solver.Minisat as MiniSat
+-- import qualified Satchmo.Solver.Minisat as MiniSat
 
 -- -------------------
 -- RPO SAT Processor
@@ -45,9 +45,11 @@ rpo :: (MonadPlus mp, Info info i, Info info o, Processor info RPOProc i o) =>
 rpo = apply (RPOProc RPOSAF MiniSat)
 
 
+runS Yices = Yices.solveW 20
+
 data RPOProc   = RPOProc Extension Solver
 data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
-data Solver    = Yices | MiniSat -- | Funsat
+data Solver    = Yices | MiniSat -- | FunSat
 
 instance (Traversable (Problem typ)
          ,Ord id, Show id, Pretty id, DPSymbol id, Pretty (TermN id)
@@ -81,21 +83,13 @@ instance (Traversable (Problem typ)
                              (NProblem typ id)
    where
 
-    apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpo  p)
-    apply (RPOProc MPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.mpo  p)
-    apply (RPOProc LPOS  Yices)  p = proc   p (Yices.solve $ RPO.lposDP p)
-    apply (RPOProc LPO   Yices)  p = proc   p (Yices.solve $ RPO.lpoDP p)
-    apply (RPOProc MPO   Yices)  p = proc   p (Yices.solve $ RPO.mpoDP p)
-
-    apply (RPOProc RPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpo  p)
-    apply (RPOProc MPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.mpo  p)
-    apply (RPOProc LPOS   MiniSat) p = proc   p (MiniSat.solve $ RPO.lposDP p)
-    apply (RPOProc LPO    MiniSat) p = proc   p (MiniSat.solve $ RPO.lpoDP p)
-    apply (RPOProc MPO    MiniSat) p = proc   p (MiniSat.solve $ RPO.mpoDP p)
+    apply (RPOProc RPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.rpos p)
+    apply (RPOProc LPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpo  p)
+    apply (RPOProc MPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.mpo  p)
+    apply (RPOProc LPOS   s)  p = proc   p (runS s $ RPO.lposDP p)
+    apply (RPOProc LPO    s)  p = proc   p (runS s $ RPO.lpoDP p)
+    apply (RPOProc MPO    s)  p = proc   p (runS s $ RPO.mpoDP p)
 
 instance (rpo  ~ RPOAF.Symbol id
          ,mpo  ~ RPOAF.MPOsymbol id
@@ -134,17 +128,10 @@ instance (rpo  ~ RPOAF.Symbol id
                              (NProblem (InitialGoal (TermF id) base) id)
    where
 
-    apply (RPOProc RPOSAF Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOAF  Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.lpo  p)
-    apply (RPOProc MPOAF  Yices) p = procAF_IG p (Yices.solve $ rpoAF_IGDP True RPOAF.mpo  p)
-
-    apply (RPOProc RPOSAF MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOAF  MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.lpo  p)
-    apply (RPOProc MPOAF  MiniSat) p = procAF_IG p (MiniSat.solve $ rpoAF_IGDP True RPOAF.mpo  p)
-
-
+    apply (RPOProc RPOSAF s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc LPOSAF s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.lpo  p)
+    apply (RPOProc MPOAF  s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.mpo  p)
 
 instance (Ord id, Pretty id, Show id
          ,Info info (RPOProof id)
@@ -152,20 +139,13 @@ instance (Ord id, Pretty id, Show id
                              (Problem IRewriting (NarradarTRS (TermF id) Var))
                              (Problem IRewriting  (NarradarTRS (TermF id) Var))
    where
-    apply (RPOProc RPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc MPOAF  Yices) p = procAF p (Yices.solve $ rpoAF_DP True RPOAF.mpo  p)
-    apply (RPOProc LPOS  Yices)  p = proc   p (Yices.solve $ RPO.lposDP p)
-    apply (RPOProc LPO   Yices)  p = proc   p (Yices.solve $ RPO.lpoDP p)
-    apply (RPOProc MPO   Yices)  p = proc   p (Yices.solve $ RPO.mpoDP p)
-
-    apply (RPOProc RPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc LPOSAF MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc MPOAF  MiniSat) p = procAF p (MiniSat.solve $ rpoAF_DP True RPOAF.mpo  p)
-    apply (RPOProc LPOS  MiniSat)  p = proc   p (MiniSat.solve $ RPO.lposDP p)
-    apply (RPOProc MPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.mpoDP p)
-    apply (RPOProc LPO   MiniSat)  p = proc   p (MiniSat.solve $ RPO.lpoDP p)
-
+    apply (RPOProc RPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.rpos p)
+    apply (RPOProc LPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpos p)
+    apply (RPOProc LPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpo p)
+    apply (RPOProc MPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.mpo  p)
+    apply (RPOProc LPOS  s)  p = proc   p (runS s $ RPO.lposDP p)
+    apply (RPOProc LPO   s)  p = proc   p (runS s $ RPO.lpoDP p)
+    apply (RPOProc MPO   s)  p = proc   p (runS s $ RPO.mpoDP p)
 
 instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
@@ -173,13 +153,9 @@ instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
                              (NProblem Narrowing id)
                              (NProblem Narrowing id)
   where
-    apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc MPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.mpo  p)
-
-    apply (RPOProc RPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc LPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc MPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.mpo  p)
+    apply (RPOProc RPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpos p)
+    apply (RPOProc LPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.lpos p)
+    apply (RPOProc MPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.mpo  p)
 
 instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
@@ -188,13 +164,9 @@ instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
                         (Problem CNarrowing (NarradarTRS (TermF id) Var))
   where
 
-    apply (RPOProc RPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc LPOSAF Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc MPOAF  Yices) p = procNAF p (Yices.solve $ rpoAF_NDP False RPOAF.mpo  p)
-
-    apply (RPOProc RPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc LPOSAF MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc MPOAF  MiniSat) p = procNAF p (MiniSat.solve $ rpoAF_NDP False RPOAF.mpo  p)
+    apply (RPOProc RPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpos p)
+    apply (RPOProc LPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.lpos p)
+    apply (RPOProc MPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.mpo  p)
 
 -- Liftings
 
@@ -351,9 +323,9 @@ instance (Ord id, Pretty id) => Pretty (RPOProof id) where
     pPrint RPOFail = text "RPO Reduction Pair : failed to synthetize a suitable ordering"
 
 
-printPrec f symb    = hsep
+printPrec f symb    = fsep
                     . punctuate (text " >")
-                    . fmap ( hsep
+                    . fmap ( fsep
                            . punctuate (text (" ="))
                            . fmap (pPrint . symb))
                     . groupBy ((==) `on` f)

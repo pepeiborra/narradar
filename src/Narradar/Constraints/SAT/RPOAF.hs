@@ -70,8 +70,10 @@ rpoAF_DP' allowCol con p
 
   assertAll [omega p']
   assertAll [ l >~ r | l:->r <- rules dps']
-  assertAll [(l > r) <<==>> return dec | (l:->r, dec) <- zip (rules dps') decreasing_dps]
-  assertAll [or decreasing_dps]
+--  assertAll [ l > r  | (l:->r, dec) <- zip (rules dps') decreasing_dps]
+  assertAll [(l > r) <=^=> return dec | (l:->r, dec) <- zip (rules dps') decreasing_dps]
+  assertAll [and decreasing_dps]
+  sequence_ [ assertW 1 [b] | b <- decreasing_dps]
 
   return $ do
     decreasing <- decode decreasing_dps
@@ -92,7 +94,7 @@ rpoAF_IGDP :: (Ord id, Ord sid, Pretty sid, AFSymbol sid, UsableSymbol sid, Exte
               ,DPSymbol id, Pretty id
               ) => Bool -> (Int -> (id,Int) -> SAT id (TermN (symbol id)) (symbol id))
                 -> NProblem (InitialGoal (TermF id) base) id
-                -> Satchmo.SAT (Decoder ([Int],[SymbolRes id]))
+                -> SatchmoSAT (Decoder ([Int],[SymbolRes id]))
 
 rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   | _ <- isTheRightKind (getProblemType p)
@@ -107,7 +109,10 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
                          (getProblemType baseProblem)
       p'   = mkDPProblem typ' trs' dps'
   decreasing_dps    <- replicateM (length $ rules dps') boolean
+
   assert decreasing_dps
+  sequence_ [ assertW 1 [b] | b <- decreasing_dps]
+
   assertAll (omega  p' :
              [ l >~ r | l:->r <- rules dps'] ++
              [(l > r) <=^=> return v | (l:->r, v) <- zip (rules dps') decreasing_dps]
@@ -144,7 +149,7 @@ rpoAF_NDP allowCol con p
     return ([ r | (r,False) <- zip [0..] decreasing]
            ,[ r | (r,False) <- zip [0..] af_ground])
 
-runRPOAF con allowCol sig f = runSAT' $ do
+runRPOAF con allowCol sig f = runSAT $ do
   let ids  = getArities sig
       bits = calcBitWidth $ Map.size ids
 
