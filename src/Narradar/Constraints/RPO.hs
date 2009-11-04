@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Narradar.Constraints.RPO where
 
@@ -50,6 +51,7 @@ symbolRPO = RPO{..} where
    | otherwise = return (s == t)
 
   s > t
+   | s == t = return False
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
    , Just id_s <- rootSymbol s, tt_s <- directSubterms s
    = anyM (>~ t) tt_s <|>
@@ -77,11 +79,12 @@ symbolRPO = RPO{..} where
 
   removeFiltered = fmap ( filter (/= (-1)))
 
-  lexD (>) (~~) _      []     = return True
   lexD (>) (~~) []     _      = return False
+  lexD (>) (~~) _      []     = return True
   lexD (>) (~~) (f:ff) (g:gg) =    (f > g)
                                 <|> (f ~~ g <&> lexD (>) (~~) ff gg)
 
+  lexeqD (~~) []     []     = return True
   lexeqD (~~) _      []     = return False
   lexeqD (~~) []     _      = return False
   lexeqD (~~) (f:ff) (g:gg) = (f ~~ g <&> lexeqD (~~) ff gg)
