@@ -107,11 +107,12 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
                          (getProblemType baseProblem)
       p'   = mkDPProblem typ' trs' dps'
   decreasing_dps    <- replicateM (length $ rules dps') boolean
+  assert decreasing_dps
   assertAll (omega  p' :
-             or decreasing_dps :
              [ l >~ r | l:->r <- rules dps'] ++
-             [(l > r) <<==>> return v | (l:->r, v) <- zip (rules dps') decreasing_dps]
+             [(l > r) <=^=> return v | (l:->r, v) <- zip (rules dps') decreasing_dps]
             )
+
   return $ do
     decreasing <- decode decreasing_dps
     return [ r | (r,False) <- zip [0..] decreasing]
@@ -129,12 +130,12 @@ rpoAF_NDP allowCol con p
   decreasing_dps    <- replicateM (length $ rules dps') boolean
   af_ground_rhs_dps <- replicateM (length $ rules dps') boolean
 
-  assertAll (or decreasing_dps :
-             or af_ground_rhs_dps :
+  assertAll (or_ decreasing_dps :
+             or_ af_ground_rhs_dps :
              omega  p' :
              [ l >~ r | l:->r <- rules dps'] ++
-             [(l > r)       <<==>> return v | (l:->r, v) <- zip (rules dps') decreasing_dps] ++
-             [afGroundRHS r <<==>> return v | (r, v)     <- zip (rules dps') af_ground_rhs_dps]
+             [(l > r)       <=^=> return v | (l:->r, v) <- zip (rules dps') decreasing_dps] ++
+             [afGroundRHS r <=^=> return v | (r, v)     <- zip (rules dps') af_ground_rhs_dps]
             )
 
   return $ do
@@ -149,7 +150,7 @@ runRPOAF con allowCol sig f = runSAT' $ do
 
   symbols <- mapM (con bits) (Map.toList ids)
   if allowCol
-    then assertAll [[listAF s] !==> oneM [inAF i s | i <- [1..a]]
+    then assertAll [[listAF s] ^!==> oneM [inAF i s | i <- [1..a]]
                     | (s,a) <- zip symbols (Map.elems ids)]
     else mapM_ (assertMemo . listAF) symbols
 
@@ -285,12 +286,12 @@ instance Ord a => SATOrd (SAT a t) (Symbol a) where
 instance Ord a => Extend (Symbol a) where
   exeq s t ss tt =
       orM [andM [return (encodeUseMset s), return (encodeUseMset t), muleq s t ss tt]
-          ,andM [return (not$ encodeUseMset s), return (not$ encodeUseMset t),
-                       lexpeq s t ss tt]
+           ,andM [return (not$ encodeUseMset s), return (not$ encodeUseMset t),
+                        lexpeq s t ss tt]
           ]
   exgt s t ss tt =
-      orM [andM [and[encodeUseMset s, encodeUseMset t], mulgt s t ss tt]
-          ,andM [notM$ or[encodeUseMset s, encodeUseMset t],
+      orM [andM [return (encodeUseMset s), return(encodeUseMset t), mulgt s t ss tt]
+           ,andM [return (not$ encodeUseMset s), return (not$ encodeUseMset t),
                        lexpgt s t ss tt]
           ]
 
@@ -357,9 +358,8 @@ instance ( id ~ TermId f
    | s == t = constant False
    | Just id_t <- rootSymbol t, tt_t <- directSubterms t
    , Just id_s <- rootSymbol s, tt_s <- directSubterms s
---   = memoTerm (s:>t) $ orM [cond1 id_s id_t tt_s tt_t,  cond2 id_s tt_s]
    = memoTerm (s:>t) $
-     orM [cond2 id_s tt_s]
+     orM [cond1 id_s id_t tt_s tt_t,  cond2 id_s tt_s]
 
    | Just id_s <- rootSymbol s, tt_s <- directSubterms s
    = memoTerm (s:>t) $
@@ -369,15 +369,6 @@ instance ( id ~ TermId f
 
      where
        cond1 id_s id_t tt_s tt_t
-
-         | id_s == id_t
-         = andM[ allM (\(t_j, j) -> [inAF j id_t] *==> s > t_j)
-                      (zip tt_t [1..])
-               , [listAF id_t] *==> andMemo [listAF id_s]
-                                            (exgt id_s id_t tt_s tt_t)
-               ]
-
-         | otherwise
          = andM[ allM (\(t_j, j) -> [inAF j id_t] *==> s > t_j)
                       (zip tt_t [1..])
                , [listAF id_t] *==> andMemo [listAF id_s]
@@ -399,27 +390,25 @@ instance ( id ~ TermId f
  Pure s ~~ Pure t = constant(s == t)
  s ~~ t
    | s == t  = constant True
-   | isVar s = -- memoTerm (s :~~ t) $
+   | isVar s = memoTerm (s :~~ t) $
                andMemoNeg [listAF id_t] $
                            allM (\(t_j,j) -> [inAF j id_t] *==>
-                         --                    withFalse [inAF j' id_t | j' <- [1..length tt], j' /= j] False
                                              (s ~~ t_j)
                                 )
                                 (zip tt [1..])
-   | isVar t = -- memoTerm (s :~~ t) $
+   | isVar t = memoTerm (s :~~ t) $
                andMemoNeg [listAF id_s] $
                           allM (\(s_i,i) -> [inAF i id_s] *==>
-                           --                  withFalse [inAF i' id_s | i' <- [1..length ss], i' /= i] False
                                             (s_i ~~ t)
                                ) (zip ss [1..])
    | id_s == id_t
-   = -- memoTerm (s :~~ t) $
+   = memoTerm (s :~~ t) $
      andM[ [listAF id_s]   !==> allM (\(s_i,i) -> [inAF i id_s] *==> s_i ~~ t) (zip ss [1..])
          , [listAF id_s]   *==> andM[ id_s ~~ id_t, exeq id_s id_t ss tt]
          ]
 
    | otherwise
-   = -- memoTerm (s :~~ t) $
+   = memoTerm (s :~~ t) $
      andM[ [listAF id_s]                  !==> allM (\(s_i,i) -> [inAF i id_s] *==> s_i ~~ t) (zip ss [1..])
          , ([listAF id_s],[listAF id_t]) *!==> allM (\(t_j,j) -> [inAF j id_t] *==> t_j ~~ s) (zip tt [1..])
          , [listAF id_s,listAF id_t]      *==> andM[ id_s ~~ id_t, exeq id_s id_t ss tt]
@@ -444,6 +433,7 @@ afGroundRHS (_ :-> t) = andM [ or [ not(inAF i f)
 -- -----------------------------------
 
 lexgt id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
+  go []     []     = constant False
   go []     _      = constant False
   go _      []     = constant True
   go ((f,i):ff) ((g,j):gg)
@@ -471,7 +461,7 @@ lexpeq id_f id_g ss tt =
               , (f_ik, g_jk) <- zip f_i g_j]]
     where
        (ff,gg) = (encodePerm id_f, encodePerm id_g)
-       eqArity = andM (take m $ zipWith (<<==>>) (map or (transpose ff) ++ repeat (constant False))
+       eqArity = andM (take m $ zipWith (<==>) (map or (transpose ff) ++ repeat (constant False))
                                                  (map or (transpose gg) ++ repeat (constant False))
                       )
        m   = max (length ff) (length gg)
@@ -549,10 +539,10 @@ instance (p  ~ Problem typ
          ) => Omega typ t
  where
 
-  omega p = andM [andM [go r trs | _:->r <- dps]
-                 ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
+  omega p = andM_ [andM_ [go r trs | _:->r <- dps]
+                 ,andM_ [ usable f ^==>> andM [ l >~ r | l:->r <- rulesFor f trs]
                               | f <- Set.toList dd ]
-                 ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                 ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                  ]
 
    where
@@ -564,12 +554,12 @@ instance (p  ~ Problem typ
 
     go t trs
       | id_t `Set.notMember` dd
-      = andM [ [inAF i id_t] *==> go t_i trs
+      = andM_ [ [inAF i id_t] ^*==> go t_i trs
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
-      = andM [ usable id_t
-             , andM [ go r rest | _:->r <- rls ]
-             , andM [ [inAF i id_t] *==> go t_i rest
+      = andM_ [ usable id_t
+             , andM_ [ go r rest | _:->r <- rls ]
+             , andM_ [ [inAF i id_t] *==> go t_i rest
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where
@@ -592,11 +582,11 @@ instance (p   ~ Problem (InitialGoal t typ)
  where
 
   omega p = pprTrace (text "dd = " <> pPrint dd) $
-             andM [andM [go l r trs | l:->r <- dps ++ reachablePairs p]
-                  ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
-                              | f <- Set.toList dd ]
-           ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
-                  ]
+             andM_ [andM_ [go l r trs | l:->r <- dps ++ reachablePairs p]
+                   ,andM_ [ usable f ^==>> andM_ [ l >~ r | l:->r <- rulesFor f trs]
+                               | f <- Set.toList dd ]
+                   ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                   ]
 
    where
     (trs,dps) = (rules $ getR p, rules $ getP p)
@@ -606,23 +596,23 @@ instance (p   ~ Problem (InitialGoal t typ)
 
     go l (Pure x) _ =
       -- If there is an extra variable, everything is usable ! (short of calling the police)
-        everyM poss (\p ->
+        everyM_ poss (\p ->
                       or [ not(inAF i f)
                           | n <- [0..length p - 1], let (pre, i:_) = splitAt n p
                           , let f = fromMaybe (error "omega: fromJust") (rootSymbol (l!pre))])
-         ==>> andM(map usable $ toList $ getDefinedSymbols (getR p))
+         ==>> andM_(map usable $ toList $ getDefinedSymbols (getR p))
 
      where
       poss = occurrences (Pure x) l
 
     go l t trs
       | id_t `Set.notMember` dd
-      = andM [ [inAF i id_t] *==> go l t_i trs
+      = andM_ [ [inAF i id_t] ^*==> go l t_i trs
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
-      = andM [ usable id_t
-             , andM [ go l r rest | l:->r <- rls ]
-             , andM [ [inAF i id_t] *==> go l t_i rest
+      = andM_ [ usable id_t
+             , andM_ [ go l r rest | l:->r <- rls ]
+             , andM_ [ [inAF i id_t] ^*==> go l t_i rest
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where
@@ -647,10 +637,10 @@ instance (p   ~ Problem typ
          ) => Omega (InitialGoal t (MkNarrowingGen base)) t
  where
 
-  omega p = andM [andM [go l r trs | l:->r <- reachablePairs p]
-                 ,andM [ usable f ==>> andM [ l >~ r | l:->r <- rulesFor f trs]
+  omega p = andM_ [andM_ [go l r trs | l:->r <- reachablePairs p]
+                 ,andM_ [ usable f ^==>> andM_ [ l >~ r | l:->r <- rulesFor f trs]
                               | f <- Set.toList dd ]
-                 ,andM [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                 ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                   ]
 
    where
@@ -661,8 +651,8 @@ instance (p   ~ Problem typ
                                   , gen == genSymbol]
 
     go l (Pure x) _ =
-        everyM poss (\p ->
-                           or [ not(inAF i f)
+        everyM_ poss (\p ->
+                           or_ [ not(inAF i f)
                                  | n <- [0..length p - 1], let (pre, i:_) = splitAt n p
                                  , let f = fromMaybe (error "omega: fromJust") (rootSymbol (l!pre))])
         ==>>  genUsable
@@ -671,12 +661,12 @@ instance (p   ~ Problem typ
 
     go l t trs
       | id_t `Set.notMember` dd
-      = andM [ [inAF i id_t] *==> go l t_i trs
-               | (i, t_i) <- zip [1..] tt ]
+      = andM_ [ [inAF i id_t] ^*==> go l t_i trs
+                 | (i, t_i) <- zip [1..] tt ]
       | otherwise
-      = andM [ usable id_t
-             , andM [ go l r rest | l:->r <- rls ]
-             , andM [ [inAF i id_t] *==> go l t_i rest
+      = andM_ [ usable id_t
+             , andM_ [ go l r rest | l:->r <- rls ]
+             , andM_ [ [inAF i id_t] ^*==> go l t_i rest
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where
@@ -733,7 +723,7 @@ verifyRPOAF p0 symbols nondec_pairs = runIdentity $ do
   the_usableRules      = Set.fromList [ l:->r | l:->r <- rules(getR p), let Just id = rootSymbol l, isUsable id]
   expected_usableRules = Set.fromList
                          [ rule
-                          | let ur_af = Set.fromList(rules $ getR $ iUsableRules (AF.apply the_af p) (rhs <$> all_dps))
+                          | let ur_af = Set.fromList(rules $ getR $ iUsableRules (AF.apply the_af p) (rhs <$> AF.apply the_af all_dps))
                           , rule <- rules(getR p)
                           , AF.apply the_af rule `Set.member` ur_af]
 

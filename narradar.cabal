@@ -47,7 +47,7 @@ Library
   ghc-prof-options: -auto
   hs-source-dirs: src
   build-Depends:  muterm-framework >= 1.1.1, base, prettyclass, array, containers, process, directory,
-     bytestring, GraphSCC,
+     bytestring, GraphSCC, EnumMap,
      xhtml, tagsoup, curl, derive,  network, filepath, graphviz == 2999.1.0.2, parallel, strict, fgl,
      term >= 0.1.20090915, TRSParser, parsec, prolog >= 0.1.20090915, prolog-tools >= 0.1.20090915, unix, template-haskell,
      control-monad-free >= 0.4.1,logict, rmonad, alacarte >= 0.4, satchmo >= 1.5, satchmo-backends >= 1.5

@@ -52,7 +52,7 @@ rpoGen inn p = runSAT $ do
             ( or decreasing_dps :
               [ (l > r)  | l:->r <- symb_rules] ++
               [ (l >~ r) | l:->r <- symb_pairs] ++
-              [(l > r) <<==>> return dec | (l:->r, dec) <- zip symb_pairs decreasing_dps])
+              [(l > r) <==> return dec | (l:->r, dec) <- zip symb_pairs decreasing_dps])
 
   assert [problem]
 
