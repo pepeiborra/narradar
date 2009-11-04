@@ -117,7 +117,7 @@ Executable narradar
      cpp-options: -DDEBUG -DHOOD
      build-depends: GHood
   main-is:             Main.hs
-  ghc-options:         
+  ghc-options:  -threaded
   hs-source-dirs:         src
 
 
