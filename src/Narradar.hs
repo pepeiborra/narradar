@@ -30,6 +30,7 @@ import Data.Monoid
 import System.Cmd
 import System.Environment
 import System.Exit
+import System.FilePath
 import System.IO
 import System.Posix.Process
 import System.Posix.Signals
@@ -77,19 +78,25 @@ narradarMain run = do
   (flags@Options{..}, _, _errors) <- getOptions
 
   let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
-      printDiagram proof = withTempFile "." "narradar.dot" $ \fp h -> do
-        let dotSrc = dotProof' DotProof{showFailedPaths = verbose > 1} proof
-        hPutStrLn h dotSrc
-        hClose h
+      printDiagram proof
+       | isNothing pdfFile = return ()
+       | isJust pdfFile    = withTempFile "." "narradar.dot" $ \fp h -> do
+
+                               let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
+                                   the_pdf = fromJust pdfFile
+                               hPutStrLn h dotSrc
+                               hClose h
 #ifdef DEBUG
-        when (verbose > 1) $ writeFile (problemFile ++ ".dot") dotSrc
+                               when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-        ignore $ system (printf "dot -Tpdf %s -o %s.pdf " fp problemFile)
+                               ignore $ system (printf "dot -Tpdf %s -o %s.pdf " fp the_pdf)
+                               putStrLn ("PDF proof written to " ++ the_pdf ++ ".pdf")
 
   a_problem <- eitherM $ runParser narradarParser mempty "INPUT" input
 
-  let proof = dispatchAProblem a_problem
-  let sol = run (runProof proof)
+  let proof    = dispatchAProblem a_problem
+      sol      = run (runProof proof)
+      diagrams = isJust pdfFile
 
   case sol of
     Just sol -> do putStrLn "YES"
@@ -123,26 +130,26 @@ getOptions = do
   let (actions, nonOptions, errors) = getOpt Permute opts args
   case errors of
     [] -> do
-      opts <- foldl (P.>>=) (P.return defOpts) actions
       let problemFile = fromMaybe "INPUT" (listToMaybe nonOptions)
       input <- maybe getContents readFile (listToMaybe nonOptions)
-      P.return (opts{problemFile,input}, nonOptions, errors)
+      opts <- foldl (P.>>=) (P.return defOpts{problemFile,input}) actions
+      P.return (opts, nonOptions, errors)
     _  -> putStrLn ("Error: " ++ unwords errors) >> putStrLn (usageInfo usage opts) >> exitWith (ExitFailure (-1))
 
 data Options =  Options { problemFile :: FilePath
+                        , pdfFile     :: Maybe FilePath
                         , input       :: String
-                        , diagrams    :: Bool
                         , verbose     :: Int
                         }
 
-defOpts = Options{ problemFile = "", input = "", diagrams = True, verbose = 0}
+defOpts = Options{ problemFile = "", pdfFile = Nothing, input = "", verbose = 0}
 
 --opts :: [OptDescr (Flags f id -> Flags f id)]
-opts = [ Option ""  ["nodiagrams"] (NoArg $ \opts  -> P.return opts{diagrams = False}) "Do not produce a pdf proof file"
+opts = [ Option ""  ["pdf"] (OptArg setPdfPath "PATH") "Produce a pdf proof file (implied by -v)"
 #ifndef GHCI
        , Option "t" ["timeout"] (ReqArg setTimeout "SECONDS") "Timeout in seconds (default:none)"
 #endif
-       , Option "v" ["verbose"] (OptArg (\i opts -> maybe (P.return 1) readIO i P.>>= \i' -> P.return opts{verbose=i'}) "LEVEL") "Verbosity level (0-2)"
+       , Option "v" ["verbose"] (OptArg setVerbosity "LEVEL") "Verbosity level (0-2)"
        , Option "h?" ["help"]   (NoArg  (\   _     -> putStrLn(usageInfo usage opts) P.>> exitSuccess)) "Displays this help screen"
        ]
 
@@ -150,3 +157,12 @@ setTimeout arg opts = do
   scheduleAlarm (read arg)
   installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure 2))) Nothing
   P.return opts
+
+setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1, pdfFile = pdfFile `mplus` Just (dropExtension problemFile)}
+
+setVerbosity (Just i) opts@Options{..}
+    = do {i <- readIO i; P.return opts{verbose=i, pdfFile = pdfFile `mplus` Just problemFile}}
+         `catch` (\e -> error "cannot parse the verbosity level")
+
+setPdfPath Nothing  opts = P.return opts{ pdfFile = Just $ dropExtension (problemFile opts) }
+setPdfPath (Just f) opts = P.return opts{ pdfFile = Just $ dropExtension f }
