@@ -19,3 +19,9 @@
 [submodule "submodules/alacarte.git"]
 	path = submodules/alacarte.git
 	url = git://github.com/pepeiborra/alacarte.git
+[submodule "submodules/satchmo-backends"]
+	path = submodules/satchmo-backends
+	url = git://github.com/pepeiborra/satchmo-backends.git
+[submodule "submodules/satchmo"]
+	path = submodules/satchmo
+	url = git://github.com/pepeiborra/satchmo.git
