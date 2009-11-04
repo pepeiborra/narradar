@@ -22,7 +22,7 @@ import Data.List
 import Data.Maybe
 import Data.Monoid
 import Network
-import Network.Curl hiding (Info)
+-- import Network.Curl hiding (Info)
 import System.FilePath
 import System.IO
 import System.IO.Unsafe
@@ -108,6 +108,8 @@ instance ( Info info (Problem i trs)
 -- Implementation
 -- ------------------
 
+aproveWebProc = error "unsupported in Snow Leopard"
+{-
 aproveWebProc :: ( p ~ Problem typ trs
                  , IsDPProblem typ, Eq p, PprTPDB p
                  , HasRules t v trs, Pretty (t(Term t v))
@@ -134,7 +136,7 @@ aproveWebProc = memoExternalProc go where
     let output = respBody response
     return$ (if isTerminating output then success else dontKnow)
             (AproveProof [OutputHtml  (pack output)]) prob
-
+-}
 isTerminating (canonicalizeTags.parseTags -> tags) = let
      ww = words $ map toLower $ innerText $ takeWhile ((~/= "<br>") .&. (~/= "</p>")) $ dropWhile (~/= "<b>") $ dropWhile (~/= "<body>") tags
   in any (("termination" `isPrefixOf`) .|. ("finiteness" `isPrefixOf`)) ww &&
