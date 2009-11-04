@@ -45,7 +45,7 @@ import Language.Prolog.SharingAnalysis (SharingAssignment)
 
 #ifdef HOOD
 import Debug.Observe
-#endif HOOD
+#endif
 
 extendToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
