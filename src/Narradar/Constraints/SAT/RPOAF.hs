@@ -224,7 +224,9 @@ rpos bits (x,ar) = do
   n_b      <- number bits
   perm_bb  <- replicateM ar (replicateM ar boolean)
   mset     <- boolean
-  (list_b:pos_bb) <- replicateM (ar + 1) boolean
+  (list_b:pos_bb) <- case ar of
+                       0 -> (:[]) `liftM` constant True
+                       _ -> replicateM (ar + 1) boolean
   usable_b <- boolean
 
   -- Permutation invariants
