@@ -5,17 +5,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.Problem.Infinitary where
 
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad.Free
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
@@ -42,7 +38,7 @@ import Narradar.Framework.Ppr
 import Prelude hiding (pi)
 
 
-data Infinitary id p = Infinitary {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
+data Infinitary id p = Infinitary {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
   data Problem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::Problem p a}
   getProblemType (InfinitaryProblem af p) = Infinitary af (getProblemType p)
@@ -71,14 +67,10 @@ deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (Infinitary id p
 deriving instance (Show id, Show (Problem p trs)) => Show (Problem (Infinitary id p) trs)
 
 -- Functor
-
 instance Functor (Problem p) => Functor (Problem (Infinitary id p)) where fmap f (InfinitaryProblem af p) = InfinitaryProblem af (fmap f p)
 instance Foldable (Problem p) => Foldable (Problem (Infinitary id p)) where foldMap f (InfinitaryProblem af p) = foldMap f p
 instance Traversable (Problem p) => Traversable (Problem (Infinitary id p)) where traverse f (InfinitaryProblem af p) = InfinitaryProblem af <$> traverse f p
 
-$(derive makeFunctor     ''Infinitary)
-$(derive makeFoldable    ''Infinitary)
-$(derive makeTraversable ''Infinitary)
 
 -- Data.Term instances
 

@@ -2,20 +2,16 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.Types.Problem.Relative where
 
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad.Free
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
@@ -37,7 +33,7 @@ import Narradar.Types.Var
 import Narradar.Utils
 import Narradar.Framework.Ppr
 
-data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deriving (Eq, Ord, Show)
+data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance IsProblem p => IsProblem (Relative trs0 p) where
   data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs}
@@ -66,13 +62,6 @@ instance Functor (Problem p) => Functor (Problem (Relative trs0 p)) where fmap f
 instance Foldable (Problem p) => Foldable (Problem (Relative trs0 p)) where foldMap f (RelativeProblem r0 p) = foldMap f p
 instance Traversable (Problem p) => Traversable (Problem (Relative trs0 p)) where traverse f (RelativeProblem r0 p) = RelativeProblem r0 <$> traverse f p
 
-
-$(derive makeFunctor     ''Relative)
-$(derive makeFoldable    ''Relative)
-$(derive makeTraversable ''Relative)
-
-
--- Data.Term instances
 
 
 -- Output

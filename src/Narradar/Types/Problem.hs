@@ -5,10 +5,10 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
-
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.Problem (
           module Narradar.Types.Problem,
@@ -22,10 +22,6 @@ import Control.Monad.List
 import Control.Monad.State
 import Data.Array as A
 import Data.Graph as G (Graph, edges, buildG)
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Maybe (isJust, isNothing)
 import Data.Monoid

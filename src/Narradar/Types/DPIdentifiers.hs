@@ -7,17 +7,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 
 module Narradar.Types.DPIdentifiers where
 
 import Control.Applicative
 import Control.Parallel.Strategies
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable (Foldable(..))
 import Data.Traversable (Traversable(..))
 import Data.Typeable
@@ -33,7 +29,8 @@ type DP a = RuleN (Identifier a)
 -- -----------------------
 -- Concrete DP Identifiers
 -- -----------------------
-data Identifier a = IdFunction a | IdDP a | AnyIdentifier deriving (Ord, Typeable)
+data Identifier a = IdFunction a | IdDP a | AnyIdentifier
+                    deriving (Ord, Typeable, Functor, Foldable, Traversable)
 instance Eq a => Eq (Identifier a) where
     IdFunction f1 == IdFunction f2 = f1 == f2
     IdDP f1       == IdDP f2       = f1 == f2
@@ -55,11 +52,6 @@ instance NFData a => NFData (Identifier a) where
     rnf (IdFunction f) = rnf f
     rnf (IdDP f)       = rnf f
     rnf AnyIdentifier  = ()
-
-$(derive makeFunctor     ''Identifier)
-$(derive makeFoldable    ''Identifier)
-$(derive makeTraversable ''Identifier)
-
 
 -- ------------
 -- DP Symbols

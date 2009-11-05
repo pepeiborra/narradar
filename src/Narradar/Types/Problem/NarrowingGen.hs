@@ -6,7 +6,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.Problem.NarrowingGen where
 
@@ -14,10 +14,6 @@ import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad.Free
 import Data.Char
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable (Foldable(..), toList)
 import Data.List (nub)
 import Data.Traversable as T (Traversable(..), mapM)
@@ -77,7 +73,7 @@ type NarrowingGen  = MkNarrowingGen Rewriting
 type CNarrowingGen = MkNarrowingGen IRewriting
 instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
-data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, Show)
+data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance IsProblem p => IsProblem (MkNarrowingGen p) where
   data Problem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::Problem p a}
@@ -171,11 +167,3 @@ extraVarsToGen (l :-> r) = l :-> applySubst sigma r
       sigma = fromListSubst (evars `zip` repeat genTerm)
       genTerm = term genSymbol []
       evars = Set.toList(getVars r `Set.difference` getVars l)
-
--- -------------
--- TH instances
--- -------------
-
-$(derive makeFunctor     ''MkNarrowingGen)
-$(derive makeFoldable    ''MkNarrowingGen)
-$(derive makeTraversable ''MkNarrowingGen)

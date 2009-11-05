@@ -5,17 +5,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.Problem.NarrowingGoal where
 
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad.Free
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
@@ -48,7 +44,7 @@ type CNarrowingGoal id = MkNarrowingGoal id IRewriting
 instance GetPairs (NarrowingGoal id) where getPairs _ = getNPairs
 
 data MkNarrowingGoal id p = NarrowingGoal (Goal id) (AF_ id) p
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance (Ord id, IsProblem p) => IsProblem (MkNarrowingGoal id p) where
   data Problem (MkNarrowingGoal id p) trs = NarrowingGoalProblem {goal::Goal id, pi::AF_ id, baseProblem::Problem p trs}
@@ -81,10 +77,6 @@ deriving instance (Show id, Show (Problem p trs)) => Show (Problem (MkNarrowingG
 instance Functor (Problem p) => Functor (Problem (MkNarrowingGoal id p)) where fmap f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (fmap f p)
 instance Foldable (Problem p) => Foldable (Problem (MkNarrowingGoal id p)) where foldMap f (NarrowingGoalProblem _ _ p) = foldMap f p
 instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGoal id p)) where traverse f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af <$> traverse f p
-
-$(derive makeFunctor     ''MkNarrowingGoal)
-$(derive makeFoldable    ''MkNarrowingGoal)
-$(derive makeTraversable ''MkNarrowingGoal)
 
 -- Data.Term instances
 

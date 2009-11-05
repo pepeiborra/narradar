@@ -4,7 +4,6 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Narradar.Types ( module Narradar.Framework
@@ -29,8 +28,6 @@ module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Types.Var
                       , module Ppr
                       ) where
-import Data.DeriveTH
-import Data.Derive.Is
 
 import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.Monad.Error (Error(..))
@@ -86,12 +83,15 @@ import Prelude as P hiding (sum, pi, mapM)
 
 data Output = OutputXml ByteString | OutputHtml ByteString | OutputTxt ByteString deriving Show
 
-$(derive makeIs ''Output)
+isOutputTxt OutputTxt{} = True; isOutputTxt _ = False
+isOutputXml OutputXml{} = True; isOutputXml _ = False
+isOutputHtml OutputHtml{} = True; isOutputHtml _ = False
 
 instance Pretty [Output] where
     pPrint outputs
         | Just (OutputTxt txt) <- find isOutputTxt outputs = text (unpack txt)
         | otherwise = Ppr.empty
+
 
 -- --------------------
 -- The Narradar Parser

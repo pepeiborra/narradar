@@ -6,8 +6,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.PrologIdentifiers where
 
@@ -16,10 +15,6 @@ import Control.Parallel.Strategies
 import Data.AlaCarte (Expr)
 import Data.Foldable(Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Maybe
 import Data.Monoid
 import Data.Typeable
@@ -30,7 +25,8 @@ import Narradar.Framework.Ppr
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
-data PrologId a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord,Typeable)
+data PrologId a = InId a | OutId a | UId Int | FunctorId a
+                  deriving (Eq,Ord,Typeable, Functor, Foldable, Traversable)
 
 class Ord (WithoutPrologId id) => RemovePrologId id where
   type WithoutPrologId id :: *
@@ -113,7 +109,3 @@ instance NFData a => NFData (PrologId a) where
   rnf (OutId a) = rnf a
   rnf (UId   i) = rnf i
   rnf (FunctorId f) = rnf f
-
-$(derive makeFunctor     ''PrologId)
-$(derive makeFoldable    ''PrologId)
-$(derive makeTraversable ''PrologId)
