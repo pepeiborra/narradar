@@ -43,6 +43,7 @@ import MuTerm.Framework.Proof
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Problem
+import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Types.Var
@@ -222,7 +223,6 @@ instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Va
          ,MkDPProblem p trs
          ,ICap t Var (p, trs)
          ,IUsableRules t Var (p, trs, trs)
-         ,IUsableRules t Var (IRewriting, trs, trs)
          ) =>
           IUsableRules t Var (InitialGoal t p, NarradarTRS t Var, NarradarTRS t Var)
   where
@@ -232,9 +232,9 @@ instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Va
       iUsableRulesVarM (p, reachableRules, dps) v
     iUsableRulesM (it@(InitialGoal _ _ p), trs, dps) tt = do
       let the_problem = mkDPProblem it trs dps
-      (_,reachableRules,_) <- iUsableRulesM (IRewriting, trs, dps) (rhs <$> reachablePairs the_problem)
+      reachableRules <- f_UsableRules (p, trs) (\_ -> return mempty) =<< getFresh (rhs <$> reachablePairs the_problem)
       pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
-      (_,trs',_)           <- iUsableRulesM (p, reachableRules, dps) tt
+      (_,trs',_)           <- iUsableRulesM (p, tRS $ toList reachableRules, dps) tt
       return (it, trs', dps)
 
 -- Other Narradar instances

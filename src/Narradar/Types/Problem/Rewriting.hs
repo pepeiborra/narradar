@@ -6,7 +6,11 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE CPP #-}
 
-module Narradar.Types.Problem.Rewriting (Problem(..), Rewriting(..), IRewriting(..), rewritingProblem, irewritingProblem) where
+module Narradar.Types.Problem.Rewriting
+         ( Problem(..), Rewriting(..), IRewriting(..)
+         , rewritingProblem, irewritingProblem
+         , f_UsableRules
+         ) where
 
 import Control.Applicative
 import Control.Monad
