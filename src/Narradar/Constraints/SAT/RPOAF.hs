@@ -584,9 +584,10 @@ instance (p  ~ Problem typ
          ,v   ~ Var
          ,trs ~ NarradarTRS t v
          ,Traversable p
-         ,Ord id, SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
+         ,Ord id, Ord (t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v), Pretty id
-         ,IUsableRules t v (p trs)
+         ,IUsableRules t v (typ, trs, trs)
+         ,MkDPProblem typ (NarradarTRS t v)
          ) => Omega typ t
  where
 
@@ -601,7 +602,7 @@ instance (p  ~ Problem typ
     sig = getSignature (getR p)
     dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps) :: p trs)
 
-    go (Pure x) _ = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar (p:: p trs) x)
+    go (Pure x) _ = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
 
     go t trs
       | id_t `Set.notMember` dd
