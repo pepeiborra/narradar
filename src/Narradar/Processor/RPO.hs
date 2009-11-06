@@ -49,7 +49,7 @@ runS Yices = Yices.solveW 20
 
 data RPOProc   = RPOProc Extension Solver
 data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
-data Solver    = Yices | MiniSat -- | FunSat
+data Solver    = Yices | MiniSat -- FunSat
 
 instance (Traversable (Problem typ)
          ,Ord id, Show id, Pretty id, DPSymbol id, Pretty (TermN id)
