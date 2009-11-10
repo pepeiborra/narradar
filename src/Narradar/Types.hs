@@ -77,7 +77,7 @@ import Narradar.Framework.Ppr as Ppr
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.Parser as Prolog
 
-#ifdef DEBUG
+#ifdef HOOD
 import Debug.Observe
 #endif
 
@@ -248,6 +248,6 @@ prologParser = do
 -- ------------
 -- Debug stuff
 -- ------------
-#ifdef DEBUG
+#ifdef HOOD
 instance Observable Mode where observer = observeBase
 #endif

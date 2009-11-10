@@ -34,7 +34,7 @@ import Narradar.Types.Problem.NarrowingGoal
 import Narradar.Utils
 import Lattice
 
-#ifdef DEBUG
+#ifdef HOOD
 import Debug.Observe
 #endif
 
@@ -185,6 +185,6 @@ findGroundAF' heu pi_groundInfo af0 p (_:->r)
 
               (pi_c,pi_d) = AF.splitCD p pi_groundInfo
 
-#ifdef DEBUG
+#ifdef HOOD
 instance Observable Id   where observer = observeBase
 #endif
