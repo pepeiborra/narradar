@@ -27,6 +27,7 @@ import Data.Foldable (Foldable)
 import Data.Maybe
 import Data.Monoid
 import System.Cmd
+import System.Directory
 import System.Environment
 import System.Exit
 import System.FilePath
@@ -78,11 +79,11 @@ narradarMain :: forall mp.
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = do
   (flags@Options{..}, _, _errors) <- getOptions
-
+  tmp <- getTemporaryDirectory
   let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
       printDiagram proof
        | isNothing pdfFile = return ()
-       | isJust pdfFile    = withTempFile "." "narradar.dot" $ \fp h -> do
+       | isJust pdfFile    = withTempFile tmp "narradar.dot" $ \fp h -> do
 
                                let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
                                    the_pdf = fromJust pdfFile
@@ -91,8 +92,8 @@ narradarMain run = do
 #ifdef DEBUG
                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-                               ignore $ system (printf "dot -Tpdf %s -o %s.pdf " fp the_pdf)
-                               putStrLn ("PDF proof written to " ++ the_pdf ++ ".pdf")
+                               ignore $ system (printf "dot -Tpdf %s -o %s" fp the_pdf)
+                               hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
 
   a_problem <- eitherM $ runParser narradarParser mempty "INPUT" input
 
@@ -102,9 +103,8 @@ narradarMain run = do
 
   case sol of
     Just sol -> do putStrLn "YES"
-                   when (verbose>0) $ do
-                          print $ pPrint sol
-                          when diagrams $ printDiagram sol
+                   when diagrams $ printDiagram sol
+                   when (verbose>0) $ print $ pPrint sol
 
     Nothing  -> do
              putStrLn "MAYBE"
@@ -152,11 +152,11 @@ setTimeout arg opts = do
   installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure 2))) Nothing
   P.return opts
 
-setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1, pdfFile = pdfFile `mplus` Just (dropExtension problemFile)}
+setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}
 
 setVerbosity (Just i) opts@Options{..}
     = do {i <- readIO i; P.return opts{verbose=i, pdfFile = pdfFile `mplus` Just problemFile}}
          `catch` (\e -> error "cannot parse the verbosity level")
 
-setPdfPath Nothing  opts = P.return opts{ pdfFile = Just $ dropExtension (problemFile opts) }
-setPdfPath (Just f) opts = P.return opts{ pdfFile = Just $ dropExtension f }
+setPdfPath Nothing  opts = P.return opts{ pdfFile = Just (problemFile opts <.> "pdf") }
+setPdfPath (Just f) opts = P.return opts{ pdfFile = Just $ f }
