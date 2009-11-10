@@ -16,10 +16,10 @@ data RelativeToRegularProof = RelativeToRegularProof | RelativeToRegularProofFai
           deriving (Eq, Ord, Show)
 
 instance Pretty RelativeToRegularProof where
-    pPrint RelativeToRegularProof = text "The two systems form a Generalized Hierarchical Combination" $$
+    pPrint RelativeToRegularProof = text "The two systems form a  Hierarchical Combination" $$
                                     text "and hence the result from LOPSTR09 applies." $$
                                     text "Termination of the following DP problem implies relative termination."
-    pPrint RelativeToRegularProofFail = text "The two systems do not form a Generalized" $$
+    pPrint RelativeToRegularProofFail = text "The two systems do not form a " $$
                                         text "Hierarchical Combination and hence we cannot apply" $$
                                         text "the result from LOPSTR09."
 
