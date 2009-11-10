@@ -6,7 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module Narradar.Types ( module MuTerm.Framework.Problem
+module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Constraints.Unify
                       , module Narradar.Types
                       , module Narradar.Types.TRS
@@ -47,14 +47,11 @@ import Data.Traversable as T
 import Text.ParserCombinators.Parsec
 import qualified TRSParser as TRS
 import qualified TRSTypes  as TRS
-import TRSTypes hiding (Goal, Id, Rule, Term, TermF, Narrowing, Other, SimpleRuleF(..))
+import TRSTypes hiding (Id, Rule, Term, TermF, Narrowing, Other, SimpleRuleF(..))
 import Prelude as P hiding (mapM, pi, sum)
 
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
 
 import Narradar.Constraints.Unify
-import Narradar.Framework
 import Narradar.Types.ArgumentFiltering (AF_)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
@@ -74,6 +71,7 @@ import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Utils
+import Narradar.Framework hiding (Label, Note)
 import Narradar.Framework.Ppr as Ppr
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
@@ -104,9 +102,9 @@ narradarParser = trsParser <|> prologParser' where
     return (APrologProblem p)
 
 
--- -----------------
--- Parsing TPDB TRSs
--- -----------------
+-- ---------------------------------
+-- Parsing and dispatching TPDB TRSs
+-- ---------------------------------
 
 data AProblem t trs where
     ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
@@ -114,16 +112,53 @@ data AProblem t trs where
     ANarrowingProblem         :: Problem Narrowing trs  -> AProblem t trs
     ACNarrowingProblem        :: Problem CNarrowing trs -> AProblem t trs
     ARelativeRewritingProblem :: Problem (Relative trs Rewriting) trs -> AProblem t trs
+    ARelativeIRewritingProblem     :: Problem (Relative trs IRewriting) trs -> AProblem t trs
+    AGoalRelativeRewritingProblem  :: Problem (Relative trs (InitialGoal t Rewriting)) trs  -> AProblem t trs
+    AGoalRelativeIRewritingProblem :: Problem (Relative trs (InitialGoal t IRewriting)) trs -> AProblem t trs
+    AGoalRewritingProblem     :: Problem (InitialGoal t Rewriting) trs  -> AProblem t trs
+    AGoalIRewritingProblem    :: Problem (InitialGoal t IRewriting) trs -> AProblem t trs
     AGoalNarrowingProblem     :: Problem (NarrowingGoal (TermId t)) trs -> AProblem t trs
     AGoalCNarrowingProblem    :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
     APrologProblem            :: PrologProblem -> AProblem t trs
+
+
+dispatchAProblem :: (MonadPlus m
+                    ,Dispatch (Problem Rewriting  trs)
+                    ,Dispatch (Problem IRewriting trs)
+                    ,Dispatch (Problem (InitialGoal t Rewriting) trs)
+                    ,Dispatch (Problem (InitialGoal t IRewriting) trs)
+                    ,Dispatch (Problem (Relative  trs (InitialGoal t Rewriting))  trs)
+                    ,Dispatch (Problem (Relative  trs (InitialGoal t IRewriting))  trs)
+                    ,Dispatch (Problem (Relative  trs Rewriting)  trs)
+                    ,Dispatch (Problem (Relative  trs IRewriting)  trs)
+                    ,Dispatch (Problem Narrowing  trs)
+                    ,Dispatch (Problem CNarrowing trs)
+                    ,Dispatch (Problem (NarrowingGoal (TermId t)) trs)
+                    ,Dispatch (Problem (CNarrowingGoal (TermId t)) trs)
+                    ,Dispatch PrologProblem
+                    ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m ()
+
+dispatchAProblem (ARewritingProblem p)         = dispatch p
+dispatchAProblem (AIRewritingProblem p)        = dispatch p
+dispatchAProblem (ANarrowingProblem p)         = dispatch p
+dispatchAProblem (ACNarrowingProblem p)        = dispatch p
+dispatchAProblem (ARelativeRewritingProblem p) = dispatch p
+dispatchAProblem (ARelativeIRewritingProblem p)= dispatch p
+dispatchAProblem (AGoalRewritingProblem p)     = dispatch p
+dispatchAProblem (AGoalIRewritingProblem p)    = dispatch p
+dispatchAProblem (AGoalNarrowingProblem p)     = dispatch p
+dispatchAProblem (AGoalCNarrowingProblem p)    = dispatch p
+dispatchAProblem (APrologProblem p)            = dispatch p
+dispatchAProblem (AGoalRelativeRewritingProblem p) = dispatch p
+dispatchAProblem (AGoalRelativeIRewritingProblem p)= dispatch p
+
+
 
 parseTRS :: (trs ~ NTRS id, id ~ Identifier String, Monad m) =>
              String -> m (AProblem (TermF id) trs)
 parseTRS s = eitherM (runParser trsParser mempty "<input>" s)
 
 trsParser :: TRS.TRSParser (AProblem (TermF (Identifier String)) (NTRS (Identifier String)))
-
 trsParser = do
   Spec spec <- TRS.trsParser
 
@@ -133,7 +168,7 @@ trsParser = do
 
       spec'   = toTerm <$$$> spec
 
-      strategy = [s | Strategy s <- spec]
+      strategies = sort [s | Strategy s <- spec]
 
   let r   = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->  r) _ <- rr]
       r0  = [ mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r
@@ -142,34 +177,56 @@ trsParser = do
                   | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
       r' = mapTermSymbols IdFunction <$$> r
 
-  case (r0, dps, strategy) of
+      mkGoal = markDP . mapTermSymbols IdFunction . toTerm
+
+      mkAbstractGoal :: Monad m => TRS.Term -> m (Goal Id)
+      mkAbstractGoal (Impure (TRS.Term id tt)) = do {tt' <- mapM mkMode tt; return (Goal (IdDP id) tt')}
+      mkMode (Impure (fromSimple -> Term "i" [])) = return G
+      mkMode (Impure (fromSimple -> Term "b" [])) = return G
+      mkMode (Impure (fromSimple -> Term "c" [])) = return G
+      mkMode (Impure (fromSimple -> Term "o" [])) = return V
+      mkMode (Impure (fromSimple -> Term "v" [])) = return V
+      mkMode (Impure (fromSimple -> Term "f" [])) = return V
+      mkMode _                          = fail "not a mode"
+
+  case (r0, dps, strategies) of
     ([], [], [])
         -> return $ ARewritingProblem (mkNewProblem Rewriting r)
+    ([], [], [GoalStrategy g])
+        -> return $ AGoalRewritingProblem (mkNewProblem (initialGoal [mkGoal g] Rewriting) r)
 
-    ([], [], [InnerMost])
+    ([], [], InnerMost:_)
         -> return $ AIRewritingProblem (mkNewProblem IRewriting r)
+    ([], [], (GoalStrategy g : InnerMost : _))
+        -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] IRewriting) r)
 
     ([], dps, [])
         -> return $ ARewritingProblem (mkDPProblem' Rewriting r' (tRS dps))
+    ([], dps, [GoalStrategy g])
+        -> return $ AGoalRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] Rewriting) r' (tRS dps))
 
-    ([], dps, [InnerMost])
-        -> return $ AIRewritingProblem (mkDPProblem' IRewriting r' (tRS dps))
+    ([], dps, InnerMost:_)
+        -> return $ ARewritingProblem (mkDPProblem' Rewriting r' (tRS dps))
+    ([], dps, GoalStrategy g:InnerMost:_)
+        -> return $ AGoalIRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] IRewriting) r' (tRS dps))
 
     (r0, [], [])
-        -> return $ ARelativeRewritingProblem (mkNewProblem (Relative (tRS r0) Rewriting) r)
+        -> return $ ARelativeRewritingProblem (mkNewProblem (relative (tRS r0) Rewriting) r)
+    (r0, [], InnerMost:_)
+        -> return $ ARelativeIRewritingProblem (mkNewProblem (relative (tRS r0) IRewriting) r)
 
-    ([], [], [TRS.Narrowing])
-        -> return $ ANarrowingProblem (mkNewProblem Narrowing r)
+    (r0, [], [GoalStrategy g])
+        -> return $ AGoalRelativeRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] Rewriting)) r)
+    (r0, [], GoalStrategy g:InnerMost:_)
+        -> return $ AGoalRelativeIRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] IRewriting)) r)
 
-    ([], [], [ConstructorNarrowing])
-        -> return $ ACNarrowingProblem (mkNewProblem CNarrowing r)
+    ([], [], TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem Narrowing r)
+    ([], [], ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem CNarrowing r)
 
-    ([], [], [NarrowingG (TRS.Term id tt)])
-        -> return $ AGoalNarrowingProblem (mkNewProblem (narrowingGoal (Goal (IdDP id) tt)) r)
-{-
-    ([], [], [ConstructorNarrowingG (TRS.Term id tt)])
-        -> return $ AGoalCNarrowingProblem (mkNarradarProblem (initialGoal [Goal id tt] CNarrowing) r)
--}
+    ([], [], GoalStrategy g:TRS.Narrowing:_)
+        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (narrowingGoal g') r)}
+    ([], [], GoalStrategy g:ConstructorNarrowing:_)
+        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (cnarrowingGoal g') r)}
 
 -- --------------------------
 -- Parsing Prolog problems

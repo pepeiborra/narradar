@@ -63,11 +63,11 @@ instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~
     Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
   applySearch NarrowingP = narrowing_innermost
 
-instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier (GenId id)
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem CNarrowing t) (NarradarProblem CNarrowing t) where
-  applySearch NarrowingP = narrowing_innermost
+  applySearch NarrowingP = narrowing
 
 instance (Ord id, GenSymbol id, Pretty (Identifier id)
          ,Info info GraphTransformationProof

@@ -35,12 +35,11 @@ import Text.ParserCombinators.Parsec.Tag
 
 import Paths_narradar
 
-import Narradar.Framework hiding ((.|.), (.&.))
 import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr
-import Narradar.Types
+import Narradar.Types hiding ((!),(.|.), (.&.))
 import Narradar.Types.Problem.Rewriting
-import Narradar.Utils
+import Narradar.Utils (withTempFile, memoIO, eitherM, tailSafe, (.|.), (.&.))
 import Narradar.Utils.Html
 
 --type ExternalProcTyp proof id v = (Ord id, Ppr id, Ord v, Enum v, Ppr v, MonadFree ProofF proof) => Problem id v -> IO (proof(Problem id v))

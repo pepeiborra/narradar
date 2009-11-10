@@ -61,8 +61,6 @@ import Data.Term.Rules
 import Data.Term.Var as Prolog (Var(VName, VAuto))
 import qualified Language.Prolog.Syntax as Prolog
 
-import TRSTypes (Mode(..))
-
 
 import Narradar.Framework
 import qualified Narradar.Types.ArgumentFiltering as AF

@@ -6,7 +6,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Narradar ( narradarMain, Options(..), defOpts
-                , module Narradar.Framework
                 , PprTPDBDot(..)      -- module Narradar.Framework.GraphViz
                 , module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
@@ -63,15 +62,18 @@ import Narradar.Processor.RelativeProblem
 
 narradarMain :: forall mp.
                  (IsMZero mp, Foldable mp
---                 ,Dispatch (NProblem  (InitialGoal (TermF (Identifier String)) CNarrowing) (Identifier String))
---                 ,Dispatch (NProblem  (InitialGoal (TermF (Identifier String))  Narrowing) (Identifier String))
-                 ,Dispatch (NProblem  (Relative  (NTRS (Identifier String)) Rewriting)  (Identifier String))
-                 ,Dispatch (NProblem  Narrowing  (Identifier String))
-                 ,Dispatch (NProblem  CNarrowing (Identifier String))
-                 ,Dispatch (NProblem  (NarrowingGoal (Identifier String)) (Identifier String))
-                 ,Dispatch (NProblem  (CNarrowingGoal (Identifier String)) (Identifier String))
-                 ,Dispatch (NProblem  Rewriting  (Identifier String))
-                 ,Dispatch (NProblem  IRewriting (Identifier String))
+                 ,Dispatch (Problem Rewriting  (NTRS Id))
+                 ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id)IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) IRewriting))  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) Rewriting)  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) IRewriting)  (NTRS Id))
+                 ,Dispatch (Problem Narrowing  (NTRS Id))
+                 ,Dispatch (Problem CNarrowing (NTRS Id))
+                 ,Dispatch (Problem (NarrowingGoal Id) (NTRS Id))
+                 ,Dispatch (Problem (CNarrowingGoal Id) (NTRS Id))
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = do
@@ -110,14 +112,6 @@ narradarMain run = do
                   print $ pPrint proof
                   printDiagram (sliceWorkDone proof)
   where
-    dispatchAProblem (ARewritingProblem p)         = dispatch p
-    dispatchAProblem (AIRewritingProblem p)        = dispatch p
-    dispatchAProblem (ANarrowingProblem p)         = dispatch p
-    dispatchAProblem (ACNarrowingProblem p)        = dispatch p
-    dispatchAProblem (ARelativeRewritingProblem p) = dispatch p
-    dispatchAProblem (AGoalNarrowingProblem p)     = dispatch p
-    dispatchAProblem (AGoalCNarrowingProblem p)    = dispatch p
-    dispatchAProblem (APrologProblem p)            = dispatch p
 
 
 -- ------------------------------

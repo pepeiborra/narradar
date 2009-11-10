@@ -2,6 +2,7 @@
 {-# LANGUAGE OverlappingInstances, FlexibleInstances #-}
 module Narradar.Framework (
         module Narradar.Framework,
+        module MuTerm.Framework.DotRep,
         module MuTerm.Framework.Problem,
         module MuTerm.Framework.Processor,
         module MuTerm.Framework.Proof,
@@ -20,7 +21,7 @@ import Narradar.Framework.Ppr
 
 
 class Dispatch thing where
-    dispatch :: MonadPlus m => thing -> Proof (PrettyInfo,DotInfo) m ()
+    dispatch :: MonadPlus m => thing -> Proof (PrettyInfo, DotInfo) m ()
 
 
 mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m ()

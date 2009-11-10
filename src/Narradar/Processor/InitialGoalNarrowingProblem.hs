@@ -15,7 +15,6 @@ import Data.List ((\\))
 import Data.Monoid
 import Data.Term
 import qualified Data.Set as Set
-import TRSTypes (Mode(..))
 
 import Narradar.Framework
 import Narradar.Framework.GraphViz

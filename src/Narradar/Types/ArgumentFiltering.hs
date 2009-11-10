@@ -31,6 +31,7 @@ import Data.Monoid
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
+
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Labellings
@@ -38,7 +39,6 @@ import Narradar.Types.Term
 import Narradar.Framework.Ppr
 import Narradar.Utils hiding (fromRight)
 
-import TRSTypes (Mode(..))
 
 import Lattice
 import Language.Prolog.SharingAnalysis (SharingAssignment)
