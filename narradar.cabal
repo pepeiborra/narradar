@@ -10,6 +10,7 @@ license-file:        LICENSE
 author:              Jose Iborra
 maintainer:          pepeiborra@gmail.com
 data-files:          aproveStrats/*.strategy
+		     resources/form.html
 extra-source-files:  prelude.pl
 source-repository head
   type:     git
@@ -108,14 +109,6 @@ Library
 
 Executable narradar
   buildable: False
-  if flag(base4)
-     cpp-options: -DBASE4
-     build-depends:     base >= 4
-  else
-     build-depends:     base < 4
-  if flag(debug)
-     cpp-options: -DDEBUG -DHOOD
-     build-depends: GHood
   main-is:             Main.hs
   ghc-options:  -threaded
   hs-source-dirs:         src
@@ -123,19 +116,28 @@ Executable narradar
 
 Executable narradarCgi
   if flag(web)
-    buildable: True
+    buildable: False
   else
     buildable: False
-  if flag(base4)
-    cpp-options:       -DBASE4
-    build-depends:     base >= 4
-  else
-    build-depends:     base < 4
-
+  build-depends: cgi
   main-is:             MainWeb.hs
   ghc-options:         -O2 -threaded
   hs-source-dirs:      src
   build-Depends:       
+
+  other-modules:
+
+
+
+Executable LOPSTR09
+  if flag(web)
+    buildable: True
+  else
+    buildable: False
+  build-depends: cgi, file-embed
+  main-is:             LOPSTR09web.hs
+  ghc-options:         -O2 -threaded
+  hs-source-dirs:      src
 
   other-modules:
 

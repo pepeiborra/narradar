@@ -1,0 +1,50 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+   <head>
+      <title>
+         Select strategies to review or compare
+      </title>
+      <link rel="stylesheet" href="?action=getCss" type="text/css" />
+      <script src="http://prototypejs.org/assets/2009/8/31/prototype.js" type="text/javascript">
+      </script>
+   </head>
+   <body>
+<h1>The Narradar Termination Tool</h1>
+<h2>LOPSTR'09 version</h2>
+
+<p>To start input a TRS in the textfield below in <a title="opens in a new window" href="http://www.lri.fr/~marche/tpdb/format.html" target="_blank">TPDB format</a>,
+   or a Logic program. Goals in logic program use the syntax
+<pre>
+%query: predicate(i,o,o)
+</pre>
+</p>
+<p>Narradar recognizes a few extensions to the TPDB format</p>
+<ul>
+  <li> You can specify Narrowing programs using (STRATEGY NARROWING) </li>
+  <li> You can specify an Initial Goal using (STRATEGY GOAL &lt;initial-goal&gt;) </li>
+  <li> Note that you can use multiple STRATEGY sections </li>
+  <li> You can specify the pairs of a DP Problem using (PAIRS ..) </li>
+</ul>
+
+<form id="myform"  accept-charset="utf-8" method="post"> 
+<p>
+<textarea cols="80" rows="30" name="TRS">
+(VAR x y) 
+(RULES
+ add(s(x),y) -> s(add(x,y))
+ add(zero,y) -> y
+ goal(x) -> add(x,gen)
+ gen ->= s(gen)
+ gen ->= zero
+)
+(STRATEGY GOAL goal(x))
+</textarea>
+</p>
+<input type="hidden" name="action" id="action" value="solve" />
+<input name="LOG" type="hidden" value="True" />
+
+<input id="submit" type="submit" value="Prove" /> 
+</form>
+
+</body>
+</html>
