@@ -64,7 +64,8 @@ class GenSymbol id where
   genSymbol  :: id
 
 instance GenSymbol (GenId id) where genSymbol = GenId; goalSymbol = GoalId
-instance GenSymbol a => GenSymbol (Identifier a) where genSymbol = IdFunction genSymbol; goalSymbol = IdFunction goalSymbol
+instance GenSymbol a => GenSymbol (DPIdentifier a) where genSymbol = IdFunction genSymbol; goalSymbol = IdFunction goalSymbol
+--instance GenSymbol StringId where genSymbol = StringId "gen" 0; goalSymbol
 
 -- --------------------------------------------------------------
 -- The class of Narrowing-as-Rewriting-with-Generators problems

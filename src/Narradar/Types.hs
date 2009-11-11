@@ -32,6 +32,7 @@ module Narradar.Types ( module Narradar.Framework
 import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.Monad.Error (Error(..))
 import Control.Monad (liftM, MonadPlus(..))
+import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString, unpack)
 import Data.Graph (Graph, Vertex)
 import Data.List (find, groupBy, sort, partition)
@@ -73,7 +74,7 @@ import Narradar.Framework hiding (Label, Note)
 import Narradar.Framework.Ppr as Ppr
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
-import qualified Language.Prolog.Parser as Prolog
+import qualified Language.Prolog.Parser as Prolog hiding (term)
 
 #ifdef HOOD
 import Debug.Observe
@@ -155,11 +156,11 @@ dispatchAProblem (AGoalRelativeIRewritingProblem p)= dispatch p
 
 
 
-parseTRS :: (trs ~ NTRS id, id ~ Identifier String, Monad m) =>
-             String -> m (AProblem (TermF id) trs)
+parseTRS :: (trs ~ NTRS Id, Monad m) =>
+             String -> m (AProblem (TermF Id) trs)
 parseTRS s = eitherM (runParser trsParser mempty "<input>" s)
 
-trsParser :: TRS.TRSParser (AProblem (TermF (Identifier String)) (NTRS (Identifier String)))
+trsParser :: TRS.TRSParser (AProblem (TermF Id) (NTRS Id))
 trsParser = do
   Spec spec <- TRS.trsParser
 
@@ -182,13 +183,13 @@ trsParser = do
 
 --      mkAbstractGoal :: Monad m => Term String -> m (Goal Id)
       mkAbstractGoal (Impure (Term id tt)) = do {tt' <- mapM mkMode tt; return (Goal (IdDP id) tt')}
-      mkMode (Impure (Term "i" [])) = return G
-      mkMode (Impure (Term "b" [])) = return G
-      mkMode (Impure (Term "c" [])) = return G
-      mkMode (Impure (Term "g" [])) = return G
-      mkMode (Impure (Term "o" [])) = return V
-      mkMode (Impure (Term "v" [])) = return V
-      mkMode (Impure (Term "f" [])) = return V
+      mkMode (Impure (Term (the_id -> "i") [])) = return G
+      mkMode (Impure (Term (the_id -> "b") [])) = return G
+      mkMode (Impure (Term (the_id -> "c") [])) = return G
+      mkMode (Impure (Term (the_id -> "g") [])) = return G
+      mkMode (Impure (Term (the_id -> "o") [])) = return V
+      mkMode (Impure (Term (the_id -> "v") [])) = return V
+      mkMode (Impure (Term (the_id -> "f") [])) = return V
       mkMode _                      = fail "parsing the abstract goal"
 
   case (r0, dps, strategies) of
@@ -240,11 +241,21 @@ prologParser = do
   txt    <- getInput
   goals  <- eitherM $ mapM parseGoal $ catMaybes $ map f (lines txt)
   clauses<- Prolog.whiteSpace >> many Prolog.clause
-  return (prologProblem (concat goals) (concat clauses))
+  return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds (concat clauses)))
   where
     f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
     f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
     f _ = Nothing
+
+    upgradeIds :: Prolog.Program id -> Prolog.Program (SomeId id)
+    upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
+
+    upgradeGoal (Goal id mm) = Goal (SomeId id (length mm)) mm
+
+    upgradeTerm (Prolog.Term id tt) = Prolog.term (SomeId id (length tt)) tt
+    upgradeTerm t                   = Impure $ bimap (`SomeId` 0) P.id t
+    upgradePred (Prolog.Pred id tt) = Prolog.Pred (SomeId id (length tt)) tt
+    upgradePred p                   = bimap (`SomeId` 0) P.id p
 
 
 -- ------------

@@ -2,8 +2,12 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE RecordWildCards #-}
 
-module Narradar.Types.Term (TermF(..), TermN, RuleN, constant, term, term1
+module Narradar.Types.Term
+                     (TermF(..), SomeId(..), StringId
+                     ,TermN, RuleN, constant, term, term1
                      ,termIds, Size(..), fromSimple
                      ,ExtraVars(..)
                      ,module Data.Term, module Data.Term.Rules, MonadFree(..))
@@ -18,9 +22,23 @@ import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
 import qualified Data.Term.Simple as Simple
 import Data.Term.Rules hiding (unifies', matches')
+import Data.Typeable
 
 import Narradar.Framework.Ppr
 import Narradar.Types.Var
+
+-- ---------------------
+-- Basic Identifiers
+-- ---------------------
+type StringId = SomeId String
+data SomeId a = SomeId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable)
+
+instance Pretty StringId where pPrint SomeId{..} = text the_id
+instance Pretty a => Pretty (SomeId a) where pPrint SomeId{..} = pPrint the_id
+
+-- -------
+-- Terms
+-- -------
 
 data TermF id f = Term id [f] deriving (Eq,Ord,Show)
 type TermN id = Term (TermF id) Var
@@ -38,7 +56,8 @@ termIds :: MonadPlus m => Term (TermF id) a -> m id
 termIds = foldTerm (const mzero) f where
     f (Term f tt) = return f `mplus` F.msum tt
 
-fromSimple (Simple.Term id tt) = Term id tt
+fromSimple :: Simple.TermF id a -> TermF (SomeId id) a
+fromSimple (Simple.Term id tt) = Term (SomeId id (length tt)) tt
 
 
 class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]

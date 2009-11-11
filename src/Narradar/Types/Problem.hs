@@ -60,12 +60,12 @@ type NarradarProblem typ t = Problem typ (NarradarTRS t Var)
 type NProblem typ id = NarradarProblem typ (TermF id)
 
 mkNewProblem :: ( HasRules (TermF id) Var trs
-                , Ord id, Pretty (Identifier id), Pretty typ
+                , Ord id, Pretty (DPIdentifier id), Pretty typ
                 , Traversable (Problem typ)
-                , MkDPProblem typ (NTRS (Identifier id))
-                , NCap (Identifier id) (typ, NTRS (Identifier id))
-                , NUsableRules (Identifier id) (typ, NTRS (Identifier id), NTRS (Identifier id))
-                ) => typ -> trs -> NProblem typ (Identifier id)
+                , MkDPProblem typ (NTRS (DPIdentifier id))
+                , NCap (DPIdentifier id) (typ, NTRS (DPIdentifier id))
+                , NUsableRules (DPIdentifier id) (typ, NTRS (DPIdentifier id), NTRS (DPIdentifier id))
+                ) => typ -> trs -> NProblem typ (DPIdentifier id)
 mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
    rr' = mapTermSymbols IdFunction <$$> rules trs
 
@@ -97,7 +97,7 @@ mkDPProblem' typ (rules -> rr) (rules -> dps) = mkDPProblem typ (tRS rr) dptrs
 -- Computing Dependency Pairs
 -- ---------------------------
 class GetPairs typ where
-  getPairs :: ( HasRules t v trs, HasSignature trs, t ~ f (Identifier id), Ord id
+  getPairs :: ( HasRules t v trs, HasSignature trs, t ~ f (DPIdentifier id), Ord id
               , Foldable t, MapId f, HasId t
               , SignatureId trs ~ TermId t)
                => typ -> trs -> [Rule t v]

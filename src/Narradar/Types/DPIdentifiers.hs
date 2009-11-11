@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE GADTs #-}
@@ -10,7 +11,9 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 
-module Narradar.Types.DPIdentifiers where
+module Narradar.Types.DPIdentifiers
+    (module Narradar.Types.DPIdentifiers, SomeId(..), StringId
+    )  where
 
 import Control.Applicative
 import Control.Parallel.Strategies
@@ -23,32 +26,32 @@ import Narradar.Types.Term
 import Narradar.Framework.Ppr
 
 
-type Id = Identifier String
-type DP a = RuleN (Identifier a)
+type Id = DPIdentifier StringId
+type DP a = RuleN (DPIdentifier a)
 
 -- -----------------------
 -- Concrete DP Identifiers
 -- -----------------------
-data Identifier a = IdFunction a | IdDP a | AnyIdentifier
+data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier
                     deriving (Ord, Typeable, Functor, Foldable, Traversable)
-instance Eq a => Eq (Identifier a) where
+instance Eq a => Eq (DPIdentifier a) where
     IdFunction f1 == IdFunction f2 = f1 == f2
     IdDP f1       == IdDP f2       = f1 == f2
     AnyIdentifier == _             = True
     _             == AnyIdentifier = True
     _             == _             = False
 
-instance Pretty (Identifier a) => Show (Identifier a) where show = show . pPrint
+instance Pretty (DPIdentifier a) => Show (DPIdentifier a) where show = show . pPrint
 
-instance Pretty (Identifier String) where
+instance Pretty (DPIdentifier String) where
     pPrint (IdFunction f) = text f
     pPrint (IdDP n) = text n <> text "#"
 
-instance Pretty a => Pretty (Identifier a) where
+instance Pretty a => Pretty (DPIdentifier a) where
     pPrint (IdFunction f) = pPrint f
     pPrint (IdDP n) = pPrint n <> text "#"
 
-instance NFData a => NFData (Identifier a) where
+instance NFData a => NFData (DPIdentifier a) where
     rnf (IdFunction f) = rnf f
     rnf (IdDP f)       = rnf f
     rnf AnyIdentifier  = ()
@@ -72,7 +75,7 @@ markDPRule   = fmap markDP
 unmarkDPRule = fmap unmarkDP
 
 class DPSymbol s where markDPSymbol, unmarkDPSymbol :: s -> s
-instance DPSymbol (Identifier id) where
+instance DPSymbol (DPIdentifier id) where
   markDPSymbol (IdFunction f) = IdDP f
   markDPSymbol f = f
   unmarkDPSymbol (IdDP n) = IdFunction n

@@ -33,17 +33,17 @@ import Narradar.Utils
 data NarrowingGoalToRelativeRewriting = NarrowingGoalToRelativeRewriting deriving (Eq, Show)
 data NarrowingGoalToInRelativeRewritingProof = NarrowingGoalToRelativeRewritingProof deriving (Eq, Show)
 
-instance (gid ~ Identifier (GenId id)
+instance (gid ~ DPIdentifier (GenId id)
          ,Ord id, Pretty (GenId id)
          ,Traversable (Problem base), MkDPProblem base (NTRS gid), Pretty base
          ,NCap gid (base, NTRS gid)
          ,NUsableRules gid (base, NTRS gid, NTRS gid)
-         ,HasSignature (NProblem base (Identifier id)), Identifier id ~ SignatureId (NProblem base (Identifier id))
+         ,HasSignature (NProblem base (DPIdentifier id)), DPIdentifier id ~ SignatureId (NProblem base (DPIdentifier id))
 --         ,InsertDPairs (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) (NTRS gid)
          ,InsertDPairs base (NTRS gid)
          ) =>
          Processor info NarrowingGoalToRelativeRewriting
-                        (NProblem (MkNarrowingGoal (Identifier id) base) (Identifier id))
+                        (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
                         (NProblem (Relative (NTRS gid) (InitialGoal (TermF gid)
                                                                     (MkNarrowingGen base)))
                                   gid)
@@ -140,16 +140,16 @@ instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
 {-
 instance (trsGDP ~ NarradarTRS gdp Var
          ,gid    ~ GenTermF id
-         ,gdp    ~ GenTermF (Identifier id)
+         ,gdp    ~ GenTermF (DPIdentifier id)
          ,typ'   ~ InitialGoal gdp (Relative trsGDP NarrowingGen)
 --         ,MkNarradarProblem (InitialGoal gdp (Relative trsGDP NarrowingGen)) gid
          ,Ord id
          ) =>
     Processor NarrowingGoalToRelativeRewriting
-              (Problem (InitialGoal (TermF (Identifier id)) Narrowing) (NTRS (Identifier id) Var))
-              (Problem (InitialGoal (GenTermF (Identifier id))
-                                      (Relative (NarradarTRS (GenTermF (Identifier id)) Var) NarrowingGen))
-                         (NarradarTRS (GenTermF (Identifier id)) Var))
+              (Problem (InitialGoal (TermF (DPIdentifier id)) Narrowing) (NTRS (DPIdentifier id) Var))
+              (Problem (InitialGoal (GenTermF (DPIdentifier id))
+                                      (Relative (NarradarTRS (GenTermF (DPIdentifier id)) Var) NarrowingGen))
+                         (NarradarTRS (GenTermF (DPIdentifier id)) Var))
  where
    apply = initialGoalNarrowingToRelativeRewriting
 -}
@@ -158,15 +158,15 @@ instance (trsGDP ~ NarradarTRS gdp Var
 initialGoalNarrowingToRelativeRewriting ::
               forall typ typ' tag id mp gid gdp trsG trsGDP info.
             ( gid  ~ GenTermF id
-            , gdp  ~ GenTermF (Identifier id)
-            , typ  ~ InitialGoal (TermF (Identifier id)) Narrowing
+            , gdp  ~ GenTermF (DPIdentifier id)
+            , typ  ~ InitialGoal (TermF (DPIdentifier id)) Narrowing
             , typ' ~ InitialGoal gdp (Relative trsGDP NarrowingGen)
             , trsG ~ NarradarTRS gid Var
             , trsGDP ~ NarradarTRS gdp Var
-            , Ord id, Pretty (Identifier id)
+            , Ord id, Pretty (DPIdentifier id)
 --            ,MkDPProblem (Relative trs NarrowingGen) trsGDP
             , Monad mp
-            ) => tag -> Problem typ (NarradarTRS (TermF (Identifier id)) Var)
+            ) => tag -> Problem typ (NarradarTRS (TermF (DPIdentifier id)) Var)
                      -> Proof info mp (Problem typ' trsGDP)
 
 initialGoalNarrowingToRelativeRewriting _ p =
@@ -176,7 +176,7 @@ initialGoalNarrowingToRelativeRewriting _ p =
                       , let rr' = convert <$$> (rules $ getR p)
                       , let goal_vars =  [ v | (G,v) <- modes `zip` take (length modes) vars]
                       , let goalRule = goalTerm goal_vars :-> term (symbol f) (take (length modes) vars)
-                    , let goal = Goal (GoalId :: GenId (Identifier id)) []
+                    , let goal = Goal (GoalId :: GenId (DPIdentifier id)) []
                     ]
     where
       vars = map return ([toEnum 0 ..] \\ toList (getVars p))

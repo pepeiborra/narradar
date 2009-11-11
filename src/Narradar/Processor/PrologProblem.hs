@@ -33,6 +33,7 @@ import qualified Control.RMonad as R
 import Control.RMonad.AsMonad
 import Data.AlaCarte as Al hiding (Note)
 import Data.AlaCarte.Ppr hiding (Note)
+import Data.Bifunctor
 import Data.Char (isSpace)
 import Data.List as List hiding (any,notElem)
 import Data.Maybe
@@ -159,13 +160,13 @@ instance Pretty SKTransformProof where
 -- Types for Identifiers
 -- ------------------------
 type PF' id = PrologT :+: PrologP :+: T id
-type PF   = PF' String
+type PF   = PF' StringId
 type P    = Expr PF
 type RP   = PrologId P
 type LP   = Labelled P
-type DRP  = Identifier RP
+type DRP  = DPIdentifier RP
 type LRP  = Labelled RP
-type DLRP = Identifier LRP
+type DLRP = DPIdentifier LRP
 
 -- ------------------------------------------
 -- Representation of Prolog clauses as rules
@@ -373,13 +374,13 @@ class (Ord id, Ord id') => SkTransformAF id id' | id -> id' where
     skTransformAF :: (HasSignature sig, SignatureId sig ~ id) => sig -> AF_ id -> AF_ id'
     skTransformGoal :: Goal id -> Goal id'
 
-instance SkTransformAF String RP where
+instance SkTransformAF StringId RP where
   skTransformAF sig = AF.mapSymbols (\f -> if f `Set.member` getDefinedSymbols sig
                                          then InId (mkT f)
                                          else FunctorId (mkT f))
   skTransformGoal = fmap (InId . mkT)
 
-instance SkTransformAF (Labelled String) LRP where
+instance SkTransformAF (Labelled StringId) LRP where
   skTransformAF sig = AF.mapSymbols (\f@(Labelling l t) -> if f `Set.member` getDefinedSymbols sig
                                          then Labelling l (InId (mkT t))
                                          else Labelling l (FunctorId (mkT t)))
@@ -1223,22 +1224,33 @@ instantiatePM sigma (c,tt) cc = do
 Right preludePl = $(do pgm <- runIO (readFile "prelude.pl")
                        case parse Prolog.program "prelude.pl" pgm of -- parse just for compile time checking
                          Left err  -> error (show err)
-                         Right _ -> [| fromRight <$$> parse Prolog.program "prelude.pl" pgm |]
-                   )                 -- actual parsing ^^ happens (again) at run time.
+                         Right _ -> [| (upgradeIds . fmap fromRight) <$> parse Prolog.program "prelude.pl" pgm |]
+                   )                 -- actual parsing ^^ happens (for 2nd time) at run time.
                                      -- I am too lazy to write the required LiftTH instances.
+
+  where
+         upgradeIds :: Program id -> Program (SomeId id)
+         upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
+         upgradeTerm (Prolog.Term id tt) = Prolog.term (SomeId id (length tt)) tt
+         upgradeTerm t = Impure $ bimap (`SomeId` 0) id t
+         upgradePred (Pred id tt) = Pred (SomeId id (length tt)) tt
+         upgradePred p = bimap (`SomeId` 0) id p
+
 
 preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
 
---addMissingPredicates :: Program String -> Program String
+addMissingPredicates :: Program StringId -> Program StringId
 addMissingPredicates cc0
   | Set.null undefined_cc0 = (insertIs . insertEqual) cc0
   | otherwise              = (insertDummy . insertIs . insertEqual . insertPrelude) cc0
 
    where undefined_cc0 = undefinedPreds cc0
 
-         undefinedPreds    cc = Set.fromList [ f | f <- Set.toList (getDefinedSymbols cc `Set.difference` definedPredicates cc)]
-         definedPredicates :: Program String -> Set String
-         definedPredicates cc = Set.fromList [ f | Pred f _ :- _ <- cc]
+         reallyDefinedPredicates :: Ord id => Program id -> Set id
+         undefinedPreds          :: Ord id => Program id -> Set id
+         undefinedPreds    cc = Set.fromList [ f | f <- Set.toList (getDefinedSymbols cc `Set.difference`
+                                                                    reallyDefinedPredicates cc)]
+         reallyDefinedPredicates cc = Set.fromList [ f | Pred f _ :- _ <- cc]
 
          insertEqual       cc = if getAny $ foldMap2 (Any . isEqual) cc then eqclause `mappend` cc else cc
          insertIs          cc = if getAny $ foldMap2 (Any . isIs)    cc then isclause `mappend` cc else cc
@@ -1250,7 +1262,7 @@ addMissingPredicates cc0
 
          insertPrelude cc = if not (Set.null (Set.intersection (undefinedPreds cc) preludePreds)) then cc' `mappend` cc else cc
            where cc' = P.foldr renamePred (cc `mappend` preludePl) (toList repeatedIdentifiers)
-                 repeatedIdentifiers = preludePreds `Set.intersection` definedPredicates cc0
+                 repeatedIdentifiers = preludePreds `Set.intersection` reallyDefinedPredicates cc0
          insertDummy cc =  [ Pred f (take (getArity cc f) vars) :- [] | f <- toList (undefinedPreds cc)] ++ cc
          renamePred f = fmap2 (rename (findFreeSymbol cc0 f))
            where rename f' (Pred f tt) | f == f' = Pred f' tt
@@ -1258,7 +1270,9 @@ addMissingPredicates cc0
 
          vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
 
-findFreeSymbol sig pre = fromJust $ find (`Set.notMember` getAllSymbols sig) (pre : [pre ++ show i | i <- [0..]])
+         findFreeSymbol sig pre@SomeId{..}
+             = fromJust $ find (`Set.notMember` getAllSymbols sig)
+                               (pre : [pre{the_id = the_id ++ show i} | i <- [0..]])
 
 -- ----------
 -- Auxiliary

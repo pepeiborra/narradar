@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE TypeSynonymInstances, UndecidableInstances, OverlappingInstances #-}
 {-# LANGUAGE PatternGuards  #-}
+{-# LANGUAGE RecordWildCards  #-}
 {-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
@@ -39,12 +40,12 @@ instance Ord a => RemovePrologId (PrologId a) where
   removePrologId (FunctorId x) = Just x
   removePrologId (UId _      ) = Nothing
 
-instance (RemovePrologId a) => RemovePrologId (Identifier a) where
-  type WithoutPrologId (Identifier a) = Identifier (WithoutPrologId a)
+instance (RemovePrologId a) => RemovePrologId (DPIdentifier a) where
+  type WithoutPrologId (DPIdentifier a) = DPIdentifier (WithoutPrologId a)
   removePrologId = T.mapM removePrologId
 
-instance RemovePrologId String where
-  type WithoutPrologId String = String
+instance RemovePrologId StringId where
+  type WithoutPrologId StringId = StringId
   removePrologId = Just
 
 instance Ord (Expr p) => RemovePrologId (Expr p) where
