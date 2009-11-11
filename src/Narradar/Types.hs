@@ -189,7 +189,7 @@ trsParser = do
       mkMode (Impure (Term "o" [])) = return V
       mkMode (Impure (Term "v" [])) = return V
       mkMode (Impure (Term "f" [])) = return V
-      mkMode _                      = fail "not a mode"
+      mkMode _                      = fail "parsing the abstract goal"
 
   case (r0, dps, strategies) of
     ([], [], [])
