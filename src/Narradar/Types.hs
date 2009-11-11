@@ -185,6 +185,7 @@ trsParser = do
       mkMode (Impure (Term "i" [])) = return G
       mkMode (Impure (Term "b" [])) = return G
       mkMode (Impure (Term "c" [])) = return G
+      mkMode (Impure (Term "g" [])) = return G
       mkMode (Impure (Term "o" [])) = return V
       mkMode (Impure (Term "v" [])) = return V
       mkMode (Impure (Term "f" [])) = return V
