@@ -37,33 +37,40 @@ instance Dispatch PrologProblem where
     dispatch = apply SKTransformNarrowing >=> dispatch
 
 -- Rewriting
-instance () => Dispatch (NProblem Rewriting Id) where
+instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem Rewriting (DPIdentifier a)) where
   dispatch = mkDispatcher $ fixSolver (apply DependencyGraphSCC >=> apply (RPOProc LPO Yices))
 
-instance (id ~ Identifier a, Pretty id, Ord a) => Dispatch (NProblem IRewriting id) where
+instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
   dispatch = mkDispatcher (rpoPlusTransforms RPOSAF)
 
 -- Narrowing
-instance (Pretty id, Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) =>
-    Dispatch (NProblem Narrowing (Identifier id)) where
+instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
+    Dispatch (NProblem Narrowing (DPIdentifier id)) where
   dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
 
 -- Narrowing Goal
-instance (Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) => Dispatch (NProblem (NarrowingGoal (Identifier id)) (Identifier id)) where
+instance (Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply (NarrowingGoalToInfinitary bestHeu) >=> dispatch
-instance (Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) => Dispatch (NProblem (CNarrowingGoal (Identifier id)) (Identifier id)) where
+instance (Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply (NarrowingGoalToInfinitary bestHeu) >=> dispatch
 
 -- Infinitary
-instance (id  ~ Identifier a, Ord a, Lattice (AF_ id), Pretty id) =>
-           Dispatch (NProblem (Infinitary (Identifier a) IRewriting) (Identifier a)) where
+instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
+           Dispatch (NProblem (Infinitary (DPIdentifier a) Rewriting) (DPIdentifier a)) where
+  dispatch = mkDispatcher
+                (apply DependencyGraphSCC >=>
+                 apply (InfinitaryToRewriting bestHeu) >=>
+                 dispatch)
+
+instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
+           Dispatch (NProblem (Infinitary (DPIdentifier a) IRewriting) (DPIdentifier a)) where
   dispatch = mkDispatcher
                 (apply DependencyGraphSCC >=>
                  apply (InfinitaryToRewriting bestHeu) >=>
                  dispatch)
 
 -- Initial Goal
-type GId id = Identifier (GenId id)
+type GId id = DPIdentifier (GenId id)
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
   dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
@@ -94,8 +101,8 @@ rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
 
 {-
-instance (Pretty id, Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) =>
-    Dispatch (DPProblem  Narrowing (NarradarTRS (TermF (Identifier id)) Var)) where
+instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (Identifier id))) =>
+    Dispatch (DPProblem  Narrowing (NarradarTRS (TermF (DPIdentifier id)) Var)) where
   dispatch = mkDispatcher(
                          apply DependencyGraphCycles
                      >=> apply (NarrowingToRewritingICLP08 bestHeu)

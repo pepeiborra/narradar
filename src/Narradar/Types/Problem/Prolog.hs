@@ -19,6 +19,7 @@ import Text.XHtml (HTML(..), theclass)
 import MuTerm.Framework.Problem
 
 import Narradar.Types.Goal
+import Narradar.Types.Term (StringId)
 
 import qualified Language.Prolog.Syntax as Prolog
 
@@ -26,7 +27,7 @@ import qualified Language.Prolog.Syntax as Prolog
 -- Prolog Problems
 -- -----------------
 
-type PrologProblem = Problem (Prolog String) (Prolog.Program String)
+type PrologProblem = Problem (Prolog StringId) (Prolog.Program StringId)
 
 data Prolog id = Prolog {goals_Ptype :: [Goal id]} deriving (Eq,Show,Ord)
 instance IsProblem (Prolog id) where

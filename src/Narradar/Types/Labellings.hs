@@ -26,7 +26,7 @@ import Narradar.Framework.Ppr
 -- -----------------------
 
 type LS   = Labelled String
-type LId  = Identifier LS
+type LId  = DPIdentifier LS
 
 instance RemovePrologId a => RemovePrologId (Labelled a) where
   type WithoutPrologId (Labelled a) = Labelled (WithoutPrologId a)
@@ -92,8 +92,8 @@ instance IsLabelled a => IsLabelled (PrologId a) where
    mapLabel f = fmap (mapLabel f)
 
 
-instance IsLabelled a => IsLabelled (Identifier a) where
-   type WithoutLabel (Identifier a) = Identifier (WithoutLabel a)
+instance IsLabelled a => IsLabelled (DPIdentifier a) where
+   type WithoutLabel (DPIdentifier a) = DPIdentifier (WithoutLabel a)
    getLabel   = foldMap getLabel
    mapLabel f = fmap (mapLabel f)
 

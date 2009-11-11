@@ -39,74 +39,74 @@ data FInstantiation = FInstantiation
 
 -- Narrowing
 
-instance ( Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance ( Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
-instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Narrowing t) (NarradarProblem Narrowing t) where
   applySearch NarrowingP = narrowing
 
-instance (Ord id, GenSymbol id, Pretty (Identifier id)
+instance (Ord id, GenSymbol id, Pretty (DPIdentifier id)
          ,Info info GraphTransformationProof
          ) =>
-    Processor info NarrowingP (NProblem NarrowingGen (Identifier id)) (NProblem NarrowingGen (Identifier id)) where
+    Processor info NarrowingP (NProblem NarrowingGen (DPIdentifier id)) (NProblem NarrowingGen (DPIdentifier id)) where
   applySearch NarrowingP = narrowing
 
-instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
   applySearch NarrowingP = narrowing_innermost
 
-instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem CNarrowing t) (NarradarProblem CNarrowing t) where
   applySearch NarrowingP = narrowing
 
-instance (Ord id, GenSymbol id, Pretty (Identifier id)
+instance (Ord id, GenSymbol id, Pretty (DPIdentifier id)
          ,Info info GraphTransformationProof
          ) =>
-    Processor info NarrowingP (NProblem CNarrowingGen (Identifier id)) (NProblem CNarrowingGen (Identifier id)) where
+    Processor info NarrowingP (NProblem CNarrowingGen (DPIdentifier id)) (NProblem CNarrowingGen (DPIdentifier id)) where
   applySearch NarrowingP = narrowing_innermost
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Rewriting) t) (NarradarProblem (InitialGoal t Rewriting) t)
   where
    applySearch tag = narrowingIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t IRewriting) t) (NarradarProblem (InitialGoal t IRewriting) t)
   where
    applySearch tag = narrowing_innermostIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Narrowing) t) (NarradarProblem (InitialGoal t Narrowing) t)
   where
    applySearch tag = narrowingIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowing) t) (NarradarProblem (InitialGoal t CNarrowing) t)
   where
    applySearch tag = narrowing_innermostIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier (GenId id)
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
          , MkDPProblem NarrowingGen (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t NarrowingGen) t) (NarradarProblem (InitialGoal t NarrowingGen) t)
   where
    applySearch tag = narrowingIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ Identifier (GenId id)
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
          , MkDPProblem CNarrowingGen (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowingGen) t) (NarradarProblem (InitialGoal t CNarrowingGen) t)
@@ -116,7 +116,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 -- Instantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -124,7 +124,7 @@ instance (trs ~ NarradarTRS t Var
   applySearch Instantiation = instantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -132,7 +132,7 @@ instance (trs ~ NarradarTRS t Var
   applySearch Instantiation = instantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -140,7 +140,7 @@ instance (trs ~ NarradarTRS t Var
   applySearch Instantiation = instantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -150,7 +150,7 @@ instance (trs ~ NarradarTRS t Var
 -- Forward Instantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -158,7 +158,7 @@ instance (trs ~ NarradarTRS t Var
   applySearch FInstantiation = finstantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -166,7 +166,7 @@ instance (trs ~ NarradarTRS t Var
   applySearch FInstantiation = finstantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -174,7 +174,7 @@ instance (trs ~ NarradarTRS t Var
   applySearch FInstantiation = finstantiation
 
 instance (trs ~ NarradarTRS t Var
-         ,Identifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof
          ) =>
@@ -292,7 +292,7 @@ instance Pretty GraphTransformationProof where
 narrowing, narrowing_innermost
           :: (p  ~ Problem typ trs
              ,trs ~ NarradarTRS t v
-             ,TermId t  ~ Identifier id, HasId t, Unify t
+             ,TermId t  ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)
              ,MkDPProblem typ trs, Traversable (Problem typ)
              ,IUsableRules t v (typ, trs, trs), ICap t v (typ,trs)
@@ -445,7 +445,7 @@ instantiation, finstantiation
           :: forall typ trs mp t v p id info.
              (p  ~ Problem typ trs, Info info p
              ,trs ~ NarradarTRS t v
-             ,TermId t ~ Identifier id, HasId t, Unify t
+             ,TermId t ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v
              ,MkDPProblem typ trs, Traversable (Problem typ)
              ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
