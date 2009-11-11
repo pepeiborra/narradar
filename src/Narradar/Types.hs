@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Constraints.Unify
@@ -166,9 +167,9 @@ trsParser = do
       toTerm  = foldTerm toVar (Impure . fromSimple)
       toVar v = var' (Just v) (fromJust $ Map.lookup v allvars)
 
-      spec'   = toTerm <$$$> spec
+      spec'   = toTerm <$$> spec
 
-      strategies = sort [s | Strategy s <- spec]
+      strategies = sort [s | Strategy s <- spec']
 
   let r   = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->  r) _ <- rr]
       r0  = [ mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r
@@ -177,17 +178,17 @@ trsParser = do
                   | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
       r' = mapTermSymbols IdFunction <$$> r
 
-      mkGoal = markDP . mapTermSymbols IdFunction . toTerm
+      mkGoal = markDP . mapTermSymbols IdFunction
 
-      mkAbstractGoal :: Monad m => TRS.Term -> m (Goal Id)
-      mkAbstractGoal (Impure (TRS.Term id tt)) = do {tt' <- mapM mkMode tt; return (Goal (IdDP id) tt')}
-      mkMode (Impure (fromSimple -> Term "i" [])) = return G
-      mkMode (Impure (fromSimple -> Term "b" [])) = return G
-      mkMode (Impure (fromSimple -> Term "c" [])) = return G
-      mkMode (Impure (fromSimple -> Term "o" [])) = return V
-      mkMode (Impure (fromSimple -> Term "v" [])) = return V
-      mkMode (Impure (fromSimple -> Term "f" [])) = return V
-      mkMode _                          = fail "not a mode"
+--      mkAbstractGoal :: Monad m => Term String -> m (Goal Id)
+      mkAbstractGoal (Impure (Term id tt)) = do {tt' <- mapM mkMode tt; return (Goal (IdDP id) tt')}
+      mkMode (Impure (Term "i" [])) = return G
+      mkMode (Impure (Term "b" [])) = return G
+      mkMode (Impure (Term "c" [])) = return G
+      mkMode (Impure (Term "o" [])) = return V
+      mkMode (Impure (Term "v" [])) = return V
+      mkMode (Impure (Term "f" [])) = return V
+      mkMode _                      = fail "not a mode"
 
   case (r0, dps, strategies) of
     ([], [], [])
