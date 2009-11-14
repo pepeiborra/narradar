@@ -38,7 +38,7 @@ import Control.Monad (liftM, MonadPlus(..))
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString, unpack)
 import Data.Graph (Graph, Vertex)
-import Data.List (find, groupBy, sort, partition)
+import Data.List (find, groupBy, maximumBy, sort, partition)
 import Data.Foldable (Foldable(..))
 import Data.Maybe
 import Data.Monoid
@@ -98,11 +98,16 @@ instance Pretty [Output] where
 -- The Narradar Parser
 -- --------------------
 
-narradarParser = trsParser <|> prologParser' where
-  prologParser' = do
-    p <- prologParser
-    return (APrologProblem p)
+narradarParse name input = let
+    results = map (\p -> runParser p mempty name input) [trsParser, APrologProblem <$> prologParser]
+    in case results of
+         [Right x, _] -> Right x
+         [_, Right x] -> Right x
+         [Left e1 , Left e2] -> Left $ bestError [e1,e2]
 
+bestError :: [ParseError] -> ParseError
+bestError = maximumBy (compare `on` errorPos)
+ where on cmp f x y = f x `cmp` f y
 
 -- ---------------------------------
 -- Parsing and dispatching TPDB TRSs
@@ -230,33 +235,6 @@ trsParser = do
         -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (narrowingGoal g') r)}
     ([], [], GoalStrategy g:ConstructorNarrowing:_)
         -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (cnarrowingGoal g') r)}
-
--- --------------------------
--- Parsing Prolog problems
--- --------------------------
-
-instance Error ParseError
-
-prologParser = do
-  txt    <- getInput
-  goals  <- eitherM $ mapM parseGoal $ catMaybes $ map f (lines txt)
-  clauses<- Prolog.whiteSpace >> many Prolog.clause
-  return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds (concat clauses)))
-  where
-    f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
-    f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
-    f _ = Nothing
-
-    upgradeIds :: Prolog.Program id -> Prolog.Program (SomeId id)
-    upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
-
-    upgradeGoal (Goal id mm) = Goal (SomeId id (length mm)) mm
-
-    upgradeTerm (Prolog.Term id tt) = Prolog.term (SomeId id (length tt)) tt
-    upgradeTerm t                   = Impure $ bimap (`SomeId` 0) P.id t
-    upgradePred (Prolog.Pred id tt) = Prolog.Pred (SomeId id (length tt)) tt
-    upgradePred p                   = bimap (`SomeId` 0) P.id p
-
 
 -- ------------
 -- Debug stuff

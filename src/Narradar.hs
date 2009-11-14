@@ -5,7 +5,8 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Narradar ( narradarMain, Options(..), defOpts
+module Narradar ( narradarMain, prologMain
+                , Options(..), defOpts
                 , PprTPDBDot(..)      -- module Narradar.Framework.GraphViz
                 , module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
@@ -95,7 +96,7 @@ narradarMain run = do
                                ignore $ system (printf "dot -Tpdf %s -o %s" fp the_pdf)
                                hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
 
-  a_problem <- eitherM $ runParser narradarParser mempty "INPUT" input
+  a_problem <- eitherM $ narradarParse problemFile input
 
   let proof    = dispatchAProblem a_problem
       sol      = run (runProof proof)
@@ -113,6 +114,45 @@ narradarMain run = do
                   printDiagram (sliceWorkDone proof)
   where
 
+prologMain :: forall mp.
+                 (IsMZero mp, Foldable mp
+                 ,Dispatch PrologProblem
+                 ) => (forall a. mp a -> Maybe a) -> IO ()
+prologMain run = do
+  (flags@Options{..}, _, _errors) <- getOptions
+  tmp <- getTemporaryDirectory
+  let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
+      printDiagram proof
+       | isNothing pdfFile = return ()
+       | isJust pdfFile    = withTempFile tmp "narradar.dot" $ \fp h -> do
+
+                               let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
+                                   the_pdf = fromJust pdfFile
+                               hPutStrLn h dotSrc
+                               hClose h
+#ifdef DEBUG
+                               when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
+#endif
+                               ignore $ system (printf "dot -Tpdf %s -o %s" fp the_pdf)
+                               hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
+
+  prologProblem <- eitherM $ parse prologParser problemFile input
+
+  let proof    = dispatch prologProblem
+      sol      = run (runProof proof)
+      diagrams = isJust pdfFile
+
+  case sol of
+    Just sol -> do putStrLn "YES"
+                   when diagrams $ printDiagram sol
+                   when (verbose>0) $ print $ pPrint sol
+
+    Nothing  -> do
+             putStrLn "MAYBE"
+             when (diagrams && verbose > 0) $ do
+                  print $ pPrint proof
+                  printDiagram (sliceWorkDone proof)
+  where
 
 -- ------------------------------
 -- Command Line Options handling

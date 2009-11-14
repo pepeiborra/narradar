@@ -8,18 +8,27 @@
 
 module Narradar.Types.Problem.Prolog where
 
-import Control.Applicative
+import Control.Applicative ((<$>))
+import Control.Monad.Error
+import Data.Bifunctor
 import Data.Foldable as F (Foldable(..), toList)
-import Data.Traversable as T (Traversable(..), mapM)
+import Data.Maybe (catMaybes)
+import Data.Term
+import Data.Traversable (Traversable)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Text.ParserCombinators.Parsec
 import Text.PrettyPrint.HughesPJClass
 import Text.XHtml (HTML(..), theclass)
+import Prelude as P
+
+import qualified Language.Prolog.Parser as Prolog hiding (term)
 
 import MuTerm.Framework.Problem
-
+import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Term (StringId)
+import Narradar.Utils
 
 import qualified Language.Prolog.Syntax as Prolog
 
@@ -49,4 +58,31 @@ instance Pretty PrologProblem where
             text "Prolog problem." $$
             text "Clauses:" <+> pPrint program $$
             text "Goals:" <+> pPrint goals
+
+
+-- --------------------------
+-- Parsing Prolog problems
+-- --------------------------
+
+instance Error ParseError
+
+prologParser = do
+  txt    <- getInput
+  goals  <- eitherM $ mapM parseGoal $ catMaybes $ map f (lines txt)
+  clauses<- Prolog.whiteSpace >> many Prolog.clause
+  return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds (concat clauses)))
+  where
+    f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
+    f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
+    f _ = Nothing
+
+    upgradeIds :: Prolog.Program id -> Prolog.Program (SomeId id)
+    upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
+
+    upgradeGoal (Goal id mm) = Goal (SomeId id (length mm)) mm
+
+    upgradeTerm (Prolog.Term id tt) = Prolog.term (SomeId id (length tt)) tt
+    upgradeTerm t                   = Impure $ bimap (`SomeId` 0) P.id t
+    upgradePred (Prolog.Pred id tt) = Prolog.Pred (SomeId id (length tt)) tt
+    upgradePred p                   = bimap (`SomeId` 0) P.id p
 
