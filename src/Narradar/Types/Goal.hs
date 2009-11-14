@@ -25,7 +25,7 @@ instance Functor Goal where fmap f (Goal id mm) = Goal (f id) mm
 
 
 goalP  = Goal <$> TRSParser.identifier <*> modesP <* optional (char '.')
-modesP = parens (modeP `sepBy` char ',') where parens= between (char '(') (char ')')
+modesP = parens (modeP `sepBy` char ',') <|> return [] where parens= between (char '(') (char ')')
 modeP  = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
 
 parseGoal :: String -> Either ParseError [Goal String]
