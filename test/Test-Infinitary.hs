@@ -32,7 +32,6 @@ instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
 -- Prolog
 instance Dispatch PrologProblem where
---    dispatch = apply SKTransformInfinitary >=> dispatch
     dispatch = apply (SKTransformInfinitary bestHeu) >=> dispatch
 
 -- Rewriting
