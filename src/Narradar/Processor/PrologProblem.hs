@@ -134,13 +134,14 @@ instance (Info info SKTransformProof
                    PrologProblem {- ==> -} (NProblem (Infinitary DRP IRewriting) DRP)
  where
   apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
-   andP SKTransformInfinitaryProof p0
-     [ p
-         | let sk_p = prologTRS'' rr (getSignature rr)
-               rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
-         , goal    <- goals
-         , p       <- mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem IRewriting sk_p)
+   andP SKTransformInfinitaryProof p0 =<< sequence
+     [  msum (map return probs)
+         | goal    <- goals
+         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem IRewriting sk_p)
      ]
+    where
+       sk_p = prologTRS'' rr (getSignature rr)
+       rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
 
 -- -------
 -- Proofs
