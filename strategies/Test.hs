@@ -38,11 +38,10 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = mkDispatcher $ fixSolver (apply DependencyGraphSCC >=> apply (RPOProc LPO Yices))
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (id ~ DPIdentifier a, Pretty id, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = mkDispatcher (rpoPlusTransforms RPOSAF)
-
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 -- Narrowing
 instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
     Dispatch (NProblem Narrowing (DPIdentifier id)) where
@@ -66,10 +65,10 @@ instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
 type GId id = DPIdentifier (GenId id)
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
   dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
@@ -83,7 +82,7 @@ instance (Dispatch (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
-proofByAprove = aprove
+sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
                          fixSolver (apply (RPOProc rpo Yices) .|. graphTransform >=>

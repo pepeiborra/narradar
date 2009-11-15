@@ -30,29 +30,17 @@ instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
-
 -- Prolog
 instance Dispatch PrologProblem where
 --    dispatch = apply SKTransformInfinitary >=> dispatch
-    dispatch = apply SKTransformNarrowing >=> dispatch
+    dispatch = apply SKTransformInfinitary >=> dispatch
 
 -- Rewriting
 instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem Rewriting (DPIdentifier a)) where
-  dispatch = mkDispatcher $ fixSolver (apply DependencyGraphSCC >=> apply (RPOProc LPO Yices))
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
-  dispatch = mkDispatcher (rpoPlusTransforms RPOSAF)
-
--- Narrowing
-instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
-    Dispatch (NProblem Narrowing (DPIdentifier id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
-
--- Narrowing Goal
-instance (Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
-  dispatch = apply (NarrowingGoalToInfinitary bestHeu) >=> dispatch
-instance (Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
-  dispatch = apply (NarrowingGoalToInfinitary bestHeu) >=> dispatch
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 -- Infinitary
 instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
@@ -69,33 +57,12 @@ instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
                  apply (InfinitaryToRewriting bestHeu) >=>
                  dispatch)
 
--- Initial Goal
-type GId id = DPIdentifier (GenId id)
-
-instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
-
-instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
-
-instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
-
--- Relative
-instance (Dispatch (NProblem base id)
-         ,Pretty id, Ord id, Pretty base, Pretty (TermN id)
-         ,IsDPProblem base, MkProblem base (NTRS id)
-         ,PprTPDBDot (NProblem base id), ProblemColor (NProblem base id)
-         ,Pretty (NProblem base id)
-         ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
-  dispatch = apply RelativeToRegular >=> dispatch
-
-proofByAprove = aprove
+sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         fixSolver (apply (RPOProc rpo Yices) .|. graphTransform >=>
-                                    apply DependencyGraphSCC
-                                   )
+                         repeatSolver 5 (apply (RPOProc rpo Yices) .|. graphTransform >=>
+                                          apply DependencyGraphSCC
+                                         )
 
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation

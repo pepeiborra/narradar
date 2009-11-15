@@ -6,7 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Narradar.Types.Term
-                     (TermF(..), SomeId(..), StringId
+                     (TermF(..), SomeId(..), HasArity(..), StringId
                      ,TermN, RuleN, constant, term, term1
                      ,termIds, Size(..), fromSimple
                      ,ExtraVars(..)
@@ -35,6 +35,9 @@ data SomeId a = SomeId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Ty
 
 instance Pretty StringId where pPrint SomeId{..} = text the_id
 instance Pretty a => Pretty (SomeId a) where pPrint SomeId{..} = pPrint the_id
+
+class    HasArity id where getIdArity :: id -> Int
+instance HasArity (SomeId a) where getIdArity = the_arity
 
 -- -------
 -- Terms

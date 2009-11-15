@@ -63,11 +63,11 @@ import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
-import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem)
+import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, liftProcessor)
 import Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
 import Narradar.Types.Problem.Prolog        hiding (goals)
 import Narradar.Types.Problem.Relative      hiding (baseProblem, baseProblemType)
-import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseProblemType, goals)
+import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseProblemType, goals, liftProcessor)
 import Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseProblemType, pi_PType)
 import Narradar.Types.TRS
 import Narradar.Types.Term

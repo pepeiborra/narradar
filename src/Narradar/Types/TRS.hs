@@ -247,8 +247,14 @@ mapNarradarTRS' ft fr (DPTRS rr g (u1 :!: u2) _) = let rr' = fmap fr rr
 isDPTRS :: NarradarTRSF a -> Bool
 isDPTRS DPTRS{} = True; isDPTRS _ = False
 
-restrictDPTRS :: Foldable t => NarradarTRS t v -> [Int] -> NarradarTRS t v
-restrictDPTRS (DPTRS dps gr (unif :!: unifInv) _) indexes
+restrictTRS :: Foldable t => NarradarTRS t v -> [Int] -> NarradarTRS t v
+restrictTRS (TRS rr _) indexes = let rr' = Set.fromList (select indexes (toList rr))
+                                   in TRS rr' (getSignature rr')
+restrictTRS (PrologTRS rr _) indexes = let rr'  = Map.fromList (select indexes (Map.toList rr))
+                                           sig' = getSignature (Map.elems rr')
+                                       in PrologTRS rr' (getSignature rr')
+
+restrictTRS (DPTRS dps gr (unif :!: unifInv) _) indexes
   = DPTRS dps' gr' unif' (getSignature $ elems dps')
   where
    newIndexes = Map.fromList (zip indexes [0..])

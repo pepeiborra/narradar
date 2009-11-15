@@ -98,7 +98,7 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
     if null cc
      then success NoCycles p
      else andP proof p
-               [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) p | ciclo <- cc]
+               [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) p | ciclo <- cc]
 
 -- --------------
 -- Graph Proofs
@@ -205,14 +205,14 @@ cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 sccProcessor problem@(getP -> dps@(DPTRS dd gr unif sig))
   | null cc   = success NoCycles problem
   | otherwise = andP (SCCs gr (map Set.fromList cc)) problem
-                 [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
+                 [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
     where
       cc  = [vv | CyclicSCC vv <- GSCC.sccList gr]
 
 cycleProcessor problem@(getP -> DPTRS dd gr unif sig)
   | null cc   = success NoCycles problem
   | otherwise = andP (Cycles gr) problem
-                 [setP (restrictDPTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
+                 [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
     where
       cc = cycles gr
 

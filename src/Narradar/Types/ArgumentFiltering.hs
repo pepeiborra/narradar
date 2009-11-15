@@ -8,7 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 {-# LANGUAGE GADTs #-}
 
@@ -16,6 +16,7 @@ module Narradar.Types.ArgumentFiltering where
 
 import Control.Applicative
 import Control.Arrow (second)
+import Control.Monad.Failure
 import Control.Monad.Fix (fix)
 import Data.Bifunctor
 import Data.List (partition, find, inits, unfoldr, sortBy)
@@ -28,6 +29,7 @@ import qualified Data.Set as Set
 import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
 import Data.Monoid
+import Data.Typeable
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
@@ -77,6 +79,7 @@ invert    :: (HasSignature sig) => sig -> AF_ (SignatureId sig) -> AF_ (Signatur
 restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
 splitCD   :: (HasSignature sig, id ~ SignatureId sig, Pretty id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
+combine :: (MonadFailure FailedToCombineAFs m, Ord id) => AF_ id -> AF_ id -> m (AF_ id)
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show (pPrint id))
@@ -168,6 +171,32 @@ difference (Right s1) (Left y)   = Right (Set.delete y s1)
 difference (Left x) (Left y)     = if x == y
                                     then error "AF.difference: cannot further filter a collapsed filtering"
                                     else Left x
+
+data FailedToCombineAFs = FailedToCombineAFs deriving (Eq,Ord,Show,Typeable)
+
+combine (AF a1) (AF a2)
+   | Map.size a1 > Map.size a2 = go a1 (Map.toList a2)
+   | otherwise                 = go a2 (Map.toList a1)
+  where
+   go m [] = return (AF m)
+   go m ((k,Left i):rest)
+       = case Map.lookup k m of
+           Nothing                  -> go (Map.insert k (Left i) m) rest
+           Just (Right pp)
+                | i `Set.member` pp -> go (Map.insert k (Left i) m) rest
+                | otherwise         -> failure FailedToCombineAFs
+           Just (Left j)
+                | i /= j            -> failure FailedToCombineAFs
+                | otherwise         -> go m rest
+
+   go m ((k,Right ii):rest)
+       = case Map.lookup k m of
+           Nothing                  -> go (Map.insert k (Right ii) m) rest
+           Just (Right pp)          -> go (Map.insert k (Right $ Set.intersection ii pp) m) rest
+           Just (Left j)
+                | j `Set.member` ii -> go (Map.insert k (Left j) m) rest
+                | otherwise         -> failure FailedToCombineAFs
+
 
 -- ----------------------
 -- Regular AF Application

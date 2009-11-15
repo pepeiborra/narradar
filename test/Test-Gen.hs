@@ -38,15 +38,10 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = mkDispatcher $ fixSolver (apply DependencyGraphSCC >=> apply (RPOProc LPO Yices))
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (id ~ DPIdentifier a, Pretty id, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = mkDispatcher (rpoPlusTransforms RPOSAF)
-
--- Narrowing
-instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
-    Dispatch (NProblem Narrowing (DPIdentifier id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 -- Narrowing Goal
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
@@ -54,25 +49,17 @@ instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NPro
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 
--- Infinitary
-instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
-           Dispatch (NProblem (Infinitary (DPIdentifier a) IRewriting) (DPIdentifier a)) where
-  dispatch = mkDispatcher
-                (apply DependencyGraphSCC >=>
-                 apply (InfinitaryToRewriting bestHeu) >=>
-                 dispatch)
-
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 -- Relative
 instance (Dispatch (NProblem base id)
@@ -83,12 +70,12 @@ instance (Dispatch (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
-proofByAprove = aprove
+sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         fixSolver (apply (RPOProc rpo Yices) .|. graphTransform >=>
-                                    apply DependencyGraphSCC
-                                   )
+                         repeatSolver 5 (apply (RPOProc rpo Yices) .|. graphTransform >=>
+                                         apply DependencyGraphSCC
+                                        )
 
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation

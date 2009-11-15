@@ -34,14 +34,13 @@ import Data.Term.Rules
 import MuTerm.Framework.Problem
 import MuTerm.Framework.Proof
 
-import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
-import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Term
 import Narradar.Types.TRS
+import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
@@ -106,6 +105,16 @@ narrowingGen        = NarrowingGen  Rewriting
 cnarrowingGen       = NarrowingGen  IRewriting
 narrowingGenProblem = NarrowingGenProblem
 
+-- Lifting Processors
+
+liftProcessor :: ( Processor info tag (Problem base trs) (Problem base trs)
+                 , Info info (Problem base trs), MonadPlus m
+                 )=> tag -> Problem (MkNarrowingGen base) trs -> Proof info m (Problem (MkNarrowingGen base) trs)
+
+liftProcessor tag p@NarrowingGenProblem{..} = do
+      p' <- apply tag baseProblem
+      return p{baseProblem = p' `asTypeOf` baseProblem}
+
 -- ----------
 -- Instances
 -- ----------
@@ -129,14 +138,6 @@ instance Pretty p => Pretty (MkNarrowingGen p) where
 
 instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenNarr"
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
-
--- Custom Argument Filtering notion
-
-instance ( GenSymbol id, Ord id, Functor (Problem base)
-         , id ~ AFId (Problem (MkNarrowingGen base) (NTRS id))
-         ) => ApplyAF (Problem (MkNarrowingGen base) (NTRS id)) where
-  type AFId (Problem (MkNarrowingGen base) (NTRS id)) = AFId (NTRS id)
-  apply af = fmap (mapNarradarTRS' id extraVarsToGen . apply af)
 
 -- ICap
 

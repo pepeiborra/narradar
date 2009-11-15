@@ -44,6 +44,11 @@ instance Eq a => Eq (DPIdentifier a) where
     _             == AnyIdentifier = True
     _             == _             = False
 
+instance HasArity a => HasArity (DPIdentifier a) where
+    getIdArity (IdFunction f) = getIdArity f
+    getIdArity (IdDP f)       = getIdArity f
+    getIdArity AnyIdentifier  = 0
+
 instance Pretty (DPIdentifier a) => Show (DPIdentifier a) where show = show . pPrint
 
 instance Pretty (DPIdentifier String) where

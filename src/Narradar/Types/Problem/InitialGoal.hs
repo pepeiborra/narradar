@@ -152,6 +152,16 @@ reachableRules :: (Ord(Term t Var), HasId t, Foldable t
 
 reachableRules p = getR $ iUsableRules (baseProblem p) (rhs <$> reachablePairs p)
 
+-- Lifting Processors
+
+liftProcessor :: ( Processor info tag (Problem base trs) (Problem base trs)
+                 , Info info (Problem base trs), MonadPlus m
+                 )=> tag -> Problem (InitialGoal t base) trs -> Proof info m (Problem (InitialGoal t base) trs)
+
+liftProcessor tag p@InitialGoalProblem{..} = do
+      p' <- apply tag baseProblem
+      return p{baseProblem = p' `asTypeOf` baseProblem}
+
 -- ---------
 -- Instances
 -- ---------
@@ -182,16 +192,6 @@ instance HTML p => HTML (InitialGoal id p) where
     toHtml InitialGoal{..} = toHtml "Initial goal " +++ baseProblemType
 
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
-
--- Lifting Processors
-
-liftProcessor :: ( Processor info tag (Problem base trs) (Problem base trs)
-                 , Info info (Problem base trs), MonadPlus m
-                 )=> tag -> Problem (InitialGoal t base) trs -> Proof info m (Problem (InitialGoal t base) trs)
-
-liftProcessor tag p@InitialGoalProblem{..} = do
-      p' <- apply tag baseProblem
-      return p{baseProblem = p' `asTypeOf` baseProblem}
 
 
 -- ICap

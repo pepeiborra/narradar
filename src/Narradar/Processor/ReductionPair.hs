@@ -87,8 +87,8 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
                                                              , show (pprDP <$> AF.apply the_af dp) `Set.member` text_nonDecreasingDPs]
                in assert (Set.size nonDecreasingDPs == length basic_nonDecreasingDPs) $
                   andP (AProveReductionPairProof the_af [OutputXml $ pack xml]) rp
-                      [ setP (restrictDPTRS dps (toList nonDecreasingDPs)) p
-                      , setP (restrictDPTRS dps [ i | (i,dp) <- zip [0..] (rules dps)
+                      [ setP (restrictTRS dps (toList nonDecreasingDPs)) p
+                      , setP (restrictTRS dps [ i | (i,dp) <- zip [0..] (rules dps)
                                                     , i `Set.notMember` nonDecreasingDPs
                                                     , not $ isGround $ rhs $ AF.apply pi' dp])
                                       p])

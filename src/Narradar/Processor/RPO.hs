@@ -22,7 +22,7 @@ import qualified Data.Set as Set
 import Narradar.Framework.GraphViz
 
 import Narradar.Types
-import Narradar.Types.Problem.NarrowingGen
+import qualified Narradar.Types.Problem.InitialGoal as InitialGoal
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
@@ -175,7 +175,7 @@ instance ( Processor info RPOProc (Problem base trs) (Problem base trs)
          , Info info (Problem base trs)
          )=> Processor info RPOProc (Problem (InitialGoal t base) trs) (Problem (InitialGoal t base) trs)
   where
-   apply = liftProcessor
+   apply = InitialGoal.liftProcessor
 
 
 -- -----------------
@@ -201,7 +201,7 @@ procAF p m = case unsafePerformIO m of
                           decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
-                          p'            = setP (restrictDPTRS dps nondec_dps) p
+                          p'            = setP (restrictTRS dps nondec_dps) p
 #ifdef DEBUG
                           verification  = verifyRPOAF p symbols nondec_dps
                           isValidProof
@@ -223,7 +223,7 @@ procAF_IG p m = case unsafePerformIO m of
                           decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
-                          p'            = setP (restrictDPTRS dps nondec_dps) p
+                          p'            = setP (restrictTRS dps nondec_dps) p
 
                       in
                          singleP proof p p'
@@ -240,8 +240,8 @@ procNAF p m = case unsafePerformIO m of
                           decreasingDps = select([0..length (rules dps) - 1] \\ non_dec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
-                          p1            = setP (restrictDPTRS dps non_dec_dps) p
-                          p2            = setP (restrictDPTRS dps non_rhsground_dps) p
+                          p1            = setP (restrictTRS dps non_dec_dps) p
+                          p2            = setP (restrictTRS dps non_rhsground_dps) p
                       in andP proof p (snub [p1,p2])
        where dps = getP p
 {-
@@ -258,7 +258,7 @@ proc p m = case unsafePerformIO m of
                       let proof         = RPOProof decreasingDps [] symbols
                           dps           = getP p
                           decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
-                          p'            = setP (restrictDPTRS dps nondec_dps) p
+                          p'            = setP (restrictTRS dps nondec_dps) p
                           verification  = verifyRPO p symbols nondec_dps
                           isValidProof
                             | isCorrect verification = True

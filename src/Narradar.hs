@@ -19,6 +19,7 @@ module Narradar ( narradarMain, prologMain
                 , module Narradar.Processor.ExtraVariables
                 , module Narradar.Processor.PrologProblem
                 , module Narradar.Processor.RelativeProblem
+                , module Narradar.Processor.SubtermCriterion
                 , module Narradar.Types
                 ) where
 
@@ -61,6 +62,7 @@ import Narradar.Processor.ReductionPair
 import Narradar.Processor.ExtraVariables
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem
+import Narradar.Processor.SubtermCriterion
 
 narradarMain :: forall mp.
                  (IsMZero mp, Foldable mp

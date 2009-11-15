@@ -71,7 +71,7 @@ solver = do
   mb_input  <- getInput "TRS"
   case (mb_input) of
     Just input -> do
-       a_problem <- eitherM $ runParser narradarParser mempty "INPUT" input
+       a_problem <- eitherM $ narradarParse "INPUT" input
 
        let proof   = dispatchAProblem a_problem   :: Proof (PrettyInfo, DotInfo) [] ()
            sol     = listToMaybe (runProof proof) :: Maybe (Proof (PrettyInfo, DotInfo) [] ())
@@ -112,39 +112,39 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = mkDispatcher $ fixSolver (apply DependencyGraphSCC >=> apply (RPOProc LPO Yices))
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
-instance (id ~ Identifier a, Pretty id, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = mkDispatcher (rpoPlusTransforms RPOSAF)
+instance (id ~ DPIdentifier a, Pretty id, Ord a) => Dispatch (NProblem IRewriting id) where
+  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 -- Narrowing
-instance (Pretty id, Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) =>
-    Dispatch (NProblem Narrowing (Identifier id)) where
+instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
+    Dispatch (NProblem Narrowing (DPIdentifier id)) where
   dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
 
-instance (Pretty id, Pretty (Identifier id), Ord id, Lattice (AF_ (Identifier id))) =>
-   Dispatch (NProblem CNarrowing (Identifier id)) where
+instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
+   Dispatch (NProblem CNarrowing (DPIdentifier id)) where
 --  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
   dispatch = mkDispatcher (apply DependencyGraphSCC >=>
                             (apply (RPOProc LPOSAF Yices) .|. (apply Instantiation .|. apply FInstantiation))
                           )
 
 -- Narrowing Goal
-instance (Pretty (Identifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (NarrowingGoal (Identifier id)) (Identifier id)) where
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
-instance (Pretty (Identifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (CNarrowingGoal (Identifier id)) (Identifier id)) where
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 
 -- Infinitary
-instance (id  ~ Identifier a, Ord a, Lattice (AF_ id), Pretty id) =>
-           Dispatch (NProblem (Infinitary (Identifier a) IRewriting) (Identifier a)) where
+instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
+           Dispatch (NProblem (Infinitary (DPIdentifier a) IRewriting) (DPIdentifier a)) where
   dispatch = mkDispatcher
                 (apply DependencyGraphSCC >=>
                  apply (InfinitaryToRewriting bestHeu) >=>
                  dispatch)
 
 -- Initial Goal
-type GId id = Identifier (GenId id)
+type GId id = DPIdentifier (GenId id)
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
   dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
@@ -167,16 +167,16 @@ instance (Dispatch (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
--- Initial Goal + Relative
 
+sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
 
 --rpoPlusTransforms ::
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         fixSolver (apply (RPOProc rpo Yices) .|. graphTransform >=>
-                                    apply DependencyGraphSCC
-                                   )
+                         repeatSolver 3 (apply (RPOProc rpo Yices) .|. graphTransform >=>
+                                         apply DependencyGraphSCC
+                                        )
 
 -- -------------------
 -- Embedded content
