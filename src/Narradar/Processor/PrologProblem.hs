@@ -122,12 +122,10 @@ instance (Info info SKTransformProof
  where
   apply SKTransformNarrowing p0@PrologProblem{..} =
    andP SKTransformNarrowingProof p0
-     [ mkNewProblem (cnarrowingGoal (IdFunction <$> skTransformGoal goal)) sk_p
+     [ mkNewProblem (cnarrowingGoal (IdDP <$> skTransformGoal goal)) sk_p
          | let sk_p          = prologTRS'' rr (getSignature rr)
                rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal            <- goals
-         , let goalAF        = skTransformAF program (mkGoalAF goal)
-               af_groundinfo = AF.init sk_p `mappend` goalAF
      ]
 
 instance (Info info SKTransformProof
@@ -137,12 +135,10 @@ instance (Info info SKTransformProof
  where
   apply SKTransformInfinitary p0@PrologProblem{..} =
    andP SKTransformInfinitaryProof p0
-     [ mkNewProblem (infinitary (IdFunction <$> skTransformGoal goal) IRewriting) sk_p
+     [ mkNewProblem (infinitary (IdDP <$> skTransformGoal goal) IRewriting) sk_p
          | let sk_p          = prologTRS'' rr (getSignature rr)
                rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal            <- goals
-         , let goalAF        = skTransformAF program (mkGoalAF goal)
-               af_groundinfo = AF.init sk_p `mappend` goalAF
      ]
 
 -- -------
