@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
@@ -17,7 +18,7 @@ import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
-import Data.Traversable as T (Traversable(..), mapM)
+import Data.Traversable as T (Traversable(..), mapM, fmapDefault, foldMapDefault)
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -43,29 +44,30 @@ import Narradar.Framework.Ppr
 import Prelude hiding (pi)
 
 
-data Infinitary id p = Infinitary {pi_PType :: AF_ id, baseProblemType :: p} deriving (Eq, Ord, Show)
+data Infinitary id p = forall heu . PolyHeuristic heu id => Infinitary {pi_PType :: AF_ id, heuristic :: MkHeu heu , baseProblemType :: p}
+
 instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
   data Problem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::Problem p a}
-  getProblemType (InfinitaryProblem af p) = Infinitary af (getProblemType p)
-  getR   (InfinitaryProblem _  p) = getR p
+  getProblemType (InfinitaryProblem af p) = infinitary' af (getProblemType p)
+  getR   (InfinitaryProblem _ p) = getR p
 
-instance (Ord id, MkProblem p trs, HasSignature (Problem p trs), id ~ SignatureId (Problem p trs)) =>
+instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ SignatureId (Problem p trs)) =>
     MkProblem (Infinitary id p) trs where
-  mkProblem (Infinitary af base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
+  mkProblem (Infinitary af _ base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
   mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
 
 instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
   getP   (InfinitaryProblem _  p) = getP p
 
-instance (id ~ SignatureId (Problem p trs), HasSignature (Problem p trs), Ord id, MkDPProblem p trs) =>
+instance (id ~ SignatureId (Problem p trs), HasSignature trs, Ord id, MkDPProblem p trs) =>
     MkDPProblem (Infinitary id p) trs where
   mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
-  mkDPProblem (Infinitary af base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
+  mkDPProblem (Infinitary af _ base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
     where p = mkDPProblem base rr dp
 
+infinitary  g p = Infinitary (mkGoalAF g) bestHeu p
+infinitary' g p = Infinitary g bestHeu p
 
-infinitary        g p = Infinitary (mkGoalAF g) p
-infinitaryProblem g p = InfinitaryProblem (g `mappend` AF.init p) p
 mkDerivedInfinitaryProblem g mkH p = do
   let heu = mkHeu mkH p
       af  = mkGoalAF g `mappend` AF.init p
@@ -73,19 +75,19 @@ mkDerivedInfinitaryProblem g mkH p = do
   let p' = InfinitaryProblem af' p --  $ (iUsableRules p (rhs <$> rules (getP p)))
   return p'
 
+-- Eq,Ord,Show
 deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (Infinitary id p) trs)
 deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (Infinitary id p) trs)
 deriving instance (Show id, Show (Problem p trs)) => Show (Problem (Infinitary id p) trs)
 
 -- Functor
+instance Functor (Infinitary id) where fmap = fmapDefault
+instance Foldable (Infinitary id) where foldMap = foldMapDefault
+instance Traversable (Infinitary id) where traverse f (Infinitary pi heu p) = Infinitary pi heu <$> f p
 
 instance Functor (Problem p) => Functor (Problem (Infinitary id p)) where fmap f (InfinitaryProblem af p) = InfinitaryProblem af (fmap f p)
 instance Foldable (Problem p) => Foldable (Problem (Infinitary id p)) where foldMap f (InfinitaryProblem af p) = foldMap f p
 instance Traversable (Problem p) => Traversable (Problem (Infinitary id p)) where traverse f (InfinitaryProblem af p) = InfinitaryProblem af <$> traverse f p
-
-$(derive makeFunctor     ''Infinitary)
-$(derive makeFoldable    ''Infinitary)
-$(derive makeTraversable ''Infinitary)
 
 -- Data.Term instances
 
@@ -110,7 +112,7 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
 
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
          ,ApplyAF (Term t v), ApplyAF trs
-         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id
+         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id, Ord (t(Term t v))
          ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
    IUsableRules t v (Infinitary id p, trs)
  where

@@ -26,9 +26,6 @@ import Text.XHtml (theclass)
 import Data.Term
 import Data.Term.Rules
 
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
-
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
@@ -39,6 +36,7 @@ import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Problem.Infinitary (f_UsableRulesAF)
 import Narradar.Types.Term
 import Narradar.Types.TRS
+import Narradar.Framework
 import Narradar.Framework.Ppr
 
 import Prelude hiding (pi)
@@ -68,13 +66,14 @@ instance (HasSignature trs, id ~ SignatureId trs, Ord id, MkDPProblem p trs) =>
   mkDPProblem (NarrowingGoal g pi typ) = (narrowingGoalProblem g pi.) . mkDPProblem typ
   mapP f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapP f p)
 
+
 instance FrameworkExtension (MkNarrowingGoal id) where
   getBaseFramework (NarrowingGoal _ _ p) = p
   getBaseProblem = baseProblem
   setBaseProblem p0 p = p{baseProblem = p0}
 
-narrowingGoal        g = NarrowingGoal g (mkGoalAF g) Rewriting
-cnarrowingGoal       g = NarrowingGoal g (mkGoalAF g) IRewriting
+narrowingGoal        g = NarrowingGoal g (mkGoalAF g) rewriting
+cnarrowingGoal       g = NarrowingGoal g (mkGoalAF g) irewriting
 
 narrowingGoalProblem g pi p = NarrowingGoalProblem g (pi `mappend` AF.init p) p
 
@@ -103,29 +102,22 @@ instance Pretty p => Pretty (MkNarrowingGoal id p) where
 instance HTMLClass (MkNarrowingGoal id Rewriting) where htmlClass _ = theclass "IRew"
 instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass "INarr"
 
+
 -- ICap
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-    ICap t v (MkNarrowingGoal id p, trs)
-  where
-    icap (NarrowingGoal _ _ p, trs) = icap (p,trs)
+instance ICap t v (base, NarradarTRS t v) => ICap t v (MkNarrowingGoal id base, NarradarTRS t v) where icap = liftIcap
 
 -- Usable Rules
 
-instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
-         ,ApplyAF (Term t v), ApplyAF trs
-         ,id ~ AFId trs, AFId (Term t v) ~ id, Ord id
-         ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
-   IUsableRules t v (MkNarrowingGoal id p, trs)
- where
-   iUsableRulesM p@(typ@(NarrowingGoal _ pi p0), trs) tt = return p
-   iUsableRulesVarM (NarrowingGoal _ _ p, trs) _ = return (Set.fromList $ rules trs)
 
+instance (IUsableRules t v (base, NarradarTRS t v)) =>
+  IUsableRules t v (MkNarrowingGoal id base, NarradarTRS t v) where
+   iUsableRulesM    = liftUsableRulesM2
+   iUsableRulesVarM = liftUsableRulesVarM2
 
+{-
 -- Insert Pairs
 
-instance (Pretty id, Ord id) =>InsertDPairs (NarrowingGoal id) (NTRS id) where
-  insertDPairs = insertDPairsDefault
-
-instance (Pretty id, Ord id) =>InsertDPairs (CNarrowingGoal id) (NTRS id) where
-  insertDPairs = insertDPairsDefault
+instance (Pretty id, Ord id, MkDPProblem b (NTRS id)) =>InsertDPairs (NarrowingGoal id) (NTRS id) where
+    insertDPairs = insertDPairsDefault
+-}

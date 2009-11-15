@@ -20,7 +20,8 @@ import Data.Term.Rules
 import Narradar.Constraints.ICap
 import Narradar.Types.Term
 import Narradar.Types.Var
-import MuTerm.Framework.Problem
+import Narradar.Framework
+
 
 class IUsableRules t v thing | thing -> t v where
     iUsableRulesM   :: MonadFresh v m => thing -> [Term t v] -> m thing
@@ -58,6 +59,19 @@ instance (MkDPProblem typ trs, IsTRS t v trs, IUsableRules t v (typ,trs,trs)) =>
             (_, trs', _dps) <- iUsableRulesM (getProblemType p, getR p, getP p) tt
             return $ setR (tRS $ rules trs') p
       iUsableRulesVarM p = iUsableRulesVarM (getProblemType p, getR p, getP p)
+
+
+liftUsableRulesM2  (typ, trs) tt = do
+      (_,trs') <- iUsableRulesM (getBaseFramework typ,trs) tt
+      return (typ, trs')
+
+liftUsableRulesM3  (typ, trs, dps) tt = do
+      (_,trs',dps') <- iUsableRulesM (getBaseFramework typ,trs,dps) tt
+      return (typ, trs',dps')
+
+liftUsableRulesVarM2 (typ, trs) = iUsableRulesVarM (getBaseFramework typ, trs)
+liftUsableRulesVarM3 (typ, trs, dps) = iUsableRulesVarM (getBaseFramework typ, trs, dps)
+
 
 {-
 iUsableRules_correct trs (Just pi) = F.toList . go mempty where

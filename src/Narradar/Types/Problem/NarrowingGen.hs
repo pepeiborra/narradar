@@ -101,14 +101,13 @@ instance (Ord id, GenSymbol id, MkDPProblem p (NTRS id)) =>
   MkDPProblem (MkNarrowingGen p) (NTRS id)
  where
   mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
-  mkDPProblem (NarrowingGen typ) trs dps = narrowingGenProblem $ mkDPProblem typ trs' dps'
+  mkDPProblem (NarrowingGen typ) trs dps = NarrowingGenProblem $ mkDPProblem typ trs' dps'
    where
     trs' = mapNarradarTRS' id extraVarsToGen trs
     dps' = mapNarradarTRS' id extraVarsToGen dps
 
-narrowingGen        = NarrowingGen  Rewriting
-cnarrowingGen       = NarrowingGen  IRewriting
-narrowingGenProblem = NarrowingGenProblem
+narrowingGen        = NarrowingGen  rewriting
+cnarrowingGen       = NarrowingGen  irewriting
 
 -- ----------
 -- Instances
@@ -135,28 +134,19 @@ instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenN
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
 
 -- ICap
-
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-    ICap t v (MkNarrowingGen p, trs)
-  where
-    icap (NarrowingGen{..},trs) = icap (baseProblemType,trs)
+instance ICap t v (st, NarradarTRS t v) => ICap t v (MkNarrowingGen st, NarradarTRS t v) where icap = liftIcap
 
 -- Usable Rules
 
-instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
-         ,IUsableRules t v (p,trs, trs), ICap t v (p,trs)) =>
-   IUsableRules t v (MkNarrowingGen p, trs, trs)
- where
-   iUsableRulesM (typ@NarrowingGen{..}, trs, dps) tt = do
-      (_,trs',dps') <- iUsableRulesM (baseProblemType,trs,dps) tt
-      return (typ, trs',dps')
-
-   iUsableRulesVarM (NarrowingGen{..},trs, dps) = iUsableRulesVarM (baseProblemType, trs, dps)
+instance (IUsableRules t v (st, NarradarTRS t v)) =>
+  IUsableRules t v (MkNarrowingGen st, NarradarTRS t v) where
+   iUsableRulesM    = liftUsableRulesM2
+   iUsableRulesVarM = liftUsableRulesVarM2
 
 -- Insert Pairs
 
 instance (MkDPProblem (MkNarrowingGen base) trs, InsertDPairs base trs) => InsertDPairs (MkNarrowingGen base) trs where
-  insertDPairs NarrowingGenProblem{..} = narrowingGenProblem . insertDPairs baseProblem
+  insertDPairs NarrowingGenProblem{..} = NarrowingGenProblem . insertDPairs baseProblem
 
 
 -- -------------------

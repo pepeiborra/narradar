@@ -47,8 +47,11 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
          , Info info (Problem Rewriting (NTRS id))
          , Info info UsableRulesProof
          , Info info (NarrowingToRewritingProof id)
+         , MkDPProblem base (NTRS id)
+         , Traversable (Problem base)
+         , NUsableRules id (base, NTRS id), NCap id (base, NTRS id)
          ) =>
-    Processor info (NarrowingToRewritingICLP08 heu) (Problem Narrowing (NTRS id) ) (Problem Rewriting (NTRS id) ) where
+    Processor info (NarrowingToRewritingICLP08 heu) (Problem (MkNarrowing base) (NTRS id) ) (Problem base (NTRS id) ) where
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
@@ -58,7 +61,7 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
           afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkDerivedProblem Rewriting p')
+                                AF.apply af (getBaseProblem p')
                         | af <- Set.toList afs]
 
   applySearch (NarrowingToRewritingICLP08_SCC mk) p
@@ -70,39 +73,7 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
           afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
           orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p' $
-                                AF.apply af (mkDerivedProblem Rewriting p')
-                        | af <- Set.toList afs]
-
-instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (TermN id)
-         , Info info (NProblem CNarrowing id)
-         , Info info (NProblem IRewriting id)
-         , Info info (NarrowingToRewritingProof id)
-         , Info info UsableRulesProof
-         ) =>
-    Processor info (NarrowingToRewritingICLP08 heu) (Problem CNarrowing (NTRS id)) (Problem IRewriting (NTRS id))
- where
-  applySearch (NarrowingToRewritingICLP08 mk) p
-    | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
-    | otherwise = orProblems
-    where (trs, dps) = (getR p, getP p)
-          heu        = mkHeu mk p
-          u_p        = iUsableRules p (rhs <$> rules dps)
-          afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
-          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
-                         singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkDerivedProblem IRewriting p')
-                        | af <- Set.toList afs]
-
-  applySearch (NarrowingToRewritingICLP08_SCC mk) p
-    | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
-    | otherwise = orProblems
-    where (trs, dps) = (getR p, getP p)
-          heu        = mkHeu mk p
-          u_p        = iUsableRules p (rhs <$> rules dps)
-          afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
-          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
-                         singleP (NarrowingToRewritingICLP08Proof af) p' $
-                                AF.apply af (mkDerivedProblem IRewriting p')
+                                AF.apply af (getBaseProblem p')
                         | af <- Set.toList afs]
 
 

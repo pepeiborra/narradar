@@ -20,9 +20,6 @@ import Text.XHtml (HTML(..), theclass)
 import Data.Term
 import Data.Term.Rules
 
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
-
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
@@ -32,95 +29,48 @@ import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Utils
+import Narradar.Framework
 import Narradar.Framework.Ppr
 
 
-data Narrowing = Narrowing                          deriving (Eq, Ord, Show)
-data CNarrowing = CNarrowing                          deriving (Eq, Ord, Show)
+data MkNarrowing base = MkNarrowing base deriving (Eq, Ord, Show)
 
-narrowingProblem         = NarrowingProblem
-cnarrowingProblem        = CNarrowingProblem
+type Narrowing  = MkNarrowing Rewriting
+type CNarrowing = MkNarrowing IRewriting
 
+narrowing  = MkNarrowing rewriting
+cnarrowing = MkNarrowing irewriting
 
-instance IsProblem Narrowing where
-  data Problem Narrowing a = NarrowingProblem a a deriving (Eq, Ord, Show)
-  getProblemType _ = Narrowing
-  getR (NarrowingProblem r _) = r
+instance IsProblem b => IsProblem (MkNarrowing b) where
+  data Problem (MkNarrowing b) a = NarrowingProblem (Problem b a)
+  getProblemType (NarrowingProblem p) = MkNarrowing (getProblemType p)
+  getR (NarrowingProblem b) = getR b
 
-instance IsDPProblem Narrowing where
-  getP   (NarrowingProblem _ p) = p
+instance IsDPProblem b => IsDPProblem (MkNarrowing b) where
+  getP (NarrowingProblem b) =  getP b
 
-instance Monoid trs => MkProblem Narrowing trs where
-  mkProblem Narrowing rr = narrowingProblem rr mempty
-  mapR f (NarrowingProblem r p) = NarrowingProblem (f r) p
-
-
-instance MkProblem Narrowing trs => MkDPProblem Narrowing trs where
-  mkDPProblem Narrowing = narrowingProblem
-  mapP f (NarrowingProblem r p) = NarrowingProblem r (f p)
-
-instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
-  MkProblem Narrowing (NarradarTRS t v)
- where
-  mkProblem Narrowing rr = narrowingProblem rr mempty
-  mapR f (NarrowingProblem rr pp) = mkDPProblem' Narrowing (f rr) pp
-
-instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(Term t v))) =>
-  MkDPProblem Narrowing (NarradarTRS t v)
- where
-  mkDPProblem Narrowing rr dd@DPTRS{} = narrowingProblem rr dd
-  mkDPProblem Narrowing rr dd = mkDPProblem' Narrowing rr dd
-  mapP f (NarrowingProblem rr pp) = case f pp of
-                                    pp'@DPTRS{} -> NarrowingProblem rr pp'
-                                    pp' -> mkDPProblem' Narrowing rr pp'
-
-instance IsProblem CNarrowing where
-  data Problem CNarrowing a = CNarrowingProblem a a deriving (Eq, Ord, Show)
-  getProblemType _ = CNarrowing
-  getR (CNarrowingProblem r _) = r
-
-instance IsDPProblem CNarrowing where
-  getP (CNarrowingProblem _ p) = p
-
-instance Monoid trs => MkProblem CNarrowing trs where
-  mkProblem CNarrowing rr = cnarrowingProblem rr mempty
-  mapR f (CNarrowingProblem r p) = CNarrowingProblem (f r) p
+instance MkProblem b trs => MkProblem (MkNarrowing b) trs where
+  mkProblem (MkNarrowing b)   = NarrowingProblem . mkProblem b
+  mapR f (NarrowingProblem b) = NarrowingProblem (mapR f b)
 
 
-instance MkProblem CNarrowing trs => MkDPProblem CNarrowing trs where
-  mkDPProblem _ = cnarrowingProblem
-  mapP f (CNarrowingProblem r p) = CNarrowingProblem r (f p)
+instance (MkProblem (MkNarrowing b) trs, MkDPProblem b trs) => MkDPProblem (MkNarrowing b) trs where
+  mkDPProblem (MkNarrowing b) r p = NarrowingProblem $ mkDPProblem b r p
+  mapP f (NarrowingProblem b) = NarrowingProblem (mapP f b)
+
 
 instance FrameworkExtension MkNarrowing where
     getBaseFramework (MkNarrowing b) = b
     getBaseProblem   (NarrowingProblem p) = p
     setBaseProblem p (NarrowingProblem _) = NarrowingProblem p
 
+deriving instance (Eq (Problem p trs)) => Eq (Problem (MkNarrowing p) trs)
+deriving instance (Ord (Problem p trs)) => Ord (Problem (MkNarrowing p) trs)
+deriving instance (Show (Problem p trs)) => Show (Problem (MkNarrowing p) trs)
 
-instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
-  MkProblem CNarrowing (NarradarTRS t v)
- where
-  mkProblem CNarrowing rr = cnarrowingProblem rr mempty
-  mapR f (CNarrowingProblem rr pp) = mkDPProblem' CNarrowing (f rr) pp
-
-instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(Term t v))) =>
-  MkDPProblem CNarrowing (NarradarTRS t v)
- where
-  mkDPProblem CNarrowing rr dd@DPTRS{} = cnarrowingProblem rr dd
-  mkDPProblem CNarrowing rr dd = mkDPProblem' CNarrowing rr dd
-  mapP f (CNarrowingProblem rr pp) = case f pp of
-                                    pp'@DPTRS{} -> CNarrowingProblem rr pp'
-                                    pp' -> mkDPProblem' CNarrowing rr pp'
-
-
-instance Functor (Problem Narrowing) where fmap f (NarrowingProblem r p) = NarrowingProblem (f r) (f p)
-instance Foldable (Problem Narrowing) where foldMap f (NarrowingProblem r p) = f r `mappend` f p
-instance Traversable (Problem Narrowing) where traverse f (NarrowingProblem r p) = NarrowingProblem <$> f r <*> f p
-
-instance Functor (Problem CNarrowing) where fmap f (CNarrowingProblem r p) = CNarrowingProblem (f r) (f p)
-instance Foldable (Problem CNarrowing) where foldMap f (CNarrowingProblem r p) = f r `mappend` f p
-instance Traversable (Problem CNarrowing) where traverse f (CNarrowingProblem r p) = CNarrowingProblem <$> f r <*> f p
-
+instance Functor (Problem p) => Functor (Problem (MkNarrowing p)) where fmap f (NarrowingProblem p) = NarrowingProblem (fmap f p)
+instance Foldable (Problem p) => Foldable (Problem (MkNarrowing p)) where foldMap f (NarrowingProblem p) = foldMap f p
+instance Traversable (Problem p) => Traversable (Problem (MkNarrowing p)) where traverse f (NarrowingProblem p) = NarrowingProblem <$> traverse f p
 
 instance Pretty Narrowing where pPrint _ = text "Narrowing"
 instance Pretty CNarrowing where pPrint _ = text "Constructor Narrowing"
@@ -132,31 +82,22 @@ instance HTMLClass CNarrowing where htmlClass _ = theclass "GNDP"
 
 instance GetPairs Narrowing where getPairs _ = getNPairs
 
-getNPairs trs = getPairs Rewriting trs ++ getLPairs trs
+getNPairs trs = getPairs rewriting trs ++ getLPairs trs
 getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
+
 
 -- Data.Term instances
 
 -- ICap
 
-instance (Ord v, Unify t) => ICap t v (Narrowing, NarradarTRS t v) where icap (_,trs) = icap (Rewriting,trs)
-instance (Ord v, Unify t) => ICap t v (CNarrowing, NarradarTRS t v) where icap (_,trs) = icap (IRewriting,trs)
+instance ICap t v (st, NarradarTRS t v) => ICap t v (MkNarrowing st, NarradarTRS t v) where icap = liftIcap
 
 -- Usable Rules
 
-instance (Enum v, Ord (Term t v), Ord v, HasId t, Unify t) =>
-  IUsableRules t v (Narrowing, NarradarTRS t v) where
-   iUsableRulesM (typ,trs) tt = do
-      (_, trs') <- iUsableRulesM (Rewriting, trs) tt
-      return (typ, trs')
-   iUsableRulesVarM (_, trs) = iUsableRulesVarM (Rewriting, trs)
-
-instance (Enum v, Ord (Term t v), Ord v, HasId t, Unify t) =>
-  IUsableRules t v (CNarrowing, NarradarTRS t v) where
-   iUsableRulesM (typ,trs) tt = do
-      (_, trs') <- iUsableRulesM (IRewriting, trs) tt
-      return (typ, trs')
-   iUsableRulesVarM (_, trs) = iUsableRulesVarM (IRewriting, trs)
+instance (IUsableRules t v (st, NarradarTRS t v)) =>
+  IUsableRules t v (MkNarrowing st, NarradarTRS t v) where
+   iUsableRulesM    = liftUsableRulesM2
+   iUsableRulesVarM = liftUsableRulesVarM2
 
 -- Insert Pairs
 

@@ -34,8 +34,8 @@ data NarrowingGoalToRelativeRewriting = NarrowingGoalToRelativeRewriting derivin
 data NarrowingGoalToRelativeRewritingProof = NarrowingGoalToRelativeRewritingProof deriving (Eq, Show)
 
 instance Pretty NarrowingGoalToRelativeRewritingProof where
-  pPrint NarrowingGoalToRelativeRewritingProof = text "Relative Termination of the following problem with generators" <+>
-                                                 text "implies the termination of narrowing (LOPSTR'09)"
+  pPrint NarrowingGoalToRelativeRewritingProof = text "Relative Termination of the following relateive termination" $$
+                                                 text "problem implies the termination of narrowing (LOPSTR'09)"
 
 
 instance (gid ~ DPIdentifier (GenId id)

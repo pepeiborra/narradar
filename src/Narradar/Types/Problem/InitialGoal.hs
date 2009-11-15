@@ -35,11 +35,6 @@ import Text.XHtml (HTML(..), theclass, (+++))
 import Data.Term hiding ((!))
 import Data.Term.Rules
 
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Problem.Types
-import MuTerm.Framework.Processor
-import MuTerm.Framework.Proof
-
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Problem
@@ -47,8 +42,9 @@ import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Types.Var
-import Narradar.Utils
+import Narradar.Framework
 import Narradar.Framework.Ppr
+import Narradar.Utils
 
 import Prelude hiding (pi)
 
@@ -234,13 +230,14 @@ instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Va
   where
     iUsableRulesVarM (it@(InitialGoal _ _ p), trs, dps) v = do
       let the_problem = mkDPProblem it trs dps
-      (_,reachableRules,_) <- iUsableRulesM (IRewriting, trs, dps) (rhs <$> involvedPairs the_problem)
+      (_,reachableRules,_) <- iUsableRulesM (irewriting, trs, dps) (rhs <$> involvedPairs the_problem)
       iUsableRulesVarM (p, reachableRules, dps) v
+
     iUsableRulesM (it@(InitialGoal _ _ p), trs, dps) tt = do
       let the_problem = mkDPProblem it trs dps
-      reachableRules <- f_UsableRules (p, trs) (\_ -> return mempty) =<< getFresh (rhs <$> involvedPairs the_problem)
+      (_,reachableRules,_) <- iUsableRulesM (irewriting, trs, dps) =<< getFresh (rhs <$> involvedPairs the_problem)
       pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
-      (_,trs',_)     <- iUsableRulesM (p, tRS $ toList reachableRules, dps) tt
+      (_,trs',_)     <- iUsableRulesM (p, reachableRules, dps) tt
       return (it, trs', dps)
 
 -- Other Narradar instances

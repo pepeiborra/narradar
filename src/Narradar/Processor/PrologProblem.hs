@@ -139,7 +139,7 @@ instance (Info info SKTransformProof
    andP SKTransformInfinitaryProof p0 =<< sequence
      [  msum (map return probs)
          | goal    <- goals
-         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem IRewriting sk_p)
+         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem irewriting sk_p)
      ]
     where
        sk_p = prologTRS'' rr (getSignature rr)

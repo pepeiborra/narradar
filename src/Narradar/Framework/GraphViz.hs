@@ -102,15 +102,16 @@ class PprTPDBDot p where pprTPDBdot :: p -> Doc
 instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t
          ) => PprTPDBDot (Problem Rewriting trs) where
-  pprTPDBdot p = vcat
-     [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars p))
+  pprTPDBdot prob@(RewritingProblem r p Standard m) = vcat (
+     [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))
      ,parens( text "PAIRS" $$
-              nest 1 (vcat $ map pprRule $ rules $ getP p))
+              nest 1 (vcat $ map pprRule $ rules $ p))
      ,parens( text "RULES" $$
-              nest 1 (vcat $ map pprRule $ rules $ getR p))
-     ]
+              nest 1 (vcat $ map pprRule $ rules $ r))
+     ] ++ if m == M then [parens (text "MINIMALITY")] else [])
    where
         pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
+
 pprTerm = foldTerm pPrint f where
         f t@(getId -> Just id)
             | null tt = pPrint id
@@ -121,18 +122,18 @@ pprTerm = foldTerm pPrint f where
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem IRewriting trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY INNERMOST)"
+  pprTPDBdot p = pprTPDBdot (mkDerivedProblem rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem Narrowing trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY NARROWING)"
+  pprTPDBdot p = pprTPDBdot ( p) $$ text "(STRATEGY NARROWING)"
 
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem CNarrowing trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedProblem Rewriting p) $$ text "(STRATEGY CNARROWING)"
+  pprTPDBdot p = pprTPDBdot (mkDerivedProblem rewriting p) $$ text "(STRATEGY CNARROWING)"
 
 
 

@@ -63,11 +63,11 @@ import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
-import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, liftProcessor)
+import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem)
 import Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
 import Narradar.Types.Problem.Prolog        hiding (goals)
 import Narradar.Types.Problem.Relative      hiding (baseProblem, baseProblemType)
-import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseProblemType, goals, liftProcessor)
+import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseProblemType, goals)
 import Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseProblemType, pi_PType)
 import Narradar.Types.TRS
 import Narradar.Types.Term
@@ -199,41 +199,44 @@ trsParser = do
 
   case (r0, dps, strategies) of
     ([], [], [])
-        -> return $ ARewritingProblem (mkNewProblem Rewriting r)
+        -> return $ ARewritingProblem (mkNewProblem rewriting r)
     ([], [], [GoalStrategy g])
-        -> return $ AGoalRewritingProblem (mkNewProblem (initialGoal [mkGoal g] Rewriting) r)
+        -> return $ AGoalRewritingProblem (mkNewProblem (initialGoal [mkGoal g] rewriting) r)
 
     ([], [], InnerMost:_)
-        -> return $ AIRewritingProblem (mkNewProblem IRewriting r)
+        -> return $ AIRewritingProblem (mkNewProblem irewriting r)
     ([], [], (GoalStrategy g : InnerMost : _))
-        -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] IRewriting) r)
+        -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] irewriting) r)
 
     ([], dps, [])
-        -> return $ ARewritingProblem (mkDPProblem' Rewriting r' (tRS dps))
+        -> return $ ARewritingProblem (mkDPProblem' rewriting r' (tRS dps))
     ([], dps, [GoalStrategy g])
-        -> return $ AGoalRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] Rewriting) r' (tRS dps))
+        -> return $ AGoalRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] rewriting) r' (tRS dps))
 
     ([], dps, InnerMost:_)
-        -> return $ AIRewritingProblem (mkDPProblem' IRewriting r' (tRS dps))
+        -> return $ AIRewritingProblem (mkDPProblem' irewriting r' (tRS dps))
     ([], dps, GoalStrategy g:InnerMost:_)
-        -> return $ AGoalIRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] IRewriting) r' (tRS dps))
+        -> return $ AGoalIRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] irewriting) r' (tRS dps))
 
     (r0, [], [])
-        -> return $ ARelativeRewritingProblem (mkNewProblem (relative (tRS r0) Rewriting) r)
+        -> return $ ARelativeRewritingProblem (mkNewProblem (relative (tRS r0) rewriting) r)
     (r0, [], InnerMost:_)
-        -> return $ ARelativeIRewritingProblem (mkNewProblem (relative (tRS r0) IRewriting) r)
+        -> return $ ARelativeIRewritingProblem (mkNewProblem (relative (tRS r0) irewriting) r)
 
     (r0, [], [GoalStrategy g])
-        -> return $ AGoalRelativeRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] Rewriting)) r)
+        -> return $ AGoalRelativeRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] rewriting)) r)
     (r0, [], GoalStrategy g:InnerMost:_)
-        -> return $ AGoalRelativeIRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] IRewriting)) r)
+        -> return $ AGoalRelativeIRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r)
 
-    ([], [], TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem Narrowing r)
-    ([], [], ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem CNarrowing r)
+    ([], [], TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem narrowing r)
+    ([], [], ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
+    ([], [], InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
 
     ([], [], GoalStrategy g:TRS.Narrowing:_)
         -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (narrowingGoal g') r)}
     ([], [], GoalStrategy g:ConstructorNarrowing:_)
+        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (cnarrowingGoal g') r)}
+    ([], [], GoalStrategy g:InnerMost:TRS.Narrowing:_)
         -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (cnarrowingGoal g') r)}
 
 -- ------------

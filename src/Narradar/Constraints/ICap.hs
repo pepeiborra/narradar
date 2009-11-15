@@ -17,7 +17,7 @@ import Data.Term.Rules
 import Narradar.Constraints.Unify
 import Narradar.Types.Term
 import Narradar.Types.Var
-import MuTerm.Framework.Problem
+import Narradar.Framework
 
 -- -----------------
 -- Cap & friends
@@ -62,3 +62,5 @@ runIcap t m = evalState m (emptySubst, freshVars) where
 
 class ICap (TermF id) Var p => NCap id p | p -> id
 instance ICap (TermF id) Var p => NCap id p
+
+liftIcap (typ,trs) = icap (getBaseFramework typ,trs)
