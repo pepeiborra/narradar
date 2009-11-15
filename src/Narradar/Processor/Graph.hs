@@ -9,6 +9,7 @@
 module Narradar.Processor.Graph where
 
 import Control.Applicative
+import Control.Monad
 import Control.Exception (assert)
 import Data.Array as A
 import Data.Graph as G
@@ -68,31 +69,26 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
-  apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{..}
+  apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{fullgraph, pairs, initialPairsG, reachablePairsG}
                                                , baseProblem = (getP -> dps@(DPTRS dd gr unif sig))}
    = do
-    let reach_nodes = Set.fromList (fst <$> filter (isReachable.snd) (assocs dd))
-        isReachable = isJust . (`lookupNode` dg)
+    let reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
+        isReachable p =  fromMaybe False (flip Set.member reachablePairsG <$> lookupNode p dg)
 
         grForSccs   = buildG (bounds gr)
                        [ (i,o) | (i,o) <- edges gr
-                               , i `Set.member` reach_nodes
-                               , o `Set.member` reach_nodes]
-
+                               , i `Set.member` reachable
+                               , o `Set.member` reachable]
 
         cc   = [vv | CyclicSCC vv <- GSCC.sccList grForSccs]
 
-        initial_nodes = Set.fromList $ catMaybes [Map.lookup dp pairsMap | dp <- initialPairs p]
-        reach_nodes_ix = Set.fromList [ ix | dp <- toList dd, Just ix <- [lookupNode dp dg]]
-        usable_rules_ix= reachableNodes p
-        out_nodes_ix   = Set.fromList (vertices graph) `Set.difference` reach_nodes_ix
-        pairsMap = Map.fromList [ (n,dp) | (dp,n) <- A.assocs dd]
+        convertIx i = fromMaybe (error "DependencyGraphSCC") (lookupNode (dd ! i) dg)
 
-        proof = UsableSCCs{ gr         = graph
-                          , reachable  = reach_nodes_ix
-                          , initial    = Set.fromList initialPairsG
-                          , outOfScope = out_nodes_ix
-                          , inPath     = Set.fromList (reachableNodes p)
+        proof = UsableSCCs{ gr         = fullgraph
+                          , reachable  = reachablePairsG
+                          , initial    = initialPairsG
+                          , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
+                          , inPath     = Set.fromList $ involvedNodes p
                           , the_pairs  = elems pairs}
 
     if null cc

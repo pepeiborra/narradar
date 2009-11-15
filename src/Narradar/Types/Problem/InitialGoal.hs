@@ -123,15 +123,17 @@ updateInitialGoalProblem p p0 = p{baseProblem = p0}
 initialPairs :: Unify t => Problem (InitialGoal t base) trs -> [Rule t Var]
 initialPairs InitialGoalProblem{..} = dinitialPairs dgraph
 
-reachableNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
+
+-- | returns the vertexes in the DGraph which are in a path from an initial pair
+involvedNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Vertex]
-reachableNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
+involvedNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
   = flattenSCCs (map (sccs A.!) sccsInPath)
  where
    sccsInvolved = Set.fromList $ catMaybes $ [ sccFor n dg
                                                    | p <- rules (getP p)
                                                    , Just n <- [lookupNode p dg]]
-   initialSccs  = Set.fromList [ n | p <- initialPairsG
+   initialSccs  = Set.fromList [ n | p <- toList initialPairsG
                                    , Just n <- [sccFor p dg]
                                ]
 
@@ -144,7 +146,7 @@ reachableNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
 involvedPairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Rule t Var]
 involvedPairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
-  = map (`lookupPair` dg) (snub(reachableNodes p ++ pairs ++ initialPairsG))
+  = map (`lookupPair` dg) (snub(involvedNodes p ++ pairs ++ toList initialPairsG))
  where
    pairs = catMaybes(map (`lookupNode` dg) (rules $ getP p))
 
@@ -264,8 +266,9 @@ type DGraph t v = DGraphF (Rule t v)
 
 data DGraphF a = DGraph {pairs    :: Array Int a
                         ,pairsMap :: Map a Int
-                        ,initialPairsG :: [Vertex]      -- Indexes for the pairs Array
-                        ,graph    :: Graph
+                        ,initialPairsG   :: Set Vertex
+                        ,reachablePairsG :: Set Vertex
+                        ,fullgraph:: Graph
                         ,sccs     :: Array Int (SCC Vertex)
                         ,sccsMap  :: Array Vertex (Maybe Int)
                         ,sccGraph :: Graph}
@@ -274,8 +277,9 @@ deriving instance Show a => Show (SCC a)
 instance Pretty a => Pretty (DGraphF a) where
   pPrint DGraph{..} = text "DGraphF" <> brackets(vcat [text "pairs =" <+> pPrint (elems pairs)
                                                       ,text "pairsMap =" <+> pPrint pairsMap
-                                                      ,text "initialPairs = " <+> pPrint initialPairsG
-                                                      ,text "graph =" <+> text (show graph)
+                                                      ,text "initial pairs = " <+> pPrint initialPairsG
+                                                      ,text "reachable pairs = " <+> pPrint reachablePairsG
+                                                      ,text "graph =" <+> text (show fullgraph)
                                                       ,text "sccs =" <+> text (show sccs)
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
@@ -295,77 +299,58 @@ mkDGraph' :: ( IsDPProblem typ, Traversable (Problem typ), Pretty typ, Pretty tr
             , ICap t v (typ, trs)
             , HasRules t v trs
             ) => typ -> trs -> trs -> [Term t v] -> Graph -> DGraph t v
-mkDGraph' typ trs (rules -> dps) goals graph0 = runIcap (rules trs ++ dps) $ do
-  let dd  = listArray (0, length dps - 1) dps
+mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ do
+  let pairs    = listArray (0, length dps - 1) dps
+      pairsMap = Map.fromList (dps `zip` [0..])
       p   = (typ,trs)
 
-  -- List of indexes for graph0
-  initialPairs0 <- liftM snub $ runListT $ do
+  -- List of indexes for fullgraph
+  initialPairsG <- liftM Set.fromList $ runListT $ do
                      (i,s :-> t) <- liftL (zip [0..] dps)
                      g           <- liftL goals
                      g'          <- lift (getFresh g >>= icap p)
                      guard(g' `unifies` s)
                      return i
 
-  let -- list of indexes for graph0
-      reachablePairs = Set.fromList $ concatMap (reachable graph0) initialPairs0
-
-      -- list of indexes for graph
-      pairs     = listArray (0,Set.size reachablePairs - 1)
-                        [ dd A.! i | i <- Set.toList reachablePairs]
-
-      pairsMap  = Map.fromList (zip (toList (elems pairs)) [0..])
-
-      -- mapping index[graph0] -> index[graph] and viceversa
-      reindexMap = array (0, length dps - 1)  (zip [0..length dps - 1] (repeat (-1)) ++
-                                               zip (toList reachablePairs) [0..])
-      reindex    = (reindexMap A.!)
-      reindexInv = (array (bounds graph)  (zip [0..] (toList reachablePairs)) A.!)
-
-      -- The graph we actually store, containing only reachable pairs
-      graph     = buildG (0, Set.size reachablePairs - 1)
-                         [ ( reindex v1, reindex v2 )
-                         | e@(v1,v2) <- edges graph0
-                         , v1 `Set.member` reachablePairs
-                         , v2 `Set.member` reachablePairs]
-
-      -- The actual initial pairs
-      initialPairsG = map reindex initialPairs0
+  let -- list of indexes for fullgraph
+      reachablePairsG = Set.fromList $ concatMap (reachable fullgraph) (toList initialPairsG)
 
       -- A list of tuples (ix, scc, edges)
-      sccGraphNodes = SCC.sccGraph graph
-      ixes      = [ ix | (_,ix,_) <- sccGraphNodes ]
-      sccGraph  = case ixes of
+      sccGraphNodes = [ it | it@(flattenSCC -> nn,_,_) <-SCC.sccGraph fullgraph
+                           , any (`Set.member` reachablePairsG) nn]
+
+      sccsIx   = [ ix | (CyclicSCC{},ix,_) <- sccGraphNodes]
+      sccGraph  = case sccsIx of
                     [] -> emptyArray
-                    _  -> buildG (minimum ixes, maximum ixes)
+                    _  -> buildG (minimum sccsIx, maximum sccsIx)
                          [ (n1,n2) | (_, n1, nn) <- sccGraphNodes
                                    , n2 <- nn]
-      sccs      = case ixes of
+      sccs      = case sccsIx of
                     [] -> emptyArray
-                    _  -> array (minimum ixes, maximum ixes)
+                    _  -> array (minimum sccsIx, maximum sccsIx)
                                  [ (ix, scc) | (scc,ix,_) <- sccGraphNodes]
 
-      -- The scc for every node, with indexes from graph0
-      sccsMap    = array (bounds graph0) (zip [0..length dps - 1] (repeat Nothing) ++
-                                         [ (reindexInv n, Just ix) | (scc,ix,_) <- sccGraphNodes
+      -- The scc for every node, with indexes from fullgraph
+      sccsMap    = array (bounds fullgraph) (zip [0..length dps - 1] (repeat Nothing) ++
+                                         [ (n, Just ix) | (scc,ix,_) <- sccGraphNodes
                                                                    , n <- flattenSCC scc])
       the_dgraph = DGraph {..}
 
 
   pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, dps) $$
-            text "The initial pairs are:" <+> pPrint initialPairs0 $$
-            text "where the EDG is:" <+> text (show graph0) $$
-            text "The final graph stored is:" <+> text (show graph) $$
-            text "where the mapping used for the nodes is" <+> pPrint (assocs reindexMap) $$
-            text "and the final initial pairs are:" <+> pPrint initialPairsG
+            text "The initial pairs are:" <+> pPrint initialPairsG $$
+            text "where the EDG is:" <+> text (show fullgraph)
+--            text "The final graph stored is:" <+> text (show graph) $$
+--            text "where the mapping used for the nodes is" <+> pPrint (assocs reindexMap) $$
+--            text "and the final initial pairs are:" <+> pPrint initialPairsG
            ) $
 
   -- The index stored for a pair is within the range of the pairs array
-   assert (all (inRange (bounds pairs)) (Map.elems pairsMap)) $
+--   assert (all (inRange (bounds pairs)) (Map.elems pairsMap)) $
   -- The scc index stored for a pair is within the range of the sccs array
    assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
   -- No duplicate edges in the graph
-   assert (noDuplicateEdges graph) $
+   assert (noDuplicateEdges fullgraph) $
    return the_dgraph
 
   where liftL = ListT . return
@@ -403,7 +388,7 @@ sccFor n dg = sccsMap dg A.! n
 
 dreachablePairs DGraph{..} = Set.fromList $ A.elems pairs
 
-dinitialPairs g = map (pairs g A.!) (initialPairsG g)
+dinitialPairs g = map (pairs g A.!) (toList $ initialPairsG g)
 
 
 nodesInPath :: DGraphF a -> Vertex -> Vertex -> Set Vertex
