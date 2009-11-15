@@ -70,7 +70,7 @@ mkDerivedInfinitaryProblem g mkH p = do
   let heu = mkHeu mkH p
       af  = mkGoalAF g `mappend` AF.init p
   af' <-  Set.toList $ invariantEV heu p af
-  let p' = InfinitaryProblem af' $ (iUsableRules p (rhs <$> rules (getP p)))
+  let p' = InfinitaryProblem af' p --  $ (iUsableRules p (rhs <$> rules (getP p)))
   return p'
 
 deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (Infinitary id p) trs)
