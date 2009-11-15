@@ -112,8 +112,7 @@ data SKTransformNarrowing = SKTransformNarrowing
        deriving (Eq, Show,Ord)
 
 -- | This is the vanilla S-K transformation
-data SKTransformInfinitary = SKTransformInfinitary
-       deriving (Eq, Show,Ord)
+data SKTransformInfinitary heu = SKTransformInfinitary (MkHeu heu)
 
 instance (Info info SKTransformProof
          ) =>
@@ -129,16 +128,18 @@ instance (Info info SKTransformProof
      ]
 
 instance (Info info SKTransformProof
+         ,PolyHeuristic heu DRP
          ) =>
-         Processor info SKTransformInfinitary
+         Processor info (SKTransformInfinitary heu)
                    PrologProblem {- ==> -} (NProblem (Infinitary DRP IRewriting) DRP)
  where
-  apply SKTransformInfinitary p0@PrologProblem{..} =
+  apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
    andP SKTransformInfinitaryProof p0
-     [ mkNewProblem (infinitary (IdDP <$> skTransformGoal goal) IRewriting) sk_p
-         | let sk_p          = prologTRS'' rr (getSignature rr)
-               rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
-         , goal            <- goals
+     [ p
+         | let sk_p = prologTRS'' rr (getSignature rr)
+               rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
+         , goal    <- goals
+         , p       <- mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem IRewriting sk_p)
      ]
 
 -- -------

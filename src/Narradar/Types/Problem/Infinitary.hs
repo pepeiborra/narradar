@@ -29,7 +29,8 @@ import Data.Term.Rules
 import MuTerm.Framework.Problem
 import MuTerm.Framework.Proof
 
-import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
+import Narradar.Constraints.VariableCondition
+import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..), PolyHeuristic, MkHeu, mkHeu, bestHeu)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
@@ -65,6 +66,12 @@ instance (id ~ SignatureId (Problem p trs), HasSignature (Problem p trs), Ord id
 
 infinitary        g p = Infinitary (mkGoalAF g) p
 infinitaryProblem g p = InfinitaryProblem (g `mappend` AF.init p) p
+mkDerivedInfinitaryProblem g mkH p = do
+  let heu = mkHeu mkH p
+      af  = mkGoalAF g `mappend` AF.init p
+  af' <-  Set.toList $ invariantEV heu p af
+  let p' = InfinitaryProblem af' $ (iUsableRules p (rhs <$> rules (getP p)))
+  return p'
 
 deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (Infinitary id p) trs)
 deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (Infinitary id p) trs)
