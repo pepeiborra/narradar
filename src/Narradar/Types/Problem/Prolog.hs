@@ -8,7 +8,7 @@
 
 module Narradar.Types.Problem.Prolog where
 
-import Control.Applicative ((<$>))
+import Control.Applicative hiding (many)
 import Control.Monad.Error
 import Data.Bifunctor
 import Data.Foldable as F (Foldable(..), toList)
@@ -69,7 +69,7 @@ instance Error ParseError
 prologParser = do
   txt    <- getInput
   goals  <- eitherM $ mapM parseGoal $ catMaybes $ map f (lines txt)
-  clauses<- Prolog.whiteSpace >> many Prolog.clause
+  clauses<- Prolog.whiteSpace *> many Prolog.clause <* eof
   return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds (concat clauses)))
   where
     f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
