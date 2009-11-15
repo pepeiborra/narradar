@@ -15,6 +15,7 @@
 module Narradar.Processor.PrologProblem (
   SKTransformInfinitary(..), SKTransformNarrowing(..), SKTransformProof(..)
  ,RP, DRP, LP, DLRP
+ ,inferType
   ) where
 
 import Control.Applicative
