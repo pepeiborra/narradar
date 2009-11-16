@@ -214,7 +214,7 @@ trsParser = do
         -> return $ AGoalRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] Rewriting) r' (tRS dps))
 
     ([], dps, InnerMost:_)
-        -> return $ ARewritingProblem (mkDPProblem' Rewriting r' (tRS dps))
+        -> return $ AIRewritingProblem (mkDPProblem' IRewriting r' (tRS dps))
     ([], dps, GoalStrategy g:InnerMost:_)
         -> return $ AGoalIRewritingProblem (mkDPProblem' (initialGoal [mkGoal g] IRewriting) r' (tRS dps))
 
