@@ -71,9 +71,11 @@ data Kind = Weak | Strict deriving (Eq, Ord, Show)
 data Proj id = Proj {af::AF_ id, kind::[Kind]} deriving Show
 
 proj af kk = Proj af (sort kk)
+
+-- | for performance, the second projection should be 'smaller' than the first one
 combine (Proj af k) (Proj af' k')
 --  | length k < length k' = do { af'' <- AF.combine af af'; return (Proj af'' (foldr insert k' k))}
-  | otherwise            = do { af'' <- AF.combine af af'; return (Proj af'' (foldr insert k k'))}  -- BY CONVENTION
+  | otherwise            = do { af'' <- AF.combine af af'; return (Proj af'' (foldr insert k k'))}
 
 isWeakOn (l:->r) (Proj af _) = AF.apply af l == AF.apply af r
 
