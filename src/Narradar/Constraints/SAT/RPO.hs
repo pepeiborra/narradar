@@ -50,7 +50,7 @@ rpoGen inn p = runSAT $ do
   decreasing_dps <- replicateM (length symb_pairs) boolean
   problem <- andM
             ( or decreasing_dps :
-              [ (l > r)  | l:->r <- symb_rules] ++
+              [ (l >~ r)  | l:->r <- symb_rules] ++
               [ (l >~ r) | l:->r <- symb_pairs] ++
               [(l > r) <==> return dec | (l:->r, dec) <- zip symb_pairs decreasing_dps])
 
