@@ -70,7 +70,6 @@ rpoAF_DP' allowCol con p
 
   assertAll [omega p']
   assertAll [ l >~ r | l:->r <- rules dps']
---  assertAll [ l > r  | (l:->r, dec) <- zip (rules dps') decreasing_dps]
   assertAll [(l > r) <=^=> return dec | (l:->r, dec) <- zip (rules dps') decreasing_dps]
   assert decreasing_dps
   sequence_ [ assertW 1 [b] | b <- decreasing_dps]
