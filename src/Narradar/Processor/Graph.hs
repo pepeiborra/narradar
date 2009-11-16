@@ -85,16 +85,16 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
         convertIx i = fromMaybe (error "DependencyGraphSCC") (lookupNode (safeAt "DependencyGraphSCC" dd i) dg)
 
         proof = UsableSCCs{ gr         = fullgraph
-                          , reachable  = reachablePairsG
                           , initial    = initialPairsG
                           , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
                           , inPath     = Set.fromList $ involvedNodes p
-                          , the_pairs  = elems pairs}
+                          , the_pairs  = elems pairs
+                          , the_sccs   = map Set.fromList cc }
 
     if null cc
      then success NoCycles p
      else andP proof p
-               [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) p | ciclo <- cc]
+               [setP (restrictTRS dps ciclo) p | ciclo <- cc]
 
 -- --------------
 -- Graph Proofs
@@ -103,7 +103,8 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
 data DependencyGraphProof = SCCs   Graph [Set Vertex]
                           | forall a. Pretty a =>
                             UsableSCCs { gr :: Graph
-                                       , reachable, initial, outOfScope, inPath :: Set Vertex
+                                       , initial, outOfScope, inPath :: Set Vertex
+                                       , the_sccs  :: [Set Vertex]
                                        , the_pairs :: [a]}
                           | Cycles Graph
                           | NoCycles
@@ -157,11 +158,12 @@ instance DotRep DependencyGraphProof where
                              }
      where
    coloredGraph = FGL.mkGraph coloredNodes coloredEdges
+   sccNodes     = Set.unions the_sccs
    coloredNodes = [ case True of
                       _ | n `Set.member` initial ->
                            (n,[label (int n), LabelFontColor (head $ mkColor "red"), Color $ mkColor "red"])
-                        | n `Set.member` reachable ->
-                           (n,[label (int n), LabelFontColor (head $ mkColor "green"), Color $ mkColor "green"])
+                        | n `Set.member` sccNodes ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "green"), Color $ mkColor "yellow"])
                         | n `Set.member` inPath ->
                            (n,[label (int n), LabelFontColor (head $ mkColor "rosybrown1"), Color $ mkColor "rosybrown1"])
                         | n `Set.member` outOfScope ->
@@ -169,8 +171,8 @@ instance DotRep DependencyGraphProof where
                         | otherwise -> (n,[label (int n)])
                       | n <- G.vertices gr]
    coloredEdges = [ (a,b, case True of
-                            _ | a `Set.member` reachable && b `Set.member` reachable ->
-                                 [Color $ mkColor "green"]
+                            _ | a `Set.member` sccNodes && b `Set.member` sccNodes ->
+                                 [Color $ mkColor "yellow"]
                               | a `Set.member` inPath && b `Set.member` inPath ->
                                  [Color $ mkColor "rosybrown1"]
                               | a `Set.member` outOfScope || b `Set.member` outOfScope ->
