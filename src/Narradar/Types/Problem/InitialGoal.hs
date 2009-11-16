@@ -139,18 +139,21 @@ reachableNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
                     from <- embed initialSccs
                     to   <- embed sccsInvolved
                     embed $ nodesInPathNaive sccGraph from to
-reachablePairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
+
+
+involvedPairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Rule t Var]
-reachablePairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
-  = map (`lookupPair` dg) (reachableNodes p)
+involvedPairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
+  = map (`lookupPair` dg) (snub(reachableNodes p ++ pairs ++ initialPairsG))
+ where
+   pairs = catMaybes(map (`lookupNode` dg) (rules $ getP p))
 
-
-reachableRules :: (Ord(Term t Var), HasId t, Foldable t
+reachableUsableRules :: (Ord(Term t Var), HasId t, Foldable t
                   ,IsDPProblem base, Traversable (Problem base)
                   ,IUsableRules t Var (Problem base (NarradarTRS t Var))
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
 
-reachableRules p = getR $ iUsableRules (baseProblem p) (rhs <$> reachablePairs p)
+reachableUsableRules p = getR $ iUsableRules (baseProblem p) (rhs <$> involvedPairs p)
 
 -- Lifting Processors
 
@@ -228,13 +231,13 @@ instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Va
   where
     iUsableRulesVarM (it@(InitialGoal _ _ p), trs, dps) v = do
       let the_problem = mkDPProblem it trs dps
-      (_,reachableRules,_) <- iUsableRulesM (IRewriting, trs, dps) (rhs <$> reachablePairs the_problem)
+      (_,reachableRules,_) <- iUsableRulesM (IRewriting, trs, dps) (rhs <$> involvedPairs the_problem)
       iUsableRulesVarM (p, reachableRules, dps) v
     iUsableRulesM (it@(InitialGoal _ _ p), trs, dps) tt = do
       let the_problem = mkDPProblem it trs dps
-      reachableRules <- f_UsableRules (p, trs) (\_ -> return mempty) =<< getFresh (rhs <$> reachablePairs the_problem)
+      reachableRules <- f_UsableRules (p, trs) (\_ -> return mempty) =<< getFresh (rhs <$> involvedPairs the_problem)
       pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
-      (_,trs',_)           <- iUsableRulesM (p, tRS $ toList reachableRules, dps) tt
+      (_,trs',_)     <- iUsableRulesM (p, tRS $ toList reachableRules, dps) tt
       return (it, trs', dps)
 
 -- Other Narradar instances
@@ -417,5 +420,5 @@ nodesInPath dg@DGraph{..} from to
 
 
 nodesInPathNaive g from to = Set.intersection (Set.fromList $ reachable g from)
-                                                  (Set.fromList $ reachable g' to)
+                                              (Set.fromList $ reachable g' to)
   where g' = transposeG g

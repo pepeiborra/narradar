@@ -633,8 +633,8 @@ instance (p   ~ Problem (InitialGoal t typ)
          ) => Omega (InitialGoal t typ) t
  where
 
-  omega p = pprTrace (text "dd = " <> pPrint dd) $
-             andM_ [andM_ [go l r trs | l:->r <- dps ++ reachablePairs p]
+  omega p = -- pprTrace (text "dd = " <> pPrint dd) $
+             andM_ [andM_ [go l r trs | l:->r <- involvedPairs p]
                    ,andM_ [ usable f ^==>> andM_ [ l >~ r | l:->r <- rulesFor f trs]
                                | f <- Set.toList dd ]
                    ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
@@ -643,8 +643,8 @@ instance (p   ~ Problem (InitialGoal t typ)
    where
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
-    dd  = getDefinedSymbols (reachableRules p)
-    p'  = setR (reachableRules p) (baseProblem p)
+    dd  = getDefinedSymbols (reachableUsableRules p)
+    p'  = setR (reachableUsableRules p) (baseProblem p)
 
     go l (Pure x) _ =
       -- If there is an extra variable, everything is usable ! (short of calling the police)
@@ -661,60 +661,6 @@ instance (p   ~ Problem (InitialGoal t typ)
       | id_t `Set.notMember` dd
       = andM_ [ [inAF i id_t] ^*==> go l t_i trs
                | (i, t_i) <- zip [1..] tt ]
-      | otherwise
-      = andM_ [ usable id_t
-             , andM_ [ go l r rest | l:->r <- rls ]
-             , andM_ [ [inAF i id_t] ^*==> go l t_i rest
-                          | (i, t_i) <- zip [1..] tt ]
-             ]
-       where
-         Just id_t = rootSymbol t
-         tt        = directSubterms t
-         rls       = rulesFor id_t trs
-         rest      = trs \\ rls  :: [Rule t Var]
-
-instance (p   ~ Problem typ
-         ,typ ~ InitialGoal t (MkNarrowingGen base)
-         ,id  ~ TermId t, id ~ SignatureId (Problem base trs), id ~ symbol a
-         ,v   ~ Var
-         ,trs ~ NarradarTRS t v
---         ,HasSignature (Problem (MkNarrowing base) trs)
-         ,Traversable (Problem base), Traversable t
-         ,Ord id, SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id, GenSymbol id
-         ,Foldable t, HasId t, Ord (t(Term t v)), Pretty id
-         ,MkDPProblem (MkNarrowingGen base) trs
-         ,MkDPProblem  base trs
-         ,IUsableRules t v (MkNarrowingGen base, trs, trs)
-         ,IUsableRules t v (base, trs, trs)
-         ) => Omega (InitialGoal t (MkNarrowingGen base)) t
- where
-
-  omega p = andM_ [andM_ [go l r trs | l:->r <- reachablePairs p]
-                 ,andM_ [ usable f ^==>> andM_ [ l >~ r | l:->r <- rulesFor f trs]
-                              | f <- Set.toList dd ]
-                 ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
-                  ]
-
-   where
-    (trs,dps) = (rules $ getR p, rules $ getP p)
-    sig = getSignature (getR p)
-    dd  = getDefinedSymbols (reachableRules p)
-    genUsable = andM  [usable gen | gen <- toList(getDefinedSymbols (getR p))
-                                  , gen == genSymbol]
-
-    go l (Pure x) _ =
-        everyM_ poss (\p ->
-                           or_ [ not(inAF i f)
-                                 | n <- [0..length p - 1], let (pre, i:_) = splitAt n p
-                                 , let f = fromMaybe (error "omega: fromJust") (rootSymbol (l!pre))])
-        ==>>  genUsable
-     where
-      poss = occurrences (Pure x) l
-
-    go l t trs
-      | id_t `Set.notMember` dd
-      = andM_ [ [inAF i id_t] ^*==> go l t_i trs
-                 | (i, t_i) <- zip [1..] tt ]
       | otherwise
       = andM_ [ usable id_t
              , andM_ [ go l r rest | l:->r <- rls ]
