@@ -87,7 +87,6 @@ narradarMain run = do
       printDiagram proof
        | isNothing pdfFile = return ()
        | isJust pdfFile    = withTempFile tmp "narradar.dot" $ \fp h -> do
-
                                let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
                                    the_pdf = fromJust pdfFile
                                hPutStrLn h dotSrc
@@ -197,7 +196,7 @@ setTimeout arg opts = do
 setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}
 
 setVerbosity (Just i) opts@Options{..}
-    = do {i <- readIO i; P.return opts{verbose=i, pdfFile = pdfFile `mplus` Just problemFile}}
+    = do {i <- readIO i; P.return opts{verbose=i, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}}
          `catch` (\e -> error "cannot parse the verbosity level")
 
 setPdfPath Nothing  opts = P.return opts{ pdfFile = Just (problemFile opts <.> "pdf") }
