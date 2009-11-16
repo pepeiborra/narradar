@@ -56,10 +56,10 @@ instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
   dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
 instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
 
 instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
+  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
 
 -- Relative
 instance (Dispatch (NProblem base id)
