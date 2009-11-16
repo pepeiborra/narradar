@@ -99,6 +99,21 @@ validPrjs pTRS = go (proj (AF.init dps) []) dps
 
 pairPrjs :: Ord id => Signature id -> RuleN id -> [Proj id]
 pairPrjs sig (l@(rootSymbol -> Just f) :-> r@(rootSymbol -> Just g))
+ | f == g
+ = do
+    i <- [1 .. getArity sig f]
+    let l_i = l ! [i]
+        r_i = r ! [i]
+        sub_l = Set.fromList (subterms l_i)
+
+    guard (r_i `Set.member` sub_l)
+
+    let af   = AF.fromList' [(f,Left i)]
+        kind = if r_i == l_i then Weak else Strict
+
+    return (proj af [kind])
+
+ | otherwise
  = do
     i <- [1 .. getArity sig f]
     let l_i = l ! [i]
