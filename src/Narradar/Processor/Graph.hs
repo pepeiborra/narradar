@@ -82,12 +82,10 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
 
         cc   = [vv | CyclicSCC vv <- GSCC.sccList grForSccs]
 
-        convertIx i = fromMaybe (error "DependencyGraphSCC") (lookupNode (safeAt "DependencyGraphSCC" dd i) dg)
-
         proof = UsableSCCs{ gr         = fullgraph
                           , initial    = initialPairsG
                           , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
-                          , inPath     = Set.fromList $ involvedNodes p
+                          , inPath     = Set.fromList $ involvedNodes' p (map (safeAt "DependencyGraphSCC" dd) (concat cc))
                           , the_pairs  = elems pairs
                           , the_sccs   = map Set.fromList cc }
 

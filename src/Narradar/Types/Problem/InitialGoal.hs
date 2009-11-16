@@ -124,17 +124,23 @@ initialPairs :: Unify t => Problem (InitialGoal t base) trs -> [Rule t Var]
 initialPairs InitialGoalProblem{..} = dinitialPairs dgraph
 
 
--- | returns the vertexes in the DGraph which are in a path from an initial pair
+-- | returns the vertexes in the DGraph which are in a path from an initial pair to the current P
 involvedNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Vertex]
-involvedNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
+involvedNodes p = involvedNodes' p (getP p)
+
+-- | returns the vertexes in the DGraph which are in a path from an initial pair to a given TRS P
+involvedNodes' :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
+                  ,HasRules t Var trs
+                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> trs -> [Vertex]
+involvedNodes' p@InitialGoalProblem{dgraph=dg@DGraph{..},..} pTRS
   = flattenSCCs (map (safeAt "involvedNodes" sccs) sccsInPath)
  where
    sccsInvolved = Set.fromList $ catMaybes $ [ sccFor n dg
-                                                   | p <- rules (getP p)
+                                                   | p <- rules pTRS
                                                    , Just n <- [lookupNode p dg]]
-   initialSccs  = Set.fromList [ n | p <- toList initialPairsG
-                                   , Just n <- [sccFor p dg]
+   initialSccs  = Set.fromList [ n | p0 <- toList initialPairsG
+                                   , Just n <- [sccFor p0 dg]
                                ]
 
    sccsInPath   = toList $ unEmbed $ do
