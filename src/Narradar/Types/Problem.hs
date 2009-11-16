@@ -161,8 +161,8 @@ filterSEDG p gr = G.buildG (bounds gr) edges where
   edges = runIcap p $ runListT $ do
                 trs'   <- lift $ getFresh (rules $ getR p)
                 (i, j) <- liftL (G.edges gr)
-                let _ :-> r = dps A.! i
-                    l :-> _ = dps A.! j
+                let _ :-> r = safeAt "filterSEDG" dps i
+                    l :-> _ = safeAt "filterSEDG" dps j
                 (_,trs_u,_) <- iUsableRulesM (typ, trs', A.elems dps) [r]
                 let trs_inv = swapRule <$> trs_u
                 l'  <- lift (icap (typ, trs_inv) l)
@@ -265,7 +265,7 @@ expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` e
             A.array ((0,0), (l_dps', l_dps'))
                        ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
                                                       , x /= i, y /= i] ++
-                        concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
+                        concat [ [(in1, safeAt "expandPair" arr' in1), (in2, safeAt "expandPair" arr' in2)]
                                  | j <- new_nodes, k <- [0..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
         adjust x = if x < i then x else x-1
@@ -316,7 +316,7 @@ insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs
           mkUnif arr arr' =
             A.array ((0,0), (l_dps', l_dps'))
                     (assocs arr ++
-                     concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
+                     concat [ [(in1, safeAt "insertDPairsDefault" arr' in1), (in2, safeAt "insertDPairsDefault" arr' in2)]
                                  | j <- new_nodes, k <- [0..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
 

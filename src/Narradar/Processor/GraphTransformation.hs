@@ -201,7 +201,7 @@ instance (trs ~ NarradarTRS t v
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
                              (mkDerivedProblem typ' (expandDPair p i newdps))
                      | (i,dps') <- dpss
-                     , let olddp  = dpsA !  i
+                     , let olddp  = safeAt "Instantiation" dpsA i
                      , let newdps = dps' !! i
                      , let dgraph' = expandDGraph p olddp newdps
                      , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
@@ -237,7 +237,7 @@ instance (trs ~ NarradarTRS t v
   | otherwise = [ singleP (FInstantiationProof olddp newdps) p
                            (mkDerivedProblem typ' (expandDPair p i newdps))
                      | (i, dps') <- dpss
-                     , let olddp  = dpsA !  i
+                     , let olddp  = safeAt "FInstantiation" dpsA  i
                      , let newdps = dps' !! i
                      , let dgraph' = expandDGraph p olddp newdps
                      , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
@@ -250,7 +250,7 @@ instance (trs ~ NarradarTRS t v
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i, applySubst sigma s :-> applySubst sigma t)
-                             | Just sigma <- snub [dpUnifyInv (getP p) j i | j <- gr ! i]]
+                             | Just sigma <- snub [dpUnifyInv (getP p) j i | j <- safeAt "FInstantiation" gr i]]
 
 
 -- -------
@@ -307,7 +307,7 @@ narrowing p0
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0 (expandDPair p0 i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = dpsA ! i
+                     , let olddp  = safeAt "narrowing" dpsA i
                      , let newdps = dps' !! i]
     where
           (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
@@ -331,7 +331,7 @@ narrowing p0
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-               where uu     = map (lhs . (dpsA !)) (gr ! i)
+               where uu     = map (lhs . (safeAt "narrowing" dpsA)) (safeAt "narrowing" gr i)
                      pos_uu = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
@@ -339,7 +339,7 @@ narrowing_innermost p0
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0 (expandDPair p0 i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = dpsA ! i
+                     , let olddp  = safeAt "narrowing_innermost" dpsA i
                      , let newdps = dps' !! i]
     where --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
           (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
@@ -362,7 +362,7 @@ narrowing_innermost p0
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-               where uu     = map (lhs . (dpsA !)) (gr ! i)
+               where uu     = map (lhs . (safeAt "narrowing_innermost" dpsA)) (safeAt "narrowing_innermost" gr i)
                      pos_uu = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
@@ -371,7 +371,7 @@ narrowingIG p0@InitialGoalProblem{..}
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0
                            (mkDerivedProblem typ' (expandDPair p0 i newdps))
                      | (i,dps') <- dpss
-                     , let olddp  = dpsA ! i
+                     , let olddp  = safeAt "narrowingIg" dpsA i
                      , let newdps = dps' !! i
                      , let dgraph'= expandDGraph p0 olddp newdps
                      , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
@@ -397,7 +397,7 @@ narrowingIG p0@InitialGoalProblem{..}
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-               where uu     = map (lhs . (dpsA !)) (gr ! i)
+               where uu     = map (lhs . (safeAt "narrowingIG" dpsA)) (safeAt "narrowingIG" gr i)
                      pos_uu = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
@@ -406,7 +406,7 @@ narrowing_innermostIG p0@InitialGoalProblem{..}
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0
                           (mkDerivedProblem typ' (expandDPair p0 i newdps))
                      | (i,dps') <- dpss
-                     , let olddp  = dpsA ! i
+                     , let olddp  = safeAt "narrowing_innermostIG" dpsA i
                      , let newdps = dps' !! i
                      , let dgraph'= expandDGraph p0 olddp newdps
                      , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
@@ -432,7 +432,7 @@ narrowing_innermostIG p0@InitialGoalProblem{..}
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-               where uu     = map (lhs . (dpsA !)) (gr ! i)
+               where uu     = map (lhs . (safeAt "narrowing_innermostIG" dpsA)) (safeAt "narrowing_innermostIG" gr i)
                      pos_uu = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
@@ -460,7 +460,7 @@ instantiation p
   | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (InstantiationProof olddp newdps) p (expandDPair p i newdps)
                      | (i,dps') <- dpss
-                     , let olddp  = dpsA  ! i
+                     , let olddp  = safeAt "instantiation" dpsA i
                      , let newdps = dps' !! i ]
 
    where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
@@ -485,7 +485,7 @@ finstantiation p
   | otherwise = [ singleP (FInstantiationProof olddp newdps) p
                            (expandDPair p i newdps)
                      | (i, dps') <- dpss
-                     , let olddp  = dpsA !  i
+                     , let olddp  = safeAt "finstantiation" dpsA  i
                      , let newdps = dps' !! i]
    where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
          dps  = elems dpsA
@@ -496,7 +496,7 @@ finstantiation p
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i, applySubst sigma s :-> applySubst sigma t)
-                             | Just sigma <- snub [dpUnifyInv (getP p) j i | j <- gr ! i]]
+                             | Just sigma <- snub [dpUnifyInv (getP p) j i | j <- safeAt "finstantiation" gr i]]
 -- finstantiation p = [return p]
 
 
@@ -506,7 +506,7 @@ finstantiation p
 
 maps, maps' :: Monad m => (a -> m a) -> [a] -> [[m a]]
 maps f xx = concat $ elems $ array (Pointer 1 (listArray (1, length xx) xx) =>> appF) where
-    appF (Pointer i a) = let a' = amap return a in  map elems [a' // [(i, f(a!i))] ]
+    appF (Pointer i a) = let a' = amap return a in  map elems [a' // [(i, f(safeAt "maps" a i))] ]
 
 maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
   updateAt 0 (x:rest) = f x      : map return rest
@@ -524,7 +524,7 @@ instance Ix i => Functor (Pointer i) where
     fmap f (Pointer i a) = Pointer i (fmap f a)
 
 instance Ix i => Copointed (Pointer i) where
-    extract (Pointer i a) = a ! i
+    extract (Pointer i a) = safeAt "Copointed Pointer" a i
 
 instance Ix i => Comonad (Pointer i) where
     extend f (Pointer i a) = Pointer i . listArray bds $ fmap (f . flip Pointer a) (range bds) where

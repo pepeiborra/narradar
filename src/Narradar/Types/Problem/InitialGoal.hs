@@ -128,7 +128,7 @@ initialPairs InitialGoalProblem{..} = dinitialPairs dgraph
 involvedNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Vertex]
 involvedNodes p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
-  = flattenSCCs (map (sccs A.!) sccsInPath)
+  = flattenSCCs (map (safeAt "involvedNodes" sccs) sccsInPath)
  where
    sccsInvolved = Set.fromList $ catMaybes $ [ sccFor n dg
                                                    | p <- rules (getP p)
@@ -319,7 +319,7 @@ mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ 
       sccGraphNodes = [ it | it@(flattenSCC -> nn,_,_) <-SCC.sccGraph fullgraph
                            , any (`Set.member` reachablePairsG) nn]
 
-      sccsIx   = [ ix | (CyclicSCC{},ix,_) <- sccGraphNodes]
+      sccsIx   = [ ix | (_,ix,_) <- sccGraphNodes]
       sccGraph  = case sccsIx of
                     [] -> emptyArray
                     _  -> buildG (minimum sccsIx, maximum sccsIx)
@@ -382,13 +382,13 @@ instance R.RFunctor DGraphF where
 
 lookupNode p dg = Map.lookup p (pairsMap dg)
 
-lookupPair n dg = pairs dg A.! n
+lookupPair n dg = safeAt "lookupPair" (pairs dg) n
 
-sccFor n dg = sccsMap dg A.! n
+sccFor n dg = safeAt "sccFor" (sccsMap dg) n
 
 dreachablePairs DGraph{..} = Set.fromList $ A.elems pairs
 
-dinitialPairs g = map (pairs g A.!) (toList $ initialPairsG g)
+dinitialPairs g = map (safeAt "initialPairs" (pairs g)) (toList $ initialPairsG g)
 
 
 nodesInPath :: DGraphF a -> Vertex -> Vertex -> Set Vertex
@@ -399,7 +399,7 @@ nodesInPath dg@DGraph{..} from to
     , Just to'   <- sccFor to   dg
     , sccsInPath <- Set.intersection (Set.fromList $ reachable sccGraph from')
                                      (Set.fromList $ reachable (transposeG sccGraph) to')
-    = Set.fromList (flattenSCCs [sccs A.! i | i <- Set.toList sccsInPath])
+    = Set.fromList (flattenSCCs [safeAt "nodesInPath" sccs i | i <- Set.toList sccsInPath])
 
     | otherwise = Set.empty
 

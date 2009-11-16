@@ -261,7 +261,7 @@ restrictTRS (DPTRS dps gr (unif :!: unifInv) _) indexes
    nindexes   = length indexes -1
    dps'       = extractIxx dps indexes `asTypeOf` dps
    gr'        = A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
-   extractIxx arr nodes = A.listArray (0, length nodes - 1) [arr A.! n | n <- nodes]
+   extractIxx arr nodes = A.listArray (0, length nodes - 1) [safeAt "restrictTRS" arr n | n <- nodes]
    unif' = (reindexArray unif :!: reindexArray unifInv)
    reindexArray arr =
            A.array ( (0,0), (nindexes, nindexes) )
@@ -270,8 +270,8 @@ restrictTRS (DPTRS dps gr (unif :!: unifInv) _) indexes
                                        , Just y' <- [Map.lookup y newIndexes]]
 
 dpUnify, dpUnifyInv :: NarradarTRS t v -> Int -> Int -> Maybe (Substitution t v)
-dpUnify    (DPTRS _ _ (unifs :!: _) _) l r = unifs ! (r,l)
-dpUnifyInv (DPTRS _ _ (_ :!: unifs) _) l r = unifs ! (r,l)
+dpUnify    (DPTRS _ _ (unifs :!: _) _) l r = safeAt "dpUnify" unifs (r,l)
+dpUnifyInv (DPTRS _ _ (_ :!: unifs) _) l r = safeAt "dpUnifyInv" unifs (r,l)
 
 rulesArray :: NarradarTRS t v -> A.Array Int (Rule t v)
 rulesArray (DPTRS dps _ _ _) = dps
@@ -329,7 +329,7 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
 
 getEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
   the_edges = [ xy | (xy, Just _) <- A.assocs unif
-                   , isJust (unifInv ! xy)
+                   , isJust (safeAt "getEDGFromUnifiers" unifInv xy)
                    ]
   ((m,_),(n,_)) = bounds unif
 

@@ -15,6 +15,7 @@ import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad  (liftM2, ap)
 import Control.Monad.Identity(Identity(..))
+import Control.Monad.Failure
 import Control.Monad.List (lift, ListT(..))
 import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
 import qualified Control.Monad.State.Strict as Strict
@@ -28,6 +29,7 @@ import qualified Data.Graph  as G
 import qualified Data.HashTable as HT
 import Data.Int
 import Data.List (group, sort)
+import Data.Maybe
 import Data.Term (Term)
 import Data.Monoid
 import qualified Data.Map as Map
@@ -110,6 +112,16 @@ unsafeZipWithGM f t1 t2  = evalStateT (mapM zipG' t2) (toList t1)
 unsafeZipWithG :: (Traversable t1, Traversable t2) => (a -> b -> c) -> t1 a -> t2 b -> t2 c
 unsafeZipWithG f x y = runIdentity $ unsafeZipWithGM (\x y -> return (f x y)) x y
 
+-- 'Safe' variants
+-- ----------------
+tailSafe []     = []
+tailSafe (_:xx) = xx
+
+safeAtM a i
+ | A.bounds a `inRange` i = return (a A.! i)
+ | otherwise = failure "safeIx"
+
+safeAt msg a i = fromMaybe (error ("safeAt:" ++ msg)) (safeAtM a i)
 
 -- --------------
 -- Various stuff
@@ -186,9 +198,6 @@ asTypeOfArg1 x _ = x
 asTypeOfArg21 :: f a b -> f' a b' -> f a b
 asTypeOfArg21 x _ = x
 
-tailSafe []     = []
-tailSafe (_:xx) = xx
-
 chunks n _ | n < 1 = error "chunks: zero or negative chunk size"
 chunks _ []   = []
 chunks n list = xx : chunks n rest  where (xx, rest) = (take n list, drop n list)
@@ -202,8 +211,8 @@ withTempFile dir name m = bracket (openTempFile dir name) (removeFile . fst) (un
 --cycles :: Graph gr => gr a b -> [[Node]]
 cycles gr = filter (all ((==1) . length) . group) $ concatMap (map getNodes . liuwang) [singletonQ n | n <- G.vertices gr]
  where
-  liuwang path = [ path | h `elem` gr ! t] ++
-                 concatMap liuwang [ snoc n path | n <- gr ! t, n > h, n `notMemberQ` path]
+  liuwang path = [ path | h `elem` safeAt "cycles" gr t] ++
+                 concatMap liuwang [ snoc n path | n <- safeAt "cycles" gr t, n > h, n `notMemberQ` path]
                      where h = headQ path
                            t = tailQ path
   getNodes = toList . fst

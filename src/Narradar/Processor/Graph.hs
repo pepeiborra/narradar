@@ -82,7 +82,7 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
 
         cc   = [vv | CyclicSCC vv <- GSCC.sccList grForSccs]
 
-        convertIx i = fromMaybe (error "DependencyGraphSCC") (lookupNode (dd ! i) dg)
+        convertIx i = fromMaybe (error "DependencyGraphSCC") (lookupNode (safeAt "DependencyGraphSCC" dd i) dg)
 
         proof = UsableSCCs{ gr         = fullgraph
                           , reachable  = reachablePairsG
@@ -131,7 +131,7 @@ instance DotRep DependencyGraphProof where
                             ,legend     = Nothing}
      where
    coloredGraph = FGL.mkGraph coloredNodes coloredEdges
-   coloredNodes = [ case nodeColorsA ! n of
+   coloredNodes = [ case safeAt "DependencyGraphProof.DotRep.coloredNodes" nodeColorsA n of
                         Nothing -> (n,[label (int n)])
                         Just c  -> (n, [label (int n), LabelFontColor (head c), Color c])
                       | n <- G.vertices g]
@@ -139,7 +139,8 @@ instance DotRep DependencyGraphProof where
                                              | n <- G.vertices g]
    coloredEdges = [ (a,b,att)
                        | (a,b) <- G.edges g
-                       , let att = case (nodeColorsA ! a, nodeColorsA ! b) of
+                       , let att = case (safeAt "DependencyGraphProof.DotRep.coloredEdges" nodeColorsA a
+                                        ,safeAt "DependencyGraphProof.DotRep.coloredEdges" nodeColorsA b) of
                                      (Just c1, Just c2) | c1 == c2 -> [Color c1]
                                      otherwise          -> []
                   ]
