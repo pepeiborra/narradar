@@ -643,7 +643,6 @@ instance (p   ~ Problem (InitialGoal t typ)
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
     dd  = getDefinedSymbols (reachableUsableRules p)
-    p'  = setR (reachableUsableRules p) (baseProblem p)
 
     go l (Pure x) _ =
       -- If there is an extra variable, everything is usable
