@@ -112,7 +112,10 @@ instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
          , Info info (NProblem (MkNarrowingGoal id typ0) id)
          , Info info (NProblem typ0 id)
          , Info info (NarrowingToRewritingProof id)
-         , MkDPProblem typ0 (NTRS id), Traversable (Problem typ0)) =>
+         , MkDPProblem typ0 (NTRS id), Traversable (Problem typ0)
+         , NUsableRules id (typ0, NTRS id)
+         , NCap id (typ0, NTRS id)
+         ) =>
     Processor info (NarrowingToRewritingICLP08 heu)
                    (NProblem (MkNarrowingGoal id typ0) id)
                    (NProblem typ0 id)

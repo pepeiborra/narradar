@@ -34,6 +34,7 @@ import qualified Narradar.Constraints.RPO as RPO
 import Narradar.Types hiding (symbol, constant)
 import Narradar.Types.Problem.InitialGoal
 import Narradar.Utils
+import Narradar.Types.ArgumentFiltering (AFId)
 import qualified Narradar.Types.ArgumentFiltering as AF
 
 import qualified Prelude as P
@@ -627,13 +628,13 @@ instance (p   ~ Problem (InitialGoal t typ)
          ,HasSignature (Problem typ trs)
          ,Traversable (Problem typ), Traversable t
          ,Ord id, Ord(t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
-         ,Foldable t, HasId t, Pretty id
+         ,Foldable t, HasId t, Pretty id, Pretty (t(Term t v))
          ,IUsableRules t v (typ, trs, trs)
          ) => Omega (InitialGoal t typ) t
  where
 
-  omega p = -- pprTrace (text "dd = " <> pPrint dd) $
-             andM_ [andM_ [go l r trs | l:->r <- involvedPairs p]
+  omega p = pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are: " <> involvedPairs p) $
+            andM_ [andM_ [go l r trs | l:->r <- involvedPairs p]
                    ,andM_ [ usable f ^==>> andM_ [ l >~ r | l:->r <- rulesFor f trs]
                                | f <- Set.toList dd ]
                    ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
@@ -684,8 +685,10 @@ verifyRPOAF :: forall typ trs t v a k.
           ,MkDPProblem typ trs
           ,Ord a, Pretty a
           ,AF.ApplyAF (Problem typ trs)
-          ,HasSignature (Problem typ trs), SignatureId (Problem typ trs) ~ SymbolRes a
+          ,HasSignature (Problem typ trs)
           ,NUsableRules (SymbolRes a) (typ, trs, trs)
+          ,SignatureId (Problem typ trs) ~ SymbolRes a
+          ,AFId (Problem typ (NTRS (SymbolRes a))) ~ SymbolRes a
           ) => Problem typ (NTRS a) -> [SymbolRes a] -> [Int] -> VerifyRPOAF (RuleN (SymbolRes a))
 
 verifyRPOAF p0 symbols nondec_pairs = runIdentity $ do

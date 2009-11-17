@@ -221,10 +221,27 @@ class HTMLClass a where htmlClass :: a -> HtmlAttr
 instance (Ord v, ExtraVars v trs, IsDPProblem p) =>  ExtraVars v (Problem p trs) where
   extraVars p = extraVars (getP p) `mappend` extraVars (getR p)
 
+instance (MkDPProblem typ (NarradarTRS t v)
+         ,Unify t, Pretty (t(Term t v)), ApplyAF (Term t v)
+         ,Enum v, Ord v, Pretty v
+         ,IUsableRules t v (typ, NarradarTRS t v)
+         ,ICap t v (typ, NarradarTRS t v)
+         ,AFId (Term t v) ~ AFId (NarradarTRS t v)
+--         ,AFId (NarradarTRS t v) ~ AFId (Problem typ (NarradarTRS t v))
+         ) =>
+    ApplyAF (Problem typ (NarradarTRS t v))
+  where
+    type AFId (Problem typ (NarradarTRS t v)) = AFId (Term t v)
+    apply af p@(getP -> dps@DPTRS{}) = mkDPProblem typ trs' dps'
+     where
+       typ  = getProblemType p
+       trs' = apply af (getR p)
+       dps' = dpTRS typ trs' (apply af dps)
+{-
 instance (ApplyAF trs, IsDPProblem p) => ApplyAF (Problem p trs) where
     type AFId (Problem p trs) = AFId trs
     apply af = fmap (apply af)
-
+-}
 -- ------------------------------
 -- Data.Term framework instances
 -- ------------------------------

@@ -65,6 +65,8 @@ instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (
          , PolyHeuristic heu id
          , Foldable (Problem typ)
          , Info info NarrowingGoalToInfinitaryProof
+         , NCap id (typ, NTRS id)
+         , NUsableRules id (typ, NTRS id)
          ) =>
     Processor info (NarrowingGoalToInfinitary heu)
                    (NProblem (MkNarrowingGoal id typ) id)
