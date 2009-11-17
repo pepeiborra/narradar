@@ -45,11 +45,11 @@ rpo :: (MonadPlus mp, Info info i, Info info o, Processor info RPOProc i o) =>
 rpo = apply (RPOProc RPOSAF MiniSat)
 
 
-runS Yices = Yices.solveW 20
+runS (Yices timeout) = Yices.solveW (Just timeout) 20
 
 data RPOProc   = RPOProc Extension Solver
 data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
-data Solver    = Yices | MiniSat -- FunSat
+data Solver    = Yices Int | MiniSat -- FunSat
 
 instance (Traversable (Problem typ)
          ,Ord id, Show id, Pretty id, DPSymbol id, Pretty (TermN id)

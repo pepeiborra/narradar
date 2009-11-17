@@ -85,7 +85,7 @@ instance (Dispatch (NProblem base id)
 sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         fixSolver (apply (RPOProc rpo Yices) .|. graphTransform >=>
+                         fixSolver (apply (RPOProc rpo (Yices 60)) .|. graphTransform >=>
                                     apply DependencyGraphSCC
                                    )
 

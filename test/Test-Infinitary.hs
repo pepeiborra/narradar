@@ -59,7 +59,7 @@ instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
 sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         repeatSolver 5 (apply (RPOProc LPOAF Yices) .|. apply (RPOProc rpo Yices) .|. graphTransform >=>
+                         repeatSolver 5 (apply (RPOProc LPOAF (Yices 60)) .|. apply (RPOProc rpo (Yices 60)) .|. graphTransform >=>
                                           apply DependencyGraphSCC
                                          )
 
