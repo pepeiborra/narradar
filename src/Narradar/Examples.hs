@@ -32,7 +32,7 @@ plus2 = [ x +: zero   :-> x
 plus3 = [ x +: zero   :-> x
          , x +: succ y :-> succ x +: y]
 
-peanoP = mkNewProblem Rewriting peano
+peanoP = mkNewProblem rewriting peano
 
 -- --------------------------------------------------------
 -- Normalization of formulas with propositional connectives
@@ -78,12 +78,12 @@ minusquot = mapTermSymbols IdFunction <$$>
        , quot (succ x) (succ y) :-> succ (quot (x -: y) (succ y)) ])
 
 
-minusquotPairs = getPairs Rewriting minusquot
+minusquotPairs = getPairs rewriting minusquot
 
 
-minusquotP  = mkDPProblem Rewriting minusquot minusquotPairs
-minusquotP1 = mkDPProblem Rewriting minusquot (take 1 minusquotPairs)
-minusquotP2 = mkDPProblem Rewriting minusquot [minusquotPairs !! 1]
+minusquotP  = mkDPProblem rewriting minusquot minusquotPairs
+minusquotP1 = mkDPProblem rewriting minusquot (take 1 minusquotPairs)
+minusquotP2 = mkDPProblem rewriting minusquot [minusquotPairs !! 1]
 
 -- -----
 -- large
@@ -113,11 +113,11 @@ nonterm2 = [term "f" [x] :-> term "f" [x]]
 -- peano substraction and GEN
 -- --------------------------
 
-lessGen = mkDPProblem Rewriting (mkTRS rr) (mkTRS $ take 1 pp) where
+lessGen = mkDPProblem rewriting (mkTRS rr) (mkTRS $ take 1 pp) where
   rr = mapTermSymbols IdFunction <$$>
        [succ (succ x) -: succ (succ y) :-> succ x -: succ y
        ,gen :-> succ gen]
-  pp = getPairs Rewriting rr
+  pp = getPairs rewriting rr
   gen = term "GEN" []
 
 -- -------
