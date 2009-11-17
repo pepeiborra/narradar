@@ -216,8 +216,10 @@ dpTRS :: ( SignatureId trs ~ TermId t
          typ -> trs -> trs -> NarradarTRS t v
 
 dpTRS typ trs dps = dpTRS' dps_a unifs
-    where dps_a   = listArray (0, length (rules dps) - 1) (rules dps)
-          unifs   = runIcap dps (computeDPUnifiers typ trs dps)
+    where
+      dps'    = snub (rules dps)
+      dps_a   = listArray (0, length dps' - 1) dps'
+      unifs   = runIcap dps (computeDPUnifiers typ trs (tRS dps'))
 
 dpTRS' :: ( Foldable t, HasId t, Ord (Term t v)) =>
          Array Int (Rule t v) -> (Unifiers t v :!: Unifiers t v) -> NarradarTRS t v
