@@ -202,16 +202,12 @@ procAF p m = case unsafePerformIO m of
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
                           p'            = setP (restrictTRS dps nondec_dps) p
-#ifdef DEBUG
                           verification  = verifyRPOAF p symbols nondec_dps
                           isValidProof
                             | isCorrect verification = True
                             | otherwise = pprTrace (proof $+$ Ppr.empty $+$ verification) False
-#endif
                       in
-#ifdef DEBUG 
                          CE.assert isValidProof $
-#endif
                          singleP proof p p'
        where dps = getP p
 
@@ -264,9 +260,7 @@ proc p m = case unsafePerformIO m of
                             | isCorrect verification = True
                             | otherwise = pprTrace (proof $+$ Ppr.empty $+$ verification) False
                       in
-#ifdef DEBUG
                          CE.assert isValidProof $
-#endif
                          singleP proof p p'
 
 -- -------------
