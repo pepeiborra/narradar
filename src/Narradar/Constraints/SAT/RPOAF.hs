@@ -646,7 +646,7 @@ instance (p   ~ Problem (InitialGoal t typ)
     p'  = setR (reachableUsableRules p) (baseProblem p)
 
     go l (Pure x) _ =
-      -- If there is an extra variable, everything is usable ! (short of calling the police)
+      -- If there is an extra variable, everything is usable
         everyM_ poss (\p ->
                       or [ not(inAF i f)
                           | n <- [0..length p - 1], let (pre, i:_) = splitAt n p
