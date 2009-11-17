@@ -170,7 +170,7 @@ instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTR
 
     apply af (PrologTRS rr _) = prologTRS' ((Map.map . Set.map) (AF.apply af) rr)
     apply af trs@TRS{}        = tRS$ AF.apply af <$$> rules trs
-    apply af (DPTRS a g uu _) = let dps' = AF.apply af <$$> a in DPTRS dps' g uu (getSignature $ elems dps')
+    apply af (DPTRS a g uu _) = tRS (AF.apply af <$$> toList a) -- cannot recreate the graph without knowledge of the problem type
 
 instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
     extraVars (TRS rr _) = extraVars rr
