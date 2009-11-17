@@ -44,13 +44,13 @@ instance(Info info (Problem base (NTRS id))
         ,Processor info SubtermCriterion (Problem base (NTRS id)) (Problem base (NTRS id))) =>
          Processor info SubtermCriterion (Problem (MkNarrowingGen base) (NTRS id)) (Problem (MkNarrowingGen base) (NTRS id))
   where
-   apply = NarrowingGen.liftProcessor
+   apply = liftProcessor
 
 instance (Info info (Problem base (NTRS id))
          ,Processor info SubtermCriterion (Problem base (NTRS id)) (Problem base (NTRS id))) =>
          Processor info SubtermCriterion (Problem (InitialGoal (TermF id) base) (NTRS id)) (Problem (InitialGoal (TermF id) base) (NTRS id))
   where
-   apply = InitialGoal.liftProcessor
+   apply = liftProcessor
 
 -- --------------
 -- Implementation

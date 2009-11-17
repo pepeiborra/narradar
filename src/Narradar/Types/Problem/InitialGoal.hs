@@ -99,6 +99,11 @@ instance (HasId t, Unify t, Foldable t, MkDPProblem p (NarradarTRS t Var), Prett
   mapP f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapP f p)
   mkDPProblem (InitialGoal goals g p) = (initialGoalProblem goals g .) . mkDPProblem p
 
+instance FrameworkExtension (InitialGoal t) where
+  getBaseFramework = baseProblemType
+  getBaseProblem   = baseProblem
+  setBaseProblem p0 p = p{baseProblem=p0}
+
 initialGoal gg = InitialGoal gg Nothing
 
 initialGoalProblem :: ( HasId t, Unify t, Ord (Term t Var), Pretty (t(Term t Var))
@@ -162,16 +167,6 @@ reachableUsableRules :: (Ord(Term t Var), HasId t, Foldable t
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
 
 reachableUsableRules p = getR $ iUsableRules (baseProblem p) (rhs <$> involvedPairs p)
-
--- Lifting Processors
-
-liftProcessor :: ( Processor info tag (Problem base trs) (Problem base trs)
-                 , Info info (Problem base trs), MonadPlus m
-                 )=> tag -> Problem (InitialGoal t base) trs -> Proof info m (Problem (InitialGoal t base) trs)
-
-liftProcessor tag p@InitialGoalProblem{..} = do
-      p' <- apply tag baseProblem
-      return p{baseProblem = p' `asTypeOf` baseProblem}
 
 -- ---------
 -- Instances

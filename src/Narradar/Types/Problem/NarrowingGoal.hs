@@ -68,8 +68,14 @@ instance (HasSignature trs, id ~ SignatureId trs, Ord id, MkDPProblem p trs) =>
   mkDPProblem (NarrowingGoal g pi typ) = (narrowingGoalProblem g pi.) . mkDPProblem typ
   mapP f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapP f p)
 
+instance FrameworkExtension (MkNarrowingGoal id) where
+  getBaseFramework (NarrowingGoal _ _ p) = p
+  getBaseProblem = baseProblem
+  setBaseProblem p0 p = p{baseProblem = p0}
+
 narrowingGoal        g = NarrowingGoal g (mkGoalAF g) Rewriting
 cnarrowingGoal       g = NarrowingGoal g (mkGoalAF g) IRewriting
+
 narrowingGoalProblem g pi p = NarrowingGoalProblem g (pi `mappend` AF.init p) p
 
 deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (MkNarrowingGoal id p) trs)

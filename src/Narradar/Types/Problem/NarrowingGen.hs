@@ -79,6 +79,11 @@ instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
 data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, Show)
 
+instance FrameworkExtension MkNarrowingGen where
+  getBaseFramework = baseProblemType
+  getBaseProblem (NarrowingGenProblem p) = p
+  setBaseProblem p0 p = p{baseProblem=p0}
+
 instance IsProblem p => IsProblem (MkNarrowingGen p) where
   data Problem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::Problem p a}
   getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
@@ -104,16 +109,6 @@ instance (Ord id, GenSymbol id, MkDPProblem p (NTRS id)) =>
 narrowingGen        = NarrowingGen  Rewriting
 cnarrowingGen       = NarrowingGen  IRewriting
 narrowingGenProblem = NarrowingGenProblem
-
--- Lifting Processors
-
-liftProcessor :: ( Processor info tag (Problem base trs) (Problem base trs)
-                 , Info info (Problem base trs), MonadPlus m
-                 )=> tag -> Problem (MkNarrowingGen base) trs -> Proof info m (Problem (MkNarrowingGen base) trs)
-
-liftProcessor tag p@NarrowingGenProblem{..} = do
-      p' <- apply tag baseProblem
-      return p{baseProblem = p' `asTypeOf` baseProblem}
 
 -- ----------
 -- Instances

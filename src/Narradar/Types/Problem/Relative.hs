@@ -24,9 +24,6 @@ import qualified Data.Set as Set
 import Data.Term
 import Data.Term.Rules
 
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
-
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
@@ -34,8 +31,9 @@ import Narradar.Types.Problem
 import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
-import Narradar.Utils
+import Narradar.Framework
 import Narradar.Framework.Ppr
+import Narradar.Utils
 
 data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deriving (Eq, Ord, Show)
 
@@ -54,6 +52,11 @@ instance MkProblem p trs => MkProblem (Relative trs p) trs where
 instance MkDPProblem p trs => MkDPProblem (Relative trs p) trs where
   mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
   mkDPProblem (Relative trs0 p) = (RelativeProblem trs0 .) . mkDPProblem p
+
+instance FrameworkExtension (Relative id) where
+  getBaseFramework = baseProblemType
+  getBaseProblem   = baseProblem
+  setBaseProblem p0 p = p{baseProblem=p0}
 
 relative = Relative
 relativeProblem = RelativeProblem

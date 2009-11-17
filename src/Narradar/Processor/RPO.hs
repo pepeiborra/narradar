@@ -175,7 +175,7 @@ instance ( Processor info RPOProc (Problem base trs) (Problem base trs)
          , Info info (Problem base trs)
          )=> Processor info RPOProc (Problem (InitialGoal t base) trs) (Problem (InitialGoal t base) trs)
   where
-   apply = InitialGoal.liftProcessor
+   apply = liftProcessor
 
 
 -- -----------------

@@ -86,9 +86,16 @@ instance Monoid trs => MkProblem CNarrowing trs where
   mkProblem CNarrowing rr = cnarrowingProblem rr mempty
   mapR f (CNarrowingProblem r p) = CNarrowingProblem (f r) p
 
+
 instance MkProblem CNarrowing trs => MkDPProblem CNarrowing trs where
   mkDPProblem _ = cnarrowingProblem
   mapP f (CNarrowingProblem r p) = CNarrowingProblem r (f p)
+
+instance FrameworkExtension MkNarrowing where
+    getBaseFramework (MkNarrowing b) = b
+    getBaseProblem   (NarrowingProblem p) = p
+    setBaseProblem p (NarrowingProblem _) = NarrowingProblem p
+
 
 instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
   MkProblem CNarrowing (NarradarTRS t v)
