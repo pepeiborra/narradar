@@ -308,7 +308,7 @@ computeDPUnifiers typ trs dps = do
                 let unifier = unify l' r
                 return ((x,y), unifier)
 
-   return (unif :!: array ( (0,0), (ldps,ldps) ) unifInv)
+   return (unif :!: array (bounds unif) unifInv)
 
  where
    the_dps = rules dps
@@ -324,8 +324,9 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
 --                pprTrace (text "unify" <+> pPrint l <+> pPrint r' <+> equals <+> pPrint unifier) (return ())
                 return ((x,y), unifier)
    return $ array ( (0,0), (ldps, ldps) ) unif
- where liftL = ListT . return
-       ldps  = length the_dps - 1
+ where
+   liftL = ListT . return
+   ldps  = length the_dps - 1
 
 getEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
   the_edges = [ xy | (xy, Just _) <- A.assocs unif

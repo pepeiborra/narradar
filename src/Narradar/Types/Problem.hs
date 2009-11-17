@@ -324,17 +324,18 @@ insertDPairsDefault ::
 
 insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs
     = runIcap (getVars p `mappend` getVars newPairs) $ do
-      let (_,l_dps) = bounds dps
+      let (zero,l_dps) = bounds dps
           l_newPairs  = length $ rules newPairs
           dps'      = A.elems dps ++ rules newPairs
           l_dps'    = l_dps + l_newPairs
           a_dps'    = A.listArray (0,l_dps') dps'
-          new_nodes= [l_dps + 1 .. l_dps']
+          new_nodes = [l_dps + 1 .. l_dps']
+          (!)       = safeAt "insertDPairsDefault"
           mkUnif arr arr' =
-            A.array ((0,0), (l_dps', l_dps'))
+            A.array ((zero,zero), (l_dps', l_dps'))
                     (assocs arr ++
-                     concat [ [(in1, safeAt "insertDPairsDefault" arr' in1), (in2, safeAt "insertDPairsDefault" arr' in2)]
-                                 | j <- new_nodes, k <- [0..l_dps']
+                     concat [ [(in1, arr' ! in1), (in2, arr' ! in2)]
+                                 | j <- new_nodes, k <- [zero..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
 
       unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (getR p) (tRS dps')
@@ -344,6 +345,7 @@ insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs
           dptrs'   = dpTRS' a_dps' (unif' :!: unifInv')
           p'       = setP dptrs' p
           gr'      = getEDG p'
+
 
       return p'
 
