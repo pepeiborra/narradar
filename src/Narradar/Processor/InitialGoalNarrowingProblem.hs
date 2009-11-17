@@ -31,7 +31,12 @@ import Narradar.Utils
 
 -- | This is the approach of Iborra, Nishida & Vidal
 data NarrowingGoalToRelativeRewriting = NarrowingGoalToRelativeRewriting deriving (Eq, Show)
-data NarrowingGoalToInRelativeRewritingProof = NarrowingGoalToRelativeRewritingProof deriving (Eq, Show)
+data NarrowingGoalToRelativeRewritingProof = NarrowingGoalToRelativeRewritingProof deriving (Eq, Show)
+
+instance Pretty NarrowingGoalToRelativeRewritingProof where
+  pPrint NarrowingGoalToRelativeRewritingProof = text "Relative Termination of the following problem with generators" <+>
+                                                 text "implies the termination of narrowing (LOPSTR'09)"
+
 
 instance (gid ~ DPIdentifier (GenId id)
          ,Ord id, Pretty (GenId id)
@@ -41,6 +46,7 @@ instance (gid ~ DPIdentifier (GenId id)
          ,HasSignature (NProblem base (DPIdentifier id)), DPIdentifier id ~ SignatureId (NProblem base (DPIdentifier id))
 --         ,InsertDPairs (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) (NTRS gid)
          ,InsertDPairs base (NTRS gid)
+         ,Info info NarrowingGoalToRelativeRewritingProof
          ) =>
          Processor info NarrowingGoalToRelativeRewriting
                         (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
@@ -49,7 +55,7 @@ instance (gid ~ DPIdentifier (GenId id)
                                   gid)
   where
     apply NarrowingGoalToRelativeRewriting prob@NarrowingGoalProblem{goal=Goal goal_f modes, ..} =
-            return prob'
+            singleP NarrowingGoalToRelativeRewritingProof prob prob'
      where
 {-
        prob'    = insertDPairs (mkDPProblem newType r' p')
