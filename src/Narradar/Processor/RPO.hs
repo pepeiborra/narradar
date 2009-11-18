@@ -64,12 +64,12 @@ instance (Traversable (Problem typ)
          ,Omega typ (TermF mpo)
          ,Omega typ (TermF lpo)
          ,Omega typ (TermF lpos)
-         ,NUsableRules rpo  (typ, NTRS rpo, NTRS rpo)
-         ,NUsableRules mpo  (typ, NTRS mpo, NTRS mpo)
-         ,NUsableRules lpo  (typ, NTRS lpo, NTRS lpo)
-         ,NUsableRules lpos (typ, NTRS lpos, NTRS lpos)
-         ,NUsableRules res  (typ, NTRS res,  NTRS res)
-         ,NUsableRules res' (typ, NTRS res', NTRS res')
+         ,NUsableRules typ rpo
+         ,NUsableRules typ mpo
+         ,NUsableRules typ lpo
+         ,NUsableRules typ lpos
+         ,NUsableRules typ res
+         ,NUsableRules typ res'
          ,MkDPProblem typ (NTRS id)
          ,MkDPProblem typ (NTRS rpo)
          ,MkDPProblem typ (NTRS mpo)
@@ -113,11 +113,11 @@ instance (rpo  ~ RPOAF.Symbol id
          ,NCap mpo  (base, NTRS mpo)
          ,NCap lpo  (base, NTRS lpo)
          ,NCap lpos (base, NTRS lpos)
-         ,NUsableRules id   (base, NTRS id,  NTRS id)
-         ,NUsableRules rpo  (base, NTRS rpo, NTRS rpo)
-         ,NUsableRules mpo  (base, NTRS mpo, NTRS mpo)
-         ,NUsableRules lpo  (base, NTRS lpo, NTRS lpo)
-         ,NUsableRules lpos (base, NTRS lpos, NTRS lpos)
+         ,NUsableRules base id
+         ,NUsableRules base rpo
+         ,NUsableRules base mpo
+         ,NUsableRules base lpo
+         ,NUsableRules base lpos
          ,MkDPProblem base (NTRS id)
          ,MkDPProblem base (NTRS rpo)
          ,MkDPProblem base (NTRS mpo)
@@ -191,7 +191,7 @@ procAF :: (Monad m
           ,Traversable  (Problem typ)
           ,MkDPProblem typ (NTRS sres)
           ,MkDPProblem typ (NTRS id)
-          ,NUsableRules sres (typ, NTRS sres, NTRS sres)
+          ,NUsableRules typ sres
           ,AF.ApplyAF (NProblem typ sres)
           )=> NProblem typ id -> (IO (Maybe ([Int], [SymbolRes id]))) -> Proof info m (NProblem typ id)
 procAF p m = case unsafePerformIO m of

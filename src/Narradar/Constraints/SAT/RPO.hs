@@ -334,7 +334,6 @@ verifyRPO :: forall typ trs t v a k.
           ,MkDPProblem typ trs
           ,Ord a, Pretty a
           ,HasSignature (Problem typ trs), SignatureId (Problem typ trs) ~ SymbolRes a
-          ,NUsableRules (SymbolRes a) (typ, trs, trs)
           ) => Problem typ (NTRS a) -> [SymbolRes a] -> [Int] -> VerifyRPOAF (RuleN (SymbolRes a))
 
 verifyRPO p0 symbols nondec_pairs = runIdentity $ do

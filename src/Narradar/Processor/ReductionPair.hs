@@ -46,7 +46,7 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
          ,t   ~ TermF id, Pretty (t Doc)
          ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
          ,MkDPProblem typ (NTRS id), Traversable(Problem typ)
-         ,ICap t Var (typ, trs), IUsableRules t Var (typ, trs)
+         ,ICap t Var (typ, trs), IUsableRules t Var typ trs
          ,Ord id, Pretty id, Lattice (AF_ id), PolyHeuristic heu id
          ,ApplyAF (NProblem typ id)
          ,Info info p0

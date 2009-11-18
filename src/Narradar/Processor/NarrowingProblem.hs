@@ -49,7 +49,8 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
          , Info info (NarrowingToRewritingProof id)
          , MkDPProblem base (NTRS id)
          , Traversable (Problem base)
-         , NUsableRules id (base, NTRS id), NCap id (base, NTRS id)
+         , NCap id (base, NTRS id)
+         , NUsableRules base id
          ) =>
     Processor info (NarrowingToRewritingICLP08 heu) (Problem (MkNarrowing base) (NTRS id) ) (Problem base (NTRS id) ) where
   applySearch (NarrowingToRewritingICLP08 mk) p
@@ -84,7 +85,7 @@ instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
          , Info info (NProblem typ0 id)
          , Info info (NarrowingToRewritingProof id)
          , MkDPProblem typ0 (NTRS id), Traversable (Problem typ0)
-         , NUsableRules id (typ0, NTRS id)
+         , NUsableRules typ0 id
          , NCap id (typ0, NTRS id)
          ) =>
     Processor info (NarrowingToRewritingICLP08 heu)

@@ -33,7 +33,6 @@ import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
-import Narradar.Types.Problem.Infinitary (f_UsableRulesAF)
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Framework
@@ -109,11 +108,10 @@ instance ICap t v (base, NarradarTRS t v) => ICap t v (MkNarrowingGoal id base, 
 
 -- Usable Rules
 
-
-instance (IUsableRules t v (base, NarradarTRS t v)) =>
-  IUsableRules t v (MkNarrowingGoal id base, NarradarTRS t v) where
-   iUsableRulesM    = liftUsableRulesM2
-   iUsableRulesVarM = liftUsableRulesVarM2
+instance (IUsableRules t v base trs) =>
+  IUsableRules t v (MkNarrowingGoal id base) trs where
+   iUsableRulesM    = liftUsableRulesM
+   iUsableRulesVarM = liftUsableRulesVarM
 
 {-
 -- Insert Pairs

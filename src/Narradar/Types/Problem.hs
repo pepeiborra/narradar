@@ -63,13 +63,14 @@ import Data.Term.Rules
 type NarradarProblem typ t = Problem typ (NarradarTRS t Var)
 type NProblem typ id = NarradarProblem typ (TermF id)
 
-mkNewProblem :: ( HasRules (TermF id) Var trs
-                , Ord id, Pretty (DPIdentifier id), Pretty typ
-                , Traversable (Problem typ)
-                , MkDPProblem typ (NTRS (DPIdentifier id))
-                , NCap (DPIdentifier id) (typ, NTRS (DPIdentifier id))
-                , NUsableRules (DPIdentifier id) (typ, NTRS (DPIdentifier id), NTRS (DPIdentifier id))
-                ) => typ -> trs -> NProblem typ (DPIdentifier id)
+mkNewProblem ::
+    ( HasRules (TermF id) Var trs
+    , Ord id, Pretty (DPIdentifier id), Pretty typ
+    , Traversable (Problem typ)
+    , MkDPProblem typ (NTRS (DPIdentifier id))
+    , NCap (DPIdentifier id) (typ, NTRS (DPIdentifier id))
+    , NUsableRules typ (DPIdentifier id)
+    ) => typ -> trs -> NProblem typ (DPIdentifier id)
 mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
    rr' = mapTermSymbols IdFunction <$$> rules trs
 
@@ -79,21 +80,26 @@ mkDPProblem' :: ( Enum v, Ord v, Pretty v
                 , rr ~ [Rule t v]
                 , ntrs ~ NarradarTRS t v
                 , Unify t, HasId t, Ord (Term t v)
-                , MkDPProblem typ (NarradarTRS t v), Traversable (Problem typ)
+                , MkDPProblem typ (NarradarTRS t v)
+--                , MkDPProblem typ [Rule t v]
+                , Traversable (Problem typ)
                 , ICap t v (typ, ntrs)
-                , IUsableRules t v (typ, ntrs, ntrs)
-                , Pretty (t(Term t v)), Pretty typ
+                , IUsableRules t v typ ntrs
+                , Pretty (Term t v), Pretty typ
                 , IsTRS t v trs
                 ) => typ -> trs -> trs -> Problem typ (NarradarTRS t v)
 
-{-# SPECIALIZE mkDPProblem' :: (Ord id, Pretty id, Pretty typ, MkDPProblem typ (NTRS id), Traversable (Problem typ)
-                               ,NCap id (typ, NTRS id), NUsableRules id (typ, NTRS id, NTRS id)
-                               ) =>
-                               typ -> NTRS id -> NTRS id -> Problem typ (NTRS id) #-}
+{-# SPECIALIZE mkDPProblem'
+  :: ( Ord id, Pretty id, Pretty typ
+     , MkDPProblem typ (NTRS id), Traversable (Problem typ)
+     , NCap id (typ, NTRS id), NUsableRules typ id
+     ) =>
+     typ -> NTRS id -> NTRS id -> Problem typ (NTRS id) #-}
 
-mkDPProblem' typ (rules -> rr) (rules -> dps) = mkDPProblem typ (tRS rr) dptrs
+mkDPProblem' typ (rules -> rr) (rules -> dps) = mkDPProblem typ rrtrs dptrs
   where
-      dptrs = dpTRS typ rr dps
+      rrtrs = tRS rr
+      dptrs = dpTRS typ rrtrs (tRS dps)
 
 
 
@@ -116,17 +122,18 @@ instance GetPairs typ where
 getEDG :: (Ord v, Enum v
           ,HasId t, Unify t
           ,Ord (Term t v)
-          ,Pretty (t(Term t v)), Pretty typ, Pretty v
-          ,IsDPProblem typ, Traversable (Problem typ)
+          ,Pretty (Term t v), Pretty typ, Pretty v
+          ,MkDPProblem typ (NarradarTRS t v)
+          ,Traversable (Problem typ)
           ,ICap t v (typ, NarradarTRS t v)
-          ,IUsableRules t v (typ, NarradarTRS t v, NarradarTRS t v)
+          ,IUsableRules t v typ (NarradarTRS t v)
           ) => Problem typ (NarradarTRS t v) -> G.Graph
 getEDG p = filterSEDG p $ getdirectEDG p
 
 getdirectEDG :: (Traversable (Problem typ)
                 ,IsDPProblem typ, Enum v, Ord v, Unify t
                 ,ICap t v (typ, NarradarTRS t v)
-                ,Pretty v, Pretty (t(Term t v)), Pretty typ
+                ,Pretty v, Pretty (Term t v), Pretty typ
                 ) => Problem typ (NarradarTRS t v) -> G.Graph
 getdirectEDG p@(getP -> DPTRS dps _ (unif :!: _) _) =
     assert (isValidUnif p) $
@@ -145,9 +152,10 @@ getDirectEDG p = G.buildG (0, length dps - 1) edges where
 filterSEDG :: (Ord v, Enum v
               ,HasId t, Unify t
               ,Ord (Term t v)
-              ,IsDPProblem typ, Traversable (Problem typ)
+              ,MkDPProblem typ (NarradarTRS t v)
+              ,Traversable (Problem typ)
               ,ICap t v (typ, NarradarTRS t v)
-              ,IUsableRules t v (typ, [Rule t v], [Rule t v])
+              ,IUsableRules t v typ (NarradarTRS t v)
               ) => Problem typ (NarradarTRS t v) -> G.Graph -> G.Graph
 filterSEDG p gr | isCollapsing (getP p) = gr
 filterSEDG (getP -> dptrs@DPTRS{}) gr =
@@ -160,11 +168,12 @@ filterSEDG p gr = G.buildG (bounds gr) edges where
   dps = A.listArray (bounds gr) (rules $ getP p)
   edges = runIcap p $ runListT $ do
                 trs'   <- lift $ getFresh (rules $ getR p)
+                let p' = setR (tRS trs') p
                 (i, j) <- liftL (G.edges gr)
                 let _ :-> r = safeAt "filterSEDG" dps i
                     l :-> _ = safeAt "filterSEDG" dps j
-                (_,trs_u,_) <- iUsableRulesM (typ, trs', A.elems dps) [r]
-                let trs_inv = swapRule <$> trs_u
+                (getR -> trs_u) <- iUsableRulesMp p' [r]
+                let trs_inv = swapRule <$> rules trs_u
                 l'  <- lift (icap (typ, trs_inv) l)
                 guard (unifies l' r)
                 return (i,j)
@@ -222,17 +231,17 @@ instance (Ord v, ExtraVars v trs, IsDPProblem p) =>  ExtraVars v (Problem p trs)
   extraVars p = extraVars (getP p) `mappend` extraVars (getR p)
 
 instance (MkDPProblem typ (NarradarTRS t v)
-         ,Unify t, Pretty (t(Term t v)), ApplyAF (Term t v)
-         ,Enum v, Ord v, Pretty v
-         ,IUsableRules t v (typ, NarradarTRS t v)
+         ,Unify t
+         ,ApplyAF (Term t v)
+         ,Enum v, Ord v
+         ,IUsableRules t v typ (NarradarTRS t v)
          ,ICap t v (typ, NarradarTRS t v)
          ,AFId (Term t v) ~ AFId (NarradarTRS t v)
---         ,AFId (NarradarTRS t v) ~ AFId (Problem typ (NarradarTRS t v))
          ) =>
     ApplyAF (Problem typ (NarradarTRS t v))
   where
     type AFId (Problem typ (NarradarTRS t v)) = AFId (Term t v)
-    apply af p@(getP -> dps@DPTRS{}) = mkDPProblem typ trs' dps'
+    apply af p@(getP -> dps@DPTRS{})= mkDPProblem typ trs' dps'
      where
        typ  = getProblemType p
        trs' = apply af (getR p)
@@ -263,15 +272,16 @@ instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) w
 -- Dealing with the pairs in a problem
 -- ------------------------------------
 
-expandDPair :: ( problem ~ Problem typ
-               , trs ~ NarradarTRS t v
-               , HasId t, Foldable t, Unify t, Ord (Term t v), Ord v, Enum v
-               , Traversable problem, MkDPProblem typ trs
-               , ICap t v (typ, trs)
-               , IUsableRules t v (typ, trs, trs)
-               , Pretty (t(Term t v)), Pretty v, Pretty typ
+expandDPair :: ( -- v ~ Var
+                 Ord v, Enum v, Pretty v
+               , HasId t, Unify t, Ord (Term t v)
+               , Traversable (Problem typ)
+               , MkDPProblem typ (NarradarTRS t v)
+               , ICap t v (typ, NarradarTRS t v)
+               , IUsableRules t v typ [Rule t v]
+               , Pretty (Term t v), Pretty typ
                ) =>
-               problem (NarradarTRS t v) -> Int -> [Rule t v] -> problem (NarradarTRS t v)
+               Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
 
 expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
  = runIcap (rules p ++ newdps) $ do
@@ -318,7 +328,7 @@ insertDPairsDefault ::
          (trs ~ NTRS id
          ,MkDPProblem typ trs, Pretty typ, Traversable (Problem typ)
          ,Pretty id, Eq id
-         ,NUsableRules id (typ, trs, trs)
+         ,NUsableRules typ id
          ,NCap id (typ, trs)
          ) => NProblem typ id -> NTRS id -> NProblem typ id
 
@@ -358,7 +368,7 @@ isValidUnif :: ( p   ~ Problem typ
                , Ord v, Enum v, Unify t
                , Traversable p, IsDPProblem typ, Pretty typ
                , ICap t v (typ, NarradarTRS t v)
-               , Pretty v, Pretty (t(Term t v))
+               , Pretty v, Pretty (Term t v)
                ) => p (NarradarTRS t v) -> Bool
 isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _)
   | valid = True

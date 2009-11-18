@@ -63,7 +63,7 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (t(Term t Var)), Pretty typ0
          , ICap t Var (typ0,trs)
-         , IUsableRules t Var (typ0,trs,trs)
+         , IUsableRules t Var typ0 trs
          , ProblemColor problem, PprTPDBDot problem
          , Info info DependencyGraphProof
          ) =>

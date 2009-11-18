@@ -113,40 +113,29 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
          ,ApplyAF (Term t v), ApplyAF trs
          , id ~ AFId trs, AFId (Term t v) ~ id, Ord id, Ord (t(Term t v))
-         ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
-   IUsableRules t v (Infinitary id p, trs)
+         ,IUsableRules t v p trs, ICap t v (p,trs)) =>
+   IUsableRules t v (Infinitary id p) trs
  where
-   iUsableRulesM p@(typ@Infinitary{..}, trs) tt = do
+   iUsableRulesM Infinitary{..} trs dps tt = do
+      pi_tt <- getFresh (AF.apply pi_PType tt)
+      let it = (baseProblemType, trs)
+      trs'  <- f_UsableRulesAF it pi_PType (iUsableRulesVarM baseProblemType trs dps) pi_tt
+      return (tRS $ rules trs')
+
+   iUsableRulesVarM Infinitary{..} = iUsableRulesVarM baseProblemType
+
+{-
+instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
+         ,ApplyAF (Term t v), ApplyAF trs
+         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id, Ord (t(Term t v))
+         ,IUsableRules t v (p, trs, trs), ICap t v (p,trs)) =>
+   IUsableRules t v (Infinitary id p, trs, trs)
+ where
+   iUsableRulesM p@(typ@Infinitary{..}, trs, dps) tt = do
       pi_tt <- getFresh (AF.apply pi_PType tt)
       trs'  <- f_UsableRulesAF (baseProblemType, trs) pi_PType (iUsableRulesVarM p) pi_tt
-      return (typ, tRS $ rules trs')
+      return (typ, tRS $ rules trs', dps)
 
    iUsableRulesVarM (Infinitary{..},trs) = iUsableRulesVarM (baseProblemType, trs)
+-}
 
-f_UsableRulesAF :: forall term vk acc t id v trs typ problem m.
-                 ( problem ~ (typ,trs)
-                 , term    ~ Term t v
-                 , vk      ~ (v -> m acc)
-                 , acc     ~ Set (Rule t v)
-                 , id      ~ AFId trs, AFId term ~ id, Ord id
-                 , Ord (Term t v), Unify t, Ord v, ApplyAF term
-                 , HasRules t v trs, ApplyAF trs, GetVars v trs
-                 , ICap t v problem
-                 , MonadFresh v m
-                 ) =>
-                 problem -> AF_ id -> vk -> [term] -> m acc
-
-f_UsableRulesAF p@(typ,trs)    _   _ tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined
-f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
-    pi_rules = [(AF.apply pi r, r) | r <- rules trs]
-    pi_trs   = AF.apply pi trs
-  --go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
-    go acc []       = return acc
-    go acc (t:rest) = evalTerm (\v -> vk v >>= \vacc -> go (vacc `mappend` acc) rest) tk t where
-     tk in_t = do
-        t' <- wrap `liftM` (icap (typ, pi_trs) `T.mapM` in_t)
-        let rr = Set.fromList
-                [rule | (pi_rule@(l:->r), rule) <- pi_rules, not(isVar l), t' `unifies` l]
-            new = Set.difference rr acc
-        rhsSubterms <- getFresh (AF.apply pi . rhs <$> F.toList new)
-        go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])

@@ -38,11 +38,12 @@ instance (t   ~ TermF id
          ,v   ~ Var
          ,trs ~ NTRS id
          ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
-         ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,ApplyAF (NProblem typ id)
          ,Info info (InfinitaryToRewritingProof id)
+         ,ICap t v (typ, trs)
+         ,IUsableRules t v typ trs
          ) =>
     Processor info (InfinitaryToRewriting heu)
               (NProblem (Infinitary id typ) id)
@@ -69,7 +70,7 @@ instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (
          , Foldable (Problem typ)
          , Info info NarrowingGoalToInfinitaryProof
          , NCap id (typ, NTRS id)
-         , NUsableRules id (typ, NTRS id)
+         , NUsableRules typ id
          ) =>
     Processor info (NarrowingGoalToInfinitary heu)
                    (NProblem (MkNarrowingGoal id typ) id)

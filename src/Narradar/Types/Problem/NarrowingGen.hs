@@ -138,10 +138,9 @@ instance ICap t v (st, NarradarTRS t v) => ICap t v (MkNarrowingGen st, Narradar
 
 -- Usable Rules
 
-instance (IUsableRules t v (st, NarradarTRS t v)) =>
-  IUsableRules t v (MkNarrowingGen st, NarradarTRS t v) where
-   iUsableRulesM    = liftUsableRulesM2
-   iUsableRulesVarM = liftUsableRulesVarM2
+instance (IUsableRules t v base trs) => IUsableRules t v (MkNarrowingGen base) trs where
+   iUsableRulesM    = liftUsableRulesM
+   iUsableRulesVarM = liftUsableRulesVarM
 
 -- Insert Pairs
 

@@ -93,7 +93,7 @@ rpoAF_IGDP :: (Ord id, Ord sid, Pretty sid, AFSymbol sid, UsableSymbol sid, Exte
               ,Decode sid (SymbolRes id)
               ,HasSignature (Problem base (NTRS id)),  id  ~ SignatureId (Problem base (NTRS id))
               ,HasSignature (Problem base (NTRS sid)), sid ~ SignatureId (Problem base (NTRS sid))
-              ,NUsableRules sid (base, NTRS sid, NTRS sid)
+              ,NUsableRules base sid
               ,NCap sid (base, NTRS sid)
               ,Omega (InitialGoal (TermF sid) base) (TermF sid)
               ,DPSymbol id, Pretty id
@@ -595,7 +595,7 @@ instance (p  ~ Problem typ
          ,Traversable p
          ,Ord id, Ord (t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v), Pretty id
-         ,IUsableRules t v (typ, trs, trs)
+         ,IUsableRules t v typ trs
          ,MkDPProblem typ (NarradarTRS t v)
          ) => Omega typ t
  where
@@ -609,7 +609,7 @@ instance (p  ~ Problem typ
    where
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
-    dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps) :: p trs)
+    dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps))
 
     go (Pure x) _ = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
 
@@ -638,7 +638,7 @@ instance (p   ~ Problem (InitialGoal t typ)
          ,Traversable (Problem typ), Traversable t
          ,Ord id, Ord(t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Pretty id, Pretty (t(Term t v))
-         ,IUsableRules t v (typ, trs, trs)
+         ,IUsableRules t v typ trs
          ) => Omega (InitialGoal t typ) t
  where
 
@@ -695,7 +695,7 @@ verifyRPOAF :: forall typ trs t v a k.
           ,Ord a, Pretty a
           ,AF.ApplyAF (Problem typ trs)
           ,HasSignature (Problem typ trs)
-          ,NUsableRules (SymbolRes a) (typ, trs, trs)
+          ,NUsableRules typ (SymbolRes a)
           ,SignatureId (Problem typ trs) ~ SymbolRes a
           ,AFId (Problem typ (NTRS (SymbolRes a))) ~ SymbolRes a
           ) => Problem typ (NTRS a) -> [SymbolRes a] -> [Int] -> VerifyRPOAF (RuleN (SymbolRes a))

@@ -81,7 +81,7 @@ instance (t   ~ TermF id
          ,v   ~ Var
          ,trs ~ NTRS id
          ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
-         ,ICap t v (typ, trs), IUsableRules t v (typ,trs)
+         ,ICap t v (typ, trs), IUsableRules t v typ trs
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,ApplyAF (NProblem typ id)

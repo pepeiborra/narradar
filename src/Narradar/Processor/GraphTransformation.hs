@@ -40,12 +40,14 @@ data FInstantiation = FInstantiation
 -- * Narrowing
 
 instance ( Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+         , IUsableRules t Var Rewriting [Rule t Var]
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
 instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+         , IUsableRules t Var IRewriting [Rule t Var]
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
@@ -113,7 +115,7 @@ instance (trs ~ NarradarTRS t Var
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
          ,ICap t Var (MkRewriting st, NarradarTRS t Var)
-         ,IUsableRules t Var (MkRewriting st, NarradarTRS t Var)
+         ,IUsableRules t Var (MkRewriting st) [Rule t Var]
          ) =>
     Processor info Instantiation (NarradarProblem (MkRewriting st) t) (NarradarProblem (MkRewriting st) t) where
   applySearch Instantiation = instantiation
@@ -130,7 +132,9 @@ instance (trs ~ NarradarTRS t v
          ,id  ~ TermId t, HasId t, MapId f, DPSymbol id
          ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (t(Term t Var))
          ,MkDPProblem typ trs, Traversable (Problem typ)
-         ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
+         ,IUsableRules t v typ [Rule t v]
+         ,IUsableRules t v typ trs
+         ,ICap t v (typ, trs)
          ,Info info GraphTransformationProof
          ) =>
     Processor info Instantiation (NarradarProblem (InitialGoal (f id) typ) (f id))
@@ -140,7 +144,7 @@ instance (trs ~ NarradarTRS t v
    | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
-                             (mkDerivedProblem typ' (expandDPair p i newdps))
+                             (mkDerivedProblem typ' p) -- (expandDPair p i newdps))
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "Instantiation" dpsA i
                      , let newdps = dps' !! i
@@ -168,7 +172,7 @@ instance (trs ~ NarradarTRS t Var
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
          ,ICap t Var (MkRewriting st, NarradarTRS t Var)
-         ,IUsableRules t Var (MkRewriting st, NarradarTRS t Var)
+         ,IUsableRules t Var (MkRewriting st) [Rule t Var]
          ) =>
     Processor info FInstantiation (NarradarProblem (MkRewriting st) t) (NarradarProblem (MkRewriting st) t) where
   applySearch FInstantiation = finstantiation
@@ -179,34 +183,36 @@ instance (Info info (NarradarProblem b t)
     Processor info FInstantiation (NarradarProblem (MkNarrowing b) t) (NarradarProblem (MkNarrowing b) t) where
   applySearch = liftProcessorS
 
-instance (trs ~ NarradarTRS t v
-         ,v   ~ Var
-         ,t   ~ f id
-         ,id  ~ TermId t, HasId t, MapId f, DPSymbol id
-         ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (t(Term t Var))
-         ,MkDPProblem typ trs, Traversable (Problem typ)
-         ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
+instance (v ~ Var
+         ,TermId t ~ DPIdentifier id, HasId t, Unify t
+         ,MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
+         ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
+         ,IUsableRules t v typ (NarradarTRS t v)
+         ,IUsableRules t v typ [Rule t v]
+         ,ICap t v (typ, (NarradarTRS t Var))
          ,Info info GraphTransformationProof
          ) =>
-    Processor info FInstantiation (NarradarProblem (InitialGoal (f id) typ) (f id))
-                                  (NarradarProblem (InitialGoal (f id) typ) (f id))
+    Processor info FInstantiation (NarradarProblem (InitialGoal t typ) t)
+                                  (NarradarProblem (InitialGoal t typ) t)
  where
  applySearch FInstantiation p@InitialGoalProblem{..}
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
   | isCollapsing (getR p) = mzero
-  | otherwise = [ singleP (FInstantiationProof olddp newdps) p
-                           (mkDerivedProblem typ' (expandDPair p i newdps))
+  | otherwise = [ singleP (FInstantiationProof olddp newdps) p (mkDerivedProblem typ' p')
                      | (i, dps') <- dpss
-                     , let olddp  = safeAt "FInstantiation" dpsA  i
+                     , let olddp  = safeAt "FInstantiation" dpsA i
                      , let newdps = dps' !! i
-                     , let dgraph' = expandDGraph p olddp newdps
-                     , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
+                     , let dgraph'= expandDGraph p olddp newdps
+                     , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
+                     , let p'     = expandDPair (getBaseProblem p) i newdps
+                ]
    where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
          dps  = elems dpsA
          dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                     , all (not.null) dps]
-         f :: (Int, Rule t v) -> [(Int, Rule t v)]
+
+--         f :: (Int, Rule t v) -> [(Int, Rule t v)]
          f (i, olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
@@ -253,10 +259,11 @@ instance Pretty GraphTransformationProof where
 narrowing, narrowing_innermost
           :: (p  ~ Problem typ trs
              ,trs ~ NarradarTRS t v
+             ,v ~ Var
              ,TermId t  ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)
              ,MkDPProblem typ trs, Traversable (Problem typ)
-             ,IUsableRules t v (typ, trs, trs), ICap t v (typ,trs)
+             ,IUsableRules t v typ [Rule t v], ICap t v (typ,trs)
              ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info p
              ,Info info GraphTransformationProof
@@ -326,11 +333,25 @@ narrowing_innermost p0
                where uu     = map (lhs . (safeAt "narrowing_innermost" dpsA)) (safeAt "narrowing_innermost" gr i)
                      pos_uu = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
-
+narrowingIG, narrowing_innermostIG
+          :: (trs ~ NarradarTRS t v
+             ,v ~ Var
+             ,TermId t  ~ DPIdentifier id, HasId t, Unify t
+             ,Enum v, GetVars v v, Ord (Term t v)
+             ,MkDPProblem typ trs, Traversable (Problem typ)
+             ,IUsableRules t v typ (NarradarTRS t v)
+             ,IUsableRules t v typ [Rule t v]
+             ,ICap t v (typ,trs)
+             ,Pretty (t(Term t v)), Pretty v, Pretty typ
+             ,Info info (Problem (InitialGoal t typ) trs)
+             ,Info info GraphTransformationProof
+             ,Monad mp
+             ) =>
+             Problem (InitialGoal t typ) trs -> [Proof info mp (Problem (InitialGoal t typ) trs)]
 narrowingIG p0@InitialGoalProblem{..}
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0
-                           (mkDerivedProblem typ' (expandDPair p0 i newdps))
+                           (mkDerivedProblem typ' (expandDPair (getBaseProblem p0) i newdps))
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "narrowingIg" dpsA i
                      , let newdps = dps' !! i
@@ -365,7 +386,7 @@ narrowingIG p0@InitialGoalProblem{..}
 narrowing_innermostIG p0@InitialGoalProblem{..}
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0
-                          (mkDerivedProblem typ' (expandDPair p0 i newdps))
+                          (mkDerivedProblem typ' (expandDPair (getBaseProblem p0) i newdps))
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "narrowing_innermostIG" dpsA i
                      , let newdps = dps' !! i
@@ -406,11 +427,12 @@ instantiation, finstantiation
           :: forall typ trs mp t v p id info.
              (p  ~ Problem typ trs, Info info p
              ,trs ~ NarradarTRS t v
+             ,v ~ Var
              ,TermId t ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v
              ,MkDPProblem typ trs, Traversable (Problem typ)
              ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
-             ,IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
+             ,IUsableRules t v typ [Rule t v], ICap t v (typ, trs)
              ,Info info GraphTransformationProof
              ,Monad mp
              ) =>

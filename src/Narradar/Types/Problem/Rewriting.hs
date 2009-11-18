@@ -26,9 +26,9 @@ import Data.Term
 import Data.Term.Rules
 
 import MuTerm.Framework.Problem
---import MuTerm.Framework.Problem.Types
 import MuTerm.Framework.Proof
 
+import Narradar.Constraints.UsableRules
 import Narradar.Types.Problem
 import Narradar.Types.TRS
 import Narradar.Types.Term
@@ -147,46 +147,27 @@ instance (Ord v, Unify t) => ICap t v (IRewriting, [Rule t v]) where
 
 -- Usable Rules
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (Rewriting, NarradarTRS t v) where
---iUsableRulesM p _ tt | assert (Set.null (getVars p `Set.intersection` getVars tt)) False = undefined
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v Rewriting (NarradarTRS t v) where
+  iUsableRulesM m@(MkRewriting Standard _) trs dps tt = do
+    trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) =<< getFresh tt
+    return (tRS $ toList trs')
 
-  iUsableRulesM p@(m@(MkRewriting Standard _), trs) tt = do
-    trs' <- f_UsableRules p (iUsableRulesVarM p) =<< getFresh tt
-    return (m, tRS $ toList trs')
+  iUsableRulesVarM (MkRewriting Standard _) trs _ _ = return $ Set.fromList $ rules trs
 
-  iUsableRulesVarM (MkRewriting Standard _,trs) _ = return $ Set.fromList $ rules trs
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v IRewriting (NarradarTRS t v) where
+  iUsableRulesM m@(MkRewriting Innermost _) trs dps tt = do
+    trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) =<< getFresh tt
+    return (tRS $ toList trs')
 
+  iUsableRulesVarM (MkRewriting Innermost _) trs _ _ = return $ Set.fromList $ rules trs
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (IRewriting, NarradarTRS t v) where
-  iUsableRulesM p@(m@(MkRewriting Innermost _), trs) tt = do
-    trs' <- f_UsableRules p (iUsableRulesVarM p) =<< getFresh tt
-    return (m, tRS $ toList trs')
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v Rewriting [Rule t v] where
+  iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
+  iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
-  iUsableRulesVarM (MkRewriting Innermost _, _) _ = return mempty
-
-f_UsableRules :: forall term vk acc t v trs typ problem m.
-                 ( Ord (Term t v), Unify t, Ord v
-                 , problem ~ (typ, trs)
-                 , term ~ Term t v
-                 , vk ~ (v -> m acc)
-                 , acc ~ Set (Rule t v)
-                 , HasRules t v trs, GetVars v trs
-                 , ICap t v problem
-                 , MonadFresh v m
-                 ) =>
-                 problem -> vk -> [term] -> m acc
-f_UsableRules p@(_,trs) _  tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined
-f_UsableRules p@(_,trs) vk tt = go mempty tt where
-  go acc []       = return acc
-  go acc (t:rest) = evalTerm (\v -> vk v >>= \vacc -> go (vacc `mappend` acc) rest) tk t where
-        tk :: t (Term t v) -> m acc
-        tk in_t = do
-           t'  <- wrap `liftM` (icap p `T.mapM` in_t)
-           let rr  = [ l:->r | l:->r <- rules trs, not(isVar l), l `unifies` t']
-               new = Set.difference (Set.fromList rr) acc
-           rhsSubterms <- getFresh (rhs <$> F.toList new)
-           go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
-
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v IRewriting [Rule t v] where
+  iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
+  iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
 -- Insert Pairs
 

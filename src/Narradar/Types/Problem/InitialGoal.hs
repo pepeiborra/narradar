@@ -72,14 +72,14 @@ instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
   getProblemType (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getProblemType p)
   getR   (InitialGoalProblem _     _ p) = getR p
 
-instance ( MkProblem p (NarradarTRS t Var), IsDPProblem p
+instance ( MkDPProblem p (NarradarTRS t Var)
          , HasId t, Foldable t, Unify t
          , Ord (Term t Var), Pretty (t(Term t Var))
          , Traversable (Problem p), Pretty p
          , ICap t Var (p, NarradarTRS t Var)
-         , IUsableRules t Var (p, NarradarTRS t Var, NarradarTRS t Var)
+         , IUsableRules t Var p (NarradarTRS t Var)
          ) =>
- MkProblem (InitialGoal t p) (NarradarTRS t Var)
+     MkProblem (InitialGoal t p) (NarradarTRS t Var)
  where
   mkProblem (InitialGoal gg gr p) rr = initialGoalProblem gg gr (mkProblem p rr)
   mapR f (InitialGoalProblem goals g@DGraph{..} p) = initialGoalProblem goals Nothing (mapR f p)
@@ -90,7 +90,8 @@ instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) w
 instance (HasId t, Unify t, Foldable t, MkDPProblem p (NarradarTRS t Var), Pretty p
          ,Pretty(t(Term t Var)), Ord (Term t Var), Traversable (Problem p)
          ,ICap t Var (p, NarradarTRS t Var)
-         ,IUsableRules t Var (p, NarradarTRS t Var, NarradarTRS t Var)
+         ,MkDPProblem p (NarradarTRS t Var)
+         ,IUsableRules t Var p (NarradarTRS t Var)
          ) => MkDPProblem (InitialGoal t p) (NarradarTRS t Var) where
   mapP f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapP f p)
   mkDPProblem (InitialGoal goals g p) = (initialGoalProblem goals g .) . mkDPProblem p
@@ -103,9 +104,10 @@ instance FrameworkExtension (InitialGoal t) where
 initialGoal gg = InitialGoal gg Nothing
 
 initialGoalProblem :: ( HasId t, Unify t, Ord (Term t Var), Pretty (t(Term t Var))
-                      , IsDPProblem typ, Traversable (Problem typ), Pretty typ
+                      , MkDPProblem typ (NarradarTRS t Var)
+                      , Traversable (Problem typ), Pretty typ
                       , ICap t Var (typ, NarradarTRS t Var)
-                      , IUsableRules t Var (typ, NarradarTRS t Var, NarradarTRS t Var)
+                      , IUsableRules t Var typ (NarradarTRS t Var)
                       ) =>
                       [Term t Var]
                    -> Maybe(DGraph t Var)
@@ -158,8 +160,8 @@ involvedPairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
    pairs = catMaybes(map (`lookupNode` dg) (rules $ getP p))
 
 reachableUsableRules :: (Ord(Term t Var), HasId t, Foldable t
-                  ,IsDPProblem base, Traversable (Problem base)
-                  ,IUsableRules t Var (Problem base (NarradarTRS t Var))
+                  ,MkDPProblem base (NarradarTRS t Var), Traversable (Problem base)
+                  ,IUsableRules t Var base (NarradarTRS t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
 
 reachableUsableRules p = getR $ iUsableRules (baseProblem p) (rhs <$> involvedPairs p)
@@ -224,29 +226,28 @@ instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Va
          ,trs ~ NarradarTRS t Var
          ,MkDPProblem p trs
          ,ICap t Var (p, trs)
-         ,IUsableRules t Var (p, trs, trs)
+         ,IUsableRules t Var p trs
          ) =>
-          IUsableRules t Var (InitialGoal t p, NarradarTRS t Var, NarradarTRS t Var)
+          IUsableRules t Var (InitialGoal t p) trs
   where
-    iUsableRulesVarM (it@(InitialGoal _ _ p), trs, dps) v = do
+    iUsableRulesVarM it@(InitialGoal _ _ p) trs dps v = do
       let the_problem = mkDPProblem it trs dps
-      (_,reachableRules,_) <- iUsableRulesM (irewriting, trs, dps) (rhs <$> involvedPairs the_problem)
-      iUsableRulesVarM (p, reachableRules, dps) v
+      reachableRules <- iUsableRulesM irewriting trs dps (rhs <$> involvedPairs the_problem)
+      iUsableRulesVarM p reachableRules dps v
 
-    iUsableRulesM (it@(InitialGoal _ _ p), trs, dps) tt = do
+    iUsableRulesM it@(InitialGoal _ _ p) trs dps tt = do
       let the_problem = mkDPProblem it trs dps
-      (_,reachableRules,_) <- iUsableRulesM (irewriting, trs, dps) =<< getFresh (rhs <$> involvedPairs the_problem)
+      reachableRules <- iUsableRulesM irewriting trs dps =<< getFresh (rhs <$> involvedPairs the_problem)
       pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
-      (_,trs',_)     <- iUsableRulesM (p, reachableRules, dps) tt
-      return (it, trs', dps)
+      iUsableRulesM p reachableRules dps tt
+
 
 -- Other Narradar instances
-
 
 instance (trs ~ NTRS id
          ,MkDPProblem typ trs, Pretty typ, Traversable (Problem typ)
          ,Pretty id, Ord id, DPSymbol id
-         ,NUsableRules id (typ, trs, trs)
+         ,NUsableRules typ id
          ,NCap id (typ, trs)
          ,InsertDPairs typ (NTRS id)
          ) =>
@@ -282,18 +283,21 @@ instance Pretty a => Pretty (DGraphF a) where
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
 
-mkDGraph :: ( IsDPProblem typ, Traversable (Problem typ), Pretty typ
+mkDGraph :: ( MkDPProblem typ (NarradarTRS t v)
+            , Traversable (Problem typ), Pretty typ
             , HasId t, Unify t, Ord v, Pretty v, Enum v
-            , Ord (Term t v), Pretty (t(Term t v))
+            , Ord    (Term t v)
+            , Pretty (Term t v)
+            , Pretty (NarradarTRS t v)
             , ICap t v (typ, NarradarTRS t v)
-            , IUsableRules t v (typ, NarradarTRS t v, NarradarTRS t v)
+            , IUsableRules t v typ (NarradarTRS t v)
             ) => Problem typ (NarradarTRS t v) -> [Term t v] -> DGraph t v
 
 mkDGraph p@(getP -> DPTRS _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg gr
 mkDGraph p gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg (getEDG p)
 
 mkDGraph' :: ( IsDPProblem typ, Traversable (Problem typ), Pretty typ, Pretty trs
-            , HasId t, Unify t, Ord (Term t v), Ord v, Pretty v, Enum v, Pretty (t(Term t v))
+            , HasId t, Unify t, Ord (Term t v), Ord v, Pretty v, Enum v, Pretty (Term t v)
             , ICap t v (typ, trs)
             , HasRules t v trs
             ) => typ -> trs -> trs -> [Term t v] -> Graph -> DGraph t v
@@ -359,8 +363,18 @@ insertDGraph p@InitialGoalProblem{..} (rules -> newdps)
     dps'   = tRS(elems (pairs dgraph) ++ newdps)
     graph' = getEDG (setP dps' baseProblem)
 
+expandDGraph ::
+      ( Unify t, HasId t
+      , Pretty (t(Term t Var))
+      , Ord    (Term t Var)
+      , Traversable (Problem typ), Pretty typ
+      , MkDPProblem typ (NarradarTRS t Var)
+      , ICap t Var (typ, NarradarTRS t Var)
+      , IUsableRules t Var typ (NarradarTRS t Var)
+      ) =>
+      Problem (InitialGoal t typ) (NarradarTRS t Var) -> Rule t Var -> [Rule t Var] -> DGraph t Var
 -- TODO This is doing far more work than necessary
-expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},..} olddp (rules -> newdps)
+expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},..} olddp newdps
    | Nothing <- Map.lookup olddp pairsMap = dg
    | Just i  <- Map.lookup olddp pairsMap
    , dps'    <- tRS([ dp | (j,dp) <- assocs pairs, j /= i] ++ newdps)

@@ -100,31 +100,21 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>
          icap (Relative _ p,trs) = icap (p,trs)
 
 -- Usable Rules
-
-instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v (typ, trs, trs)) =>
-   IUsableRules t v (Relative trs typ, trs, trs)
+instance (Monoid trs, IUsableRules t v b trs) => IUsableRules t v (Relative trs b) trs where
+  iUsableRulesM _ trs _ _ = return trs
+  iUsableRulesVarM = liftUsableRulesVarM
+{-
+instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v typ trs) =>
+   IUsableRules t v (Relative trs typ) trs
     where
-      iUsableRulesM (Relative r0 p, rr, dps) tt = do
+      iUsableRulesM (Relative r0 p) rr dps tt = do
             (_, usableRulesTRS, _) <- iUsableRulesM (p, r0 `mappend` rr, dps) tt
             let usableRulesSet = Set.fromList (rules usableRulesTRS :: [Rule t v])
                 rr' = tRS $ toList (Set.fromList (rules rr) `Set.intersection` usableRulesSet)
                 r0' = tRS $ toList (Set.fromList (rules r0) `Set.intersection` usableRulesSet)
             return (Relative r0' p,  rr', dps)
-      iUsableRulesVarM (Relative r0 p, rr, dps) = iUsableRulesVarM (p, r0 `mappend` rr, dps)
-
-{-
-instance (Ord v, Ord (Term t v), IsTRS t v trs, IsTRS t v trs', IsDPProblem typ, IUsableRules t v (typ, [Rule t v], [Rule t v])) =>
-   IUsableRules t v (Relative trs typ, trs', trs')
-    where
-      iUsableRulesM (Relative r0 p, rr, dps) tt = do
-            (_, usableRulesTRS) <- iUsableRulesM (p, rules r0 `mappend` rules rr, dps) tt
-            let usableRulesSet = Set.fromList (rules usableRulesTRS :: [Rule t v])
-                rr' = tRS $ toList (Set.fromList (rules rr) `Set.intersection` usableRulesSet)
-                r0' = tRS $ toList (Set.fromList (rules r0) `Set.intersection` usableRulesSet)
-            return (Relative r0' p, rr', dps)
-      iUsableRulesVarM (Relative r0 p, rr, dps) = iUsableRulesVarM (p, rules r0 `mappend` rules rr, dps)
+      iUsableRulesVarM (Relative r0 p) rr = iUsableRulesVarM p (r0 `mappend` rr)
 -}
-
 
 -- Insert Pairs
 

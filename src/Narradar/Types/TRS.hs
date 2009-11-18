@@ -75,8 +75,6 @@ pair2|_____|_____|
 -}
 
 
-
-
 data NarradarTRSF a where
     TRS       :: (HasId t, Ord (Term t v)) => Set (Rule t v) -> Signature (TermId t) -> NarradarTRSF (Rule t v)
     PrologTRS :: (HasId t, RemovePrologId (TermId t), Ord (Term t v)) =>
@@ -160,6 +158,9 @@ instance (Traversable t, Ord v, GetFresh t v (Set (Rule t v))) => GetFresh t v (
 -- Narradar instances
 -- -------------------
 
+class IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
+instance IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
+
 instance (Functor t, Foldable t) => Size (NarradarTRS t v) where size = F.sum . fmap size . rules
 
 instance (Ord (Term t v), ICap t v [Rule t v]) => ICap t v (NarradarTRS t v) where
@@ -179,13 +180,6 @@ instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
 
 instance (ICap t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap t v (typ, [Rule t v]) where
     icap (typ, p) = icap (typ, mkTRS p)
-
-instance (trs ~ NarradarTRS t v
-         ,IUsableRules t v (typ, trs, trs), Ord (Term t v), Foldable t, HasId t) =>
-    IUsableRules t v (typ, [Rule t v], [Rule t v]) where
-    iUsableRulesM   (typ, r, p) = liftM (second3 rules . third3 rules)
-                                . iUsableRulesM (typ, mkTRS r, mkTRS p)
-    iUsableRulesVarM (typ, r, p)  = iUsableRulesVarM (typ, mkTRS r, mkTRS p)
 
 -- ------------
 -- Constructors
@@ -209,9 +203,8 @@ narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 -- | Assumes that the rules have already been renamed apart
 dpTRS :: ( SignatureId trs ~ TermId t
          , Ord (Term t v), HasId t, Unify t, Enum v
-         , HasRules t v trs, HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
-         , IsDPProblem typ, IUsableRules t v (typ, trs, trs), ICap t v (typ, trs)
-         , Pretty trs, Pretty (t(Term t v)), Pretty v
+         , HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
+         , IUsableRules t v typ trs, ICap t v (typ, trs)
          ) =>
          typ -> trs -> trs -> NarradarTRS t v
 
@@ -287,19 +280,18 @@ rulesGraph _ = error "rulesGraph: only DP TRSs carry the dependency graph"
 computeDPUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
-                     , Enum v, Ord v, Ord term, Unify t
-                     , HasRules t v trs, IsTRS t v trs, GetFresh t v trs, GetVars v trs
-                     , Pretty (t(Term t v)), Pretty v, Pretty trs
-                     , IUsableRules t v (typ, trs, trs)
+                     , Ord v, Unify t
+                     , HasRules t v trs, GetFresh t v trs
+                     , IUsableRules t v typ trs
                      , ICap t v (typ, trs)
                      , MonadFresh v m) =>
                      typ -> trs -> trs -> m(unif :!: unif)
 --computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
 computeDPUnifiers typ trs dps = do
    trs_f <- getFresh trs
-   let p_f = (typ, trs_f, dps)
 
-   u_rr <- listArray (0,ldps) `liftM` P.sequence [snd3 `liftM` iUsableRulesM p_f [r] | _:->r <- the_dps]
+   u_rr <- (listArray (0,ldps)) `liftM`
+           P.sequence [iUsableRulesM typ trs_f dps [r] | _:->r <- the_dps]
 
    unif <- computeDirectUnifiers (typ, trs_f) dps
    unifInv <- runListT $ do
