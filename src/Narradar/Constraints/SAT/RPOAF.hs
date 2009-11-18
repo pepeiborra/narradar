@@ -694,7 +694,7 @@ verifyRPOAF :: forall typ trs t v a k.
 verifyRPOAF p0 symbols nondec_pairs = runIdentity $ do
 
   falseDecreasingPairs       <- runListT $ do
-     s:->t <- li the_dps
+     s:->t <- li the_dec_pairs
      guard =<< lift (liftM P.not(AF.apply the_af s > AF.apply the_af t))
      return (s:->t)
 
@@ -715,14 +715,16 @@ verifyRPOAF p0 symbols nondec_pairs = runIdentity $ do
   p             = fmap (mapNarradarTRS (mapTermSymbols convertSymbol)) p0
   convertSymbol = fromJust . (`Map.lookup` Map.fromList [(the_symbolR s, s) | s <- symbols])
 
-  the_af  = AF.fromList' [(s, filtering s) | s <- toList (getAllSymbols p)]
-  all_dps = rules (getP p)
-  the_dps = CE.assert (all (P.< length all_dps) nondec_pairs) $
-            select ([0..length all_dps - 1] \\ nondec_pairs) all_dps
+  the_af    = AF.fromList' [(s, filtering s) | s <- symbols]
+  the_pairs = rules(getP p)
+  the_filtered_pairs = AF.apply the_af the_pairs
+
+  the_dec_pairs = CE.assert (all (P.< length the_pairs) nondec_pairs) $
+                  select ([0..length the_pairs - 1] \\ nondec_pairs) the_pairs
   the_usableRules      = Set.fromList [ l:->r | l:->r <- rules(getR p), let Just id = rootSymbol l, isUsable id]
   expected_usableRules = Set.fromList
                          [ rule
-                          | let ur_af = Set.fromList(rules $ getR $ iUsableRules (AF.apply the_af p) (rhs <$> AF.apply the_af all_dps))
+                          | let ur_af = Set.fromList(rules $ getR $ iUsableRules (AF.apply the_af p) (rhs <$> the_filtered_pairs))
                           , rule <- rules(getR p)
                           , AF.apply the_af rule `Set.member` ur_af]
 

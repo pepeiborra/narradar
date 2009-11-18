@@ -349,6 +349,8 @@ verifyRPO p0 symbols nondec_pairs = runIdentity $ do
     return (s:->t)
   let missingUsableRules = []
       excessUsableRules  = []
+      the_pairs          = rules(getP p)
+      the_filtered_pairs = the_pairs
 
   return VerifyRPOAF{..}
  where

@@ -414,15 +414,22 @@ withTrue bb orelse m = do
 -- Testing
 -- ---------
 
-data VerifyRPOAF a = VerifyRPOAF { falseDecreasingPairs :: [a]
-                                 , falseWeaklyDecreasingRules :: [a]
-                                 , missingUsableRules :: [a]
+data VerifyRPOAF a = VerifyRPOAF { the_pairs, the_filtered_pairs
+                                 , falseDecreasingPairs
+                                 , falseWeaklyDecreasingRules
+                                 , missingUsableRules
                                  , excessUsableRules  :: [a]
                                  }
                    | FailedWithStatusMismatch String
 
-instance Pretty a => Pretty (VerifyRPOAF a) where
-  pPrint VerifyRPOAF{..} = vcat [ if P.not (null falseDecreasingPairs)
+mkVerifyRPOAF = VerifyRPOAF [] [] [] [] [] []
+
+instance (Eq a, Pretty a) => Pretty (VerifyRPOAF a) where
+  pPrint VerifyRPOAF{..} = vcat [ text "The pairs are: " $$ nest 2 (vcat the_pairs)
+                                , if the_filtered_pairs /= the_pairs
+                                    then text "We filter them and get: " $$ nest 2 (vcat the_filtered_pairs)
+                                    else Ppr.empty
+                                , if P.not (null falseDecreasingPairs)
                                     then text "These pairs are not decreasing:" $$ nest 2 (vcat falseDecreasingPairs)
                                     else Ppr.empty
                                 , if P.not (null falseWeaklyDecreasingRules)
