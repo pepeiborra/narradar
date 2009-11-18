@@ -144,7 +144,7 @@ f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
      tk in_t = do
         t' <- wrap `liftM` (icap (typ, pi_trs) `T.mapM` in_t)
         let rr = Set.fromList
-                [r | (pi_r, r) <- pi_rules, t' `unifies` lhs pi_r]
+                [rule | (pi_rule@(l:->r), rule) <- pi_rules, not(isVar l), t' `unifies` l]
             new = Set.difference rr acc
         rhsSubterms <- getFresh (AF.apply pi . rhs <$> F.toList new)
         go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])

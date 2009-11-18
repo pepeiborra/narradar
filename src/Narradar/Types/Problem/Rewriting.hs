@@ -181,7 +181,7 @@ f_UsableRules p@(_,trs) vk tt = go mempty tt where
         tk :: t (Term t v) -> m acc
         tk in_t = do
            t'  <- wrap `liftM` (icap p `T.mapM` in_t)
-           let rr  = [ r | r <- rules trs, lhs r `unifies` t']
+           let rr  = [ l:->r | l:->r <- rules trs, not(isVar l), l `unifies` t']
                new = Set.difference (Set.fromList rr) acc
            rhsSubterms <- getFresh (rhs <$> F.toList new)
            go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
