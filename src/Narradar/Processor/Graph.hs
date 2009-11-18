@@ -16,7 +16,7 @@ import Data.Graph as G
 import Data.Graph.SCC as GSCC
 import qualified Data.Graph.Inductive as FGL
 import Data.Foldable (Foldable, foldMap, toList)
-import Data.List (find)
+import Data.List (find, sort)
 import Data.Traversable (Traversable)
 import Data.Tree  as Tree
 import Data.Maybe
@@ -89,9 +89,10 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
                           , the_pairs  = elems pairs
                           , the_sccs   = map Set.fromList cc }
 
-    if null cc
-     then success NoCycles p
-     else andP proof p
+    case cc of
+     [] -> success NoCycles p
+     [c] | sort c == sort(vertices gr) -> return p
+     cc -> andP proof p
                [setP (restrictTRS dps ciclo) p | ciclo <- cc]
 
 -- --------------
@@ -201,6 +202,7 @@ cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 
 sccProcessor problem@(getP -> dps@(DPTRS dd gr unif sig))
   | null cc   = success NoCycles problem
+  | [c] <- cc, sort c == sort (vertices gr) = return problem
   | otherwise = andP (SCCs gr (map Set.fromList cc)) problem
                  [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
     where
@@ -208,6 +210,7 @@ sccProcessor problem@(getP -> dps@(DPTRS dd gr unif sig))
 
 cycleProcessor problem@(getP -> DPTRS dd gr unif sig)
   | null cc   = success NoCycles problem
+  | [c] <- cc, sort c == sort (vertices gr) = return problem
   | otherwise = andP (Cycles gr) problem
                  [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
     where
