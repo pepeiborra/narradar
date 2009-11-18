@@ -112,12 +112,8 @@ instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
          ,IUsableRules t v (p,trs), ICap t v (p,trs)) =>
    IUsableRules t v (MkNarrowingGoal id p, trs)
  where
-   iUsableRulesM p@(typ@(NarrowingGoal _ pi p0), trs) tt = do
-      pi_tt <- getFresh (AF.apply pi tt)
-      trs'  <- f_UsableRulesAF (p0, trs) pi (iUsableRulesVarM p) pi_tt
-      return (typ, tRS $ rules trs')
-
-   iUsableRulesVarM (NarrowingGoal _ _ p, trs) = iUsableRulesVarM (p, trs)
+   iUsableRulesM p@(typ@(NarrowingGoal _ pi p0), trs) tt = return p
+   iUsableRulesVarM (NarrowingGoal _ _ p, trs) _ = return (Set.fromList $ rules trs)
 
 
 -- Insert Pairs
