@@ -65,7 +65,7 @@ import Narradar.Processor.RelativeProblem
 import Narradar.Processor.SubtermCriterion
 
 narradarMain :: forall mp.
-                 (IsMZero mp, Foldable mp
+                 (IsMZero mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
