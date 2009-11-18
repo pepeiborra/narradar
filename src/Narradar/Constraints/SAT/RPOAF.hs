@@ -73,7 +73,12 @@ rpoAF_DP' allowCol con p
   assertAll [ l >~ r | l:->r <- rules dps']
   assertAll [(l > r) <=^=> return dec | (l:->r, dec) <- zip (rules dps') decreasing_dps]
   assert decreasing_dps
+
+  -- Ensure that we find the solution which removes the most pairs possible
   sequence_ [ assertW 1 [b] | b <- decreasing_dps]
+
+  -- Ensure that only really usable rules are selected
+  sequence_ [ assertW 1 =<< sequence [notM (usable f)] | f <- Map.elems dict]
 
   return $ do
     decreasing <- decode decreasing_dps
@@ -111,12 +116,16 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   decreasing_dps    <- replicateM (length $ rules dps') boolean
 
   assert decreasing_dps
-  sequence_ [ assertW 1 [b] | b <- decreasing_dps]
 
   assertAll (omega  p' :
              [ l >~ r | l:->r <- rules dps'] ++
              [(l > r) <=^=> return v | (l:->r, v) <- zip (rules dps') decreasing_dps]
             )
+  -- Ensure that we find the solution which removes the most pairs possible
+  sequence_ [ assertW 1 [b] | b <- decreasing_dps]
+
+  -- Ensure that only really usable rules are selected
+  sequence_ [ assertW 1 =<< sequence [notM (usable f)] | f <- Map.elems dict]
 
   return $ do
     decreasing <- decode decreasing_dps
