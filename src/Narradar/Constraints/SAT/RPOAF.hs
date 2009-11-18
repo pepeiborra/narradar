@@ -609,9 +609,9 @@ instance (p  ~ Problem typ
       = andM_ [ [inAF i id_t] ^*==> go t_i trs
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
-      = andM_ [ usable id_t
-             , andM_ [ go r rest | _:->r <- rls ]
-             , andM_ [ [inAF i id_t] *==> go t_i rest
+      = andM_ [ listAF id_t ==> andM [ usable id_t
+                                     , andM_ [ go r rest | _:->r <- rls ]]
+              , andM_ [ [inAF i id_t] *==> go t_i rest
                           | (i, t_i) <- zip [1..] tt ]
              ]
        where
