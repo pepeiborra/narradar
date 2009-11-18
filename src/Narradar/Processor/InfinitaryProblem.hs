@@ -26,9 +26,11 @@ import Narradar.Utils
 import Lattice
 
 
-data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu)
-data NarrowingGoalToInfinitary heu = NarrowingGoalToInfinitary (MkHeu heu)
+data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu) Bool
+data NarrowingGoalToInfinitary heu = NarrowingGoalToInfinitary (MkHeu heu) Bool
 
+infinitaryToRewriting heu = apply(InfinitaryToRewriting heu False)
+narrowingGoalToInfinitary heu = apply(NarrowingGoalToInfinitary heu False)
 
 -- | This is the infinitary constructor rewriting AF processor described in
 --   "Termination of Logic Programs ..." (Schneider-Kamp et al)
@@ -46,7 +48,7 @@ instance (t   ~ TermF id
               (NProblem (Infinitary id typ) id)
               (NProblem typ id)
   where
-  applySearch (InfinitaryToRewriting mk) p
+  applySearch (InfinitaryToRewriting mk usable) p
     | null orProblems = [dontKnow (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
     | otherwise = orProblems
    where
@@ -54,7 +56,8 @@ instance (t   ~ TermF id
        let (Infinitary af base_p) = getProblemType p
            heu = mkHeu mk p
        af' <-  Set.toList $ invariantEV heu p af
-       let p' = mkDerivedProblem base_p (iUsableRules p (rhs <$> rules (getP p)))
+       let p' = mkDerivedProblem base_p $
+                 if usable then iUsableRules p (rhs <$> rules (getP p)) else p
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
 
@@ -72,7 +75,7 @@ instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (
                    (NProblem (MkNarrowingGoal id typ) id)
                    (NProblem (Infinitary id typ) id)
    where
-    applySearch (NarrowingGoalToInfinitary mk) p@(getProblemType -> NarrowingGoal _ pi p0) = do
+    applySearch (NarrowingGoalToInfinitary mk usable) p@(getProblemType -> NarrowingGoal _ pi p0) = do
         pi' <- Set.toList $ invariantEV heu p pi
         let p' = mkDerivedProblem (Infinitary pi' p0) p
         return $ singleP NarrowingGoalToInfinitaryProof p p'
