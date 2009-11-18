@@ -39,6 +39,8 @@ import Narradar.Framework.Ppr
 -- DP Processors estimating the graph
 -- -------------------------------------
 
+depGraph p = apply DependencyGraphSCC p
+
 data DependencyGraphSCC    = DependencyGraphSCC    deriving (Eq, Ord, Show)
 data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
 
