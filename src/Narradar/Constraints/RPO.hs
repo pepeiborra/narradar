@@ -43,7 +43,7 @@ symbolRPO = RPO{..} where
   s >~ t = s > t <|> s ~~ t
 
   s ~~ t
-   | Just id_s <- rootSymbol t, tt_s <- directSubterms t
+   | Just id_s <- rootSymbol s, tt_s <- directSubterms s
    , Just id_t <- rootSymbol t, tt_t <- directSubterms t
 
    = precedence id_s == precedence id_t &> exeq id_s id_t tt_s tt_t
