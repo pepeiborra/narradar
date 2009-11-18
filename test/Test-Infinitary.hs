@@ -56,7 +56,7 @@ instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
                  apply (InfinitaryToRewriting bestHeu) >=>
                  dispatch)
 
-sc = apply DependencyGraphSCC >=> apply SubtermCriterion
+sc = apply DependencyGraphSCC >=> try(apply SubtermCriterion)
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
                          repeatSolver 5 (apply (RPOProc LPOAF (Yices 60)) .|. apply (RPOProc rpo (Yices 60)) .|. graphTransform >=>
