@@ -101,6 +101,7 @@ Library
      Narradar.Processor.PrologProblem,
      Narradar.Processor.RelativeProblem,
      Narradar.Processor.SubtermCriterion,
+     Narradar.Processor.LOPSTR09,
      Narradar.Utils,
      Narradar.Utils.Html,
      Control.Monad.Supply,
