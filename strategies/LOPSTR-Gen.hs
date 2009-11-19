@@ -69,7 +69,7 @@ instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (
 -- Relative
 instance (Dispatch (NProblem base id)
          ,Pretty id, Ord id, Pretty base, Pretty (TermN id)
-         ,IsDPProblem base, MkProblem base (NTRS id)
+         ,IsDPProblem base, MkProblem base (NTRS id), HasMinimality base
          ,PprTPDBDot (NProblem base id), ProblemColor (NProblem base id)
          ,Pretty (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where

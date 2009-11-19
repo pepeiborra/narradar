@@ -97,13 +97,18 @@ instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(T
 
 class IsDPProblem typ => HasMinimality typ where
   getMinimality :: typ -> Minimality
+  setMinimality :: Minimality -> Problem typ trs -> Problem typ trs
 
 getMinimalityFromProblem :: HasMinimality typ => Problem typ trs -> Minimality
 getMinimalityFromProblem = getMinimality . getProblemType
 
-instance HasMinimality (MkRewriting st) where getMinimality (MkRewriting st m) = m
+instance HasMinimality (MkRewriting st) where
+    getMinimality    (MkRewriting st m) = m
+    setMinimality m' (RewritingProblem rr dd s _) = RewritingProblem rr dd s m'
+
 instance (IsDPProblem (p b), HasMinimality b, FrameworkExtension p) => HasMinimality (p b)
    where getMinimality = getMinimality . getBaseFramework
+         setMinimality m = liftFramework (setMinimality m)
 
 -- Functor
 

@@ -28,9 +28,11 @@ instance ( MkProblem base trs
          , Ord (t(Term t v)), Ord v, Enum v, HasId t, Match t
          , Monoid trs, HasRules t v trs, HasSignature trs
          , Info info RelativeToRegularProof
+         , HasMinimality base
          ) => Processor info RelativeToRegular (Problem (Relative trs base) trs) (Problem base trs) where
   apply RelativeToRegular p@RelativeProblem{..}
     | isGeneralizedHierarchicalCombination (getR p) relativeTRS
-    = singleP RelativeToRegularProof p (mapR (`mappend` relativeTRS) baseProblem)
+    = let p' = setMinimality A (mapR (`mappend` relativeTRS) baseProblem)
+      in singleP RelativeToRegularProof p p'
 
     | otherwise = dontKnow RelativeToRegularProofFail p
