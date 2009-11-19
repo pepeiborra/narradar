@@ -101,14 +101,15 @@ class PprTPDBDot p where pprTPDBdot :: p -> Doc
 
 instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t
-         ) => PprTPDBDot (Problem Rewriting trs) where
-  pprTPDBdot prob@(RewritingProblem r p Standard m) = vcat (
+         ) => PprTPDBDot (Problem (MkRewriting st) trs) where
+  pprTPDBdot prob@(RewritingProblem r p st m) = vcat (
      [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))
      ,parens( text "PAIRS" $$
               nest 1 (vcat $ map pprRule $ rules $ p))
      ,parens( text "RULES" $$
               nest 1 (vcat $ map pprRule $ rules $ r))
-     ] ++ if m == M then [parens (text "MINIMALITY")] else [])
+     ] ++ if isInnermost st then [parens (text "STRATEGY INNERMOST")] else []
+       ++ if m == M then [parens (text "MINIMALITY")] else [])
    where
         pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
 
@@ -118,11 +119,6 @@ pprTerm = foldTerm pPrint f where
             | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
          where tt = toList t
 
-
-instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
-         ) => PprTPDBDot (Problem IRewriting trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedDPProblem rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs

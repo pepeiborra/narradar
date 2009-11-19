@@ -30,7 +30,6 @@ import Narradar.Types.ArgumentFiltering as AF (AF_, ApplyAF(..))
 class Monoid trs => IUsableRules t v typ trs | trs -> t v where
     iUsableRulesM    :: MonadFresh v m => typ -> trs -> trs -> [Term t v] -> m trs
     iUsableRulesVarM :: MonadFresh v m => typ -> trs -> trs -> v -> m(Set (Rule t v))
-    iUsableRulesM  typ trs _dps = iUsableRules2M typ trs
 
 data Proxy a
 proxy = undefined
@@ -44,9 +43,6 @@ deriveUsableRulesVarFromTRS :: forall t v typ trs m.
                               (IUsableRules t v typ trs, IsTRS t v trs, MonadFresh v m) =>
                             Proxy trs -> typ -> [Rule t v] -> [Rule t v] -> v -> m (Set(Rule t v))
 deriveUsableRulesVarFromTRS _ typ r p = iUsableRulesVarM typ (tRS r :: trs) (tRS p :: trs)
-
-iUsableRules2M typ trs = iUsableRulesM typ trs mempty
-iUsableRulesVar2M typ trs = iUsableRulesVarM typ trs mempty
 
 iUsableRules :: ( p ~ Problem typ
                 , Ord (Term t v), Enum v

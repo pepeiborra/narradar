@@ -1,15 +1,17 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Problem.Rewriting
          ( Problem(..), MkRewriting(..), Rewriting, IRewriting, rewriting, irewriting
-         , Standard(..), Innermost(..), Minimality(..)
-         , HasMinimality(..), getMinimalityFromProblem
+         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
+         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
          ) where
 
 import Control.Applicative
@@ -34,20 +36,24 @@ import Narradar.Utils
 import Narradar.Framework
 import Narradar.Framework.Ppr
 
-data MkRewriting strat = MkRewriting strat Minimality deriving (Eq, Ord, Show)
+data MkRewriting strat = MkRewriting (Strategy strat) Minimality deriving (Eq, Ord, Show)
 
 type Rewriting  = MkRewriting Standard
 type IRewriting = MkRewriting Innermost
 
-data Standard  = Standard  deriving (Eq, Ord, Show)
-data Innermost = Innermost deriving (Eq, Ord, Show)
+data Standard
+data Innermost
+data Strategy st where
+    Standard  :: Strategy Standard
+    Innermost :: Strategy Innermost
+
 data Minimality  = M | A   deriving (Eq, Ord, Show)
 
 rewriting  = MkRewriting Standard  M
 irewriting = MkRewriting Innermost M
 
 instance IsProblem (MkRewriting st) where
-  data Problem (MkRewriting st) a = RewritingProblem a a st Minimality deriving (Eq, Ord, Show)
+  data Problem (MkRewriting st) a = RewritingProblem a a (Strategy st) Minimality deriving (Eq, Ord, Show)
   getProblemType (RewritingProblem _ _ s m) = MkRewriting s m
   getR (RewritingProblem r _ _ _) = r
 
@@ -93,7 +99,16 @@ instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(T
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
                                           pp' -> mkDPProblem' (MkRewriting s m) rr pp'
 
--- The HasMinimality class
+-- The HasStrategy and HasMinimality classes
+
+class IsDPProblem typ => HasStrategy typ st | typ -> st where
+  getStrategy :: typ -> Strategy st
+
+instance HasStrategy Rewriting Standard   where getStrategy _ = Standard
+instance HasStrategy IRewriting Innermost where getStrategy _ = Innermost
+
+instance (FrameworkExtension ext, IsDPProblem (ext b), HasStrategy b st) => HasStrategy (ext b) st where
+  getStrategy = getStrategy . getBaseFramework
 
 class IsDPProblem typ => HasMinimality typ where
   getMinimality :: typ -> Minimality
@@ -109,6 +124,26 @@ instance HasMinimality (MkRewriting st) where
 instance (IsDPProblem (p b), HasMinimality b, FrameworkExtension p) => HasMinimality (p b)
    where getMinimality = getMinimality . getBaseFramework
          setMinimality m = liftFramework (setMinimality m)
+
+-- Prelude
+
+instance Eq (Strategy st) where
+  Standard  == Standard  = True
+  Innermost == Innermost = True
+  _         == _         = False
+
+instance Show (Strategy st) where
+  show Standard = "Standard"
+  show Innermost = "Innermost"
+
+instance Ord (Strategy st) where
+  compare Standard Innermost = GT
+  compare Innermost Standard = LT
+  compare x y = EQ
+
+isInnermost :: Strategy st -> Bool
+isInnermost Innermost = True
+isInnermost _         = False
 
 -- Functor
 
@@ -140,13 +175,11 @@ instance HTMLClass IRewriting where htmlClass (MkRewriting Innermost _) = thecla
 
 -- ICap
 
-instance (Unify t, Ord v) => ICap t v (Rewriting,  NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
-instance (Unify t, Ord v) => ICap t v (IRewriting, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
-instance (Ord v, Unify t) => ICap t v (Rewriting, [Rule t v]) where
-  icap (MkRewriting Standard  _, trs) t = icap trs t
-
-instance (Ord v, Unify t) => ICap t v (IRewriting, [Rule t v]) where
-  icap (MkRewriting Innermost _, trs) t = do
+instance (Unify t, Ord v) => ICap t v (MkRewriting st, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
+instance (Ord v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) where
+  icap (MkRewriting st m, trs) t
+    | not(isInnermost st) = icap trs t 
+    | otherwise = do
 #ifdef DEBUG
     when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
       error "assertion failed (icap)" `const` t `const` trs
@@ -161,19 +194,14 @@ instance (Ord v, Unify t) => ICap t v (IRewriting, [Rule t v]) where
 
 -- Usable Rules
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v Rewriting (NarradarTRS t v) where
-  iUsableRulesM m@(MkRewriting Standard _) trs dps tt = do
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (MkRewriting st) (NarradarTRS t v) where
+  iUsableRulesM m trs dps tt = do
     trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) =<< getFresh tt
     return (tRS $ toList trs')
 
-  iUsableRulesVarM (MkRewriting Standard _) trs _ _ = return $ Set.fromList $ rules trs
-
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v IRewriting (NarradarTRS t v) where
-  iUsableRulesM m@(MkRewriting Innermost _) trs dps tt = do
-    trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) =<< getFresh tt
-    return (tRS $ toList trs')
-
-  iUsableRulesVarM (MkRewriting Innermost _) trs _ _ = return $ Set.fromList $ rules trs
+  iUsableRulesVarM m@(MkRewriting st _) trs _ _
+    | isInnermost st = return Set.empty
+    | otherwise      = return $ Set.fromList $ rules trs
 
 instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v Rewriting [Rule t v] where
   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
