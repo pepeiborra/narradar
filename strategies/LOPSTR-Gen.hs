@@ -17,6 +17,7 @@ import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Processor.Aprove
+import Narradar.Processor.LOPSTR09
 import Narradar.Processor.RPO
 import Narradar.Framework.GraphViz
 import Lattice
@@ -39,7 +40,7 @@ instance Dispatch thing where dispatch _ = error "missing dispatcher"
 -- Prolog
 instance Dispatch PrologProblem where
 --    dispatch = apply SKTransformInfinitary >=> dispatch
-    dispatch = apply SKTransformNarrowing >=> dispatch
+    dispatch = apply SKTransform >=> dispatch
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
