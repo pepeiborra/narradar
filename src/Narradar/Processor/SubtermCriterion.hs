@@ -21,15 +21,23 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Utils (on)
 
 data SubtermCriterion         = SubtermCriterion deriving (Eq, Show, Ord)
-data SubtermCriterionProof id = SubtermCriterionProof (Proj id) deriving (Eq, Show, Ord)
+data SubtermCriterionProof id = SubtermCriterionProof (Proj id)
+                              | SubtermCriterionFailMinimality
+     deriving (Eq, Show, Ord)
+
 instance (Pretty (DPIdentifier id), Ord id) => Pretty (SubtermCriterionProof (DPIdentifier id)) where
+    pPrint SubtermCriterionFailMinimality = text "The problem does not have the minimality property," $$
+                                            text "nor is innermost, hence the subterm criterion does not apply"
+
     pPrint (SubtermCriterionProof pi) = text "Subterm Criterion with the projection:" $$
                                         nest 2 pi
 
 instance (Info info (SubtermCriterionProof id), Ord id, Pretty id) =>
          Processor info SubtermCriterion (Problem Rewriting (NTRS id)) (Problem Rewriting (NTRS id))
   where
-   apply SubtermCriterion p0 = case subtermCriterion (getP p0) of
+   apply SubtermCriterion p0
+     | getMinimalityFromProblem p0 /= M = dontKnow (SubtermCriterionFailMinimality ::SubtermCriterionProof id) p0
+     | otherwise = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP (SubtermCriterionProof prj) p0 (setP pTRS' p0)
 
