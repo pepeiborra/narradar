@@ -131,3 +131,27 @@ f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
             new = Set.difference rr acc
         rhsSubterms <- getFresh (AF.apply pi . rhs <$> F.toList new)
         go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
+
+
+-- ----------------
+-- Needed Rules
+-- ----------------
+
+class Monoid trs => NeededRules t v typ trs | trs -> t v where
+    neededRulesM :: MonadFresh v m => typ -> trs -> trs -> [Term t v] -> m trs
+
+-- We lift the needed rules automatically
+instance (FrameworkExtension ext, NeededRules t v base trs) => NeededRules t v (ext base) trs
+  where neededRulesM typ trs dps = neededRulesM (getBaseFramework typ) trs dps
+
+
+neededRules :: ( p ~ Problem typ
+                , Ord (Term t v), Enum v
+                , MkProblem typ trs, IsDPProblem typ, Traversable p
+                , IsTRS t v trs, GetVars v trs, NeededRules t v typ trs
+                ) =>
+                p trs -> [Term t v] -> p trs
+neededRules p tt = runIcap p $ do
+                     trs' <- neededRulesM (getProblemType p) (getR p) (getP p) tt
+                     return $ setR trs' p
+

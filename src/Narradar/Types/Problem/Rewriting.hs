@@ -211,6 +211,9 @@ instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v IRewriting
   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
   iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
+instance (Ord(Term t v), Ord v, Unify t, HasId t) => NeededRules t v (MkRewriting st) (NarradarTRS t v) where
+  neededRulesM _ = iUsableRulesM irewriting
+
 -- Insert Pairs
 
 instance (Pretty id, Ord id) =>InsertDPairs Rewriting  (NTRS id) where insertDPairs = insertDPairsDefault
