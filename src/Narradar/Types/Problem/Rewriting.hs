@@ -9,7 +9,7 @@
 module Narradar.Types.Problem.Rewriting
          ( Problem(..), MkRewriting(..), Rewriting, IRewriting, rewriting, irewriting
          , Standard(..), Innermost(..), Minimality(..)
-         , f_UsableRules
+         , HasMinimality(..), getMinimalityFromProblem
          ) where
 
 import Control.Applicative
@@ -25,15 +25,13 @@ import Text.XHtml (HTML(..), theclass)
 import Data.Term
 import Data.Term.Rules
 
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
-
 import Narradar.Constraints.UsableRules
 import Narradar.Types.Problem
 import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Utils
+import Narradar.Framework
 import Narradar.Framework.Ppr
 
 data MkRewriting strat = MkRewriting strat Minimality deriving (Eq, Ord, Show)
@@ -95,6 +93,17 @@ instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(T
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
                                           pp' -> mkDPProblem' (MkRewriting s m) rr pp'
 
+-- The HasMinimality class
+
+class IsDPProblem typ => HasMinimality typ where
+  getMinimality :: typ -> Minimality
+
+getMinimalityFromProblem :: HasMinimality typ => Problem typ trs -> Minimality
+getMinimalityFromProblem = getMinimality . getProblemType
+
+instance HasMinimality (MkRewriting st) where getMinimality (MkRewriting st m) = m
+instance (IsDPProblem (p b), HasMinimality b, FrameworkExtension p) => HasMinimality (p b)
+   where getMinimality = getMinimality . getBaseFramework
 
 -- Functor
 
