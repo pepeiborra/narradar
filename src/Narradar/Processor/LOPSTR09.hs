@@ -22,7 +22,7 @@ import Narradar.Framework
 import Narradar.Types
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF, PolyHeuristic, MkHeu(..),mkHeu)
 import qualified Narradar.Types.ArgumentFiltering as AF
-
+import Narradar.Types.Problem.Infinitary as Infinitary
 import Narradar.Processor.PrologProblem hiding (SKTransformProof)
 
 instance Pretty SKTransformProof where
@@ -68,7 +68,7 @@ instance (Info info SKTransformProof
    andP SKTransformProof p0 =<< sequence
      [  msum (map return probs)
          | goal    <- goals
-         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem Rewriting sk_p)
+         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
      ]
     where
        sk_p = prologTRS'' rr (getSignature rr)
@@ -96,9 +96,9 @@ instance (t   ~ TermF id
     | otherwise = orProblems
    where
      orProblems = do
-       let (Infinitary af base_p) = getProblemType p
-           heu = mkHeu mk p
-       af' <-  Set.toList $ invariantEV heu p af
+       let heu = mkHeu mk p
+           base_p = getProblemType (Infinitary.baseProblem p)
+       af' <-  Set.toList $ invariantEV heu p (Infinitary.pi p)
        let p' = mkDerivedProblem base_p p
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
