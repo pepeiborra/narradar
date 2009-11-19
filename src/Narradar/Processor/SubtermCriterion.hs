@@ -2,6 +2,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Narradar.Processor.SubtermCriterion where
 
