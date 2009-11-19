@@ -57,7 +57,7 @@ instance (t   ~ TermF id
        let heu    = mkHeu mk p
            base_p = getProblemType (Infinitary.baseProblem p)
        af' <-  Set.toList $ invariantEV heu p (Infinitary.pi p)
-       let p' = mkDerivedProblem base_p $
+       let p' = mkDerivedDPProblem base_p $
                 if usable then iUsableRules p (rhs <$> rules (getP p)) else p
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
@@ -78,7 +78,7 @@ instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (
    where
     applySearch (NarrowingGoalToInfinitary mk usable) p@(getProblemType -> NarrowingGoal _ pi p0) = do
         pi' <- Set.toList $ invariantEV heu p pi
-        let p' = mkDerivedProblem (infinitary' pi' p0) p
+        let p' = mkDerivedDPProblem (infinitary' pi' p0) p
         return $ singleP NarrowingGoalToInfinitaryProof p p'
      where
       heu = mkHeu mk p

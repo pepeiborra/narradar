@@ -103,7 +103,7 @@ instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
                   embed $ findGroundAF' heu pi_groundInfo af0 p R.=<< Set.fromList(rules $ getP p)
           orProblems = [ singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkDerivedProblem typ0 p)
+                                AF.apply af (mkDerivedDPProblem typ0 p)
                         | af <- Set.toList afs]
 
 

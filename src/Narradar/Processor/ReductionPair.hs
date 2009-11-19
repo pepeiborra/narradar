@@ -67,10 +67,10 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
     afs = unEmbed $ do
        let p_f = getVariant p dps
        af0    <- embed (findGroundAF' heu pi_groundInfo af_init p R.=<< Set.fromList (rules dps))
-       let u_p = iUsableRules (mkDerivedProblem (NarrowingGoal goal af0 basetyp) p_f) (rhs <$> rules dps)
+       let u_p = iUsableRules (mkDerivedDPProblem (NarrowingGoal goal af0 basetyp) p_f) (rhs <$> rules dps)
        af1    <- embed $ invariantEV heu u_p (AF.restrictTo (getAllSymbols u_p) af0)
-       let u_p' = iUsableRules (mkDerivedProblem (NarrowingGoal goal af1 basetyp) u_p) (rhs <$> rules dps)
-           rp   = AF.apply af1 (mkDerivedProblem basetyp u_p')
+       let u_p' = iUsableRules (mkDerivedDPProblem (NarrowingGoal goal af1 basetyp) u_p) (rhs <$> rules dps)
+           rp   = AF.apply af1 (mkDerivedDPProblem basetyp u_p')
        return (Tuple31 (rp, af1, u_p'))   -- forcing unicity of the rewriting problem
 
     orProblems =

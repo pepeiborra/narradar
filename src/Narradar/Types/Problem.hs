@@ -74,8 +74,6 @@ mkNewProblem ::
 mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
    rr' = mapTermSymbols IdFunction <$$> rules trs
 
-mkDerivedProblem typ p = mkDPProblem typ (getR p) (getP p)
-
 mkDPProblem' :: ( Enum v, Ord v, Pretty v
                 , rr ~ [Rule t v]
                 , ntrs ~ NarradarTRS t v

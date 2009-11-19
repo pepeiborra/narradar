@@ -275,7 +275,7 @@ instance (GetVars v trs, HasRules t v trs
 instance (GetVars v trs, HasRules t v trs, Monoid trs, MkDPProblem Rewriting trs
          ,Pretty (t(Term t v)), Pretty v, Enum v, Foldable t, HasId t, Pretty (TermId t)
          ) => PprTPDB (Problem IRewriting trs) where
- pprTPDB p = pprTPDB (mkDerivedProblem rewriting p) $$ text "(STRATEGY INNERMOST)"
+ pprTPDB p = pprTPDB (mkDerivedDPProblem rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 -- ----------------
 -- Parse XML

@@ -144,7 +144,7 @@ instance (trs ~ NarradarTRS t v
    | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
-                             (mkDerivedProblem typ' p) -- (expandDPair p i newdps))
+                             (mkDerivedDPProblem typ' p) -- (expandDPair p i newdps))
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "Instantiation" dpsA i
                      , let newdps = dps' !! i
@@ -199,7 +199,7 @@ instance (v ~ Var
   | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
   | isCollapsing (getR p) = mzero
-  | otherwise = [ singleP (FInstantiationProof olddp newdps) p (mkDerivedProblem typ' p')
+  | otherwise = [ singleP (FInstantiationProof olddp newdps) p (mkDerivedDPProblem typ' p')
                      | (i, dps') <- dpss
                      , let olddp  = safeAt "FInstantiation" dpsA i
                      , let newdps = dps' !! i
@@ -351,7 +351,7 @@ narrowingIG, narrowing_innermostIG
 narrowingIG p0@InitialGoalProblem{..}
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0
-                           (mkDerivedProblem typ' (expandDPair (getBaseProblem p0) i newdps))
+                           (mkDerivedDPProblem typ' (expandDPair (getBaseProblem p0) i newdps))
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "narrowingIg" dpsA i
                      , let newdps = dps' !! i
@@ -386,7 +386,7 @@ narrowingIG p0@InitialGoalProblem{..}
 narrowing_innermostIG p0@InitialGoalProblem{..}
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0
-                          (mkDerivedProblem typ' (expandDPair (getBaseProblem p0) i newdps))
+                          (mkDerivedDPProblem typ' (expandDPair (getBaseProblem p0) i newdps))
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "narrowing_innermostIG" dpsA i
                      , let newdps = dps' !! i

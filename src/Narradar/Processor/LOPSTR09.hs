@@ -99,7 +99,7 @@ instance (t   ~ TermF id
        let heu = mkHeu mk p
            base_p = getProblemType (Infinitary.baseProblem p)
        af' <-  Set.toList $ invariantEV heu p (Infinitary.pi p)
-       let p' = mkDerivedProblem base_p p
+       let p' = mkDerivedDPProblem base_p p
        return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
 
 data InfinitaryToRewritingProof id where

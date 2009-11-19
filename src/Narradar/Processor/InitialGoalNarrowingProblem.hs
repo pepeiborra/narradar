@@ -62,7 +62,7 @@ instance (gid ~ DPIdentifier (GenId id)
                                (mkTRS [ l :-> r | l :-> r <- getPairs newType (goalRule:initialRules)
                                                 , rootSymbol l == Just (IdDP GoalId)])
 -}
-       prob'    = mkDerivedProblem newType
+       prob'    = mkDerivedDPProblem newType
                                (insertDPairs (mkDPProblem baseType r' p')
                                              (mkTRS [ l :-> r | l :-> r <- getPairs newType (goalRule:initialRules)
                                                               , rootSymbol l == Just (IdDP GoalId)]))
@@ -104,7 +104,7 @@ instance ( HasId t, Foldable t, TermId t ~ id, SignatureId trs ~ id
               (Problem (InitialGoal t Narrowing) trs)
               (Problem (NarrowingGoal id) trs)
  where
-  apply _ p = mprod [mkDerivedProblem (narrowingGoal g) p | g <- gg]
+  apply _ p = mprod [mkDerivedDPProblem (narrowingGoal g) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
 instance ( HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var)
@@ -114,7 +114,7 @@ instance ( HasId t, Foldable t, TermId t ~ id, Ord id, Ord (Term t Var)
               (Problem (InitialGoal t CNarrowing) trs)
               (Problem (CNarrowingGoal id) trs)
  where
-  apply _ p = mprod [mkDerivedProblem (cnarrowingGoal g) p | g <- gg]
+  apply _ p = mprod [mkDerivedDPProblem (cnarrowingGoal g) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
 
@@ -128,7 +128,7 @@ instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
               (Problem (Infinitary id Rewriting) trs)
  where
   apply _ p = andP NarrowingGoalToInfinitaryRewritingProof p
-                [mkDerivedProblem (infinitary g Rewriting) p | g <- gg]
+                [mkDerivedDPProblem (infinitary g Rewriting) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 
 instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
@@ -140,7 +140,7 @@ instance ( HasId t, Foldable t, Ord (Term t Var), TermId t ~ id, Ord id
               (Problem (Infinitary id IRewriting) trs)
  where
   apply _ p = andP NarrowingGoalToInfinitaryRewritingProof p
-              [mkDerivedProblem (infinitary g IRewriting) p | g <- gg]
+              [mkDerivedDPProblem (infinitary g IRewriting) p | g <- gg]
     where InitialGoal gg _ _ = getProblemType p
 -}
 {-

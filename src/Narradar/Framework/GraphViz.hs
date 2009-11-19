@@ -122,7 +122,7 @@ pprTerm = foldTerm pPrint f where
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem IRewriting trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedProblem rewriting p) $$ text "(STRATEGY INNERMOST)"
+  pprTPDBdot p = pprTPDBdot (mkDerivedDPProblem rewriting p) $$ text "(STRATEGY INNERMOST)"
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
@@ -133,7 +133,7 @@ instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDBDot (Problem CNarrowing trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedProblem rewriting p) $$ text "(STRATEGY CNARROWING)"
+  pprTPDBdot p = pprTPDBdot (mkDerivedDPProblem rewriting p) $$ text "(STRATEGY CNARROWING)"
 
 
 
