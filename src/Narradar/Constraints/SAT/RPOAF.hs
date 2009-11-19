@@ -588,6 +588,7 @@ class Omega typ t where omega :: (TermId t ~ somesymbol id) => Problem typ (Narr
 
 instance (p  ~ Problem typ
          ,IsDPProblem typ
+         ,HasMinimality typ
          ,HasSignature (p trs)
          ,id ~ TermId t, id ~ SignatureId (p trs), id ~ symbol a
          ,v   ~ Var
@@ -596,6 +597,7 @@ instance (p  ~ Problem typ
          ,Ord id, Ord (t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
          ,Foldable t, HasId t, Ord (Term t v), Pretty id
          ,IUsableRules t v typ trs
+         ,NeededRules t v typ trs
          ,MkDPProblem typ (NarradarTRS t v)
          ) => Omega typ t
  where
@@ -609,9 +611,13 @@ instance (p  ~ Problem typ
    where
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
-    dd  = getDefinedSymbols (iUsableRules p (rhs <$> dps))
+    dd
+       | getMinimalityFromProblem p == M = getDefinedSymbols (neededRules p (rhs <$> dps))
+       | otherwise                       = getDefinedSymbols (iUsableRules p (rhs <$> dps))
 
-    go (Pure x) _ = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
+    go (Pure x) _
+       | getMinimalityFromProblem p == M = constant True
+       | otherwise                       = andM $ map usable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
 
     go t trs
       | id_t `Set.notMember` dd
