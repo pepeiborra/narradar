@@ -478,8 +478,8 @@ lexpeq id_f id_g ss tt =
               , (f_ik, g_jk) <- zip f_i g_j]]
     where
        (ff,gg) = (encodePerm id_f, encodePerm id_g)
-       eqArity = andM (take m $ zipWith (<==>) (map or (transpose ff) ++ repeat (constant False))
-                                                 (map or (transpose gg) ++ repeat (constant False))
+       eqArity = andM ( take m (zipWith (<==>) (map or ff ++ repeat (constant False))
+                                               (map or gg ++ repeat (constant False)))
                       )
        m   = max (length ff) (length gg)
 
