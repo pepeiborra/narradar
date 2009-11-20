@@ -217,7 +217,14 @@ procAF_IG p m = case unsafePerformIO m of
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
 
+                          verification  = verifyRPOAF typSymbols (getR p) dps symbols nondec_dps
+                          typSymbols    = mapInitialGoal (bimap convertSymbol id) (getProblemType p)
+                          convertSymbol = fromJust . (`Map.lookup` Map.fromList [(the_symbolR s, s) | s <- symbols])
+                          isValidProof
+                            | isCorrect verification = True
+                            | otherwise = pprTrace (proof $+$ Ppr.empty $+$ verification) False
                       in
+                         CE.assert isValidProof $
                          singleP proof p (setP (restrictTRS dps nondec_dps) p)
 
 -- For Narrowing we need to add the constraint that one of the dps is ground in the rhs
