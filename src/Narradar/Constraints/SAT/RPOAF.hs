@@ -255,7 +255,7 @@ rpos bits (x,ar) = do
   assertAll [ p ==> oneM perm_i | (p, perm_i) <- zip pos_bb perm_bb]
   -- All non-filtered arguments are permuted 'to the left'
   assertAll [ or perm_k1 ==>> or perm_k
-                  | (perm_k, perm_k1) <- zip perm_bb (tail perm_bb)]
+                  | (perm_k, perm_k1) <- zip (transpose perm_bb) (tail $transpose perm_bb)]
 
   return $ Symbol
              { the_symbol   = x
