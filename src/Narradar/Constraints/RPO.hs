@@ -9,6 +9,7 @@ module Narradar.Constraints.RPO where
 import Prelude hiding ((>))
 import qualified Prelude
 
+import Control.Exception(assert)
 import Control.Monad
 import Data.Foldable (Foldable)
 import Data.List
@@ -25,8 +26,15 @@ class HasStatus     a where status     :: a -> Status
 data Status   = Mul | Lex (Maybe [Int]) deriving (Eq, Ord, Show)
 mkStatus mul perm
  | mul       = Mul
- | otherwise = Lex (Just [head ([i | (i,True) <- zip [1..] perm_i] ++ [-1])
-                             | perm_i <- perm])
+ | otherwise = assert (if all oneOrNone perm then True else pprTrace perm False) $
+               assert (all oneOrNone (transpose perm)) $
+               Lex (Just [ head ([i | (i,True) <- zip [1..] perm_i] ++ [-1])
+                          | perm_i <- perm])
+
+  where
+    oneOrNone []         = True
+    oneOrNone (False:xx) = oneOrNone xx
+    oneOrNone (True:xx)  = not $ or xx
 
 instance Pretty Status where pPrint = text.show
 
@@ -89,10 +97,11 @@ symbolRPO = RPO{..} where
   lexeqD (~~) []     _      = return False
   lexeqD (~~) (f:ff) (g:gg) = (f ~~ g <&> lexeqD (~~) ff gg)
 
-  lexsD (>) (~~) f_perm g_perm ff gg = lexD (>) (~~) (maybe ff ((`select` ff) . map pred) f_perm)
-                                                     (maybe gg ((`select` gg) . map pred) g_perm)
-  lexseqD   (~~) f_perm g_perm ff gg = lexeqD (~~) (maybe ff ((`select` ff) . map pred) f_perm)
-                                                   (maybe gg ((`select` gg) . map pred) g_perm)
+
+  lexsD (>) (~~) f_perm g_perm ff gg = lexD (>) (~~) (maybe ff (permute ff) f_perm)
+                                                     (maybe gg (permute gg) g_perm)
+  lexseqD   (~~) f_perm g_perm ff gg = lexeqD (~~)   (maybe ff (permute ff) f_perm)
+                                                     (maybe gg (permute gg) g_perm)
 
   mulD (>) (~~) m1 m2 = muleqD (~~) m1 m2
                          <&>
@@ -130,4 +139,6 @@ symbolRPO = RPO{..} where
 
 allM  f xx = and `liftM` mapM f xx
 anyM  f xx = or  `liftM` mapM f xx
+
+permute ff ii = map fst $ sortBy (compare `on` snd) (zip ff ii)
 
