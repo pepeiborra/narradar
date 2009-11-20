@@ -249,10 +249,10 @@ rpos bits (x,ar) = do
   -- There is one or zero arguments considered at the k'th perm position,
   assertAll [ or perm_k ==>> oneM perm_k
              | perm_k <- transpose perm_bb]
-  -- Filtered arguments may not be used in the permutation
-  assertAll [ not p ==> and (not <$> perm_i) | (p, perm_i) <- zip pos_bb perm_bb]
+--  assertAll [ not p ==> and (not <$> perm_i) | (p, perm_i) <- zip pos_bb perm_bb]
   -- Non filtered arguments are considered at exactly one position in the permutation
-  assertAll [ p ==> oneM perm_i | (p, perm_i) <- zip pos_bb perm_bb]
+  -- Filtered arguments may not be used in the permutation
+  assertAll [ ifM' p (oneM perm_i) (notM $ or perm_i) | (p, perm_i) <- zip pos_bb perm_bb]
   -- All non-filtered arguments are permuted 'to the left'
   assertAll [ or perm_k1 ==>> or perm_k
                   | (perm_k, perm_k1) <- zip (transpose perm_bb) (tail $transpose perm_bb)]
