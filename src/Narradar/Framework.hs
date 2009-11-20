@@ -51,3 +51,5 @@ liftFramework f p = setBaseProblem (f(getBaseProblem p)) p
 mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m ()
 mkDispatcher f = fmap (const ()) . f
 
+
+forDPProblem f p = f (getProblemType p) (getR p) (getP p)
