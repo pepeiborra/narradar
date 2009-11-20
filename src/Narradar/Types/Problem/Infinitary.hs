@@ -22,6 +22,7 @@ import Data.Traversable as T (Traversable(..), mapM, fmapDefault, foldMapDefault
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Text.XHtml (theclass)
 
 import Data.Term
@@ -31,7 +32,7 @@ import MuTerm.Framework.Problem
 import MuTerm.Framework.Proof
 
 import Narradar.Constraints.VariableCondition
-import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..), PolyHeuristic, MkHeu, mkHeu, bestHeu)
+import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..), PolyHeuristic, MkHeu, mkHeu, bestHeu, fromAF)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
@@ -39,7 +40,9 @@ import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Term
+import Narradar.Framework
 import Narradar.Framework.Ppr
+import Narradar.Utils (chunks)
 
 import Prelude hiding (pi)
 
@@ -100,6 +103,18 @@ instance HTMLClass (Infinitary id Rewriting) where htmlClass _ = theclass "InfRe
 instance HTMLClass (Infinitary id IRewriting) where htmlClass _ = theclass "InfIRew"
 instance HTMLClass (Infinitary id Narrowing) where htmlClass _ = theclass "InfNarr"
 instance HTMLClass (Infinitary id CNarrowing) where htmlClass _ = theclass "InfCNarr"
+
+
+instance (Pretty id, PprTPDB (Problem typ trs)) =>
+  PprTPDB (Problem (Infinitary id typ) trs)
+ where
+   pprTPDB (InfinitaryProblem pi p) =
+      pprTPDB p $$
+      parens(text "AF" <+> pprAF pi)
+
+
+pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.id) (pPrint.toList) aa | (f, aa) <- xx])
+                      | xx <- chunks 3 $ Map.toList $ fromAF af]
 
 -- Icap
 

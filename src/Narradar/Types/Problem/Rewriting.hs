@@ -1,11 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Problem.Rewriting
@@ -40,14 +38,6 @@ data MkRewriting strat = MkRewriting (Strategy strat) Minimality deriving (Eq, O
 
 type Rewriting  = MkRewriting Standard
 type IRewriting = MkRewriting Innermost
-
-data Standard
-data Innermost
-data Strategy st where
-    Standard  :: Strategy Standard
-    Innermost :: Strategy Innermost
-
-data Minimality  = M | A   deriving (Eq, Ord, Show)
 
 rewriting  = MkRewriting Standard  M
 irewriting = MkRewriting Innermost M
@@ -99,32 +89,6 @@ instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(T
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
                                           pp' -> mkDPProblem' (MkRewriting s m) rr pp'
 
--- The HasStrategy and HasMinimality classes
-
-class IsDPProblem typ => HasStrategy typ st | typ -> st where
-  getStrategy :: typ -> Strategy st
-
-instance HasStrategy Rewriting Standard   where getStrategy _ = Standard
-instance HasStrategy IRewriting Innermost where getStrategy _ = Innermost
-
-instance (FrameworkExtension ext, IsDPProblem (ext b), HasStrategy b st) => HasStrategy (ext b) st where
-  getStrategy = getStrategy . getBaseFramework
-
-class IsDPProblem typ => HasMinimality typ where
-  getMinimality :: typ -> Minimality
-  setMinimality :: Minimality -> Problem typ trs -> Problem typ trs
-
-getMinimalityFromProblem :: HasMinimality typ => Problem typ trs -> Minimality
-getMinimalityFromProblem = getMinimality . getProblemType
-
-instance HasMinimality (MkRewriting st) where
-    getMinimality    (MkRewriting st m) = m
-    setMinimality m' (RewritingProblem rr dd s _) = RewritingProblem rr dd s m'
-
-instance (IsDPProblem (p b), HasMinimality b, FrameworkExtension p) => HasMinimality (p b)
-   where getMinimality = getMinimality . getBaseFramework
-         setMinimality m = liftFramework (setMinimality m)
-
 -- Prelude
 
 instance Eq (Strategy st) where
@@ -144,6 +108,15 @@ instance Ord (Strategy st) where
 isInnermost :: Strategy st -> Bool
 isInnermost Innermost = True
 isInnermost _         = False
+
+-- Framework
+
+instance HasStrategy Rewriting Standard   where getStrategy _ = Standard
+instance HasStrategy IRewriting Innermost where getStrategy _ = Innermost
+
+instance HasMinimality (MkRewriting st) where
+    getMinimality    (MkRewriting st m) = m
+    setMinimality m' (RewritingProblem rr dd s _) = RewritingProblem rr dd s m'
 
 -- Functor
 
@@ -172,6 +145,22 @@ instance HTML IRewriting where
 
 instance HTMLClass Rewriting  where htmlClass (MkRewriting Standard _) = theclass "DP"
 instance HTMLClass IRewriting where htmlClass (MkRewriting Innermost _) = theclass "IDP"
+
+
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (TermId t), Foldable t
+         ) => PprTPDB (Problem (MkRewriting st) trs) where
+  pprTPDB prob@(RewritingProblem r p st m) = vcat (
+     [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))
+     ,parens( text "PAIRS" $$
+              nest 1 (vcat $ map pprRule $ rules $ p))
+     ,parens( text "RULES" $$
+              nest 1 (vcat $ map pprRule $ rules $ r))
+     ] ++ if isInnermost st then [parens (text "STRATEGY INNERMOST")] else []
+       ++ if m == M then [parens (text "MINIMALITY")] else [])
+   where
+        pprRule (a:->b) = pprTermTPDB a <+> text "->" <+> pprTermTPDB b
+
 
 -- ICap
 

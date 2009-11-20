@@ -204,6 +204,14 @@ instance HTML p => HTML (InitialGoal id p) where
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
 
 
+instance (Pretty (Term t Var), PprTPDB (Problem typ trs)) =>
+    PprTPDB (Problem (InitialGoal t typ) trs)
+ where
+    pprTPDB (InitialGoalProblem goals _ p) =
+      pprTPDB p $$
+      parens (text "GOALS" <+> fsep (map pPrint goals))
+
+
 -- ICap
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>

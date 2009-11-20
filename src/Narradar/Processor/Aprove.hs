@@ -37,7 +37,7 @@ import Paths_narradar
 
 import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr
-import Narradar.Types hiding ((!),(.|.), (.&.))
+import Narradar.Types hiding ((!),(.|.), (.&.), PprTPDB(..))
 import Narradar.Types.Problem.Rewriting
 import Narradar.Utils (withTempFile, memoIO, eitherM, tailSafe, (.|.), (.&.))
 import Narradar.Utils.Html

@@ -27,13 +27,12 @@ import qualified Prelude as P
 
 import Lattice
 import Narradar.Constraints.VariableCondition
-import Narradar.Framework
 import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr
 import Narradar.Processor.Aprove
 import Narradar.Processor.NarrowingProblem (findGroundAF')
 import Narradar.Processor.UsableRules
-import Narradar.Types
+import Narradar.Types hiding (PprTPDB(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF, PolyHeuristic, MkHeu(..))
 import Narradar.Utils

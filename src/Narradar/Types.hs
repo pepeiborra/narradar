@@ -113,6 +113,12 @@ bestError = maximumBy (compare `on` errorPos)
 -- Parsing and dispatching TPDB TRSs
 -- ---------------------------------
 
+class Dispatch thing where
+    dispatch :: MonadPlus m => thing -> Proof (PrettyInfo, DotInfo) m ()
+
+mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m ()
+mkDispatcher f = fmap (const ()) . f
+
 data AProblem t trs where
     ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
     AIRewritingProblem        :: Problem IRewriting trs -> AProblem t trs

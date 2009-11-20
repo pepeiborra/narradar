@@ -33,6 +33,7 @@ import Text.Printf
 import qualified Data.Term.Var as Term
 import qualified Language.Prolog.Syntax as Prolog
 
+import Narradar.Framework
 import MuTerm.Framework.DotRep
 import MuTerm.Framework.GraphViz
 import MuTerm.Framework.Proof
@@ -77,14 +78,14 @@ import Narradar.Utils
         (me:_, Cluster (cl',n)) -> edge (getParentNode n) me ([("ltail", show cl'), ("lhead", show cl)] ++ doneEdge done) >> return (Cluster (cl, N me))
 -}
 
-instance (PprTPDBDot (Problem typ trs), ProblemColor (Problem typ trs)) =>
+instance (PprTPDB (Problem typ trs), ProblemColor (Problem typ trs)) =>
     DotRep (Problem typ trs) where
-    dot p = Text (pprTPDBdot p) [ Color [problemColor p]
-                                , Shape BoxShape
-                                , Style (Stl Bold Nothing)
-                                , FontName "monospace"
-                                , FontSize 10
-                                , Margin (PVal (PointD 0.2 0.2))]
+    dot p = Text (pprTPDB p) [ Color [problemColor p]
+                             , Shape BoxShape
+                             , Style (Stl Bold Nothing)
+                             , FontName "monospace"
+                             , FontSize 10
+                             , Margin (PVal (PointD 0.2 0.2))]
 
 
 instance DotRep PrologProblem where
@@ -95,88 +96,6 @@ instance DotRep PrologProblem where
                                    , Margin (PVal (PointD 0.2 0.2))]
    where pgm = pPrint program $$
                vcat [text "%Query: " <+> (pPrint g) | g <- goals]
-
-
-class PprTPDBDot p where pprTPDBdot :: p -> Doc
-
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t
-         ) => PprTPDBDot (Problem (MkRewriting st) trs) where
-  pprTPDBdot prob@(RewritingProblem r p st m) = vcat (
-     [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))
-     ,parens( text "PAIRS" $$
-              nest 1 (vcat $ map pprRule $ rules $ p))
-     ,parens( text "RULES" $$
-              nest 1 (vcat $ map pprRule $ rules $ r))
-     ] ++ if isInnermost st then [parens (text "STRATEGY INNERMOST")] else []
-       ++ if m == M then [parens (text "MINIMALITY")] else [])
-   where
-        pprRule (a:->b) = pprTerm a <+> text "->" <+> pprTerm b
-
-pprTerm = foldTerm pPrint f where
-        f t@(getId -> Just id)
-            | null tt = pPrint id
-            | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
-         where tt = toList t
-
-
-instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
-         ) => PprTPDBDot (Problem Narrowing trs) where
-  pprTPDBdot p = pprTPDBdot ( p) $$ text "(STRATEGY NARROWING)"
-
-
-instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
-         ) => PprTPDBDot (Problem CNarrowing trs) where
-  pprTPDBdot p = pprTPDBdot (mkDerivedDPProblem rewriting p) $$ text "(STRATEGY CNARROWING)"
-
-
-
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t
-         ,IsDPProblem base, PprTPDBDot (Problem base trs)
-         ) => PprTPDBDot (Problem (MkNarrowingGen base) trs) where
-  pprTPDBdot p@NarrowingGenProblem{..} = pprTPDBdot baseProblem
-
-
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, id ~ TermId t, Pretty id, Foldable t
-         ,PprTPDBDot (Problem base trs)
-         ) => PprTPDBDot (Problem (MkNarrowingGoal id base) trs) where
-  pprTPDBdot (NarrowingGoalProblem g pi p) =
-      pprTPDBdot p $$
-      parens (text "AF" <+> pprAF pi)
-
-
-instance ( HasRules t v trs, Pretty (t(Term t v))
-         , HasId t, Foldable t, Pretty (TermId t), Pretty v
-         , PprTPDBDot (Problem base trs)
-         ) => PprTPDBDot (Problem (Relative trs base) trs) where
-  pprTPDBdot RelativeProblem{..} =
-      pprTPDBdot baseProblem $$
-      parens(text "RULES" $$
-             nest 1 (vcat [ pprTerm l <+> text "->=" <+> pprTerm r
-                            | l :-> r <- rules relativeTRS]))
-
-
-instance (Pretty (Term t Var), PprTPDBDot (Problem typ trs)) =>
-    PprTPDBDot (Problem (InitialGoal t typ) trs)
- where
-    pprTPDBdot (InitialGoalProblem goals _ p) =
-      pprTPDBdot p $$
-      parens (text "GOALS" <+> fsep (map pPrint goals))
-
-instance (Pretty id, PprTPDBDot (Problem typ trs)) =>
-  PprTPDBDot (Problem (Infinitary id typ) trs)
- where
-   pprTPDBdot (InfinitaryProblem pi p) =
-      pprTPDBdot p $$
-      parens(text "AF" <+> pprAF pi)
-
-
-pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.id) (pPrint.toList) aa | (f, aa) <- xx])
-                      | xx <- chunks 3 $ Map.toList $ fromAF af]
 
 
 class ProblemColor p where problemColor :: p -> Color

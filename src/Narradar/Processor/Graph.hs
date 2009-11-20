@@ -64,7 +64,7 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
          , Pretty (t(Term t Var)), Pretty typ0
          , ICap t Var (typ0,trs)
          , IUsableRules t Var typ0 trs
-         , ProblemColor problem, PprTPDBDot problem
+         , ProblemColor problem, PprTPDB problem
          , Info info DependencyGraphProof
          ) =>
     Processor info DependencyGraphSCC

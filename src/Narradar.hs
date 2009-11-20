@@ -7,7 +7,7 @@
 
 module Narradar ( narradarMain, prologMain
                 , Options(..), defOpts
-                , PprTPDBDot(..)      -- module Narradar.Framework.GraphViz
+                , PprTPDB(..)      -- module Narradar.Framework.GraphViz
                 , module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
                 , module Narradar.Processor.ReductionPair

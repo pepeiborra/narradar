@@ -1,5 +1,10 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverlappingInstances, FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE GADTs #-}
+
 module Narradar.Framework (
         module Narradar.Framework,
         module MuTerm.Framework.DotRep,
@@ -10,6 +15,8 @@ module Narradar.Framework (
   where
 
 import Control.Monad
+import Data.Foldable (toList)
+import Data.Term (foldTerm, getId)
 
 import MuTerm.Framework.DotRep
 import MuTerm.Framework.Problem
@@ -20,9 +27,9 @@ import MuTerm.Framework.Strategy
 import Narradar.Framework.Ppr
 import Narradar.Utils ((<$$>))
 
-
-class Dispatch thing where
-    dispatch :: MonadPlus m => thing -> Proof (PrettyInfo, DotInfo) m ()
+-- ----------------------
+-- Framework extensions
+-- ----------------------
 
 class FrameworkExtension ext where
     getBaseFramework :: ext base -> base
@@ -48,8 +55,54 @@ liftFramework :: FrameworkExtension ext =>
                      (Problem base trs -> Problem base trs) -> Problem (ext base) trs -> Problem (ext base) trs
 liftFramework f p = setBaseProblem (f(getBaseProblem p)) p
 
-mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m ()
-mkDispatcher f = fmap (const ()) . f
+-- ---------- --
+-- Strategies --
+-- ---------- --
 
+data Standard
+data Innermost
+data Strategy st where
+    Standard  :: Strategy Standard
+    Innermost :: Strategy Innermost
+
+class IsDPProblem typ => HasStrategy typ st | typ -> st where
+  getStrategy :: typ -> Strategy st
+
+instance (FrameworkExtension ext, IsDPProblem (ext b), HasStrategy b st) => HasStrategy (ext b) st where
+  getStrategy = getStrategy . getBaseFramework
+
+-- ---------- --
+-- Minimality --
+-- ---------- --
+
+data Minimality  = M | A   deriving (Eq, Ord, Show)
+
+class IsDPProblem typ => HasMinimality typ where
+  getMinimality :: typ -> Minimality
+  setMinimality :: Minimality -> Problem typ trs -> Problem typ trs
+
+getMinimalityFromProblem :: HasMinimality typ => Problem typ trs -> Minimality
+getMinimalityFromProblem = getMinimality . getProblemType
+
+instance (IsDPProblem (p b), HasMinimality b, FrameworkExtension p) => HasMinimality (p b)
+   where getMinimality = getMinimality . getBaseFramework
+         setMinimality m = liftFramework (setMinimality m)
+
+-- -------------
+-- forDPProblem
+-- -------------
 
 forDPProblem f p = f (getProblemType p) (getR p) (getP p)
+
+-- -------------------------
+-- printing TPDB problems --
+-- -------------------------
+
+class PprTPDB p where pprTPDB :: p -> Doc
+
+
+pprTermTPDB t = foldTerm pPrint f t where
+        f t@(getId -> Just id)
+            | null tt = pPrint id
+            | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
+         where tt = toList t

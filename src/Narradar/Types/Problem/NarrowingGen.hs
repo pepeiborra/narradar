@@ -133,6 +133,13 @@ instance Pretty p => Pretty (MkNarrowingGen p) where
 instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenNarr"
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
 
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (TermId t), Foldable t
+         ,IsDPProblem base, PprTPDB (Problem base trs)
+         ) => PprTPDB (Problem (MkNarrowingGen base) trs) where
+  pprTPDB p@NarrowingGenProblem{..} = pprTPDB baseProblem
+
+
 -- ICap
 instance ICap t v (st, NarradarTRS t v) => ICap t v (MkNarrowingGen st, NarradarTRS t v) where icap = liftIcap
 

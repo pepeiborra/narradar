@@ -13,12 +13,9 @@ import Data.Maybe
 import qualified Language.Prolog.Syntax as Prolog
 import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
-import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
-import Narradar.Processor.Aprove
 import Narradar.Processor.LOPSTR09
-import Narradar.Processor.RPO
 import Narradar.Framework.GraphViz
 import Lattice
 
@@ -70,7 +67,7 @@ instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (
 instance (Dispatch (NProblem base id)
          ,Pretty id, Ord id, Pretty base, Pretty (TermN id)
          ,IsDPProblem base, MkProblem base (NTRS id), HasMinimality base
-         ,PprTPDBDot (NProblem base id), ProblemColor (NProblem base id)
+         ,PprTPDB (NProblem base id), ProblemColor (NProblem base id)
          ,Pretty (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch

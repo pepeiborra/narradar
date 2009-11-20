@@ -92,6 +92,17 @@ instance (HasRules t v trs, Pretty (Term t v), Pretty (Problem base trs)) =>
       pPrint baseProblem $$
       text "TRS':" <+> vcat [pPrint l <+> text "->=" <+> pPrint r
                               | l :-> r <- rules relativeTRS]
+
+
+instance ( HasRules t v trs, Pretty (t(Term t v))
+         , HasId t, Foldable t, Pretty (TermId t), Pretty v
+         , PprTPDB (Problem base trs)
+         ) => PprTPDB (Problem (Relative trs base) trs) where
+  pprTPDB RelativeProblem{..} =
+      pprTPDB baseProblem $$
+      parens(text "RULES" $$
+             nest 1 (vcat [ pprTermTPDB l <+> text "->=" <+> pprTermTPDB r
+                            | l :-> r <- rules relativeTRS]))
 -- ICap
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>
