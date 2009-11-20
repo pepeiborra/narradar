@@ -665,7 +665,9 @@ instance (p   ~ Problem (InitialGoal t typ)
     ip = forDPProblem involvedPairs p
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
-    dd  = getDefinedSymbols (reachableUsableRules p)
+    dd
+       | getMinimalityFromProblem p == M = getDefinedSymbols (neededRules p (rhs <$> dps))
+       | otherwise                       = getDefinedSymbols (reachableUsableRules p)
 
     go l (Pure x) _ =
       -- If there is an extra variable, everything is usable
