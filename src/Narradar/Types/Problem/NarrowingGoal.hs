@@ -7,6 +7,16 @@
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+
+{-
+  Narrowing Goal is an intermediate framework type.
+  Narrowing Goal problems cannot be solved directly,
+  but they can be transformed to other frameworks
+  for which solvers exist, namely Initial Goal Relative,
+  for LOPSTR09, or Infinitary, for SGST07 which is
+  equivalent to FLOPS08
+
+-}
 module Narradar.Types.Problem.NarrowingGoal where
 
 import Control.Applicative
@@ -101,6 +111,16 @@ instance Pretty p => Pretty (MkNarrowingGoal id p) where
 instance HTMLClass (MkNarrowingGoal id Rewriting) where htmlClass _ = theclass "IRew"
 instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass "INarr"
 
+
+instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+         ,Pretty id, Pretty (Goal id)
+         ,Foldable t, HasId t, id ~ TermId t
+         ,PprTPDB (Problem base trs), HasMinimality base
+         ) => PprTPDB (Problem (MkNarrowingGoal id base) trs) where
+  pprTPDB (NarrowingGoalProblem g pi p) =
+      pprTPDB (setMinimality A p) $$
+      parens (text "STRATEGY NARROWING") $$
+      parens (text "STRATEGY GOAL" <+> g)
 
 -- ICap
 
