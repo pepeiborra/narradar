@@ -145,11 +145,10 @@ instance Decode (Symbol a) (SymbolRes a) where
     decode x@Symbol{} = decodeSymbol x
 
 instance HasPrecedence (SymbolRes a) where precedence = Narradar.Constraints.SAT.RPO.precedence
-instance HasStatus (SymbolRes a) where status = Narradar.Constraints.SAT.RPO.status
-
+instance HasStatus     (SymbolRes a) where status     = Narradar.Constraints.SAT.RPO.status
 
 symbol bits (x,ar) = do
-  n <- number bits
+  n    <- number bits
   perm <- replicateM ar (replicateM ar boolean)
   mset <- boolean
 
