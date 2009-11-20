@@ -192,6 +192,7 @@ instance Pretty a => Pretty (SymbolRes a) where
 
 instance HasPrecedence (SymbolRes a) where precedence = Narradar.Constraints.SAT.RPOAF.precedence
 instance HasStatus     (SymbolRes a) where status     = Narradar.Constraints.SAT.RPOAF.status
+instance HasFiltering  (SymbolRes a) where filtering  = Narradar.Constraints.SAT.RPOAF.filtering
 
 data Symbol a = Symbol { the_symbol   :: a
                        , encodePrec   :: Number
@@ -694,52 +695,54 @@ rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
 -- Testing
 -- --------
 
-verifyRPOAF :: forall typ trs t v a k.
-          (Traversable (Problem typ)
-          ,trs ~ NTRS (SymbolRes a)
-          ,MkDPProblem typ trs
+verifyRPOAF :: forall typ trs t a k.
+          (trs ~ NTRS (SymbolRes a)
           ,Ord a, Pretty a
-          ,AF.ApplyAF (Problem typ trs)
-          ,HasSignature (Problem typ trs)
           ,NUsableRules typ (SymbolRes a)
-          ,SignatureId (Problem typ trs) ~ SymbolRes a
-          ,AFId (Problem typ (NTRS (SymbolRes a))) ~ SymbolRes a
-          ) => Problem typ (NTRS a) -> [SymbolRes a] -> [Int] -> VerifyRPOAF (RuleN (SymbolRes a))
+          ) => typ -> NTRS a -> NTRS a -> [SymbolRes a] -> [Int] -> VerifyRPOAF (RuleN (SymbolRes a))
+verifyRPOAF typ trs dps symbols nondec_pairs = runIdentity $ do
 
-verifyRPOAF p0 symbols nondec_pairs = runIdentity $ do
-
-  falseDecreasingPairs       <- runListT $ do
+  falseDecreasingPairs <- runListT $ do
      s:->t <- li the_dec_pairs
-     guard =<< lift (liftM P.not(AF.apply the_af s > AF.apply the_af t))
+     guard =<< lift (liftM P.not( s >  t))
      return (s:->t)
 
-  falseWeaklyDecreasingRules       <- runListT $ do
+  falseWeaklyDecreasingPairs <- runListT $ do
+     s:->t <- li the_weak_pairs
+     guard =<< lift (liftM P.not( s >~  t))
+     return (s:->t)
+
+  falseWeaklyDecreasingRules <- runListT $ do
      s:->t <- li (toList the_usableRules)
-     guard =<< lift (liftM P.not(AF.apply the_af s >~ AF.apply the_af t))
+     guard =<< lift (liftM P.not( s >~  t))
      return (s:->t)
 
   let missingUsableRules = [] -- toList (Set.difference expected_usableRules the_usableRules)
       excessUsableRules  = [] -- toList (Set.difference the_usableRules expected_usableRules)
 
-  return VerifyRPOAF{..}
+  return VerifyRPOAF{the_pairs = rules the_pairs, ..}
 
  where
 
-  RPO.RPO{..} = RPO.symbolRPO
+  RPO.RPO{..} = RPO.symbolRPOAF
 
-  p             = fmap (mapNarradarTRS (mapTermSymbols convertSymbol)) p0
   convertSymbol = fromJust . (`Map.lookup` Map.fromList [(the_symbolR s, s) | s <- symbols])
 
-  the_af    = AF.fromList' [(s, filtering s) | s <- symbols]
-  the_pairs = rules(getP p)
-  the_filtered_pairs = AF.apply the_af the_pairs
+  the_af    = AF.fromList' [(s, Narradar.Constraints.SAT.RPOAF.filtering s) | s <- symbols]
+  the_rules = mapNarradarTRS (mapTermSymbols convertSymbol) trs
+  the_pairs = mapNarradarTRS (mapTermSymbols convertSymbol) dps
+  the_filtered_pairs = rules $ AF.apply the_af the_pairs
+  npairs    = length (rules the_pairs)
 
-  the_dec_pairs = CE.assert (all (P.< length the_pairs) nondec_pairs) $
-                  select ([0..length the_pairs - 1] \\ nondec_pairs) the_pairs
-  the_usableRules      = Set.fromList [ l:->r | l:->r <- rules(getR p), let Just id = rootSymbol l, isUsable id]
+
+  the_dec_pairs = CE.assert (all (P.< npairs) nondec_pairs) $
+                  select ([0..npairs - 1] \\ nondec_pairs) (rules the_pairs)
+  the_weak_pairs = CE.assert (all (P.< npairs) nondec_pairs) $
+                   select nondec_pairs (rules the_pairs)
+  the_usableRules      = Set.fromList [ l:->r | l:->r <- rules the_rules, let Just id = rootSymbol l, isUsable id]
   expected_usableRules = Set.fromList
                          [ rule
-                          | let ur_af = Set.fromList(rules $ getR $ iUsableRules (AF.apply the_af p) (rhs <$> the_filtered_pairs))
-                          , rule <- rules(getR p)
+                          | let ur_af = Set.fromList $ rules(iUsableRules3 typ the_rules the_pairs (rhs <$> the_filtered_pairs))
+                          , rule <- rules the_rules
                           , AF.apply the_af rule `Set.member` ur_af]
 

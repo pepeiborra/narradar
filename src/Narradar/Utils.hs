@@ -173,15 +173,17 @@ mapMif p f= mapM (\x -> if p x then f x else return x)
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
 
-select :: [Int] -> [a] -> [a]
-select ii xx
+select = selectSafe ""
+
+selectSafe :: String -> [Int] -> [a] -> [a]
+selectSafe msg ii xx
   | len > 5   = map (safeIx (A.!) (A.listArray (0, len - 1) xx)) ii
   | otherwise = map (safeIx (!!) xx) ii
   where
     len = length xx
     safeIx (!!) xx i
-        | i > len - 1 = error "select: index too large"
-        | i < 0       = error "select: negative index"
+        | i > len - 1 = error ("select(" ++ msg ++ "): index too large")
+        | i < 0       = error ("select(" ++ msg ++ "): negative index")
         | otherwise = xx !! i
 
 propSelect ii xx = map (xx!!) ii' == select ii' xx

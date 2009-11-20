@@ -43,7 +43,7 @@ import Satchmo.Data
 import qualified Satchmo.SAT.Weighted as Satchmo
 import Narradar.Utils
 import Narradar.Framework.Ppr as Ppr
-import Narradar.Constraints.RPO (Status(..), mkStatus, HasPrecedence(..), HasStatus(..))
+import Narradar.Constraints.RPO (Status(..), mkStatus, HasPrecedence(..), HasStatus(..), HasFiltering(..))
 
 import Prelude hiding (and, not, or, lex, (>))
 import qualified Prelude as P
