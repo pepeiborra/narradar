@@ -489,7 +489,7 @@ lexpgt id_f id_g ss tt = exgt_k (transpose $ enc_f) (transpose $ enc_g)
        n = length ss
        m = length tt
        exgt_k [] _ = constant False
-       exgt_k ff [] = allM or ff
+       exgt_k (f_k:_) [] = or f_k
        exgt_k (f_k:ff) (g_k:gg)
          = orM [andMemo[f_ik] $
                 withFalse ((f_k \\ [f_ik]) ++ (f_i \\ [f_ik])) False $
