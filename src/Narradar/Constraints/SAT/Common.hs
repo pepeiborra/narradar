@@ -288,16 +288,16 @@ ifMemo cond te el = andM [ [cond] *==> te
                          , [cond] !==> el]
 -}
 
-infix 1 ==>
-infix 1 ==>>
+infix 7 ==>
+infix 7 ==>>
 a ==>> b = do {va <- a; vb <- b; va --> vb}
 a ==> b  = do {vb <- b; a --> vb}
 Constant True  --> b = return b
 Constant False --> b = constant True
 a --> b = notM $ and [a, not b]
 
-infix 1 ^==>
-infix 1 ^==>>
+infix 7 ^==>
+infix 7 ^==>>
 a ^==>> b = do {va <- a; vb <- b; va ^--> vb}
 a ^==> b  = do {vb <- b; a ^--> vb}
 Constant True  ^--> b = return b
@@ -305,22 +305,22 @@ Constant False ^--> b = constant True
 a ^-->  b = or_ [not a, b]
 
 
-infix 1 *==>
-infix 1 !==>
-infix 1 *!==>
+infix 7 *==>
+infix 7 !==>
+infix 7 *!==>
 
 aa *==> b = (aa,[]) *!==> b
 aa !==> b = ([],aa) *!==> b
 
-infix 1 ^*==>
-infix 1 ^!==>
-infix 1 ^*!==>
+infix 7 ^*==>
+infix 7 ^!==>
+infix 7 ^*!==>
 
 aa ^*==> b = (aa,[]) ^*!==> b
 aa ^!==> b = ([],aa) ^*!==> b
 
-infix 0 <-->
-infix 0 <-^->
+infix 6 <-->
+infix 6 <-^->
 Constant False <-^-> b = return (not b)
 Constant True  <-^-> b = return b
 b <-^-> Constant False = return (not b)
@@ -342,8 +342,8 @@ a <--> b = do
        return v
 
 
-infix 0 <==>
-infix 0 <=^=>
+infix 6 <==>
+infix 6 <=^=>
 (<==>) = (join.) . liftM2 (<-->)
 (<=^=>) = (join.) . liftM2 (<-^->)
 
