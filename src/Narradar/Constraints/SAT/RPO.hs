@@ -342,10 +342,15 @@ verifyRPO p0 symbols nondec_pairs = runIdentity $ do
     s:->t <- li the_dps
     guard =<< lift(liftM P.not(s > t))
     return (s:->t)
+  falseWeaklyDecreasingPairs <- runListT $ do
+    s:->t <- li the_weak_dps
+    guard =<< lift(liftM P.not(s >~ t))
+    return (s:->t)
   falseWeaklyDecreasingRules <- runListT $ do
     s:->t <- li $ rules(getR p)
     guard =<< lift(liftM P.not(s >~ t))
     return (s:->t)
+
   let missingUsableRules = []
       excessUsableRules  = []
       the_pairs          = rules(getP p)
@@ -361,5 +366,6 @@ verifyRPO p0 symbols nondec_pairs = runIdentity $ do
 
   all_dps = rules (getP p)
   the_dps = select ([0..length all_dps - 1] \\ nondec_pairs) all_dps
+  the_weak_dps = select nondec_pairs all_dps
 
   li = ListT . return

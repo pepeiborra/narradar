@@ -416,13 +416,14 @@ withTrue bb orelse m = do
 
 data VerifyRPOAF a = VerifyRPOAF { the_pairs, the_filtered_pairs
                                  , falseDecreasingPairs
+                                 , falseWeaklyDecreasingPairs
                                  , falseWeaklyDecreasingRules
                                  , missingUsableRules
                                  , excessUsableRules  :: [a]
                                  }
                    | FailedWithStatusMismatch String
 
-mkVerifyRPOAF = VerifyRPOAF [] [] [] [] [] []
+mkVerifyRPOAF = VerifyRPOAF [] [] [] [] [] [] []
 
 instance (Eq a, Pretty a) => Pretty (VerifyRPOAF a) where
   pPrint VerifyRPOAF{..} = vcat [ text "The pairs are: " $$ nest 2 (vcat the_pairs)
@@ -431,6 +432,9 @@ instance (Eq a, Pretty a) => Pretty (VerifyRPOAF a) where
                                     else Ppr.empty
                                 , if P.not (null falseDecreasingPairs)
                                     then text "These pairs are not decreasing:" $$ nest 2 (vcat falseDecreasingPairs)
+                                    else Ppr.empty
+                                , if P.not (null falseWeaklyDecreasingPairs)
+                                    then text "These pairs are not weakly decreasing:" $$ nest 2 (vcat falseWeaklyDecreasingPairs)
                                     else Ppr.empty
                                 , if P.not (null falseWeaklyDecreasingRules)
                                     then text "These rules are not weakly decreasing:" $$ nest 2 (vcat falseWeaklyDecreasingRules)
@@ -444,7 +448,7 @@ instance (Eq a, Pretty a) => Pretty (VerifyRPOAF a) where
                                 ]
   pPrint (FailedWithStatusMismatch msg) = text msg
 
-isCorrect VerifyRPOAF{..} = null (falseDecreasingPairs ++ falseWeaklyDecreasingRules ++ excessUsableRules ++ missingUsableRules)
+isCorrect VerifyRPOAF{..} = null (falseDecreasingPairs ++ falseWeaklyDecreasingPairs ++ falseWeaklyDecreasingRules ++ excessUsableRules ++ missingUsableRules)
 isCorrect FailedWithStatusMismatch{} = False
 
 
