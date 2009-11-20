@@ -11,6 +11,7 @@ module Narradar.Processor.RPO where
 import Control.Applicative
 import Control.Exception as CE (assert)
 import Control.Monad
+import Data.Bifunctor
 import Data.Foldable (Foldable)
 import Data.Typeable
 import Data.Traversable (Traversable)
@@ -27,7 +28,8 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.SAT.Common
-import Narradar.Constraints.SAT.RPOAF (SymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, Omega, inAF, isUsable, the_symbolR, filtering, verifyRPOAF)
+import Narradar.Constraints.SAT.RPOAF (SymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, Omega
+                                      ,inAF, isUsable, the_symbolR, filtering, verifyRPOAF)
 import Narradar.Constraints.SAT.RPO   (verifyRPO)
 import qualified Narradar.Constraints.SAT.RPO as RPO
 import qualified Narradar.Constraints.SAT.RPOAF as RPOAF
@@ -103,11 +105,6 @@ instance (rpo  ~ RPOAF.Symbol id
          ,Omega (InitialGoal (TermF mpo) base) (TermF mpo)
          ,Omega (InitialGoal (TermF lpos) base) (TermF lpos)
          ,Omega (InitialGoal (TermF lpo ) base) (TermF lpo )
-         ,HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
-         ,HasSignature (NProblem base rpo),  RPOAF.Symbol id ~ SignatureId (NProblem base rpo)
-         ,HasSignature (NProblem  base mpo),  RPOAF.MPOsymbol id ~ SignatureId (NProblem base mpo)
-         ,HasSignature (NProblem  base lpo ), RPOAF.LPOsymbol id ~ SignatureId (NProblem base lpo )
-         ,HasSignature (NProblem  base lpos), RPOAF.LPOSsymbol id ~ SignatureId (NProblem base lpos)
          ,NCap id   (base, NTRS id)
          ,NCap rpo  (base, NTRS rpo)
          ,NCap mpo  (base, NTRS mpo)
@@ -123,6 +120,8 @@ instance (rpo  ~ RPOAF.Symbol id
          ,MkDPProblem base (NTRS mpo)
          ,MkDPProblem base (NTRS lpo)
          ,MkDPProblem base (NTRS lpos)
+         ,NUsableRules base sres
+         ,NCap sres (base, NTRS sres)
          ) => Processor info RPOProc
                              (NProblem (InitialGoal (TermF id) base) id)
                              (NProblem (InitialGoal (TermF id) base) id)
@@ -187,43 +186,39 @@ procAF :: (Monad m
           ,Info info (NProblem typ id)
           ,Info info (RPOProof id)
           ,Pretty id, Ord id
-          ,HasSignature (NProblem typ sres), SignatureId (NProblem typ sres) ~ SymbolRes id
           ,Traversable  (Problem typ)
-          ,MkDPProblem typ (NTRS sres)
           ,MkDPProblem typ (NTRS id)
           ,NUsableRules typ sres
-          ,AF.ApplyAF (NProblem typ sres)
           )=> NProblem typ id -> (IO (Maybe ([Int], [SymbolRes id]))) -> Proof info m (NProblem typ id)
 procAF p m = case unsafePerformIO m of
                   Nothing -> dontKnow (rpoFail p) p
                   Just (nondec_dps, symbols) ->
                       let proof = RPOAFProof decreasingDps usableRules symbols
+                          dps   = getP p
                           decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
                           p'            = setP (restrictTRS dps nondec_dps) p
-                          verification  = verifyRPOAF p symbols nondec_dps
+
+                          verification  = forDPProblem verifyRPOAF p symbols nondec_dps
                           isValidProof
                             | isCorrect verification = True
                             | otherwise = pprTrace (proof $+$ Ppr.empty $+$ verification) False
                       in
                          CE.assert isValidProof $
                          singleP proof p p'
-       where dps = getP p
-
 
 procAF_IG p m = case unsafePerformIO m of
                   Nothing -> dontKnow (rpoFail p) p
                   Just (nondec_dps, symbols) ->
                       let proof = RPOAFProof decreasingDps usableRules symbols
+                          dps   = getP p
                           decreasingDps = select ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
                           usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
                           usableSymbols = Set.fromList [ the_symbolR s | s <- symbols, isUsable s]
-                          p'            = setP (restrictTRS dps nondec_dps) p
 
                       in
-                         singleP proof p p'
-       where dps = getP p
+                         singleP proof p (setP (restrictTRS dps nondec_dps) p)
 
 -- For Narrowing we need to add the constraint that one of the dps is ground in the rhs
 -- We do not just remove the strictly decreasing pairs,

@@ -65,6 +65,12 @@ instance (Show p, Show (Term t Var)) => Show (InitialGoal t p) where
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
+mapInitialGoal f (InitialGoal goals dg p) = InitialGoal goals' dg' p
+      where
+        goals' = fmap (foldTerm return f') goals
+        dg'    = mapDGraph (fmap (foldTerm return f')) <$> dg
+        f'     = Impure . f
+
 instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
   data Problem (InitialGoal t p) a = InitialGoalProblem { goals       :: [Term t Var]
                                                         , dgraph      :: DGraph t Var
@@ -130,13 +136,13 @@ initialPairs InitialGoalProblem{..} = dinitialPairs dgraph
 -- | returns the vertexes in the DGraph which are in a path from an initial pair to the current P
 involvedNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Vertex]
-involvedNodes p = involvedNodes' p (getP p)
+involvedNodes p = involvedNodes' (getProblemType p) (getP p)
 
 -- | returns the vertexes in the DGraph which are in a path from an initial pair to a given TRS P
 involvedNodes' :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ,HasRules t Var trs
-                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> trs -> [Vertex]
-involvedNodes' p@InitialGoalProblem{dgraph=dg@DGraph{..},..} pTRS
+                  ) => InitialGoal t base -> trs -> [Vertex]
+involvedNodes' p@InitialGoal{dgraph_PType=Just dg@DGraph{..},..} pTRS
   = flattenSCCs (map (safeAt "involvedNodes" sccs) sccsInPath)
  where
    sccsInvolved = Set.fromList $ catMaybes $ [ sccFor n dg
@@ -152,19 +158,19 @@ involvedNodes' p@InitialGoalProblem{dgraph=dg@DGraph{..},..} pTRS
                     embed $ nodesInPathNaive sccGraph from to
 
 
-involvedPairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
-                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Rule t Var]
-involvedPairs p@InitialGoalProblem{dgraph=dg@DGraph{..},..}
-  = map (`lookupPair` dg) (snub(involvedNodes p ++ pairs ++ toList initialPairsG))
+involvedPairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var), HasRules t Var trs
+                  ) => InitialGoal t base -> trs -> trs -> [Rule t Var]
+involvedPairs p@InitialGoal{dgraph_PType=Just dg@DGraph{..}} trs dps
+  = map (`lookupPair` dg) (snub(involvedNodes' p dps ++ pairs ++ toList initialPairsG))
  where
-   pairs = catMaybes(map (`lookupNode` dg) (rules $ getP p))
+   pairs = catMaybes(map (`lookupNode` dg) (rules dps))
 
 reachableUsableRules :: (Ord(Term t Var), HasId t, Foldable t
                   ,MkDPProblem base (NarradarTRS t Var), Traversable (Problem base)
                   ,IUsableRules t Var base (NarradarTRS t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
 
-reachableUsableRules p = getR $ iUsableRules (baseProblem p) (rhs <$> involvedPairs p)
+reachableUsableRules p = forDPProblem iUsableRules3 (baseProblem p) (rhs <$> forDPProblem involvedPairs p)
 
 -- ---------
 -- Instances
@@ -224,20 +230,17 @@ instance (HasId t, Foldable t, Unify t, Ord (Term t Var), Pretty (Term t Var)
 instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Var))
          ,IsDPProblem p, Traversable (Problem p), Pretty p
          ,trs ~ NarradarTRS t Var
-         ,MkDPProblem p trs
          ,ICap t Var (p, trs)
          ,IUsableRules t Var p trs
          ) =>
           IUsableRules t Var (InitialGoal t p) trs
   where
     iUsableRulesVarM it@(InitialGoal _ _ p) trs dps v = do
-      let the_problem = mkDPProblem it trs dps
-      reachableRules <- iUsableRulesM irewriting trs dps (rhs <$> involvedPairs the_problem)
+      reachableRules <- iUsableRulesM irewriting trs dps (rhs <$> involvedPairs it trs dps)
       iUsableRulesVarM p reachableRules dps v
 
     iUsableRulesM it@(InitialGoal _ _ p) trs dps tt = do
-      let the_problem = mkDPProblem it trs dps
-      reachableRules <- iUsableRulesM irewriting trs dps =<< getFresh (rhs <$> involvedPairs the_problem)
+      reachableRules <- iUsableRulesM irewriting trs dps =<< getFresh (rhs <$> involvedPairs it trs dps)
       pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
       iUsableRulesM p reachableRules dps tt
 
@@ -282,6 +285,8 @@ instance Pretty a => Pretty (DGraphF a) where
                                                       ,text "sccs =" <+> text (show sccs)
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
+
+mapDGraph f (DGraph p pm ip rp fg sccs sccsM sccsG) =  (DGraph (fmap f p) (Map.mapKeys f pm) ip rp fg sccs sccsM sccsG)
 
 mkDGraph :: ( MkDPProblem typ (NarradarTRS t v)
             , Traversable (Problem typ), Pretty typ

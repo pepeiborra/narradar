@@ -640,23 +640,29 @@ instance (p   ~ Problem (InitialGoal t typ)
          ,id  ~ TermId t, id ~ SignatureId (Problem typ trs), id ~ symbol a
          ,v   ~ Var
          ,trs ~ NarradarTRS t v
+         ,HasMinimality typ
+         ,Pretty typ
          ,MkDPProblem typ trs
          ,HasSignature (Problem typ trs)
-         ,Traversable (Problem typ), Traversable t
-         ,Ord id, Ord(t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
-         ,Foldable t, HasId t, Pretty id, Pretty (t(Term t v))
+         ,Traversable (Problem typ)
+         ,Traversable t, Unify t, Foldable t, HasId t
+         ,Pretty (t(Term t v))
+         ,Pretty id, Ord id, Ord(t(Term t v)), SATOrd (SAT a (Term t v)) id, Extend id, AFSymbol id, UsableSymbol id
          ,IUsableRules t v typ trs
+         ,NeededRules  t v typ trs
+         ,ICap t v (typ, NarradarTRS t Var)
          ) => Omega (InitialGoal t typ) t
  where
 
-  omega p = pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are: " <> involvedPairs p) $
-            andM_ [andM_ [go l r trs | l:->r <- involvedPairs p]
+  omega p = pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are: " <> ip) $
+            andM_ [andM_ [go l r trs | l:->r <- ip]
                    ,andM_ [ usable f ^==>> andM_ [ l >~ r | l:->r <- rulesFor f trs]
                                | f <- Set.toList dd ]
                    ,andM_ [notM(usable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                    ]
 
    where
+    ip = forDPProblem involvedPairs p
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
     dd  = getDefinedSymbols (reachableUsableRules p)

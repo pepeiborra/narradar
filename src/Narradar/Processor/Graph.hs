@@ -87,7 +87,7 @@ instance ( TermId t ~ DPIdentifier id0, Ord id0
         proof = UsableSCCs{ gr         = fullgraph
                           , initial    = initialPairsG
                           , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
-                          , inPath     = Set.fromList $ involvedNodes' p (map (safeAt "DependencyGraphSCC" dd) (concat cc))
+                          , inPath     = Set.fromList $ involvedNodes' (getProblemType p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
                           , the_pairs  = elems pairs
                           , the_sccs   = map Set.fromList cc }
 

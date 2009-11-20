@@ -60,6 +60,8 @@ iUsableRulesVar :: ( p ~ Problem typ
                 p trs -> v -> Set(Rule t v)
 iUsableRulesVar p = runIcap p . iUsableRulesVarMp p
 
+iUsableRules3 typ trs dps = runIcap (getVars trs `mappend` getVars dps) . iUsableRulesM typ trs dps
+
 iUsableRulesMp ::
   (MkProblem typ trs,
    IsDPProblem typ,
