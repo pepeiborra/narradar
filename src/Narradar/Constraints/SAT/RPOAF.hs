@@ -471,7 +471,7 @@ afGroundRHS (_ :-> t) = andM [ or [ not(inAF i f)
 lexgt id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
   go []     []     = constant False
   go []     _      = constant False
-  go _      []     = constant True
+  go ff      []    = or [inAF i id_f | (_,i) <- ff]
   go ((f,i):ff) ((g,j):gg)
     =  ifMemo(inAF i id_f)
              (ifMemo (inAF j id_g)
@@ -480,18 +480,19 @@ lexgt id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
              (go ff ((g,j):gg))
 
 lexeq id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
-  go []         []         = constant True
+  go []         [] = constant True
+  go ff         [] = notM $ or [inAF i id_f | (_,i) <- ff]
+  go []         gg = notM $ or [inAF j id_g | (_,j) <- gg]
   go ((f,i):ff) ((g,j):gg)
     = ifMemo (inAF i id_f)
              (ifMemo (inAF j id_g)
                      (andM [f ~~ g, go ff gg])
                      (go ((f,i):ff) gg))
              (go ff ((g,j):gg))
-  go _          _  = constant False
 
 lexpeq id_f id_g ss tt =
   andM [ eqArity
-       , andM [ [f_ik, g_jk] *==> s_i ~~ t_j
+       , andM [ and [f_ik, g_jk] ^==>> s_i ~~ t_j
               | (s_i, f_i) <- zip ss ff
               , (t_j, g_j) <- zip tt gg
               , (f_ik, g_jk) <- zip f_i g_j]]
