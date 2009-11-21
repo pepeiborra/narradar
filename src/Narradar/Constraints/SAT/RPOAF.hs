@@ -67,11 +67,10 @@ rpoAF_DP' allowCol con p
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
       p'   = mkDPProblem (getProblemType p) trs' dps'
-  decreasing_dps <- replicateM (length $ rules dps') boolean
 
   assertAll [omega p']
   assertAll [ l >~ r | l:->r <- rules dps']
-  assertAll [(l > r) <=^=> return dec | (l:->r, dec) <- zip (rules dps') decreasing_dps]
+  decreasing_dps <- sequence [(l > r) | (l:->r) <- rules dps']
   assert decreasing_dps
 
   -- Ensure that we find the solution which removes the most pairs possible
@@ -113,16 +112,14 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
                          (Just $ R.fmap (fmap convert) dgraph)
                          (getProblemType baseProblem)
       p'   = mkDPProblem typ' trs' dps'
-  decreasing_dps    <- replicateM (length $ rules dps') boolean
 
+  assertAll (omega  p' : [ l >~ r | l:->r <- rules dps'])
+
+  decreasing_dps <- sequence [l > r | (l:->r) <- rules dps']
   assert decreasing_dps
 
-  assertAll (omega  p' :
-             [ l >~ r | l:->r <- rules dps'] ++
-             [(l > r) <=^=> return v | (l:->r, v) <- zip (rules dps') decreasing_dps]
-            )
   -- Ensure that we find the solution which removes the most pairs possible
-  sequence_ [ assertW 1 [b] | b <- decreasing_dps]
+--  sequence_ [ assertW 1 [b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
   sequence_ [ assertW 1 =<< sequence [notM (usable f)] | f <- Map.elems dict]
@@ -141,15 +138,14 @@ rpoAF_NDP allowCol con p
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
       p'   = mkDPProblem (getProblemType p) trs' dps'
-  decreasing_dps    <- replicateM (length $ rules dps') boolean
-  af_ground_rhs_dps <- replicateM (length $ rules dps') boolean
+
+  decreasing_dps    <- sequence [l > r | (l:->r) <- rules dps']
+  af_ground_rhs_dps <- mapM afGroundRHS (rules dps')
 
   assertAll (or_ decreasing_dps :
              or_ af_ground_rhs_dps :
              omega  p' :
-             [ l >~ r | l:->r <- rules dps'] ++
-             [(l > r)       <=^=> return v | (l:->r, v) <- zip (rules dps') decreasing_dps] ++
-             [afGroundRHS r <=^=> return v | (r, v)     <- zip (rules dps') af_ground_rhs_dps]
+             [ l >~ r | l:->r <- rules dps']
             )
 
   return $ do
