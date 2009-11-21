@@ -359,6 +359,29 @@ instance Eq a => Extend (MPOsymbol a) where
   exeq s t = muleq (unMPO s) (unMPO t)
   exgt s t = mulgt (unMPO s) (unMPO t)
 
+-- RPO
+newtype RPOsymbol a = RPO{unRPO::Symbol a} deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, Functor, Foldable)
+instance Decode (RPOsymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unRPO
+
+instance Pretty a => Pretty (RPOsymbol a) where
+    pPrint = pPrint . unRPO
+
+rpo sig x = do
+  s <- rpos sig x
+  return (RPO s)
+
+instance Eq a => Extend (RPOsymbol a) where
+  exeq (RPO s) (RPO t) ss tt =
+      orM [andM [return (encodeUseMset s), return (encodeUseMset t), muleq s t ss tt]
+          ,andM [return (not$ encodeUseMset s), return (not$ encodeUseMset t),
+                 lexeq s t ss tt]
+          ]
+  exgt (RPO s) (RPO t) ss tt =
+      orM [andM [return (encodeUseMset s), return(encodeUseMset t), mulgt s t ss tt]
+          ,andM [return (not$ encodeUseMset s), return (not$ encodeUseMset t),
+                 lexgt s t ss tt]
+          ]
+
 -- -----------
 -- RPO with AF
 -- -----------

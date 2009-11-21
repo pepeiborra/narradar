@@ -50,23 +50,26 @@ rpo = apply (RPOProc RPOSAF MiniSat)
 runS (Yices timeout) = Yices.solveW (Just timeout) 20
 
 data RPOProc   = RPOProc Extension Solver
-data Extension = RPOSAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
+data Extension = RPOSAF | RPOAF | LPOSAF | MPOAF | LPOAF  | LPOS | LPO | MPO
 data Solver    = Yices Int | MiniSat -- FunSat
 
 instance (Traversable (Problem typ)
          ,Ord id, Show id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
-         ,rpo  ~ RPOAF.Symbol id
+         ,rpos ~ RPOAF.Symbol id
          ,mpo  ~ RPOAF.MPOsymbol id
          ,lpo  ~ RPOAF.LPOsymbol id
          ,lpos ~ RPOAF.LPOSsymbol id
+         ,rpo  ~ RPOAF.RPOsymbol id
          ,res  ~ RPO.SymbolRes id
          ,res' ~ RPOAF.SymbolRes id
          ,Omega typ (TermF rpo)
+         ,Omega typ (TermF rpos)
          ,Omega typ (TermF mpo)
          ,Omega typ (TermF lpo)
          ,Omega typ (TermF lpos)
          ,NUsableRules typ rpo
+         ,NUsableRules typ rpos
          ,NUsableRules typ mpo
          ,NUsableRules typ lpo
          ,NUsableRules typ lpos
@@ -74,6 +77,7 @@ instance (Traversable (Problem typ)
          ,NUsableRules typ res'
          ,MkDPProblem typ (NTRS id)
          ,MkDPProblem typ (NTRS rpo)
+         ,MkDPProblem typ (NTRS rpos)
          ,MkDPProblem typ (NTRS mpo)
          ,MkDPProblem typ (NTRS lpo)
          ,MkDPProblem typ (NTRS lpos)
@@ -88,12 +92,14 @@ instance (Traversable (Problem typ)
     apply (RPOProc RPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.rpos p)
     apply (RPOProc LPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpos p)
     apply (RPOProc LPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpo  p)
+    apply (RPOProc RPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.rpo  p)
     apply (RPOProc MPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.mpo  p)
     apply (RPOProc LPOS   s)  p = proc   p (runS s $ RPO.lposDP p)
     apply (RPOProc LPO    s)  p = proc   p (runS s $ RPO.lpoDP p)
     apply (RPOProc MPO    s)  p = proc   p (runS s $ RPO.mpoDP p)
 
-instance (rpo  ~ RPOAF.Symbol id
+instance (rpos ~ RPOAF.Symbol id
+         ,rpo  ~ RPOAF.RPOsymbol id
          ,mpo  ~ RPOAF.MPOsymbol id
          ,lpo  ~ RPOAF.LPOsymbol id
          ,lpos ~ RPOAF.LPOSsymbol id
@@ -102,21 +108,25 @@ instance (rpo  ~ RPOAF.Symbol id
          ,Info info (RPOProof id)
          ,IsDPProblem base, Pretty base, Traversable (Problem base)
          ,Omega (InitialGoal (TermF rpo) base) (TermF rpo)
+         ,Omega (InitialGoal (TermF rpos) base) (TermF rpos)
          ,Omega (InitialGoal (TermF mpo) base) (TermF mpo)
          ,Omega (InitialGoal (TermF lpos) base) (TermF lpos)
          ,Omega (InitialGoal (TermF lpo ) base) (TermF lpo )
          ,NCap id   (base, NTRS id)
+         ,NCap rpos (base, NTRS rpos)
          ,NCap rpo  (base, NTRS rpo)
          ,NCap mpo  (base, NTRS mpo)
          ,NCap lpo  (base, NTRS lpo)
          ,NCap lpos (base, NTRS lpos)
          ,NUsableRules base id
          ,NUsableRules base rpo
+         ,NUsableRules base rpos
          ,NUsableRules base mpo
          ,NUsableRules base lpo
          ,NUsableRules base lpos
          ,MkDPProblem base (NTRS id)
          ,MkDPProblem base (NTRS rpo)
+         ,MkDPProblem base (NTRS rpos)
          ,MkDPProblem base (NTRS mpo)
          ,MkDPProblem base (NTRS lpo)
          ,MkDPProblem base (NTRS lpos)
@@ -131,6 +141,7 @@ instance (rpo  ~ RPOAF.Symbol id
     apply (RPOProc LPOSAF s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.lpos p)
     apply (RPOProc LPOAF  s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.lpo  p)
     apply (RPOProc MPOAF  s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.mpo  p)
+    apply (RPOProc RPOAF  s) p = procAF_IG p (runS s $ rpoAF_IGDP True RPOAF.rpo  p)
 
 instance (Ord id, Pretty id, Show id
          ,Info info (RPOProof id)
@@ -142,6 +153,7 @@ instance (Ord id, Pretty id, Show id
     apply (RPOProc LPOSAF s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpos p)
     apply (RPOProc LPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.lpo p)
     apply (RPOProc MPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.mpo  p)
+    apply (RPOProc RPOAF  s) p = procAF p (runS s $ rpoAF_DP True RPOAF.rpo  p)
     apply (RPOProc LPOS  s)  p = proc   p (runS s $ RPO.lposDP p)
     apply (RPOProc LPO   s)  p = proc   p (runS s $ RPO.lpoDP p)
     apply (RPOProc MPO   s)  p = proc   p (runS s $ RPO.mpoDP p)
@@ -155,6 +167,7 @@ instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
     apply (RPOProc RPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.lpos p)
     apply (RPOProc MPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.mpo  p)
+    apply (RPOProc RPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpo  p)
 
 instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
          ,Info info (RPOProof id)
@@ -166,6 +179,7 @@ instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
     apply (RPOProc RPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpos p)
     apply (RPOProc LPOSAF s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.lpos p)
     apply (RPOProc MPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.mpo  p)
+    apply (RPOProc RPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpo  p)
 
 -- Liftings
 

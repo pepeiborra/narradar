@@ -75,19 +75,9 @@ instance (Dispatch (NProblem base id)
 sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         repeatSolver 5 (apply (RPOProc LPOAF (Yices 60)) .|. apply (RPOProc rpo (Yices 60)) .|. graphTransform >=>
+                         repeatSolver 5 (apply (RPOProc RPOAF (Yices 60)) .|. apply (RPOProc rpo (Yices 60)) .|. graphTransform >=>
                                          apply DependencyGraphSCC
                                         )
 
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
-
-{-
-instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
-    Dispatch (DPProblem  Narrowing (NarradarTRS (TermF (DPIdentifier id)) Var)) where
-  dispatch = mkDispatcher(
-                         apply DependencyGraphCycles
-                     >=> apply (NarrowingToRewritingICLP08 bestHeu)
-                     >=> apply (AproveServer 10 Default)
-                         )
--}
