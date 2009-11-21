@@ -47,9 +47,9 @@ instance (id ~ DPIdentifier a, Pretty id, Ord a) => Dispatch (NProblem IRewritin
 
 -- Narrowing Goal
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
-  dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
+  dispatch = depGraph >=> apply NarrowingGoalToRelativeRewriting >=> dispatch
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
-  dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
+  dispatch = depGraph >=> apply NarrowingGoalToRelativeRewriting >=> dispatch
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
