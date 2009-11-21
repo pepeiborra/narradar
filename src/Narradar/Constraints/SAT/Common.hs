@@ -189,24 +189,25 @@ assertAll mm = mapM_ (assert . (:[])) =<< sequence mm
 some  = flip any
 every = flip all
 
-oneM = one >=> and_
+oneM = one
 
-one [] = constant False >>= \c -> return [c]
-one vv = do
+one []  = constant False
+one [x] = return x
+one vv  = do
   let n  = length vv
   fa    <- constant False
   tru   <- constant True
   ones  <- replicateM n boolean
   zeros <- replicateM n boolean
 
-
-  clauses <- sequence $ concat
+  assertAll $ concat
             [ [return one_i  <=^=> ifte_ b_i zero_i1 one_i1
               ,return zero_i <=^=> and_ [not b_i, zero_i1]]
              | (b_i, one_i, zero_i, one_i1, zero_i1) <-
                  zip5 vv ones zeros (tail ones ++ [fa]) (tail zeros ++ [tru])]
 
-  return (head ones : clauses)
+
+  return (head ones)
 
 
 zip5 (a:aa) (b:bb) (c:cc) (d:dd) (e:ee) = (a,b,c,d,e) : zip5 aa bb cc dd ee
