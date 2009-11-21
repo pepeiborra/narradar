@@ -333,12 +333,13 @@ b <--> Constant False = return (not b)
 b <--> Constant True  = return b
 --a <--> b = a <-^-> b
 a <--> b = do
+  let it = if a < b then (a,b) else (b,a)
   st <- get
-  case Map.lookup (a, b) (eqCache st) of
+  case Map.lookup it (eqCache st) of
     Just v -> return v
     Nothing -> do
        v <- not <$> Satchmo.xor [a, b]
-       put st{eqCache = Map.insert (a, b) v (eqCache st)}
+       put st{eqCache = Map.insert it v (eqCache st)}
        return v
 
 
