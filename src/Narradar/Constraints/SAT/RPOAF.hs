@@ -540,29 +540,6 @@ muleq id_f id_g ff gg = do
                                 andM_ [inAF i id_f ^==> return ep_i
                                       | (i, ep_i) <- zip [1..] epsilons])
 
-{-
-mulgen id_f id_g ff gg k = do
-    let (i,j) = (length ff, length gg)
-    epsilons <- replicateM i boolean
-    gammasM  <- replicateM i (replicateM j boolean)
-
-    andM_(k epsilons :
-          [ inAF j id_g ^==> oneM gammas_j
-            | (j, gammas_j) <- zip [1..] (transpose gammasM) ] ++
-          [ not(inAF i id_f) ^==> and_ (not <$> gammas_i)
-            | (i, gammas_i) <- zip [1..] gammasM] ++
-          [ not(inAF j id_g) ^==> and_ (not <$> gammas_j)
-            | (j, gammas_j) <- zip [1..] (transpose gammasM)] ++
-          [ ep_i ^==> oneM gamma_i
-                | (ep_i, gamma_i) <- zip epsilons  gammasM] ++
-          [ gamma_ij ^==>
-                  ifM_' ep_i (f_i ~~ g_j)
-                             (f_i > g_j)
-                  | (ep_i, gamma_i, f_i) <- zip3 epsilons gammasM ff
-                  , (gamma_ij, g_j)      <- zip  gamma_i gg]
-         )
--}
-
 mulgen id_f id_g ff gg k = do
     let (i,j) = (length ff, length gg)
     epsilons <- replicateM i boolean
@@ -570,17 +547,15 @@ mulgen id_f id_g ff gg k = do
 
     let gammasM_t = transpose gammasM
 
-        oneCoverForNonFilteredSubterm =
-          [ inAF j id_g ^==> oneM gammas_j
+        oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms =
+          [ ifM_' (inAF j id_g)
+                  (oneM gammas_j)
+                  (and_ (not <$> gammas_j))
             | (j, gammas_j) <- zip [1..] gammasM ]
 
         filteredSubtermsCannotCover =
           [ not(inAF i id_f) ^==> and_ (not <$> gammas_i)
             | (i, gammas_i) <- zip [1..] gammasM_t]
-
-        noCoverForFilteredSubterms =
-          [ not(inAF j id_g) ^==> and_ (not <$> gammas_j)
-            | (j, gammas_j) <- zip [1..] gammasM]
 
         subtermUsedForEqualityCanOnlyCoverOnce =
           [ ep_i ^==> oneM gamma_i
@@ -593,14 +568,13 @@ mulgen id_f id_g ff gg k = do
                   | (ep_i, gamma_i, f_i) <- zip3 epsilons gammasM_t ff
                   , (gamma_ij, g_j)      <- zip  gamma_i gg]
 
-    andM_ (  k epsilons
-          :  oneCoverForNonFilteredSubterm
+    assertAll( 
+             oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms
           ++ filteredSubtermsCannotCover
-          ++ noCoverForFilteredSubterms
           ++ subtermUsedForEqualityCanOnlyCoverOnce
           ++ greaterOrEqualMultisetExtension
           )
-
+    k epsilons
 
 -- ------------------------
 -- Usable Rules with AF
