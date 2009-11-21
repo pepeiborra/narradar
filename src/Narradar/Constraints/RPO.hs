@@ -202,7 +202,7 @@ symbolRPOAF = RPO{..} where
 
   exgt id_s id_t tt_s tt_t
        | Mul    <- status id_s, Mul    <- status id_t = mulD  (>) (~~) (sel 11 ii tt_s) (sel 12 jj tt_t)
-       | Lex ps <- status id_s, Lex pt <- status id_t = lexsD (>) (~~) (removeFiltered ps) (removeFiltered pt) tt_s tt_t
+       | Lex ps <- status id_s, Lex pt <- status id_t = lexsD (>) (~~) id_s id_t tt_s tt_t
        | otherwise = return False
     where
       Right ii = filtering id_s
@@ -210,13 +210,12 @@ symbolRPOAF = RPO{..} where
 
   exeq id_s id_t tt_s tt_t
        | Mul    <- status id_s, Mul    <- status id_t = muleqD  (~~) (sel 1 ii tt_s) (sel 2 jj tt_t)
-       | Lex ps <- status id_s, Lex pt <- status id_t = lexseqD (~~) (removeFiltered ps) (removeFiltered pt) tt_s tt_t
+       | Lex ps <- status id_s, Lex pt <- status id_t = lexseqD (~~) id_s id_t tt_s tt_t
        | otherwise = return False
     where
       Right ii = filtering id_s
       Right jj = filtering id_t
 
-  removeFiltered = fmap ( filter (/= (-1)))
 
   lexD (>) (~~) []     _      = return False
   lexD (>) (~~) _      []     = return True
@@ -228,10 +227,15 @@ symbolRPOAF = RPO{..} where
   lexeqD (~~) []     _      = return False
   lexeqD (~~) (f:ff) (g:gg) = (f ~~ g <&> lexeqD (~~) ff gg)
 
-  lexsD (>) (~~) f_perm g_perm ff gg = lexD (>) (~~) (maybe ff (permute ff) f_perm)
-                                                     (maybe gg (permute gg) g_perm)
-  lexseqD   (~~) f_perm g_perm ff gg = lexeqD (~~)   (maybe ff (permute ff) f_perm)
-                                                     (maybe gg (permute gg) g_perm)
+  lexsD (>) (~~) id_f id_g ff gg = lexD (>) (~~) (selectLexArgs id_f ff)
+                                                 (selectLexArgs id_g gg)
+
+  lexseqD   (~~) id_f id_g ff gg = lexeqD   (~~) (selectLexArgs id_f ff)
+                                                 (selectLexArgs id_g gg)
+  selectLexArgs id tt
+    | Lex (Just p) <- status id = permute tt p
+    | Right ii  <- filtering id = sel 13 ii tt
+
 
   mulD (>) (~~) m1 m2 = muleqD (\s t -> s > t <|> s ~~ t) m1' m2'
                          <&>
@@ -275,5 +279,4 @@ symbolRPOAF = RPO{..} where
 allM  f xx = and `liftM` mapM f xx
 anyM  f xx = or  `liftM` mapM f xx
 
-permute ff ii = map fst $ sortBy (compare `on` snd) (zip ff ii)
-
+permute ff ii = map fst $ dropWhile ( (<0) . snd) $ sortBy (compare `on` snd) (zip ff ii)
