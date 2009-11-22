@@ -42,12 +42,13 @@ instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem Rewriting (DPIde
 instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
   dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
 
--- Infinitary
+-- Narrowing Goal
+
 instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
-           Dispatch (NProblem (Infinitary (DPIdentifier a) Rewriting) (DPIdentifier a)) where
+           Dispatch (NProblem (NarrowingGoal (DPIdentifier a)) (DPIdentifier a)) where
   dispatch = mkDispatcher
                 (depGraph  >=>
-                 infinitaryToRewriting bestHeu >=>
+                 apply (NarrowingGoalToRewriting bestHeu) >=>
                  dispatch)
 
 
