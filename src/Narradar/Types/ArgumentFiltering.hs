@@ -15,7 +15,7 @@
 module Narradar.Types.ArgumentFiltering where
 
 import Control.Applicative
-import Control.Arrow (second)
+import Control.Arrow (first,second)
 import Control.Monad.Failure
 import Control.Monad.Fix (fix)
 import Data.Bifunctor
@@ -328,14 +328,17 @@ allOuter _ t pos =  [(root, last sub_p)
 
 
 
-typeHeu assig = MkHeu $ \_ -> (TypeHeu assig)
+typeHeu assig = MkHeu $ \_ -> (TypeHeu assig')
+ where
+  assig' = fmap (Set.map (first (show.pPrint))) assig
 
 data TypeHeu id = TypeHeu (SharingAssignment String)
 
+{-
 instance PolyHeuristic TypeHeu String
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
-
+-}
 instance (Ord id, Pretty id) => PolyHeuristic TypeHeu id
    where runPolyHeu (TypeHeu assig) = typeHeu_f assig isUnbounded where
            isUnbounded (show.pPrint -> p,i) unboundedPositions = (p,i) `Set.member` unboundedPositions
@@ -358,7 +361,9 @@ typeHeu_f assig isUnbounded = Heuristic (predHeuOne allInner (const f) `or` runH
         arities = Map.fromListWith max (concatMap F.toList assig) -- :: Map Ident Int
 
 
-typeHeu2 assig = MkHeu $ \_ -> TypeHeu2 assig
+typeHeu2 assig = MkHeu $ \_ -> TypeHeu2 assig'
+ where
+  assig' = fmap (Set.map (first (show.pPrint))) assig
 
 data TypeHeu2 id = TypeHeu2 (SharingAssignment String)
 
