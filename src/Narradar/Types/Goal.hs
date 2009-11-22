@@ -8,8 +8,8 @@ import qualified Data.Set as Set
 import Data.Term.Rules
 import qualified TRSParser
 import qualified TRSTypes (TermF(..))
-import Text.ParserCombinators.Parsec
-import Text.ParserCombinators.Parsec.Applicative ()
+import qualified Narradar.Utils.Parse as P
+import Narradar.Utils.Parse hiding (parens, comma)
 
 import Narradar.Types.ArgumentFiltering (AF_)
 import qualified Narradar.Types.ArgumentFiltering as AF
@@ -24,9 +24,9 @@ deriving instance Ord Mode
 instance Functor Goal where fmap f (Goal id mm) = Goal (f id) mm
 
 
-goalP  = Goal <$> TRSParser.identifier <*> modesP <* optional (char '.')
-modesP = parens (modeP `sepBy` char ',') <|> return [] where parens= between (char '(') (char ')')
-modeP  = (oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V)
+goalP  = Goal <$> TRSParser.identifier <*> modesP <* optional dot
+modesP = P.parens (commaSep modeP) <|> return []
+modeP  = lexeme ((oneOf "gbi" >> return G) <|> (oneOf "vof" >> return V))
 
 parseGoal :: String -> Either ParseError [Goal String]
 parseGoal = parse (TRSParser.whiteSpace >> many (goalP <* TRSParser.whiteSpace)) "GOAL"
@@ -35,8 +35,8 @@ parseGoal = parse (TRSParser.whiteSpace >> many (goalP <* TRSParser.whiteSpace))
 mkGoalAF (Goal f mm) = AF.singleton f [i | (G,i) <- zip mm [1..]]
 instance Pretty Mode where pPrint G = text "b"; pPrint V = text "f"
 
-instance Pretty id => Pretty (Goal id) where pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ map (text.show) modes)
-instance Pretty (Goal String) where pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ map (text.show) modes)
+instance Pretty id => Pretty (Goal id) where pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ modes)
+instance Pretty (Goal String) where pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ modes)
 
 
 pPrintGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
