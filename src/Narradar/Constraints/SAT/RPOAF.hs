@@ -86,7 +86,7 @@ rpoAF_DP' allowCol con p
 
 
 rpoAF_IGDP :: (Ord id, Ord sid, Pretty sid, AFSymbol sid, UsableSymbol sid, Extend sid, SATOrd (SAT id (TermN sid)) sid
-              ,sid ~ symbol id
+              ,sid ~ symbol id, DPSymbol sid
               ,Traversable (Problem base), Pretty base
               ,MkDPProblem base (NTRS sid)
               ,Decode sid (SymbolRes id)
@@ -220,6 +220,10 @@ instance GenSymbol a => GenSymbol (Symbol a) where
     genSymbol  = mkGenSymbol genSymbol
     goalSymbol = mkGenSymbol goalSymbol
 
+instance DPSymbol a => DPSymbol (Symbol a) where
+   markDPSymbol = fmap markDPSymbol
+   unmarkDPSymbol = fmap unmarkDPSymbol
+
 mkGenSymbol a = Symbol{ the_symbol = a
                       , encodePrec = error "RPOAF.Symbol : genSymbol"
                       , encodeUsable = error "RPOAF.Symbol : genSymbol"
@@ -314,7 +318,9 @@ instance Ord a => Extend (Symbol a) where
 
 -- LPO with status
 
-newtype LPOSsymbol a = LPOS{unLPOS::Symbol a} deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, Functor, Foldable)
+newtype LPOSsymbol a = LPOS{unLPOS::Symbol a}
+    deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, DPSymbol, Functor, Foldable)
+
 instance Decode (LPOSsymbol a) (SymbolRes a) where decode = decode . unLPOS
 
 lpos sig = liftM LPOS . rpos sig
@@ -327,7 +333,9 @@ instance Pretty a => Pretty (LPOSsymbol a) where
     pPrint = pPrint . unLPOS
 
 
-newtype LPOsymbol a = LPO{unLPO::Symbol a} deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, Functor, Foldable)
+newtype LPOsymbol a = LPO{unLPO::Symbol a}
+    deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, DPSymbol, Functor, Foldable)
+
 instance Decode (LPOsymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
 
 removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{Narradar.Constraints.SAT.RPOAF.status = Lex Nothing}
@@ -344,7 +352,9 @@ instance Eq a => Extend (LPOsymbol a) where
 instance Pretty a => Pretty (LPOsymbol a) where pPrint = pPrint . unLPO
 
 -- MPO
-newtype MPOsymbol a = MPO{unMPO::Symbol a} deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, Functor, Foldable)
+newtype MPOsymbol a = MPO{unMPO::Symbol a}
+ deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, DPSymbol, Functor, Foldable)
+
 instance Decode (MPOsymbol a) (SymbolRes a) where decode = decode . unMPO
 
 instance Pretty a => Pretty (MPOsymbol a) where
@@ -360,7 +370,9 @@ instance Eq a => Extend (MPOsymbol a) where
   exgt s t = mulgt (unMPO s) (unMPO t)
 
 -- RPO
-newtype RPOsymbol a = RPO{unRPO::Symbol a} deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, Functor, Foldable)
+newtype RPOsymbol a = RPO{unRPO::Symbol a}
+  deriving (Eq, Ord, Show, SATOrd (SAT a t), AFSymbol, UsableSymbol, GenSymbol, DPSymbol, Functor, Foldable)
+
 instance Decode (RPOsymbol a) (SymbolRes a) where decode = liftM removePerm . decode . unRPO
 
 instance Pretty a => Pretty (RPOsymbol a) where
@@ -631,7 +643,8 @@ instance (p  ~ Problem typ
          rest      = trs \\ rls  :: [Rule t Var]
 
 instance (p   ~ Problem (InitialGoal t typ)
-         ,id  ~ TermId t, id ~ SignatureId (Problem typ trs), id ~ symbol a
+         ,t   ~ f id, MapId f
+         ,id  ~ TermId t, id ~ SignatureId (Problem typ trs), id ~ symbol a, DPSymbol id
          ,v   ~ Var
          ,trs ~ NarradarTRS t v
          ,HasMinimality typ

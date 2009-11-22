@@ -70,30 +70,35 @@ instance (Processor info NarrowingP (Problem b trs) (Problem b trs)
 -- Not so straightforward liftings
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+         , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Rewriting) t) (NarradarProblem (InitialGoal t Rewriting) t)
   where
    applySearch tag = narrowingIG
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+         , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t IRewriting) t) (NarradarProblem (InitialGoal t IRewriting) t)
   where
    applySearch tag = narrowing_innermostIG
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+         , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Narrowing) t) (NarradarProblem (InitialGoal t Narrowing) t)
   where
    applySearch tag = narrowingIG
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+         , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowing) t) (NarradarProblem (InitialGoal t CNarrowing) t)
   where
    applySearch tag = narrowing_innermostIG
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
+         , t ~ f (DPIdentifier (GenId id)), MapId f
          , MkDPProblem NarrowingGen (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t NarrowingGen) t) (NarradarProblem (InitialGoal t NarrowingGen) t)
@@ -101,6 +106,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
    applySearch tag = narrowingIG
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
+         , t ~ f (DPIdentifier (GenId id)), MapId f
          , MkDPProblem CNarrowingGen (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowingGen) t) (NarradarProblem (InitialGoal t CNarrowingGen) t)
@@ -184,6 +190,7 @@ instance (Info info (NarradarProblem b t)
   applySearch = liftProcessorS
 
 instance (v ~ Var
+         ,t ~ f (DPIdentifier id), MapId f
          ,TermId t ~ DPIdentifier id, HasId t, Unify t
          ,MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
          ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
@@ -335,6 +342,7 @@ narrowing_innermost p0
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 narrowingIG, narrowing_innermostIG
           :: (trs ~ NarradarTRS t v
+             ,t ~ f (DPIdentifier id), MapId f
              ,v ~ Var
              ,TermId t  ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)

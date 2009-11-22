@@ -56,7 +56,8 @@ instance ( trs ~ NarradarTRS t Var
   apply DependencyGraphSCC = sccProcessor
 
 
-instance ( TermId t ~ DPIdentifier id0, Ord id0
+instance ( t ~ f (DPIdentifier id0), MapId f
+         , TermId t ~ DPIdentifier id0, Ord id0
          , trs ~ NarradarTRS t Var
          , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
          , MkDPProblem typ0 (NarradarTRS t Var), Traversable (Problem typ0)

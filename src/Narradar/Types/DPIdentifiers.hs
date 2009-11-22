@@ -72,6 +72,14 @@ $(derive makeTraversable ''DPIdentifier)
 -- ------------
 -- DP Symbols
 -- ------------
+
+class DPSymbol s where markDPSymbol, unmarkDPSymbol :: s -> s
+instance DPSymbol (DPIdentifier id) where
+  markDPSymbol (IdFunction f) = IdDP f
+  markDPSymbol f = f
+  unmarkDPSymbol (IdDP n) = IdFunction n
+  unmarkDPSymbol n = n
+
 isDPSymbol (IdDP _ ) = True
 isDPSymbol _         = False
 
@@ -86,10 +94,3 @@ returnDP = foldTerm return (Impure . mapId IdFunction)
 --unmarkDPRule, markDPRule :: Rule t v -> Rule t v
 markDPRule   = fmap markDP
 unmarkDPRule = fmap unmarkDP
-
-class DPSymbol s where markDPSymbol, unmarkDPSymbol :: s -> s
-instance DPSymbol (DPIdentifier id) where
-  markDPSymbol (IdFunction f) = IdDP f
-  markDPSymbol f = f
-  unmarkDPSymbol (IdDP n) = IdFunction n
-  unmarkDPSymbol n = n

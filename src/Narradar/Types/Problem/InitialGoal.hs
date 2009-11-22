@@ -78,7 +78,8 @@ instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
   getProblemType (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getProblemType p)
   getR   (InitialGoalProblem _     _ p) = getR p
 
-instance ( MkDPProblem p (NarradarTRS t Var)
+instance ( t ~ f id, MapId f, DPSymbol id
+         , MkDPProblem p (NarradarTRS t Var)
          , HasId t, Foldable t, Unify t
          , Ord (Term t Var), Pretty (t(Term t Var))
          , Traversable (Problem p), Pretty p
@@ -93,7 +94,8 @@ instance ( MkDPProblem p (NarradarTRS t Var)
 instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
   getP   (InitialGoalProblem _     _ p) = getP p
 
-instance (HasId t, Unify t, Foldable t, Pretty p
+instance (t ~ f id, MapId f, DPSymbol id
+         ,HasId t, Unify t, Foldable t, Pretty p
          ,Pretty(t(Term t Var)), Ord (Term t Var), Traversable (Problem p)
          ,ICap t Var (p, NarradarTRS t Var)
          ,MkDPProblem p (NarradarTRS t Var)
@@ -109,7 +111,8 @@ instance FrameworkExtension (InitialGoal t) where
 
 initialGoal gg = InitialGoal gg Nothing
 
-initialGoalProblem :: ( HasId t, Unify t, Ord (Term t Var), Pretty (t(Term t Var))
+initialGoalProblem :: ( t ~ f id, MapId f, DPSymbol id
+                      , HasId t, Unify t, Ord (Term t Var), Pretty (t(Term t Var))
                       , MkDPProblem typ (NarradarTRS t Var)
                       , Traversable (Problem typ), Pretty typ
                       , ICap t Var (typ, NarradarTRS t Var)
@@ -296,7 +299,9 @@ instance Pretty a => Pretty (DGraphF a) where
 
 mapDGraph f (DGraph p pm ip rp fg sccs sccsM sccsG) =  (DGraph (fmap f p) (Map.mapKeys f pm) ip rp fg sccs sccsM sccsG)
 
-mkDGraph :: ( MkDPProblem typ (NarradarTRS t v)
+mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
+            , v ~ Var
+            , MkDPProblem typ (NarradarTRS t v)
             , Traversable (Problem typ), Pretty typ
             , HasId t, Unify t, Ord v, Pretty v, Enum v
             , Ord    (Term t v)
@@ -309,11 +314,13 @@ mkDGraph :: ( MkDPProblem typ (NarradarTRS t v)
 mkDGraph p@(getP -> DPTRS _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg gr
 mkDGraph p gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg (getEDG p)
 
-mkDGraph' :: ( IsDPProblem typ, Traversable (Problem typ), Pretty typ, Pretty trs
-            , HasId t, Unify t, Ord (Term t v), Ord v, Pretty v, Enum v, Pretty (Term t v)
-            , ICap t v (typ, trs)
-            , HasRules t v trs
-            ) => typ -> trs -> trs -> [Term t v] -> Graph -> DGraph t v
+mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
+             , v ~ Var
+             , IsDPProblem typ, Traversable (Problem typ), Pretty typ, Pretty trs
+             , HasId t, Unify t, Ord (Term t v), Ord v, Pretty v, Enum v, Pretty (Term t v)
+             , ICap t v (typ, trs)
+             , HasRules t v trs
+             ) => typ -> trs -> trs -> [Term t v] -> Graph -> DGraph t v
 mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ do
   let pairs    = listArray (0, length dps - 1) dps
       pairsMap = Map.fromList (dps `zip` [0..])
@@ -324,7 +331,7 @@ mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ 
                      (i,s :-> t) <- liftL (zip [0..] dps)
                      g           <- liftL goals
                      g'          <- lift (getFresh g >>= icap p)
-                     guard(g' `unifies` s)
+                     guard(markDP g' `unifies` s)
                      return i
 
   let -- list of indexes for fullgraph
@@ -377,7 +384,8 @@ insertDGraph p@InitialGoalProblem{..} (rules -> newdps)
     graph' = getEDG (setP dps' baseProblem)
 
 expandDGraph ::
-      ( Unify t, HasId t
+      ( t ~ f id, MapId f, DPSymbol id
+      , Unify t, HasId t
       , Pretty (t(Term t Var))
       , Ord    (Term t Var)
       , Traversable (Problem typ), Pretty typ
