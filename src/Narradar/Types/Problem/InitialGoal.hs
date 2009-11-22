@@ -208,8 +208,8 @@ instance (Pretty (Term t Var), PprTPDB (Problem typ trs)) =>
     PprTPDB (Problem (InitialGoal t typ) trs)
  where
     pprTPDB (InitialGoalProblem goals _ p) =
-      pprTPDB p $$
-      parens (text "GOALS" <+> fsep (map pPrint goals))
+        pprTPDB p $$
+        vcat [parens (text "STRATEGY GOAL" <+> g) | g <- goals]
 
 
 -- ICap
