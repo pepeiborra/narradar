@@ -93,7 +93,7 @@ instance ( MkDPProblem p (NarradarTRS t Var)
 instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
   getP   (InitialGoalProblem _     _ p) = getP p
 
-instance (HasId t, Unify t, Foldable t, MkDPProblem p (NarradarTRS t Var), Pretty p
+instance (HasId t, Unify t, Foldable t, Pretty p
          ,Pretty(t(Term t Var)), Ord (Term t Var), Traversable (Problem p)
          ,ICap t Var (p, NarradarTRS t Var)
          ,MkDPProblem p (NarradarTRS t Var)
