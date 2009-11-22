@@ -49,7 +49,7 @@ instance Info info SKTransformProof =>
  where
   apply SKTransform p0@PrologProblem{..} =
    andP SKTransformProof p0
-     [ mkNewProblem (narrowingGoal (IdDP <$> skTransformGoal goal)) sk_p
+     [ mkNewProblem (narrowingGoal (IdFunction <$> skTransformGoal goal)) sk_p
          | let sk_p = prologTRS'' rr (getSignature rr)
                rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal    <- goals
