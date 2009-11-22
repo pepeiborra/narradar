@@ -44,9 +44,10 @@ import qualified Language.Prolog.Syntax as Prolog
 import Prelude as P
 
 import Narradar.Framework
+import MuTerm.Framework.DotRep (DotInfo)
 
 import Narradar.Types hiding (note, dropNote)
-import Narradar.Framework.GraphViz
+import Narradar.Framework.GraphViz (dotProof', DotProof(..), sliceWorkDone)
 import Narradar.Utils
 
 import Narradar.Types.Problem.Relative

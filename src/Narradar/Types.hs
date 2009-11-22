@@ -53,6 +53,9 @@ import TRSTypes hiding (Id, Rule, Term, TermF, Narrowing, Other, SimpleRuleF(..)
 import Prelude as P hiding (mapM, pi, sum)
 
 
+import MuTerm.Framework.DotRep
+import MuTerm.Framework.Output
+
 import Narradar.Constraints.Unify
 import Narradar.Types.ArgumentFiltering (AF_)
 import qualified Narradar.Types.ArgumentFiltering as AF
@@ -73,7 +76,7 @@ import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Utils
-import Narradar.Framework hiding (Label, Note)
+import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)

@@ -7,7 +7,6 @@
 
 module Narradar.Framework (
         module Narradar.Framework,
-        module MuTerm.Framework.DotRep,
         module MuTerm.Framework.Problem,
         module MuTerm.Framework.Processor,
         module MuTerm.Framework.Proof,
