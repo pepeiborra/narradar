@@ -22,7 +22,7 @@ import Narradar.Framework
 import Narradar.Types
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF, PolyHeuristic, MkHeu(..),mkHeu)
 import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types.Problem.Infinitary as Infinitary
+import Narradar.Types.Problem.NarrowingGoal as NarrowingGoal
 import Narradar.Processor.PrologProblem hiding (SKTransformProof)
 
 instance Pretty SKTransformProof where
@@ -30,11 +30,11 @@ instance Pretty SKTransformProof where
       = text "Transformed into an initial goal narrowing problem" $$
         text "(Schneider-Kamp transformation)"
 
-instance Pretty id => Pretty (InfinitaryToRewritingProof id) where
-    pPrint InfinitaryToRewritingFail = text "Failed to find a safe argument filtering"
+instance Pretty id => Pretty (NarrowingGoalToRewritingProof id) where
+    pPrint NarrowingGoalToRewritingFail = text "Failed to find a safe argument filtering"
 
-    pPrint (InfinitaryToRewritingProof af) = text "Termination of the following rewriting DP problem implies" <+>
-                                               text "termination of the original problem (FLOPS08)." $$
+    pPrint (NarrowingGoalToRewritingProof af) = text "Termination of the following rewriting DP problem implies" <+>
+                                               text "termination of the original problem [FLOPS08]." $$
                                                text "The argument filtering used is:" $$
                                                pPrint af
 
@@ -76,7 +76,7 @@ instance (Info info SKTransformProof
 
 -- Solving narrowing as infinitary problems
 -- -----------------------------------------
-data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu)
+data NarrowingGoalToRewriting heu = NarrowingGoalToRewriting (MkHeu heu)
 instance (t   ~ TermF id
          ,v   ~ Var
          ,trs ~ NTRS id
@@ -85,23 +85,23 @@ instance (t   ~ TermF id
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,ApplyAF (NProblem typ id)
-         ,Info info (InfinitaryToRewritingProof id)
+         ,Info info (NarrowingGoalToRewritingProof id)
          ) =>
-    Processor info (InfinitaryToRewriting heu)
-              (NProblem (Infinitary id typ) id)
+    Processor info (NarrowingGoalToRewriting heu)
+              (NProblem (MkNarrowingGoal id typ) id)
               (NProblem typ id)
   where
-  applySearch (InfinitaryToRewriting mk) p
-    | null orProblems = [dontKnow (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
+  applySearch (NarrowingGoalToRewriting mk) p
+    | null orProblems = [dontKnow (NarrowingGoalToRewritingFail :: NarrowingGoalToRewritingProof id) p]
     | otherwise = orProblems
    where
      orProblems = do
        let heu = mkHeu mk p
-           base_p = getProblemType (Infinitary.baseProblem p)
-       af' <-  Set.toList $ invariantEV heu p (Infinitary.pi p)
+           base_p = getProblemType (getBaseProblem p)
+       af' <-  Set.toList $ invariantEV heu p (NarrowingGoal.pi p)
        let p' = mkDerivedDPProblem base_p p
-       return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
+       return $ singleP (NarrowingGoalToRewritingProof af') p (AF.apply af' p')
 
-data InfinitaryToRewritingProof id where
-    InfinitaryToRewritingProof :: AF_ id -> InfinitaryToRewritingProof id
-    InfinitaryToRewritingFail  :: InfinitaryToRewritingProof id
+data NarrowingGoalToRewritingProof id where
+    NarrowingGoalToRewritingProof :: AF_ id -> NarrowingGoalToRewritingProof id
+    NarrowingGoalToRewritingFail  :: NarrowingGoalToRewritingProof id
