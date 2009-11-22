@@ -181,15 +181,6 @@ instance (Ord id, Pretty id, DPSymbol id, Pretty (TermN id)
     apply (RPOProc MPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.mpo  p)
     apply (RPOProc RPOAF  s) p = procNAF p (runS s $ rpoAF_NDP False RPOAF.rpo  p)
 
--- Liftings
-
-
-instance ( Processor info RPOProc (Problem base trs) (Problem base trs)
-         , Info info (Problem base trs)
-         )=> Processor info RPOProc (Problem (InitialGoal t base) trs) (Problem (InitialGoal t base) trs)
-  where
-   apply = liftProcessor
-
 
 -- -----------------
 -- Implementations
