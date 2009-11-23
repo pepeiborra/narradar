@@ -9,18 +9,14 @@
 
 import Control.Monad
 import Data.Maybe
-import qualified Language.Prolog.Syntax as Prolog
 import Narradar
-import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, typeHeu)
+import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
-import Narradar.Processor.Aprove
 import Narradar.Processor.RPO
-import Narradar.Processor.LOPSTR09
-import Narradar.Framework.GraphViz
+import Narradar.Processor.FLOPS08
 import Lattice
---import Narradar.Utils
 
 main = narradarMain listToMaybe
 
@@ -30,11 +26,6 @@ instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
     dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getProblemType p))
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
-
--- Prolog
-instance Dispatch PrologProblem where
-    dispatch p = do let typ = inferType p
-                    apply (SKTransformInf (typeHeu typ)) p >>= dispatch
 
 -- Rewriting
 instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem Rewriting (DPIdentifier a)) where
@@ -48,7 +39,8 @@ instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem IRewriting (DPId
 instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
            Dispatch (NProblem (NarrowingGoal (DPIdentifier a)) (DPIdentifier a)) where
   dispatch = mkDispatcher
-                (depGraph  >=>
+                (apply (ComputeSafeAF (simpleHeu innermost)) >=>
+                 depGraph  >=>
                  apply (NarrowingGoalToRewriting bestHeu) >=>
                  dispatch)
 
