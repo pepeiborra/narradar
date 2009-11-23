@@ -10,7 +10,6 @@ module Narradar ( narradarMain, prologMain
                 , PprTPDB(..)      -- module Narradar.Framework.GraphViz
                 , module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
-                , module Narradar.Processor.ReductionPair
                 , module Narradar.Processor.GraphTransformation
                 , module Narradar.Processor.UsableRules
                 , module Narradar.Processor.InfinitaryProblem
@@ -59,7 +58,6 @@ import Narradar.Processor.InfinitaryProblem
 import Narradar.Processor.NarrowingProblem
 import Narradar.Processor.InitialGoalNarrowingProblem
 import Narradar.Processor.UsableRules
-import Narradar.Processor.ReductionPair
 import Narradar.Processor.ExtraVariables
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem

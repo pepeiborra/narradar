@@ -17,7 +17,7 @@ import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Processor.Aprove
 import Narradar.Processor.RPO
-import Narradar.Processor.LOPSTR09
+import Narradar.Processor.FLOPS08
 import Narradar.Framework.GraphViz
 import Lattice
 --import Narradar.Utils
@@ -31,10 +31,6 @@ instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
--- Prolog
-instance Dispatch PrologProblem where
-    dispatch = apply (SKTransformInf bestHeu) >=> dispatch
-
 -- Rewriting
 instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem Rewriting (DPIdentifier a)) where
   dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
@@ -47,7 +43,7 @@ instance (Pretty (DPIdentifier a), Ord a) => Dispatch (NProblem IRewriting (DPId
 instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
            Dispatch (NProblem (NarrowingGoal (DPIdentifier a)) (DPIdentifier a)) where
   dispatch = mkDispatcher
-                (depGraph  >=>
+                (apply (ComputeSafeAF bestHeu) >=> depGraph  >=>
                  apply (NarrowingGoalToRewriting bestHeu) >=>
                  dispatch)
 

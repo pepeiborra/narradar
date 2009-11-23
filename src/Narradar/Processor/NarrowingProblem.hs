@@ -92,11 +92,10 @@ instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
                    (NProblem (MkNarrowingGoal id typ0) id)
                    (NProblem typ0 id)
  where
-  applySearch (NarrowingToRewritingICLP08 mk) p
+  applySearch (NarrowingToRewritingICLP08 mk) p@(getProblemType -> NarrowingGoal _ pi_groundInfo0 _ typ0)
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where heu = mkHeu mk p
-          NarrowingGoal _ pi_groundInfo0 typ0 = getProblemType p
           af0 = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo0
           afs = unEmbed $ do
                   af00 <- embed $ invariantEV heu p af0

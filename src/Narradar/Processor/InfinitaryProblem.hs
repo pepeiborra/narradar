@@ -63,26 +63,6 @@ instance (t   ~ TermF id
 
 
 
-instance ( Ord id, Pretty id, MkDPProblem typ (NTRS id), Pretty typ, HTMLClass (MkNarrowingGoal id typ)
-         , HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
-         , Lattice (AF_ id)
-         , PolyHeuristic heu id
-         , Foldable (Problem typ)
-         , Info info NarrowingGoalToInfinitaryProof
-         , NCap id (typ, NTRS id)
-         , NUsableRules typ id
-         ) =>
-    Processor info (NarrowingGoalToInfinitary heu)
-                   (NProblem (MkNarrowingGoal id typ) id)
-                   (NProblem (Infinitary id typ) id)
-   where
-    applySearch (NarrowingGoalToInfinitary mk usable) p@(getProblemType -> NarrowingGoal _ pi p0) = do
-        pi' <- Set.toList $ invariantEV heu p pi
-        let p' = mkDerivedDPProblem (infinitary' pi' p0) p
-        return $ singleP NarrowingGoalToInfinitaryProof p p'
-     where
-      heu = mkHeu mk p
-
 -- -------------
 -- Proofs
 -- -------------
