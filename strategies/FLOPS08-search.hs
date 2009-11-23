@@ -51,7 +51,7 @@ instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
 sc = depGraph >=> try(apply SubtermCriterion)
 
 rpoPlusTransforms rpo =  depGraph >=>
-                         repeatSolver 5 (apply(RPOProc RPOAF (Yices 60)) .|. apply(RPOProc rpo (Yices 60)) .|. graphTransform >=>
+                         repeatSolver 5 (apply(RPOProc LPOAF (Yices 60)) .|. apply(RPOProc rpo (Yices 60)) .|. graphTransform >=>
                                          depGraph
                                          )
 
