@@ -92,8 +92,15 @@ instance ( t ~ f (DPIdentifier id0), MapId f
                           , the_pairs  = elems pairs
                           , the_sccs   = map Set.fromList cc }
 
+        proof2= NoUsableSCCs{ gr         = fullgraph
+                            , initial    = initialPairsG
+                            , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
+                            , inPath     = Set.fromList $ involvedNodes' (getProblemType p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
+                            , the_pairs  = elems pairs
+                            }
+
     case cc of
-     [] -> success NoCycles p
+     [] -> if null (rules dps) then success NoCycles p else success proof2 p
      [c] | sort c == sort(vertices gr) -> return p
      cc -> andP proof p
                [setP (restrictTRS dps ciclo) p | ciclo <- cc]
@@ -110,6 +117,10 @@ data DependencyGraphProof = SCCs   Graph [Set Vertex]
                                        , the_pairs :: [a]}
                           | Cycles Graph
                           | NoCycles
+                          | forall a. Pretty a =>
+                            NoUsableSCCs { gr :: Graph
+                                         , initial, outOfScope, inPath :: Set Vertex
+                                         , the_pairs :: [a]}
 
 instance Pretty DependencyGraphProof where
   pPrint UsableSCCs{} = text "Dependency Graph Processor (SCCs)"
@@ -117,6 +128,8 @@ instance Pretty DependencyGraphProof where
   pPrint Cycles{} = text "Dependency Graph Processor (cycles)"
   pPrint NoCycles = text "We need to prove termination for all the cycles." <+>
                  text "There are no cycles, so the system is terminating"
+  pPrint NoUsableSCCs{} = text "We need to prove termination for all the cycles." <+>
+                          text "There are no cycles, so the system is terminating"
 
 instance HTML DependencyGraphProof where toHtml = toHtml . show . pPrint
 
@@ -176,6 +189,35 @@ instance DotRep DependencyGraphProof where
                             _ | a `Set.member` sccNodes && b `Set.member` sccNodes ->
                                  [Color $ mkColor "yellow"]
                               | a `Set.member` inPath && b `Set.member` inPath ->
+                                 [Color $ mkColor "rosybrown1"]
+                              | a `Set.member` outOfScope || b `Set.member` outOfScope ->
+                                 [Color $ mkColor "gray"]
+                              | otherwise -> [])
+                    | (a,b) <- G.edges gr]
+
+
+  dot NoUsableSCCs{..} = Nodes {nodes      = coloredGraph
+                               ,attributes = []
+                               ,incoming   = fst $ head coloredNodes
+                               ,outgoing   = fst $ head coloredNodes
+                               ,legend     = Just (vcat [ n <+> text "-" <+> p
+                                                        | (n,p) <- zip [0::Int ..] the_pairs]
+                                                   ,[FontName "monospace"
+                                                   ,FontSize 9])
+                               }
+     where
+   coloredGraph = FGL.mkGraph coloredNodes coloredEdges
+   coloredNodes = [ case True of
+                      _ | n `Set.member` initial ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "red"), Color $ mkColor "red"])
+                        | n `Set.member` inPath ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "rosybrown1"), Color $ mkColor "rosybrown1"])
+                        | n `Set.member` outOfScope ->
+                           (n,[label (int n), LabelFontColor (head $ mkColor "gray"), Color $ mkColor "gray"])
+                        | otherwise -> (n,[label (int n)])
+                      | n <- G.vertices gr]
+   coloredEdges = [ (a,b, case True of
+                            _ | a `Set.member` inPath && b `Set.member` inPath ->
                                  [Color $ mkColor "rosybrown1"]
                               | a `Set.member` outOfScope || b `Set.member` outOfScope ->
                                  [Color $ mkColor "gray"]
