@@ -150,12 +150,13 @@ instance (trs ~ NarradarTRS t v
    | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
-                             (mkDerivedDPProblem typ' p) -- (expandDPair p i newdps))
+                             (mkDerivedDPProblem typ' p')
                      | (i,dps') <- dpss
                      , let olddp  = safeAt "Instantiation" dpsA i
                      , let newdps = dps' !! i
                      , let dgraph' = expandDGraph p olddp newdps
                      , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
+                     , let p'   = expandDPair (getBaseProblem p) i newdps
                  ]
 
    where
