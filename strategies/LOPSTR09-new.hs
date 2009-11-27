@@ -75,7 +75,7 @@ instance (Dispatch (NProblem base id)
 sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 rpoPlusTransforms rpo =  depGraph >=>
-                         try (apply (RPOProc LPOAF (Yices 60)) >=> depGraph) >=>
+                         try (fixSolver(apply (RPOProc LPOAF (Yices 60)) >=> depGraph)) >=>
                          try (repeatSolver 5 (graphTransform .|. apply (RPOProc rpo (Yices 60)) >=> depGraph)) >=>
                          apply (RPOProc RPOAF (Yices 60))
 
