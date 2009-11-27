@@ -68,7 +68,7 @@ instance Functor (InitialGoal t) where
 mapInitialGoal f (InitialGoal goals dg p) = InitialGoal goals' dg' p
       where
         goals' = fmap (foldTerm return f') goals
-        dg'    = mapDGraph (fmap (foldTerm return f')) <$> dg
+        dg'    = mapDGraph (foldTerm return f') <$> dg
         f'     = Impure . f
 
 instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
@@ -275,10 +275,12 @@ instance (trs ~ NTRS id
 -- -------------------------------
 -- Dependency Graph data structure
 -- -------------------------------
-type DGraph t v = DGraphF (Rule t v)
+type DGraph t v = DGraphF (Term t v)
 
-data DGraphF a = DGraph {pairs    :: Array Int a
-                        ,pairsMap :: Map a Int
+-- Invariant - the pairs field is always a DPTRS
+
+data DGraphF a = DGraph {pairs    :: NarradarTRSF (RuleF a)
+                        ,pairsMap :: Map (RuleF a) Int
                         ,initialPairsG   :: Set Vertex
                         ,reachablePairsG :: Set Vertex
                         ,fullgraph:: Graph
@@ -287,8 +289,8 @@ data DGraphF a = DGraph {pairs    :: Array Int a
                         ,sccGraph :: Graph}
 
 deriving instance Show a => Show (SCC a)
-instance Pretty a => Pretty (DGraphF a) where
-  pPrint DGraph{..} = text "DGraphF" <> brackets(vcat [text "pairs =" <+> pPrint (elems pairs)
+instance Pretty (Term t v) => Pretty (DGraph t v) where
+  pPrint DGraph{..} = text "DGraphF" <> brackets(vcat [text "pairs =" <+> pPrint (elems $ rulesArray pairs)
                                                       ,text "pairsMap =" <+> pPrint pairsMap
                                                       ,text "initial pairs = " <+> pPrint initialPairsG
                                                       ,text "reachable pairs = " <+> pPrint reachablePairsG
@@ -297,38 +299,36 @@ instance Pretty a => Pretty (DGraphF a) where
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
 
-mapDGraph f (DGraph p pm ip rp fg sccs sccsM sccsG) =  (DGraph (fmap f p) (Map.mapKeys f pm) ip rp fg sccs sccsM sccsG)
+mapDGraph f (DGraph p pm ip rp fg sccs sccsM sccsG)
+    = (DGraph (mapNarradarTRS f p) (Map.mapKeys (fmap f) pm) ip rp fg sccs sccsM sccsG)
 
 mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , v ~ Var
             , MkDPProblem typ (NarradarTRS t v)
             , Traversable (Problem typ), Pretty typ
-            , HasId t, Unify t, Ord v, Pretty v, Enum v
+            , HasId t, Unify t
+            , Pretty (t(Term t v))
             , Ord    (Term t v)
-            , Pretty (Term t v)
-            , Pretty (NarradarTRS t v)
             , ICap t v (typ, NarradarTRS t v)
             , IUsableRules t v typ (NarradarTRS t v)
             ) => Problem typ (NarradarTRS t v) -> [Term t v] -> DGraph t v
 
-mkDGraph p@(getP -> DPTRS _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg gr
+--mkDGraph p@(getP -> DPTRS _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg gr
 mkDGraph p gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg (getEDG p)
 
 mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
              , v ~ Var
-             , IsDPProblem typ, Traversable (Problem typ), Pretty typ, Pretty trs
-             , HasId t, Unify t, Ord (Term t v), Ord v, Pretty v, Enum v, Pretty (Term t v)
-             , ICap t v (typ, trs)
-             , HasRules t v trs
-             ) => typ -> trs -> trs -> [Term t v] -> Graph -> DGraph t v
-mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ do
-  let pairs    = listArray (0, length dps - 1) dps
-      pairsMap = Map.fromList (dps `zip` [0..])
+             , IsDPProblem typ, Traversable (Problem typ), Pretty typ
+             , HasId t, Unify t, Pretty (t(Term t v))
+             , ICap t v (typ, NarradarTRS t v)
+             ) => typ -> NarradarTRS t v -> NarradarTRS t v -> [Term t v] -> Graph -> DGraph t v
+mkDGraph' typ trs pairs@(DPTRS dps_a _ _ _) goals fullgraph = runIcap (rules trs ++ rules pairs) $ do
+  let pairsMap = Map.fromList (map swap $ assocs dps_a)
       p   = (typ,trs)
 
   -- List of indexes for fullgraph
   initialPairsG <- liftM Set.fromList $ runListT $ do
-                     (i,s :-> t) <- liftL (zip [0..] dps)
+                     (i,s :-> t) <- liftL (assocs dps_a)
                      g           <- liftL goals
                      g'          <- lift (getFresh g >>= icap p)
                      guard(markDP g' `unifies` s)
@@ -353,13 +353,13 @@ mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ 
                                  [ (ix, scc) | (scc,ix,_) <- sccGraphNodes]
 
       -- The scc for every node, with indexes from fullgraph
-      sccsMap    = array (bounds fullgraph) (zip [0..length dps - 1] (repeat Nothing) ++
+      sccsMap    = array (bounds fullgraph) (zip (indices dps_a) (repeat Nothing) ++
                                          [ (n, Just ix) | (scc,ix,_) <- sccGraphNodes
                                                                    , n <- flattenSCC scc])
       the_dgraph = DGraph {..}
 
 
-  pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, dps) $$
+  pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, pairs) $$
             text "The initial pairs are:" <+> pPrint initialPairsG $$
             text "where the EDG is:" <+> text (show fullgraph)
 --            text "The final graph stored is:" <+> text (show graph) $$
@@ -377,51 +377,43 @@ mkDGraph' typ trs (rules -> dps) goals fullgraph = runIcap (rules trs ++ dps) $ 
 
   where liftL = ListT . return
 
-insertDGraph p@InitialGoalProblem{..} (rules -> newdps)
-    = mkDGraph' (getProblemType baseProblem) (getR p) dps' goals graph'
+insertDGraph p@InitialGoalProblem{..} newdps
+    = mkDGraph' (getProblemType p') (getR p') dps' goals graph'
   where
-    dps'   = tRS(elems (pairs dgraph) ++ newdps)
-    graph' = getEDG (setP dps' baseProblem)
-
+    p'     =  insertDPairs (setP (pairs dgraph) p) newdps
+    dps'   = getP p'
+    graph' = getEDG p'
+{-
 expandDGraph ::
-      ( t ~ f id, MapId f, DPSymbol id
-      , Unify t, HasId t
-      , Pretty (t(Term t Var))
-      , Ord    (Term t Var)
-      , Traversable (Problem typ), Pretty typ
+      ( Traversable (Problem typ), Pretty typ
       , MkDPProblem typ (NarradarTRS t Var)
       , ICap t Var (typ, NarradarTRS t Var)
+      , IUsableRules t Var typ [Rule t Var] -- (NarradarTRS t Var)
       , IUsableRules t Var typ (NarradarTRS t Var)
       ) =>
       Problem (InitialGoal t typ) (NarradarTRS t Var) -> Rule t Var -> [Rule t Var] -> DGraph t Var
--- TODO This is doing far more work than necessary
+-}
 expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},..} olddp newdps
    | Nothing <- Map.lookup olddp pairsMap = dg
+
    | Just i  <- Map.lookup olddp pairsMap
-   , dps'    <- tRS([ dp | (j,dp) <- assocs pairs, j /= i] ++ newdps)
-   , graph'  <- getEDG (setP dps' baseProblem)
-
-   = mkDGraph' (getProblemType baseProblem) (getR p) dps' goals graph'
-
+   , p' <- expandDPair (setP pairs p) i newdps
+   = mkDGraph p' goals
 
 
 instance Ord a => Suitable DGraphF a where
   data Constraints DGraphF a = Ord a => DGraphConstraints
   constraints _ = DGraphConstraints
 
-instance R.RFunctor DGraphF where
-  fmap f x@DGraph{..} = withResConstraints $ \DGraphConstraints ->
-                        DGraph{pairs = fmap f pairs, pairsMap = Map.mapKeys f pairsMap,..}
-
 lookupNode p dg = Map.lookup p (pairsMap dg)
 
-lookupPair n dg = safeAt "lookupPair" (pairs dg) n
+lookupPair n dg = safeAt "lookupPair" (rulesArray $ pairs dg) n
 
 sccFor n dg = safeAt "sccFor" (sccsMap dg) n
 
-dreachablePairs DGraph{..} = Set.fromList $ A.elems pairs
+dreachablePairs DGraph{..} = Set.fromList $ rules pairs
 
-dinitialPairs g = map (safeAt "initialPairs" (pairs g)) (toList $ initialPairsG g)
+dinitialPairs g = map (safeAt "initialPairs" (rulesArray $ pairs g)) (toList $ initialPairsG g)
 
 
 nodesInPath :: DGraphF a -> Vertex -> Vertex -> Set Vertex

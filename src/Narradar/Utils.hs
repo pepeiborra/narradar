@@ -128,7 +128,10 @@ safeAt msg a i = fromMaybe (error ("safeAt:" ++ msg)) (safeAtM a i)
 -- --------------
 ignore m = m >> return ()
 
+
 li = ListT . return
+
+swap (a,b) = (b,a)
 
 fst3 (a,_,_) = a
 snd3 (_,b,_) = b

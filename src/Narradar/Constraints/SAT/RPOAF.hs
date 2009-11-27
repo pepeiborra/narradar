@@ -104,12 +104,12 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   | _ <- isTheRightKind (getProblemType p)
   , _ <- isNarradarTRS1 (getR p)
   , _ <- mkTRS[head goals :-> head goals] `asTypeOf` getR p
-  = runRPOAF con allowCol (getSignature p `mappend` getSignature (A.elems $ pairs dgraph)) $ \dict -> do
+  = runRPOAF con allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
       typ' = InitialGoal (map convert goals)
-                         (Just $ R.fmap (fmap convert) dgraph)
+                         (Just $ mapDGraph convert dgraph)
                          (getProblemType baseProblem)
       p'   = mkDPProblem typ' trs' dps'
 

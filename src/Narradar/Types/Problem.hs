@@ -126,6 +126,7 @@ getEDG :: (Ord v, Enum v
           ,ICap t v (typ, NarradarTRS t v)
           ,IUsableRules t v typ (NarradarTRS t v)
           ) => Problem typ (NarradarTRS t v) -> G.Graph
+getEDG p@(getP -> DPTRS _ gr _ _) = gr
 getEDG p = filterSEDG p $ getdirectEDG p
 
 getdirectEDG :: (Traversable (Problem typ)
@@ -270,13 +271,12 @@ instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) w
 -- Dealing with the pairs in a problem
 -- ------------------------------------
 
-expandDPair :: ( -- v ~ Var
-                 Ord v, Enum v, Pretty v
+expandDPair :: ( v ~ Var
                , HasId t, Unify t, Ord (Term t v)
                , Traversable (Problem typ)
                , MkDPProblem typ (NarradarTRS t v)
                , ICap t v (typ, NarradarTRS t v)
-               , IUsableRules t v typ [Rule t v]
+               , IUsableRules t v typ (NarradarTRS t v)
                , Pretty (Term t v), Pretty typ
                ) =>
                Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
@@ -295,7 +295,8 @@ expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` e
                                  , let in1 = (j,k), let in2 = (k,j)])
         adjust x = if x < i then x else x-1
 
-    unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (rules $ getR p) dps'
+    unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (getR p) (listTRS dps')
+                                         -- The use of listTRS here is important ^^
     let unif'    = mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
         dptrs'   = dpTRS' a_dps' (unif' :!: unifInv')

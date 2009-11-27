@@ -81,6 +81,8 @@ data NarradarTRSF a where
                  Map (WithoutPrologId (TermId t)) (Set (Rule t v)) -> Signature (TermId t) -> NarradarTRSF (Rule t v)
     DPTRS     :: (HasId t, Ord (Term t v)) =>
                  Array Int (Rule t v) -> Graph -> Unifiers t v :!: Unifiers t v -> Signature (TermId t) -> NarradarTRSF (Rule t v)
+    ListTRS  -- Used in very few places instead of TRS, when the order of the rules is important
+        :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (TermId t) -> NarradarTRSF (Rule t v)
 
 type Unifiers t v = Array (Int,Int) (Maybe (Substitution t v))
 
@@ -127,6 +129,8 @@ isNarradarTRS = id
 isNarradarTRS1 :: NarradarTRS (t id) v -> NarradarTRS (t id) v
 isNarradarTRS1 = id
 
+listTRS :: (HasId t, Foldable t, Ord (Term t v)) => [Rule t v] -> NarradarTRS t v
+listTRS rr = ListTRS rr (getSignature rr)
 
 -- ------------------------------
 -- Data.Term framework instances
@@ -135,12 +139,14 @@ instance HasRules t v (NarradarTRS t v) where
   rules(TRS       rr _)     = toList rr
   rules(PrologTRS rr _)     = toList $ mconcat (Map.elems rr)
   rules(DPTRS     rr _ _ _) = elems rr
+  rules(ListTRS   rr _)     = rr
 
 instance Ord (TermId t) => HasSignature (NarradarTRS t v) where
     type SignatureId (NarradarTRS t v) = TermId t -- SignatureId [Rule (TermF id) v]
     getSignature (TRS         _ sig) = sig
     getSignature (PrologTRS   _ sig) = sig
     getSignature (DPTRS   _ _ _ sig) = sig
+    getSignature (ListTRS rr    sig) = sig
 
 instance (Ord (Term t v), Foldable t, HasId t) => IsTRS t v (NarradarTRS t v) where
   tRS  rr = TRS (Set.fromList rr) (getSignature rr)
@@ -149,6 +155,7 @@ instance (Ord v, Functor t, Foldable t) => GetVars v (NarradarTRS t v) where get
 
 instance (Traversable t, Ord v, GetFresh t v (Set (Rule t v))) => GetFresh t v (NarradarTRS t v) where
     getFreshM (TRS rr sig) = getFresh (toList rr) >>= \rr' -> return (TRS (Set.fromDistinctAscList rr') sig)
+    getFreshM (ListTRS rr sig) = getFresh rr >>= \rr' -> return (ListTRS rr' sig)
     getFreshM (PrologTRS (unzip . Map.toList -> (i, rr)) sig) =
         getFresh rr >>= \rr' -> return (PrologTRS (Map.fromListWith mappend (zip i rr')) sig)
     getFreshM (DPTRS dps_a g uu sig) = getFresh (elems dps_a) >>= \dps' ->
@@ -167,19 +174,20 @@ instance (Ord (Term t v), ICap t v [Rule t v]) => ICap t v (NarradarTRS t v) whe
   icap trs = icap (rules trs)
 
 instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTRS t v) where
-    type AFId (NarradarTRS t v) = AFId (Term t v)
+  type AFId (NarradarTRS t v) = AFId (Term t v)
 
-    apply af (PrologTRS rr _) = prologTRS' ((Map.map . Set.map) (AF.apply af) rr)
-    apply af trs@TRS{}        = tRS$ AF.apply af <$$> rules trs
-    apply af (DPTRS a g uu _) = tRS (AF.apply af <$$> toList a) -- cannot recreate the graph without knowledge of the problem type
+  apply af (PrologTRS rr _) = prologTRS' ((Map.map . Set.map) (AF.apply af) rr)
+  apply af trs@TRS{}        = tRS$ AF.apply af <$$> rules trs
+  apply af (DPTRS a g uu _) = tRS (AF.apply af <$$> toList a) -- cannot recreate the graph without knowledge of the problem type
+  apply af (ListTRS rr _)   = let rr' = AF.apply af <$$> rr in ListTRS rr' (getSignature rr')
 
 instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
-    extraVars (TRS rr _) = extraVars rr
-    extraVars (PrologTRS rr _) = extraVars rr
-    extraVars (DPTRS a _ _ _) = extraVars (A.elems a)
+  extraVars (TRS rr _) = extraVars rr
+  extraVars (PrologTRS rr _) = extraVars rr
+  extraVars (DPTRS a _ _ _) = extraVars (A.elems a)
 
 instance (ICap t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap t v (typ, [Rule t v]) where
-    icap (typ, p) = icap (typ, mkTRS p)
+  icap (typ, p) = icap (typ, mkTRS p)
 
 -- ------------
 -- Constructors

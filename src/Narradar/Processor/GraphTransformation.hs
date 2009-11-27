@@ -40,14 +40,14 @@ data FInstantiation = FInstantiation
 -- * Narrowing
 
 instance ( Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
-         , IUsableRules t Var Rewriting [Rule t Var]
+         , IUsableRules t Var Rewriting (NarradarTRS t Var)
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
 instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
-         , IUsableRules t Var IRewriting [Rule t Var]
+         , IUsableRules t Var IRewriting (NarradarTRS t Var)
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
@@ -121,7 +121,7 @@ instance (trs ~ NarradarTRS t Var
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
          ,ICap t Var (MkRewriting st, NarradarTRS t Var)
-         ,IUsableRules t Var (MkRewriting st) [Rule t Var]
+         ,IUsableRules t Var (MkRewriting st) (NarradarTRS t Var)
          ) =>
     Processor info Instantiation (NarradarProblem (MkRewriting st) t) (NarradarProblem (MkRewriting st) t) where
   applySearch Instantiation = instantiation
@@ -138,7 +138,7 @@ instance (trs ~ NarradarTRS t v
          ,id  ~ TermId t, HasId t, MapId f, DPSymbol id
          ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (t(Term t Var))
          ,MkDPProblem typ trs, Traversable (Problem typ)
-         ,IUsableRules t v typ [Rule t v]
+         ,IUsableRules t v typ (NarradarTRS t v)
          ,IUsableRules t v typ trs
          ,ICap t v (typ, trs)
          ,Info info GraphTransformationProof
@@ -179,7 +179,7 @@ instance (trs ~ NarradarTRS t Var
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
          ,ICap t Var (MkRewriting st, NarradarTRS t Var)
-         ,IUsableRules t Var (MkRewriting st) [Rule t Var]
+         ,IUsableRules t Var (MkRewriting st) (NarradarTRS t Var)
          ) =>
     Processor info FInstantiation (NarradarProblem (MkRewriting st) t) (NarradarProblem (MkRewriting st) t) where
   applySearch FInstantiation = finstantiation
@@ -193,10 +193,11 @@ instance (Info info (NarradarProblem b t)
 instance (v ~ Var
          ,t ~ f (DPIdentifier id), MapId f
          ,TermId t ~ DPIdentifier id, HasId t, Unify t
-         ,MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
-         ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
+         ,Pretty typ
+         ,MkDPProblem typ (NarradarTRS t Var)
+         ,Traversable (Problem typ)
+         ,Pretty (t(Term t v)), Ord(t(Term t v))
          ,IUsableRules t v typ (NarradarTRS t v)
-         ,IUsableRules t v typ [Rule t v]
          ,ICap t v (typ, (NarradarTRS t Var))
          ,Info info GraphTransformationProof
          ) =>
@@ -271,7 +272,7 @@ narrowing, narrowing_innermost
              ,TermId t  ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (Term t v)
              ,MkDPProblem typ trs, Traversable (Problem typ)
-             ,IUsableRules t v typ [Rule t v], ICap t v (typ,trs)
+             ,IUsableRules t v typ trs, ICap t v (typ,trs)
              ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info p
              ,Info info GraphTransformationProof
@@ -346,10 +347,9 @@ narrowingIG, narrowing_innermostIG
              ,t ~ f (DPIdentifier id), MapId f
              ,v ~ Var
              ,TermId t  ~ DPIdentifier id, HasId t, Unify t
-             ,Enum v, GetVars v v, Ord (Term t v)
+             ,Enum v, GetVars v v, Ord (t(Term t v))
              ,MkDPProblem typ trs, Traversable (Problem typ)
              ,IUsableRules t v typ (NarradarTRS t v)
-             ,IUsableRules t v typ [Rule t v]
              ,ICap t v (typ,trs)
              ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info (Problem (InitialGoal t typ) trs)
@@ -441,7 +441,7 @@ instantiation, finstantiation
              ,Enum v, GetVars v v
              ,MkDPProblem typ trs, Traversable (Problem typ)
              ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
-             ,IUsableRules t v typ [Rule t v], ICap t v (typ, trs)
+             ,IUsableRules t v typ (NarradarTRS t v), ICap t v (typ, trs)
              ,Info info GraphTransformationProof
              ,Monad mp
              ) =>
