@@ -72,7 +72,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
-  apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{fullgraph, pairs, initialPairsG, reachablePairsG}
+  apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
                                                , baseProblem = (getP -> dps@(DPTRS dd gr unif sig))}
    = do
     let reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
@@ -85,16 +85,16 @@ instance ( t ~ f (DPIdentifier id0), MapId f
 
         cc   = [vv | CyclicSCC vv <- GSCC.sccList grForSccs]
 
-        proof = UsableSCCs{ gr         = fullgraph
+        proof = UsableSCCs{ gr         = fullgraph dg
                           , initial    = initialPairsG
-                          , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
+                          , outOfScope = Set.fromList(vertices $ fullgraph dg) `Set.difference` reachablePairsG
                           , inPath     = Set.fromList $ involvedNodes' (getProblemType p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
                           , the_pairs  = rules pairs
                           , the_sccs   = map Set.fromList cc }
 
-        proof2= NoUsableSCCs{ gr         = fullgraph
+        proof2= NoUsableSCCs{ gr         = fullgraph dg
                             , initial    = initialPairsG
-                            , outOfScope = Set.fromList(vertices fullgraph) `Set.difference` reachablePairsG
+                            , outOfScope = Set.fromList(vertices $ fullgraph dg) `Set.difference` reachablePairsG
                             , inPath     = Set.fromList $ involvedNodes' (getProblemType p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
                             , the_pairs  = rules pairs
                             }
