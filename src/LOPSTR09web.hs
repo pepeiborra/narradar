@@ -42,6 +42,8 @@ import Narradar.Processor.GraphTransformation
 import Narradar.Processor.RPO
 import Narradar.Processor.InitialGoalNarrowingProblem
 import Narradar.Processor.RelativeProblem
+import Narradar.Processor.FLOPS08
+import Narradar.Processor.LOPSTR09
 
 web_pdf_folder   = "/~pepe/logs"
 
@@ -108,7 +110,7 @@ solver = do
 -- Prolog
 instance Dispatch PrologProblem where
 --    dispatch = apply SKTransformInfinitary >=> dispatch
-    dispatch = apply SKTransformNarrowing >=> dispatch
+    dispatch = apply SKTransform >=> dispatch
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
@@ -124,24 +126,13 @@ instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifie
 
 instance (Pretty id, Pretty (DPIdentifier id), Ord id, Lattice (AF_ (DPIdentifier id))) =>
    Dispatch (NProblem CNarrowing (DPIdentifier id)) where
---  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
-  dispatch = mkDispatcher (apply DependencyGraphSCC >=>
-                            (apply (RPOProc LPOSAF Yices) .|. (apply Instantiation .|. apply FInstantiation))
-                          )
+  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
 
 -- Narrowing Goal
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
-
--- Infinitary
-instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
-           Dispatch (NProblem (Infinitary (DPIdentifier a) IRewriting) (DPIdentifier a)) where
-  dispatch = mkDispatcher
-                (apply DependencyGraphSCC >=>
-                 apply (InfinitaryToRewriting bestHeu) >=>
-                 dispatch)
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
@@ -162,8 +153,8 @@ instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (
 instance (Dispatch (NProblem base id)
          ,Pretty id, Ord id, Pretty base, Pretty (TermN id)
          ,IsDPProblem base, MkProblem base (NTRS id)
-         ,PprTPDBDot (NProblem base id), ProblemColor (NProblem base id)
-         ,Pretty (NProblem base id)
+         ,PprTPDB (NProblem base id), ProblemColor (NProblem base id)
+         ,Pretty (NProblem base id), HasMinimality base
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
@@ -172,11 +163,18 @@ sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
 
---rpoPlusTransforms ::
-rpoPlusTransforms rpo =  apply DependencyGraphSCC >=>
-                         repeatSolver 3 (apply (RPOProc rpo Yices) .|. graphTransform >=>
-                                         apply DependencyGraphSCC
-                                        )
+rpoPlusTransforms rpo_strategy
+  =  depGraph >=>
+     repeatSolver 5 ( (lpo .|.
+                       graphTransform .|.
+                       custom_rpo .|.
+                       rpo)
+                       >=> depGraph)
+  where
+    lpo = apply (RPOProc LPOAF (Yices 60))
+    rpo = apply (RPOProc RPOSAF (Yices 60))
+    custom_rpo =  apply (RPOProc rpo_strategy (Yices 60))
+
 
 -- -------------------
 -- Embedded content
