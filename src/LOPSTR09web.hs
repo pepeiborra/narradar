@@ -95,7 +95,7 @@ solver = do
                          thediv ! [identifier "title"]
                            << [h3 << "Termination was proved succesfully."
                               ,p  << proof_log
-                              ,p  << sol]
+                              ,pre  << sol]
                     _ -> thediv ! [identifier "title"]
                              << [h3 << "Termination could not be proved."
                                 ,p  << proof_log
