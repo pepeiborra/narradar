@@ -173,6 +173,8 @@ mapLeft _ (Right r) = Right r
 mapMif :: (Monad m, Traversable t) => (a -> Bool) -> (a -> m a) -> t a -> m (t a)
 mapMif p f= mapM (\x -> if p x then f x else return x)
 
+tag f xx = [ (f x, x) | x <- xx]
+
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
 

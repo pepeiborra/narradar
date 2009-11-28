@@ -147,29 +147,35 @@ instance (trs ~ NarradarTRS t v
                                  (NarradarProblem (InitialGoal (f id) typ) (f id))
  where
   applySearch Instantiation p@InitialGoalProblem{..}
-   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
+   | null currentPairs      = [return p]
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
                              (mkDerivedDPProblem typ' p')
                      | (i,dps') <- dpss
-                     , let olddp  = safeAt "Instantiation" dpsA i
+                     , let olddp  = safeAt "Instantiation" (rulesArray $ getP p) i
                      , let newdps = dps' !! i
                      , let dgraph' = expandDGraph p olddp newdps
                      , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
                      , let p'   = expandDPair (getBaseProblem p) i newdps
                  ]
 
-   where
-         (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
-         dps  = elems dpsA
-         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
-                                    , all (not.null) dps]
+   where currentPairs = tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
+         dpss         = [ (i, snd <$$> dps)
+                              | (i,dps) <- zip [0..] (maps f currentPairs)
+                              , all (not.null) dps]
+         err = error "Instantiation processor: unexpected"
+
          f :: (Int, Rule t v) -> [(Int, Rule t v)]
          f  (i,olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
-            where newdps = [ (i, applySubst sigma s :-> applySubst sigma t)
-                            | Just sigma <- snub [dpUnify (getP p) i m | (m,n) <- Gr.edges gr, n == i]]
+            where
+              allPairs = pairs dgraph
+              gr       = fullgraph dgraph
+              newdps   = [ (i, applySubst sigma s :-> applySubst sigma t)
+                          | Just sigma <- snub [dpUnify allPairs i m | (m,n) <- Gr.edges gr, n == i]
+                         ]
+
 
 -- * Forward Instantiation
 
@@ -205,28 +211,33 @@ instance (v ~ Var
                                   (NarradarProblem (InitialGoal t typ) t)
  where
  applySearch FInstantiation p@InitialGoalProblem{..}
-  | null dps  = error "forward instantiation Processor: received a problem with 0 pairs"
+  | null currentPairs      = [return p]
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
-  | isCollapsing (getR p) = mzero
+  | isCollapsing (getR p)  = mzero  -- no point in instantiating everything around
   | otherwise = [ singleP (FInstantiationProof olddp newdps) p (mkDerivedDPProblem typ' p')
                      | (i, dps') <- dpss
-                     , let olddp  = safeAt "FInstantiation" dpsA i
+                     , let olddp  = safeAt "FInstantiation" (rulesArray $ getP p) i
                      , let newdps = dps' !! i
                      , let dgraph'= expandDGraph p olddp newdps
                      , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
                      , let p'     = expandDPair (getBaseProblem p) i newdps
                 ]
-   where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
-         dps  = elems dpsA
-         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
-                                    , all (not.null) dps]
+   where currentPairs = rules(getP p)
+         dpss      = [ (i, snd <$$> dps)
+                        | (i,dps) <- zip [0..] (maps f (tag (fromMaybe err . (`lookupNode` dgraph)) currentPairs))
+                        , all (not.null) dps]
+         err = error "Instantiation processor: unexpected"
 
 --         f :: (Int, Rule t v) -> [(Int, Rule t v)]
          f (i, olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
-              where newdps = [(i, applySubst sigma s :-> applySubst sigma t)
-                             | Just sigma <- snub [dpUnifyInv (getP p) j i | j <- safeAt "FInstantiation" gr i]]
+              where
+                gr       = fullgraph dgraph
+                allPairs = pairs dgraph
+                newdps    = [(i, applySubst sigma s :-> applySubst sigma t)
+                             | Just sigma <- snub [dpUnifyInv allPairs j i
+                                                       | j <- safeAt "FInstantiation" gr i]]
 
 
 -- -------
@@ -358,18 +369,23 @@ narrowingIG, narrowing_innermostIG
              ) =>
              Problem (InitialGoal t typ) trs -> [Proof info mp (Problem (InitialGoal t typ) trs)]
 narrowingIG p0@InitialGoalProblem{..}
-  | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
+  | null currentPairs       = [return p0]
+  | not $ isDPTRS (getP p0) = error "narrowingIG Processor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0
                            (mkDerivedDPProblem typ' (expandDPair (getBaseProblem p0) i newdps))
                      | (i,dps') <- dpss
-                     , let olddp  = safeAt "narrowingIg" dpsA i
+                     , let olddp  = safeAt "narrowing (IG) processor" allPairs i
                      , let newdps = dps' !! i
                      , let dgraph'= expandDGraph p0 olddp newdps
                      , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
     where
-          (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
-          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+          allPairs     = rulesArray $ pairs dgraph
+          currentPairs = tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p0)
+          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f currentPairs)
                                           , all (not.null) dps]
+
+          err = error "narrowing (IG) processor: unexpected"
+
           f (i, olddp@(_s :-> t))
               | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
               | otherwise = []
@@ -388,24 +404,31 @@ narrowingIG p0@InitialGoalProblem{..}
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-               where uu     = map (lhs . (safeAt "narrowingIG" dpsA)) (safeAt "narrowingIG" gr i)
-                     pos_uu = if null uu then Set.empty
+               where
+                 gr       = fullgraph dgraph
+                 uu       = map (lhs . (safeAt "narrowingIG" allPairs))
+                                (safeAt "narrowingIG" gr i)
+                 pos_uu   = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
 narrowing_innermostIG p0@InitialGoalProblem{..}
+  | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0
                           (mkDerivedDPProblem typ' (expandDPair (getBaseProblem p0) i newdps))
                      | (i,dps') <- dpss
-                     , let olddp  = safeAt "narrowing_innermostIG" dpsA i
+                     , let olddp  = safeAt "narrowing_innermostIG" allPairs i
                      , let newdps = dps' !! i
                      , let dgraph'= expandDGraph p0 olddp newdps
                      , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
     where
-           --  dpss = snd <$$> (map concat $ filter (all (not.null)) $ maps f (assocs dpsA))
-          (dpsA, gr) = (rulesArray (getP p0), rulesGraph (getP p0))
-          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
+          allPairs     = rulesArray $ pairs dgraph
+          currentPairs = tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p0)
+          dpss = snub [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f currentPairs)
                                           , all (not.null) dps]
+
+          err = error "narrowing innermost (IG) processor: unexpected"
+
           f (i, olddp@(_s :-> t))
               | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
               | otherwise = []
@@ -423,8 +446,11 @@ narrowing_innermostIG p0@InitialGoalProblem{..}
                  if any (isVar.rhs.snd) new_dps then [] else new_dps
 
               | otherwise = []
-               where uu     = map (lhs . (safeAt "narrowing_innermostIG" dpsA)) (safeAt "narrowing_innermostIG" gr i)
-                     pos_uu = if null uu then Set.empty
+               where
+                 gr       = fullgraph dgraph
+                 uu       = map (lhs . (safeAt "narrowing_innermostIG" allPairs))
+                                (safeAt "narrowing_innermostIG" gr i)
+                 pos_uu   = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
 narrow1DP rr (l :-> r) = [ (applySubst theta l :-> r', p)
