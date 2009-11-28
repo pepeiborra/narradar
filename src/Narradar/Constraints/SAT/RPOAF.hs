@@ -244,6 +244,9 @@ rpos bits (x,ar) = do
                        _ -> replicateM (ar + 1) boolean
   usable_b <- boolean
 
+  -- Filtering invariant
+  assertAll [not list_b ==> oneM pos_bb]
+
   -- Permutation invariants
   -- -----------------------
   -- There is one or zero arguments considered at the k'th perm position,
