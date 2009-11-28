@@ -18,6 +18,7 @@ import Narradar.Types.Problem.NarrowingGen
 import Narradar.Processor.LOPSTR09
 import Narradar.Framework.GraphViz
 import Lattice
+import Narradar.Utils (pprTrace)
 
 instance IsMZero Stream where
   isMZero = null . runStream
@@ -74,10 +75,17 @@ instance (Dispatch (NProblem base id)
 
 sc = apply DependencyGraphSCC >=> apply SubtermCriterion
 
-rpoPlusTransforms rpo =  depGraph >=>
-                         try (fixSolver(apply (RPOProc LPOAF (Yices 60)) >=> depGraph)) >=>
-                         try (repeatSolver 5 (graphTransform .|. apply (RPOProc rpo (Yices 60)) >=> depGraph)) >=>
-                         apply (RPOProc RPOAF (Yices 60))
+rpoPlusTransforms rpo_strategy
+  =  depGraph >=>
+     repeatSolver 5 ( (lpo .|.
+                       graphTransform .|.
+                       custom_rpo .|.
+                       rpo)
+                       >=> depGraph)
+  where
+    lpo = apply (RPOProc LPOAF (Yices 60))
+    rpo = apply (RPOProc RPOSAF (Yices 60))
+    custom_rpo =  apply (RPOProc rpo_strategy (Yices 60))
 
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
