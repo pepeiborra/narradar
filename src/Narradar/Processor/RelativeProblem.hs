@@ -18,10 +18,10 @@ data RelativeToRegularProof = RelativeToRegularProof | RelativeToRegularProofFai
 instance Pretty RelativeToRegularProof where
     pPrint RelativeToRegularProof = text "The two systems form a  Hierarchical Combination" $$
                                     text "and hence the result from LOPSTR09 applies." $$
-                                    text "Termination of the following DP problem implies relative termination."
+                                    text "Finiteness of the following DP problem implies relative termination."
     pPrint RelativeToRegularProofFail = text "The two systems do not form a " $$
-                                        text "Hierarchical Combination and hence we cannot apply" $$
-                                        text "the result from LOPSTR09."
+                                        text "Hierarchical Combination so" $$
+                                        text "the result from LOPSTR09 does not apply."
 
 instance ( MkProblem base trs
          , SignatureId trs ~ TermId t
