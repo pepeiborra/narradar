@@ -5,12 +5,13 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TransformListComp #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Processor.PrologProblem (
   SKTransformInfinitary(..), SKTransformNarrowing(..), SKTransformProof(..)
@@ -54,11 +55,6 @@ import Language.Haskell.TH (runIO)
 import Text.ParserCombinators.Parsec (parse)
 import System.IO.Unsafe
 import GHC.Exts (the)
-
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 
 import Data.Term hiding (find)
 import Data.Term.Rules
@@ -180,7 +176,7 @@ type DLRP = DPIdentifier LRP
 data ClauseRules a =
         FactRule    {inRule :: a}
       | ClauseRules {inRule :: a, outRules' :: [a], uRules :: [a]}
- deriving (Eq, Ord, Show)
+ deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 outRules (FactRule r) = [r]
 outRules rr = outRules' rr
@@ -1327,13 +1323,5 @@ traceUpdates tit rr rr' =
     common  = List.intersect (rules rr') (rules rr)
     added   = rules rr' \\ common
     deleted = rules rr  \\ common
-
--- ------------------
--- Functor Instances
--- ------------------
-
-$(derive makeFunctor     ''ClauseRules)
-$(derive makeFoldable    ''ClauseRules)
-$(derive makeTraversable ''ClauseRules)
 
 

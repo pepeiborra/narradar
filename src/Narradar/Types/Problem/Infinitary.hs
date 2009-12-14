@@ -6,17 +6,13 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.Problem.Infinitary where
 
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad.Free
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM, fmapDefault, foldMapDefault)
 import Data.Monoid
@@ -84,9 +80,11 @@ deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (Infinitary id p
 deriving instance (Show id, Show (Problem p trs)) => Show (Problem (Infinitary id p) trs)
 
 -- Functor
+{-
 instance Functor (Infinitary id) where fmap = fmapDefault
 instance Foldable (Infinitary id) where foldMap = foldMapDefault
 instance Traversable (Infinitary id) where traverse f (Infinitary pi heu p) = Infinitary pi heu <$> f p
+-}
 
 instance Functor (Problem p) => Functor (Problem (Infinitary id p)) where fmap f (InfinitaryProblem af p) = InfinitaryProblem af (fmap f p)
 instance Foldable (Problem p) => Foldable (Problem (Infinitary id p)) where foldMap f (InfinitaryProblem af p) = foldMap f p

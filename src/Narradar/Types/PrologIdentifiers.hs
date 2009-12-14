@@ -7,8 +7,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.PrologIdentifiers where
 
@@ -18,10 +17,6 @@ import Control.DeepSeq
 import Data.AlaCarte (Expr)
 import Data.Foldable(Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
 import Data.Maybe
 import Data.NarradarTrie (HasTrie, (:->:) )
 import qualified Data.NarradarTrie as Trie
@@ -34,7 +29,8 @@ import Narradar.Framework.Ppr
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
-data PrologId a = InId a | OutId a | UId Int | FunctorId a deriving (Eq,Ord,Typeable)
+data PrologId a = InId a | OutId a | UId Int | FunctorId a
+                  deriving (Eq,Ord,Typeable, Functor, Foldable, Traversable)
 
 class Ord (WithoutPrologId id) => RemovePrologId id where
   type WithoutPrologId id :: *
@@ -136,7 +132,3 @@ instance HasTrie a => HasTrie (PrologId a) where
                                   map (first OutId)     (Trie.toList o) ++
                                   map (first UId)       (Trie.toList u) ++
                                   map (first FunctorId) (Trie.toList f)
-
-$(derive makeFunctor     ''PrologId)
-$(derive makeFoldable    ''PrologId)
-$(derive makeTraversable ''PrologId)

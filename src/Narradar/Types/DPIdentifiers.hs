@@ -8,7 +8,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 
 module Narradar.Types.DPIdentifiers
@@ -18,13 +18,9 @@ module Narradar.Types.DPIdentifiers
 import Control.Applicative
 import Control.Arrow (first)
 import Control.DeepSeq
-import Data.DeriveTH
-import Data.Derive.Foldable
-import Data.Derive.Functor
-import Data.Derive.Traversable
-import Data.NarradarTrie
-import qualified Data.NarradarTrie as Trie
 import Data.Foldable (Foldable(..))
+import Data.NarradarTrie (HasTrie, (:->:))
+import qualified Data.NarradarTrie as Trie
 import Data.Traversable (Traversable(..))
 import Data.Typeable
 import Prelude
@@ -39,7 +35,8 @@ type DP a = RuleN (DPIdentifier a)
 -- -----------------------
 -- Concrete DP Identifiers
 -- -----------------------
-data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier deriving (Ord, Typeable)
+data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier
+                    deriving (Ord, Typeable, Functor, Foldable, Traversable)
 instance Eq a => Eq (DPIdentifier a) where
     IdFunction f1 == IdFunction f2 = f1 == f2
     IdDP f1       == IdDP f2       = f1 == f2
@@ -76,11 +73,6 @@ instance HasTrie a => HasTrie (DPIdentifier a) where
   insert (IdDP dp) v (DPIdentifierTrie dpt ft) = DPIdentifierTrie (Trie.insert dp v dpt) ft
   toList (DPIdentifierTrie ft dpt) = map (first IdDP) (Trie.toList dpt) ++
                                      map (first IdFunction)   (Trie.toList ft)
-
-$(derive makeFunctor     ''DPIdentifier)
-$(derive makeFoldable    ''DPIdentifier)
-$(derive makeTraversable ''DPIdentifier)
-
 -- ------------
 -- DP Symbols
 -- ------------
