@@ -13,6 +13,7 @@ module Narradar.Types.Problem.Rewriting
          ) where
 
 import Control.Applicative
+import Control.DeepSeq
 import Control.Monad
 import Control.Exception (assert)
 import Data.Foldable as F (Foldable(..), toList)
@@ -108,6 +109,12 @@ instance Ord (Strategy st) where
 isInnermost :: Strategy st -> Bool
 isInnermost Innermost = True
 isInnermost _         = False
+
+instance NFData (Strategy st)
+instance NFData Minimality
+
+instance NFData trs => NFData (Problem (MkRewriting st) trs) where
+  rnf (RewritingProblem rr dd s m) = rnf rr `seq` rnf dd `seq` rnf s `seq` rnf m `seq` ()
 
 -- Framework
 

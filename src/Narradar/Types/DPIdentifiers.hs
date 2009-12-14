@@ -17,7 +17,7 @@ module Narradar.Types.DPIdentifiers
 
 import Control.Applicative
 import Control.Arrow (first)
-import Control.Parallel.Strategies
+import Control.DeepSeq
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor

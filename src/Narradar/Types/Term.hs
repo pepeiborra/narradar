@@ -15,6 +15,7 @@ module Narradar.Types.Term
     where
 
 import Control.Arrow (first)
+import Control.DeepSeq
 import Control.Monad.Free
 import Data.Char
 import Data.Bifunctor
@@ -205,3 +206,21 @@ instance HasTrie Var where
   toList (VarTrie m) = [(Var s i, v) | (i, (s,v)) <- Trie.toList m]
 
 
+-- ----------------
+-- NFData instances
+-- ----------------
+
+instance NFData Var where
+  rnf (Var s i) = rnf s `seq` rnf i `seq` ()
+
+instance (NFData a, NFData id) => NFData (TermF id a) where
+  rnf (Term id tt) = rnf id `seq` rnf tt `seq` ()
+
+instance NFData a => NFData (RuleF a) where
+  rnf (a :-> b) = rnf a `seq` rnf b `seq` ()
+
+instance NFData id => NFData (Signature id) where
+  rnf (Sig cc dd) = rnf cc `seq` rnf dd `seq` ()
+
+instance NFData id => NFData (ArityId id) where
+  rnf (ArityId a i) = rnf i `seq` rnf a `seq` ()

@@ -87,6 +87,7 @@ Library
                   network, 
                   filepath, 
                   graphviz == 2999.1.0.2, 
+                  deepseq,
                   strict, 
                   fgl,
                   parsec < 3, 

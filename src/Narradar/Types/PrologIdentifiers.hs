@@ -14,7 +14,7 @@ module Narradar.Types.PrologIdentifiers where
 
 import Control.Applicative
 import Control.Arrow (first)
-import Control.Parallel.Strategies
+import Control.DeepSeq
 import Data.AlaCarte (Expr)
 import Data.Foldable(Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)

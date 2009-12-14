@@ -11,6 +11,7 @@
 module Narradar.Types.Problem.InitialGoal where
 
 import Control.Applicative
+import Control.DeepSeq
 import Control.Exception (assert)
 import Control.Monad.Free
 import Control.Monad.List
@@ -187,6 +188,11 @@ instance Traversable (Problem p) => Traversable (Problem (InitialGoal id p)) whe
 
 -- Data.Term
 
+-- NFData
+
+instance (NFData (t(Term t Var)), NFData (TermId t), NFData (Problem p trs)) => NFData (Problem (InitialGoal t p) trs) where
+  rnf (InitialGoalProblem gg g p) = rnf gg `seq` rnf g `seq` rnf p `seq` ()
+
 -- Output
 
 instance Pretty p => Pretty (InitialGoal id p) where
@@ -252,7 +258,7 @@ instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Va
 
     iUsableRulesM it@(InitialGoal _ _ p) trs dps tt = do
       reachableRules <- iUsableRulesM irewriting trs dps =<< getFresh (rhs <$> involvedPairs it trs dps)
-      pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
+--      pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
       iUsableRulesM p reachableRules dps tt
 
 
@@ -300,6 +306,16 @@ instance Pretty (Term t v) => Pretty (DGraph t v) where
                                                       ,text "sccs =" <+> text (show sccs)
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
+
+instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (DGraph t v) where
+  rnf (DGraph p pm ip rp sccs sccsm sccg)  = rnf p  `seq`
+                                             rnf pm `seq`
+                                             rnf ip `seq`
+                                             rnf rp `seq`
+--                                             rnf sccs `seq`
+                                             rnf sccsm `seq`
+                                             rnf sccg
+
 mapDGraph f (DGraph p pm ip rp sccs sccsM sccsG)
     = (DGraph (mapNarradarTRS f p) (Map.mapKeys (fmap f) pm) ip rp sccs sccsM sccsG)
 
@@ -359,18 +375,18 @@ mkDGraph' typ trs pairs@(DPTRS dps_a fullgraph _ _) goals = runIcap (rules trs +
       the_dgraph = DGraph {..}
 
 
-  pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, pairs) $$
-            text "The initial pairs are:" <+> pPrint initialPairsG $$
-            text "where the EDG is:" <+> text (show fullgraph)
+--  pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, pairs) $$
+--            text "The initial pairs are:" <+> pPrint initialPairsG $$
+--            text "where the EDG is:" <+> text (show fullgraph)
 --            text "The final graph stored is:" <+> text (show graph) $$
 --            text "where the mapping used for the nodes is" <+> pPrint (assocs reindexMap) $$
 --            text "and the final initial pairs are:" <+> pPrint initialPairsG
-           ) $
+--           ) $
 
   -- The index stored for a pair is within the range of the pairs array
 --   assert (all (inRange (bounds pairs)) (Map.elems pairsMap)) $
   -- The scc index stored for a pair is within the range of the sccs array
-   assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
+  assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
   -- No duplicate edges in the graph
    assert (noDuplicateEdges fullgraph) $
    return the_dgraph

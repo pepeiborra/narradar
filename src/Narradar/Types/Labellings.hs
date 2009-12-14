@@ -12,7 +12,7 @@
 module Narradar.Types.Labellings where
 
 import Control.Applicative
-import Control.Parallel.Strategies
+import Control.DeepSeq
 import Data.Foldable (Foldable(..), toList)
 import Data.Traversable as T
 

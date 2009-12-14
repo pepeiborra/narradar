@@ -6,12 +6,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.Types.Problem.NarrowingGen where
 
 import Control.Applicative
 import Control.Arrow (first)
+import Control.DeepSeq
 import Control.Exception (assert)
 import Control.Monad.Free
 import Data.Char
@@ -21,8 +23,8 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable (Foldable(..), toList)
 import Data.List (nub)
-import Data.Trie (HasTrie, (:->:))
-import qualified Data.Trie as Trie
+import Data.NarradarTrie (HasTrie, (:->:))
+import qualified Data.NarradarTrie as Trie
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Maybe
 import Data.Monoid
@@ -76,6 +78,11 @@ instance HasTrie a => HasTrie (GenId a) where
   insert GoalId v (GenIdTrie gt ge go) = GenIdTrie gt ge (Just v)
   toList (GenIdTrie gt ge go) = catMaybes [fmap ((,) GenId) ge,fmap ((,) GoalId) go] ++
                                 map (first AnId) (Trie.toList gt)
+
+instance NFData a => NFData (GenId a) where
+  rnf GenId = ()
+  rnf GoalId = ()
+  rnf (AnId id) = rnf id
 
 class GenSymbol id where
   goalSymbol :: id
@@ -139,6 +146,11 @@ instance Foldable (Problem p) => Foldable (Problem (MkNarrowingGen p)) where fol
 instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGen p)) where traverse f (NarrowingGenProblem p) = NarrowingGenProblem <$> traverse f p
 
 -- Data.Term instances
+
+-- NFData
+
+instance NFData (Problem p trs) => NFData (Problem (MkNarrowingGen p) trs) where
+  rnf (NarrowingGenProblem p) = rnf p
 
 -- Output
 

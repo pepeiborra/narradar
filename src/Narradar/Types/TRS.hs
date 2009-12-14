@@ -13,6 +13,7 @@ module Narradar.Types.TRS where
 
 import Control.Applicative
 import Control.Arrow (second, (***))
+import Control.DeepSeq
 import Control.Exception
 import Control.Monad.List
 import Data.Suitable
@@ -122,6 +123,8 @@ instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
     pPrint trs@DPTRS{}     = vcat $ map pPrint $ rules trs
     pPrint trs@PrologTRS{} = vcat $ map pPrint $ rules trs
 
+instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (NarradarTRS t v) where
+    rnf (TRS rr sig) = rnf rr `seq` rnf sig `seq` ()
 
 isNarradarTRS :: NarradarTRS t v -> NarradarTRS t v
 isNarradarTRS = id
