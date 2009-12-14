@@ -23,6 +23,8 @@ Flag web
    default: False
 Flag debug
    default: False
+Flag tests
+   default: False
 Flag hood
    default: False
 Flag transformers
@@ -36,6 +38,12 @@ Library
      build-depends:     base < 4
   if flag(debug)
      cpp-options: -DDEBUG
+  if flag(tests)
+     cpp-options: -DTESTING
+     build-depends: parse-dimacs, test-framework, test-framework-quickcheck2, QuickCheck > 2 && < 3
+     hs-source-dirs: test
+     other-modules: Properties
+     -- ghc-options: -fhpc
   if flag(hood)
      cpp-options: -DHOOD
      build-depends: GHood
@@ -47,13 +55,56 @@ Library
 --  cpp-options: -DGHCI
   ghc-prof-options: -auto
   hs-source-dirs: src
-  build-Depends:  muterm-framework >= 1.1.1, base, prettyclass, array, containers, process, directory,
-     bytestring, GraphSCC, EnumMap,
-     xhtml, tagsoup, derive,  network, filepath, graphviz == 2999.1.0.2, parallel, strict, fgl,
-     term >= 0.1.20090915, TRSParser >= 0.3, parsec, unix, template-haskell,
-     control-monad-free >= 0.4.1, control-monad-failure, logict, rmonad, 
-     alacarte >= 0.4, satchmo >= 1.5, satchmo-backends >= 1.5,
-     prolog >= 0.1.20090915, prolog-tools >= 0.1.20090915
+  extensions:   FlexibleContexts,
+                FlexibleInstances,
+                OverlappingInstances,
+                UndecidableInstances,
+                ScopedTypeVariables,
+                PatternGuards,
+                ViewPatterns,
+                RecordWildCards,
+                NamedFieldPuns,
+                TypeOperators,
+                TypeFamilies,
+                MultiParamTypeClasses,
+                RankNTypes
+
+  build-Depends:  base,
+                  prettyclass,
+                  array,
+                  containers, 
+                  process, 
+                  directory,
+                  bytestring, 
+                  GraphSCC, 
+                  EnumMap,
+                  bimap,
+                  bytestring-trie,
+                  triefamily,
+                  xhtml, 
+                  tagsoup, 
+                  derive,  
+                  network, 
+                  filepath, 
+                  graphviz == 2999.1.0.2, 
+                  strict, 
+                  fgl,
+                  parsec < 3, 
+                  unix, 
+                  template-haskell,
+                  control-monad-free >= 0.4.1, 
+                  control-monad-failure, 
+                  logict, 
+                  rmonad, 
+                  alacarte >= 0.4, 
+                  funsat >= 0.6.2,
+                  parse-dimacs,
+                  muterm-framework >= 1.1.1,
+                  term >= 0.1.20090915, 
+                  TRSParser >= 0.3, 
+                  prolog >= 0.1.20090915, 
+                  prolog-tools >= 0.1.20090915
+
   exposed-modules:
      Narradar,
 --     Narradar.Solver,
@@ -63,9 +114,12 @@ Library
      Narradar.Constraints.Modularity,
      Narradar.Constraints.VariableCondition,
      Narradar.Constraints.RPO,
-     Narradar.Constraints.SAT.Common,
-     Narradar.Constraints.SAT.RPO,
+     Narradar.Constraints.SAT.Combinators,
+     Narradar.Constraints.SAT.Solve,
+     Narradar.Constraints.SAT.RPOCircuit,
+--     Narradar.Constraints.SAT.RPO,
      Narradar.Constraints.SAT.RPOAF,
+     Narradar.Constraints.SAT.RPOAF.Symbols,
      Narradar.Examples,
      Narradar.Framework,
      Narradar.Framework.GraphViz
@@ -96,7 +150,8 @@ Library
      Narradar.Processor.InitialGoalNarrowingProblem,
      Narradar.Processor.InfinitaryProblem,
 --     Narradar.Processor.ReductionPair,
-     Narradar.Processor.RPO,
+     Narradar.Processor.RPO
+--     Narradar.Processor.RPOFunsat
      Narradar.Processor.UsableRules,
      Narradar.Processor.PrologProblem,
      Narradar.Processor.RelativeProblem,
@@ -106,6 +161,7 @@ Library
      Narradar.Utils,
      Narradar.Utils.Html,
      Narradar.Utils.Parse,
+     Data.NarradarTrie,
      Control.Monad.Supply,
      Lattice
   other-modules:

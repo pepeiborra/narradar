@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -167,6 +168,10 @@ instance (Traversable t, Ord v, GetFresh t v (Set (Rule t v))) => GetFresh t v (
 
 class IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
 instance IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
+
+class ICap (TermF id) Var (typ, NTRS id) => NCap typ id
+instance ICap (TermF id) Var (typ, NTRS id) => NCap typ id
+
 
 instance (Functor t, Foldable t) => Size (NarradarTRS t v) where size = F.sum . fmap size . rules
 

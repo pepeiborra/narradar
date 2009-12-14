@@ -41,7 +41,7 @@ instance Pretty NarrowingGoalToRelativeRewritingProof where
 instance (gid ~ DPIdentifier (GenId id)
          ,Ord id, Pretty (GenId id)
          ,Traversable (Problem base), MkDPProblem base (NTRS gid), Pretty base
-         ,NCap gid (base, NTRS gid)
+         ,NCap base gid
          ,NUsableRules base gid
          ,HasSignature (NProblem base (DPIdentifier id)), DPIdentifier id ~ SignatureId (NProblem base (DPIdentifier id))
 --         ,InsertDPairs (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) (NTRS gid)

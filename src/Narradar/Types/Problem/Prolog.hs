@@ -11,6 +11,7 @@ module Narradar.Types.Problem.Prolog where
 import Control.Applicative hiding (many)
 import Control.Monad.Error
 import Data.Bifunctor
+import Data.ByteString.Char8 (ByteString, pack)
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Maybe (catMaybes)
 import Data.Term
@@ -76,13 +77,13 @@ prologParser = do
     f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
     f _ = Nothing
 
-    upgradeIds :: Prolog.Program id -> Prolog.Program (SomeId id)
+    upgradeIds :: Prolog.Program String -> Prolog.Program (ArityId ByteString)
     upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
 
-    upgradeGoal (Goal id mm) = Goal (SomeId id (length mm)) mm
+    upgradeGoal (Goal id mm) = Goal (ArityId (pack id) (length mm)) mm
 
-    upgradeTerm (Prolog.Term id tt) = Prolog.term (SomeId id (length tt)) tt
-    upgradeTerm t                   = Impure $ bimap (`SomeId` 0) P.id t
-    upgradePred (Prolog.Pred id tt) = Prolog.Pred (SomeId id (length tt)) tt
-    upgradePred p                   = bimap (`SomeId` 0) P.id p
+    upgradeTerm (Prolog.Term id tt) = Prolog.term (ArityId (pack id) (length tt)) tt
+    upgradeTerm t                   = Impure $ bimap ((`ArityId` 0) . pack) P.id t
+    upgradePred (Prolog.Pred id tt) = Prolog.Pred (ArityId (pack id) (length tt)) tt
+    upgradePred p                   = bimap ((`ArityId` 0) . pack) P.id p
 

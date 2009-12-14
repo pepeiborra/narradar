@@ -35,6 +35,7 @@ import Control.RMonad.AsMonad
 import Data.AlaCarte as Al hiding (Note)
 import Data.AlaCarte.Ppr hiding (Note)
 import Data.Bifunctor
+import Data.ByteString.Char8 (ByteString, pack, unpack)
 import Data.Char (isSpace)
 import Data.List as List hiding (any,notElem)
 import Data.Maybe
@@ -1233,12 +1234,12 @@ Right preludePl = $(do pgm <- runIO (readFile "prelude.pl")
                                      -- I am too lazy to write the required LiftTH instances.
 
   where
-         upgradeIds :: Program id -> Program (SomeId id)
+         upgradeIds :: Program String -> Program StringId
          upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
-         upgradeTerm (Prolog.Term id tt) = Prolog.term (SomeId id (length tt)) tt
-         upgradeTerm t = Impure $ bimap (`SomeId` 0) id t
-         upgradePred (Pred id tt) = Pred (SomeId id (length tt)) tt
-         upgradePred p = bimap (`SomeId` 0) id p
+         upgradeTerm (Prolog.Term id tt) = Prolog.term (ArityId (pack id) (length tt)) tt
+         upgradeTerm t = Impure $ bimap ((`ArityId` 0) . pack) id t
+         upgradePred (Pred id tt) = Pred (ArityId (pack id) (length tt)) tt
+         upgradePred p = bimap ((`ArityId` 0) . pack) id p
 
 
 preludePreds = Set.fromList [ f | Pred f _ :- _ <- preludePl]
@@ -1274,9 +1275,9 @@ addMissingPredicates cc0
 
          vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
 
-         findFreeSymbol sig pre@SomeId{..}
+         findFreeSymbol sig pre@ArityId{..}
              = fromJust $ find (`Set.notMember` getAllSymbols sig)
-                               (pre : [pre{the_id = the_id ++ show i} | i <- [0..]])
+                               (pre : [pre{the_id = the_id `mappend` pack(show i)} | i <- [0..]])
 
 -- ----------
 -- Auxiliary

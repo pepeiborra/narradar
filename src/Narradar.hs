@@ -38,12 +38,14 @@ import System.Posix.Signals
 import System.Console.GetOpt
 import Text.ParserCombinators.Parsec (parse, runParser)
 import Text.Printf
+import Text.XHtml (toHtml)
 import qualified Language.Prolog.Syntax as Prolog
 
 import Prelude as P
 
 import Narradar.Framework
 import MuTerm.Framework.DotRep (DotInfo)
+import MuTerm.Framework.Output
 
 import Narradar.Types hiding (note, dropNote)
 import Narradar.Framework.GraphViz (dotProof', DotProof(..), sliceWorkDone)
@@ -62,6 +64,13 @@ import Narradar.Processor.ExtraVariables
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem
 import Narradar.Processor.SubtermCriterion
+
+#ifdef TESTING
+import Properties (properties)
+import Test.Framework.Runners.Console
+import Test.Framework.Options
+import Test.Framework.Runners.Options
+#endif
 
 narradarMain :: forall mp.
                  (IsMZero mp
@@ -179,23 +188,43 @@ data Options =  Options { problemFile :: FilePath
 defOpts = Options{ problemFile = "", pdfFile = Nothing, input = "", verbose = 0}
 
 --opts :: [OptDescr (Flags f id -> Flags f id)]
-opts = [ Option ""  ["pdf"] (OptArg setPdfPath "PATH") "Produce a pdf proof file (implied by -v)"
+opts = [ Option ""  ["pdf"] (OptArg setPdfPath "PATH") "Produce a pdf proof file (implied by -v2)"
 #ifndef GHCI
        , Option "t" ["timeout"] (ReqArg setTimeout "SECONDS") "Timeout in seconds (default:none)"
 #endif
        , Option "v" ["verbose"] (OptArg setVerbosity "LEVEL") "Verbosity level (0-2)"
        , Option "h?" ["help"]   (NoArg  (\   _     -> putStrLn(usageInfo usage opts) P.>> exitSuccess)) "Displays this help screen"
+#ifdef TESTING
+       , Option "" ["verify"] (OptArg runTests "THREADS")
+                    "Run quickcheck properties and unit tests (# THREADS)"
+#endif
        ]
 
+#ifdef TESTING
+runTests mb_threads _ = do
+  defaultMainWithOpts properties runnerOpts
+  exitSuccess
+ where
+  runnerOpts = RunnerOptions (fmap read mb_threads) (Just to) Nothing
+  to = TestOptions {topt_seed = Nothing
+                   ,topt_maximum_generated_tests = Just 1000
+                   ,topt_maximum_unsuitable_generated_tests = Just 1000
+                   ,topt_timeout = Just(Just (ms 3000)) }
+  ms = (*1000000)
+#endif
 setTimeout arg opts = do
   scheduleAlarm (read arg)
   installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure 2))) Nothing
   P.return opts
 
-setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}
+setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1}
+
+setVerbosity (Just "2") opts@Options{..}
+    = do {P.return opts{verbose=2, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}}
+         `catch` (\e -> error "cannot parse the verbosity level")
 
 setVerbosity (Just i) opts@Options{..}
-    = do {i <- readIO i; P.return opts{verbose=i, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}}
+    = do {i <- readIO i; P.return opts{verbose=i}}
          `catch` (\e -> error "cannot parse the verbosity level")
 
 setPdfPath Nothing  opts = P.return opts{ pdfFile = Just (problemFile opts <.> "pdf") }

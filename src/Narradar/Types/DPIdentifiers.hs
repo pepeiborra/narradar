@@ -12,15 +12,18 @@
 
 
 module Narradar.Types.DPIdentifiers
-    (module Narradar.Types.DPIdentifiers, SomeId(..), StringId
+    (module Narradar.Types.DPIdentifiers, ArityId(..), StringId
     )  where
 
 import Control.Applicative
+import Control.Arrow (first)
 import Control.Parallel.Strategies
 import Data.DeriveTH
 import Data.Derive.Foldable
 import Data.Derive.Functor
 import Data.Derive.Traversable
+import Data.NarradarTrie
+import qualified Data.NarradarTrie as Trie
 import Data.Foldable (Foldable(..))
 import Data.Traversable (Traversable(..))
 import Data.Typeable
@@ -64,24 +67,35 @@ instance NFData a => NFData (DPIdentifier a) where
     rnf (IdDP f)       = rnf f
     rnf AnyIdentifier  = ()
 
+instance HasTrie a => HasTrie (DPIdentifier a) where
+  data DPIdentifier a :->: x = DPIdentifierTrie (a :->: x) (a :->: x)
+  empty = DPIdentifierTrie Trie.empty Trie.empty
+  lookup (IdFunction f) (DPIdentifierTrie dpt ft) = Trie.lookup f ft
+  lookup (IdDP dp) (DPIdentifierTrie dpt ft) = Trie.lookup dp dpt
+  insert (IdFunction f) v (DPIdentifierTrie dpt ft) = DPIdentifierTrie dpt (Trie.insert f v ft)
+  insert (IdDP dp) v (DPIdentifierTrie dpt ft) = DPIdentifierTrie (Trie.insert dp v dpt) ft
+  toList (DPIdentifierTrie ft dpt) = map (first IdDP) (Trie.toList dpt) ++
+                                     map (first IdFunction)   (Trie.toList ft)
+
 $(derive makeFunctor     ''DPIdentifier)
 $(derive makeFoldable    ''DPIdentifier)
 $(derive makeTraversable ''DPIdentifier)
-
 
 -- ------------
 -- DP Symbols
 -- ------------
 
-class DPSymbol s where markDPSymbol, unmarkDPSymbol :: s -> s
+class DPSymbol s where
+  markDPSymbol, unmarkDPSymbol :: s -> s
+  isDPSymbol :: s -> Bool
+
 instance DPSymbol (DPIdentifier id) where
   markDPSymbol (IdFunction f) = IdDP f
-  markDPSymbol f = f
+  markDPSymbol f              = f
   unmarkDPSymbol (IdDP n) = IdFunction n
-  unmarkDPSymbol n = n
-
-isDPSymbol (IdDP _ ) = True
-isDPSymbol _         = False
+  unmarkDPSymbol n        = n
+  isDPSymbol (IdDP _ ) = True
+  isDPSymbol _         = False
 
 functionSymbol = IdFunction; dpSymbol = IdDP
 symbol (IdFunction f) = f; symbol(IdDP f) = f

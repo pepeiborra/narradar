@@ -59,8 +59,4 @@ runIcap :: (Enum v, GetVars v thing) => thing -> State (Substitution t (Either v
 runIcap t m = evalState m (emptySubst, freshVars) where
     freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
 
-
-class ICap (TermF id) Var p => NCap id p | p -> id
-instance ICap (TermF id) Var p => NCap id p
-
 liftIcap (typ,trs) = icap (getBaseFramework typ,trs)

@@ -262,7 +262,7 @@ instance (trs ~ NTRS id
          ,MkDPProblem typ trs, Pretty typ, Traversable (Problem typ)
          ,Pretty id, Ord id, DPSymbol id
          ,NUsableRules typ id
-         ,NCap id (typ, trs)
+         ,NCap typ id
          ,InsertDPairs typ (NTRS id)
          ) =>
   InsertDPairs (InitialGoal (TermF id) typ) (NTRS id)

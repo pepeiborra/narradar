@@ -68,7 +68,7 @@ mkNewProblem ::
     , Ord id, Pretty (DPIdentifier id), Pretty typ
     , Traversable (Problem typ)
     , MkDPProblem typ (NTRS (DPIdentifier id))
-    , NCap (DPIdentifier id) (typ, NTRS (DPIdentifier id))
+    , NCap typ (DPIdentifier id)
     , NUsableRules typ (DPIdentifier id)
     ) => typ -> trs -> NProblem typ (DPIdentifier id)
 mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
@@ -90,7 +90,7 @@ mkDPProblem' :: ( Enum v, Ord v, Pretty v
 {-# SPECIALIZE mkDPProblem'
   :: ( Ord id, Pretty id, Pretty typ
      , MkDPProblem typ (NTRS id), Traversable (Problem typ)
-     , NCap id (typ, NTRS id), NUsableRules typ id
+     , NCap typ id, NUsableRules typ id
      ) =>
      typ -> NTRS id -> NTRS id -> Problem typ (NTRS id) #-}
 
@@ -328,7 +328,7 @@ insertDPairsDefault ::
          ,MkDPProblem typ trs, Pretty typ, Traversable (Problem typ)
          ,Pretty id, Eq id
          ,NUsableRules typ id
-         ,NCap id (typ, trs)
+         ,NCap typ id
          ) => NProblem typ id -> NTRS id -> NProblem typ id
 
 insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs

@@ -11,6 +11,7 @@
 
 module Narradar.Utils where
 
+import Control.DeepSeq
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad  (liftM2, ap)
@@ -23,13 +24,17 @@ import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
 import qualified Control.RMonad as R
 --import qualified "monad-param" Control.Monad.Parameterized as P
 import Data.Array as A
+import Data.Array.Base (unsafeAt)
 import qualified Data.Foldable as F
 import Data.Foldable (toList, foldMap, Foldable)
 import qualified Data.Graph  as G
 import qualified Data.HashTable as HT
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
 import Data.Int
 import Data.List (group, sort)
 import Data.Maybe
+import Data.String
 import Data.Term (Term)
 import Data.Monoid
 import qualified Data.Map as Map
@@ -54,9 +59,13 @@ import Prelude hiding (mapM)
 #ifdef DEBUG
 import qualified Debug.Trace
 trace = Debug.Trace.trace
+debug :: String -> IO ()
+debug = hPutStrLn stderr
 #else
 {-# INLINE trace #-}
 trace _ x = x
+debug :: String -> IO ()
+debug _ = return ()
 #endif
 
 pprTrace = trace . render . pPrint
@@ -118,10 +127,15 @@ tailSafe []     = []
 tailSafe (_:xx) = xx
 
 safeAtM a i
- | A.bounds a `inRange` i = return (a A.! i)
+ | A.bounds a `inRange` i = return (a ! i)
  | otherwise = failure "safeIx"
 
 safeAt msg a i = fromMaybe (error ("safeAt:" ++ msg)) (safeAtM a i)
+
+--safeAtL msg i _ | i < 0 
+safeAtL msg [] _   = error ("safeAtL - index too large (" ++ msg ++ ")")
+safeAtL msg (x:_) 0 = x
+safeAtL msg (_:xx) i = safeAtL msg xx (pred i)
 
 -- --------------
 -- Various stuff
@@ -354,3 +368,11 @@ instance (Monoid s) => R.RMonad (Writer s) where
 instance (Monoid a, Monoid b) => Monoid (Pair a b) where
   mempty = mempty :!: mempty
   mappend (a :!: b) (a' :!: b') = mappend a a' :!: mappend b b'
+
+
+-- --------------------------------
+-- Deepseq instance for Bytestring
+-- --------------------------------
+
+instance NFData BS.ByteString where rnf = rnf . show
+instance NFData LBS.ByteString where rnf = rnf . show

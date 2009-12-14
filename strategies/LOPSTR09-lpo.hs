@@ -15,6 +15,7 @@ import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
+import Narradar.Processor.RPO
 import Narradar.Processor.LOPSTR09
 import Narradar.Framework.GraphViz
 import Lattice

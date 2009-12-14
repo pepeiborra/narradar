@@ -11,6 +11,7 @@
 module Narradar.Types.Problem.NarrowingGen where
 
 import Control.Applicative
+import Control.Arrow (first)
 import Control.Exception (assert)
 import Control.Monad.Free
 import Data.Char
@@ -20,6 +21,8 @@ import Data.Derive.Functor
 import Data.Derive.Traversable
 import Data.Foldable (Foldable(..), toList)
 import Data.List (nub)
+import Data.Trie (HasTrie, (:->:))
+import qualified Data.Trie as Trie
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Maybe
 import Data.Monoid
@@ -61,6 +64,18 @@ instance Pretty (GenId String) where
   pPrint GenId  = text "GEN"
   pPrint GoalId = text "GOAL"
   pPrint (AnId id) = text id
+
+instance HasTrie a => HasTrie (GenId a) where
+  data GenId a :->: x = GenIdTrie (a :->: x) (Maybe x) (Maybe x)
+  empty = GenIdTrie Trie.empty Nothing Nothing
+  lookup (AnId id) (GenIdTrie t _ _) = Trie.lookup id t
+  lookup GenId  (GenIdTrie  _ g _) = g
+  lookup GoalId (GenIdTrie _ _ g) = g
+  insert (AnId id) v (GenIdTrie gt ge go) = GenIdTrie (Trie.insert id v gt) ge go
+  insert GenId  v (GenIdTrie gt ge go) = GenIdTrie gt (Just v) go
+  insert GoalId v (GenIdTrie gt ge go) = GenIdTrie gt ge (Just v)
+  toList (GenIdTrie gt ge go) = catMaybes [fmap ((,) GenId) ge,fmap ((,) GoalId) go] ++
+                                map (first AnId) (Trie.toList gt)
 
 class GenSymbol id where
   goalSymbol :: id

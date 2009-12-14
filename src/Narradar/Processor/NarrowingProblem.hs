@@ -49,7 +49,7 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
          , Info info (NarrowingToRewritingProof id)
          , MkDPProblem base (NTRS id)
          , Traversable (Problem base)
-         , NCap id (base, NTRS id)
+         , NCap base id
          , NUsableRules base id
          ) =>
     Processor info (NarrowingToRewritingICLP08 heu) (Problem (MkNarrowing base) (NTRS id) ) (Problem base (NTRS id) ) where
@@ -78,21 +78,21 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
                         | af <- Set.toList afs]
 
 
-instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
+instance ( HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
          , PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (TermN id)
-         , ApplyAF (NProblem typ0 id)
-         , Info info (NProblem (MkNarrowingGoal id typ0) id)
-         , Info info (NProblem typ0 id)
+         , ApplyAF (NProblem base id)
+         , Info info (NProblem (MkNarrowingGoal id base) id)
+         , Info info (NProblem base id)
          , Info info (NarrowingToRewritingProof id)
-         , MkDPProblem typ0 (NTRS id), Traversable (Problem typ0)
-         , NUsableRules typ0 id
-         , NCap id (typ0, NTRS id)
+         , MkDPProblem base (NTRS id), Traversable (Problem base)
+         , NUsableRules base id
+         , NCap base id
          ) =>
     Processor info (NarrowingToRewritingICLP08 heu)
-                   (NProblem (MkNarrowingGoal id typ0) id)
-                   (NProblem typ0 id)
+                   (NProblem (MkNarrowingGoal id base) id)
+                   (NProblem base id)
  where
-  applySearch (NarrowingToRewritingICLP08 mk) p@(getProblemType -> NarrowingGoal _ pi_groundInfo0 _ typ0)
+  applySearch (NarrowingToRewritingICLP08 mk) p@(getProblemType -> NarrowingGoal _ pi_groundInfo0 _ base)
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where heu = mkHeu mk p
@@ -102,7 +102,7 @@ instance ( HasSignature (NProblem typ0 id), id ~ SignatureId (NProblem typ0 id)
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
                   embed $ findGroundAF' heu pi_groundInfo af0 p R.=<< Set.fromList(rules $ getP p)
           orProblems = [ singleP (NarrowingToRewritingICLP08Proof af) p $
-                                AF.apply af (mkDerivedDPProblem typ0 p)
+                                AF.apply af (mkDerivedDPProblem base p)
                         | af <- Set.toList afs]
 
 

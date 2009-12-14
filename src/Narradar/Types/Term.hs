@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
@@ -6,17 +7,21 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Narradar.Types.Term
-                     (TermF(..), SomeId(..), HasArity(..), StringId
+                     (TermF(..), ArityId(..), HasArity(..), StringId
                      ,TermN, RuleN, constant, term, term1
                      ,termIds, Size(..), fromSimple
                      ,ExtraVars(..)
                      ,module Data.Term, module Data.Term.Rules, MonadFree(..))
     where
 
+import Control.Arrow (first)
 import Control.Monad.Free
 import Data.Char
 import Data.Bifunctor
+import Data.ByteString.Char8 as BS (ByteString, pack, unpack)
 import Data.Foldable as F (Foldable(..),sum,msum)
+import Data.NarradarTrie (HasTrie, (:->:))
+import qualified Data.NarradarTrie as Trie
 import qualified Data.Set as Set
 import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
@@ -24,20 +29,22 @@ import qualified Data.Term.Simple as Simple
 import Data.Term.Rules hiding (unifies', matches')
 import Data.Typeable
 
+import qualified Data.Map as Map
+
 import Narradar.Framework.Ppr
 import Narradar.Types.Var
 
 -- ---------------------
 -- Basic Identifiers
 -- ---------------------
-type StringId = SomeId String
-data SomeId a = SomeId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable)
+type StringId = ArityId ByteString
+data ArityId a = ArityId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable)
 
-instance Pretty StringId where pPrint SomeId{..} = text the_id
-instance Pretty a => Pretty (SomeId a) where pPrint SomeId{..} = pPrint the_id
+instance Pretty StringId where pPrint ArityId{..} = text (BS.unpack the_id)
+instance Pretty a => Pretty (ArityId a) where pPrint ArityId{..} = pPrint the_id
 
 class    HasArity id where getIdArity :: id -> Int
-instance HasArity (SomeId a) where getIdArity = the_arity
+instance HasArity (ArityId a) where getIdArity = the_arity
 
 -- -------
 -- Terms
@@ -59,8 +66,12 @@ termIds :: MonadPlus m => Term (TermF id) a -> m id
 termIds = foldTerm (const mzero) f where
     f (Term f tt) = return f `mplus` F.msum tt
 
-fromSimple :: Simple.TermF id a -> TermF (SomeId id) a
-fromSimple (Simple.Term id tt) = Term (SomeId id (length tt)) tt
+
+fromSimple :: Simple.TermF String a -> TermF StringId a
+fromSimple (Simple.Term id tt) = Term (ArityId (BS.pack id) (length tt)) tt
+
+fromSimple' :: Simple.TermF id a -> TermF (ArityId id) a
+fromSimple' (Simple.Term id tt) = Term (ArityId id (length tt)) tt
 
 
 class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]
@@ -90,7 +101,7 @@ instance Ord id =>  HasId (TermF id) where
     type TermId (TermF id) = id
     getId (Term id _) = Just id
 
-instance MapId TermF where mapId f (Term id tt) = Term (f id) tt
+instance MapId TermF where mapIdM f (Term id tt) = (`Term` tt) `liftM` f id
 
 -- -----
 -- Size
@@ -148,3 +159,49 @@ instance Pretty a => Pretty (TermF String a) where
     pPrint (Term n [x,y]) | not (any isAlpha n) = pPrint x <+> text n <+> pPrint y
     pPrint (Term n tt) = text n <> parens (hcat$ punctuate comma $ map pPrint tt)
 -}
+-- -------------------
+-- Trie instances
+-- -------------------
+
+instance (HasTrie a, HasTrie (f (Free f a))) => HasTrie (Free f a) where
+  data Free f a :->: x = FreeTrie !(a :->: x) !(f (Free f a) :->: x)
+  empty = FreeTrie Trie.empty Trie.empty
+  lookup (Pure k) (FreeTrie pt it) = Trie.lookup k pt
+  lookup (Impure k) (FreeTrie pt it) = Trie.lookup k it
+  insert (Pure k) v (FreeTrie pt it) = FreeTrie (Trie.insert k v pt) it
+  insert (Impure k) v (FreeTrie pt it) = FreeTrie pt (Trie.insert k v it)
+  toList (FreeTrie pt it) = map (first Pure)   (Trie.toList pt) ++
+                            map (first Impure) (Trie.toList it)
+
+instance (HasTrie id, HasTrie a) => HasTrie (TermF id a) where
+  newtype TermF id a :->: x = TermTrie ((id, [a]) :->: x)
+  empty = TermTrie Trie.empty
+  lookup (Term id tt) (TermTrie m) = Trie.lookup (id,tt) m
+  insert (Term id tt) v (TermTrie m) = TermTrie $ Trie.insert (id,tt) v m
+  toList (TermTrie m) = map (first (uncurry Term)) (Trie.toList m)
+{-
+instance HasTrie id => HasTrie (TermN id) where
+  data TermN id :->: x = TermNTrie !(Var :->: x) !( (id,[TermN id]) :->: x)
+  empty = TermNTrie Trie.empty Trie.empty
+  lookup (Impure(Term id tt)) (TermNTrie vt mt) = Trie.lookup (id,tt) mt
+  lookup (Pure v) (TermNTrie vt _) = Trie.lookup v vt
+  insert (Impure(Term id tt)) v (TermNTrie vt mt) = TermNTrie vt $ Trie.insert (id,tt) v mt
+  insert (Pure v) x (TermNTrie vt mt) = TermNTrie (Trie.insert v x vt) mt
+  toList (TermNTrie vt mt) = map (first (uncurry term)) (Trie.toList mt) ++
+                             map (first return) (Trie.toList vt)
+-}
+instance HasTrie a => HasTrie (ArityId a) where
+  newtype ArityId a :->: x = ArityIdTrie ((a,Int) :->: x)
+  empty = ArityIdTrie Trie.empty
+  lookup (ArityId a i) (ArityIdTrie m) = Trie.lookup (a,i) m
+  insert (ArityId a i) v (ArityIdTrie m) = ArityIdTrie $ Trie.insert (a,i) v m
+  toList (ArityIdTrie m) = map (first (uncurry ArityId)) (Trie.toList m)
+
+instance HasTrie Var where
+  newtype Var :->: x = VarTrie (Int :->: (Maybe String, x))
+  empty = VarTrie Trie.empty
+  lookup (Var s i) (VarTrie m) = fmap snd $ Trie.lookup i m
+  insert (Var s i) v (VarTrie m) = VarTrie $ Trie.insert i (s,v) m
+  toList (VarTrie m) = [(Var s i, v) | (i, (s,v)) <- Trie.toList m]
+
+

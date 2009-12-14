@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Constraints.Unify
@@ -28,6 +29,8 @@ module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Types.Term
                       , module Narradar.Types.Var
                       , module Ppr
+                      , HasTrie, Lattice
+                      , AF_, simpleHeu, bestHeu, innermost
                       ) where
 import Data.DeriveTH
 import Data.Derive.Is
@@ -46,6 +49,8 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Traversable as T
+import Data.NarradarTrie (HasTrie)
+import Lattice (Lattice)
 import Text.ParserCombinators.Parsec
 import qualified TRSParser as TRS
 import qualified TRSTypes  as TRS
@@ -57,7 +62,7 @@ import MuTerm.Framework.DotRep
 import MuTerm.Framework.Output
 
 import Narradar.Constraints.Unify
-import Narradar.Types.ArgumentFiltering (AF_)
+import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
@@ -91,12 +96,12 @@ import Prelude as P hiding (sum, pi, mapM)
 data Output = OutputXml ByteString | OutputHtml ByteString | OutputTxt ByteString deriving Show
 
 $(derive makeIs ''Output)
-
+{-
 instance Pretty [Output] where
     pPrint outputs
         | Just (OutputTxt txt) <- find isOutputTxt outputs = text (unpack txt)
         | otherwise = Ppr.empty
-
+-}
 -- --------------------
 -- The Narradar Parser
 -- --------------------
