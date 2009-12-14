@@ -7,7 +7,7 @@
 module Narradar.Processor.SubtermCriterion where
 
 import Control.Monad
-import Control.Monad.Failure
+import Control.Failure
 import Data.List (insert, maximumBy, sort, sortBy)
 import Data.Maybe (listToMaybe)
 import qualified Data.Set as Set

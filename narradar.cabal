@@ -70,6 +70,8 @@ Library
                 RankNTypes
 
   build-Depends:  base,
+                  failure,
+                  control-monad-failure,
                   prettyclass,
                   array,
                   containers, 
@@ -92,7 +94,6 @@ Library
                   unix, 
                   template-haskell,
                   control-monad-free >= 0.4.1, 
-                  control-monad-failure, 
                   logict, 
                   rmonad, 
                   alacarte >= 0.4, 

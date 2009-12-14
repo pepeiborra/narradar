@@ -16,7 +16,7 @@ import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad  (liftM2, ap)
 import Control.Monad.Identity(Identity(..))
-import Control.Monad.Failure
+import Control.Failure
 import Control.Monad.List (lift, ListT(..))
 import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
 import qualified Control.Monad.State.Strict as Strict

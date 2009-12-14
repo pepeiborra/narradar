@@ -16,8 +16,8 @@ module Narradar.Types.ArgumentFiltering where
 
 import Control.Applicative
 import Control.Arrow (first,second)
-import Control.Monad.Failure
 import Control.Monad.Fix (fix)
+import Control.Failure
 import Data.Bifunctor
 import Data.List (partition, find, inits, unfoldr, sortBy)
 import Data.Map (Map)
