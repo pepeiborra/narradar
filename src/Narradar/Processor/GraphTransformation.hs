@@ -39,14 +39,16 @@ data FInstantiation = FInstantiation
 
 -- * Narrowing
 
-instance ( Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+instance ( t ~ f (DPIdentifier id)
+         , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , IUsableRules t Var Rewriting (NarradarTRS t Var)
          , Info info GraphTransformationProof
          ) =>
     Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
   applySearch NarrowingP = narrowing
 
-instance (Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+instance ( t ~ f (DPIdentifier id)
+         , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , IUsableRules t Var IRewriting (NarradarTRS t Var)
          , Info info GraphTransformationProof
          ) =>
@@ -116,6 +118,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 -- * Instantiation
 
 instance (trs ~ NarradarTRS t Var
+         ,t ~ f(DPIdentifier id), MapId f
          ,DPIdentifier id ~ TermId t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
@@ -151,28 +154,27 @@ instance (trs ~ NarradarTRS t v
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
                              (mkDerivedDPProblem typ' p')
-                     | (i,dps') <- dpss
-                     , let olddp  = safeAt "Instantiation" (rulesArray $ getP p) i
-                     , let newdps = dps' !! i
+                     | (i,olddp, newdps) <- dpss
                      , let dgraph' = expandDGraph p olddp newdps
                      , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
                      , let p'   = expandDPair (getBaseProblem p) i newdps
                  ]
 
-   where currentPairs = tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
-         dpss         = [ (i, snd <$$> dps)
-                              | (i,dps) <- zip [0..] (maps f currentPairs)
-                              , all (not.null) dps]
+   where currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
+         dpss         = [ (i, olddp, newdps)
+                              | (i,(j,olddp)) <-currentPairs
+                              , let newdps = f j olddp
+                              , not (null newdps)]
          err = error "Instantiation processor: unexpected"
 
-         f :: (Int, Rule t v) -> [(Int, Rule t v)]
-         f  (i,olddp@(s :-> t))
-                  | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
+         f :: Int -> Rule t v -> [Rule t v]
+         f  i olddp@(s :-> t)
+                  | EqModulo olddp `notElem` (EqModulo <$> newdps) = newdps
                   | otherwise = []
             where
               allPairs = pairs dgraph
               gr       = fullgraph dgraph
-              newdps   = [ (i, applySubst sigma s :-> applySubst sigma t)
+              newdps   = [ applySubst sigma s :-> applySubst sigma t
                           | Just sigma <- snub [dpUnify allPairs i m | (m,n) <- Gr.edges gr, n == i]
                          ]
 
@@ -180,8 +182,9 @@ instance (trs ~ NarradarTRS t v
 -- * Forward Instantiation
 
 instance (trs ~ NarradarTRS t Var
+         ,t ~ f (DPIdentifier id), MapId f
          ,DPIdentifier id ~ TermId t, HasId t
-         ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
+         ,Unify t, Pretty (Term t Var), Ord (Term t Var)
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
          ,ICap t Var (MkRewriting st, NarradarTRS t Var)
@@ -459,14 +462,15 @@ narrow1DP rr (l :-> r) = [ (applySubst theta l :-> r', p)
 -- Instantiation
 
 instantiation, finstantiation
-          :: forall typ trs mp t v p id info.
+          :: forall typ trs mp t f v p id info.
              (p  ~ Problem typ trs, Info info p
              ,trs ~ NarradarTRS t v
              ,v ~ Var
+             ,t ~ f (DPIdentifier id)
              ,TermId t ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v
              ,MkDPProblem typ trs, Traversable (Problem typ)
-             ,Pretty (t(Term t v)), Ord(Term t v), Pretty v, Pretty typ
+             ,Pretty ((Term t v)), Ord(Term t v), Pretty v, Pretty typ
              ,IUsableRules t v typ (NarradarTRS t v), ICap t v (typ, trs)
              ,Info info GraphTransformationProof
              ,Monad mp

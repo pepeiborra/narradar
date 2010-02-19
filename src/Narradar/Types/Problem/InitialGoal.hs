@@ -163,17 +163,32 @@ involvedNodes' p@InitialGoal{dgraph_PType=Just dg@DGraph{..},..} pTRS
                     embed $ nodesInPathNaive sccGraph from to
 
 
-involvedPairs :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var), HasRules t Var trs
-                  ) => InitialGoal t base -> trs -> trs -> [Rule t Var]
+involvedPairs :: (t ~ f id, HasId t, MapId f, Foldable t, Unify t
+                 ,IsDPProblem base, Traversable (Problem base)
+                 ,Ord (Term t Var)
+                 ,ICap t Var (base, NarradarTRS t Var)
+                 ,IUsableRules t Var base (NarradarTRS t Var)
+                 ,Pretty base, Pretty (Term t Var)
+                 ,DPSymbol id
+                  ) => InitialGoal t base -> NarradarTRS t Var -> NarradarTRS t Var -> [Rule t Var]
 involvedPairs p@InitialGoal{dgraph_PType=Just dg@DGraph{..}} trs dps
   = map (`lookupPair` dg) (snub(involvedNodes' p dps ++ pairs ++ toList initialPairsG))
  where
    pairs = catMaybes(map (`lookupNode` dg) (rules dps))
 
-reachableUsableRules :: (Ord(Term t Var), HasId t, Foldable t
-                  ,MkDPProblem base (NarradarTRS t Var), Traversable (Problem base)
-                  ,IUsableRules t Var base (NarradarTRS t Var)
-                  ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
+involvedPairs p trs dps = rules dps
+
+-- NOT POSSIBLE: mkDGraph' expects a DPTRS, whereas dpTRS calls involvedPairs
+--involvedPairs p@InitialGoal{goals_PType} trs dps = involvedPairs p{dgraph_PType=Just dg} trs dps
+--    where dg = mkDGraph' p trs dps goals_PType
+
+reachableUsableRules :: (t ~ f id, Ord(Term t Var), HasId t, Foldable t, Unify t, MapId f
+                        ,MkDPProblem base (NarradarTRS t Var), Traversable (Problem base)
+                        ,ICap t Var (base, NarradarTRS t Var)
+                        ,IUsableRules t Var base (NarradarTRS t Var)
+                        ,Pretty base, Pretty (Term t Var)
+                        ,DPSymbol id
+                        ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
 
 reachableUsableRules p = forDPProblem iUsableRules3 (baseProblem p) (rhs <$> forDPProblem involvedPairs p)
 
@@ -245,13 +260,15 @@ instance (HasId t, Foldable t, Unify t, Ord (Term t Var), Pretty (Term t Var)
       (getR -> trs')           <- iUsableRulesM (setR reachableRules (baseProblem p)) tt
       return (setR trs' p)
 -}
-instance (HasId t, Foldable t, Unify t, Ord (t(Term t Var)), Pretty (t(Term t Var))
+instance (t ~ f id, MapId f, HasId t, Foldable t, Unify t
+         ,Ord (t(Term t Var)), Pretty (t(Term t Var))
          ,IsDPProblem p, Traversable (Problem p), Pretty p
+         ,DPSymbol id
          ,trs ~ NarradarTRS t Var
          ,ICap t Var (p, trs)
          ,IUsableRules t Var p trs
          ) =>
-          IUsableRules t Var (InitialGoal t p) trs
+          IUsableRules (f id) Var (InitialGoal (f id) p) trs
   where
     iUsableRulesVarM it@(InitialGoal _ _ p) trs dps v = do
       reachableRules <- iUsableRulesM irewriting trs dps (rhs <$> involvedPairs it trs dps)
@@ -325,7 +342,7 @@ mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , MkDPProblem typ (NarradarTRS t v)
             , Traversable (Problem typ), Pretty typ
             , HasId t, Unify t
-            , Pretty (t(Term t v))
+            , Pretty ((Term t v))
             , Ord    (Term t v)
             , ICap t v (typ, NarradarTRS t v)
             , IUsableRules t v typ (NarradarTRS t v)
@@ -336,7 +353,7 @@ mkDGraph p@(getP -> DPTRS _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (
 mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
              , v ~ Var
              , IsDPProblem typ, Traversable (Problem typ), Pretty typ
-             , HasId t, Unify t, Pretty (t(Term t v))
+             , HasId t, Unify t, Pretty (Term t v)
              , ICap t v (typ, NarradarTRS t v)
              ) => typ -> NarradarTRS t v -> NarradarTRS t v -> [Term t v] -> DGraph t v
 mkDGraph' typ trs pairs@(DPTRS dps_a fullgraph _ _) goals = runIcap (rules trs ++ rules pairs) $ do
