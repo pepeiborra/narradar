@@ -1,8 +1,7 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -16,6 +15,7 @@
 module Narradar.Constraints.SAT.Solve
     ( BIEnv, EvalM, runEvalM
     , module Narradar.Constraints.SAT.Solve
+    , decode, Var
     ) where
 
 import Bindings.Yices ( mkContext, interrupt, setVerbosity, assertWeighted
@@ -28,7 +28,6 @@ import Data.Array.Unboxed
 import Data.List (unfoldr)
 import Data.Monoid
 import Data.NarradarTrie (HasTrie, (:->:))
-import qualified Data.NarradarTrie as Trie
 import Data.Term.Rules (getAllSymbols)
 import Funsat.Circuit (BEnv, and,or,not)
 import Funsat.Types (Clause,Solution(..))
@@ -41,6 +40,7 @@ import System.Process
 import System.TimeIt
 import Text.Printf
 
+import Narradar.Constraints.SAT.MonadSAT hiding (and,or)
 import Narradar.Constraints.SAT.RPOCircuit hiding (nat)
 import Narradar.Constraints.SAT.YicesCircuit as Serial
         (YicesSource, YMaps(..), emptyYMaps, runYices', generateDeclarations, solveDeclarations)
@@ -54,9 +54,9 @@ import qualified Bindings.Yices as Yices
 import qualified Control.Exception as CE
 import qualified Funsat.Solver as Funsat
 import qualified Funsat.Types as Funsat
-import qualified Funsat.ECircuit as ECircuit
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as LBS
+import qualified Data.NarradarTrie as Trie
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Narradar.Types as Narradar
@@ -64,64 +64,6 @@ import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
 
 import Prelude hiding (and, not, or, any, all, lex, (>))
 import qualified Prelude as P
-
--- --------
--- MonadSAT
--- --------
-
-class (Monad m, Functor m, ECircuit repr, OneCircuit repr, HasTrie v, Ord v, Show v) =>
- MonadSAT repr v m | m -> repr v where
-  boolean :: m v
-  natural :: m (Natural v)
-  assert  :: [repr v] -> m ()
-  assertW :: Weight -> [repr v] -> m ()
-  assertW _ = assert
-
-newtype Var = V Int deriving (Eq, Ord, Num, Enum)
-
-instance Show Var where show (V i) = "v" ++ show i
-instance Read Var where
-  readsPrec p ('v':rest) = [(V i, rest) | (i,rest) <- readsPrec 0 rest]
-  readsPrec _ _ = []
-instance Bounded Var where minBound = V 0; maxBound = V maxBound
-instance HasTrie Var where
-  newtype Var :->: x = VarTrie (Int :->: x)
-  empty = VarTrie Trie.empty
-  lookup (V i) (VarTrie t) = Trie.lookup i t
-  insert (V i) v (VarTrie t) = VarTrie (Trie.insert i v t)
-  toList (VarTrie t) = map (first V) (Trie.toList t)
-
-newtype Natural v = Natural {encodeNatural::v} deriving (Eq,Ord,Show)
-
-lit (V i) = Funsat.L i
-
-instance Pretty Var where pPrint (V i) = text "v" <> i
-
-nat :: (Ord v, HasTrie v, Show v) => NatCircuit repr => Natural v -> repr v
-nat (Natural n) = ECircuit.nat n
-
-type Weight = Int
-
--- ---------------------
--- Interpreting booleans
--- ---------------------
-type Precedence = [Integer]
-
-class Decode a b var | a b -> var where decode :: a -> EvalM var b
-
-instance Decode (Eval var) Bool var where decode = evalB
-instance Decode (Eval var) Int var  where decode = evalN
-instance Decode a b var => Decode [a] [b] var where decode = mapM decode
-instance (Decode a a' var, Decode b b' var ) => Decode (a, b) (a',b') var where
-  decode (a, b) = do {va <- decode a; vb <- decode b; return (va,vb)}
-
---instance Decode var Bool var where decode = evalB . input
-instance Decode Var Bool Var where decode = evalB . input
-instance Decode Var Int Var  where decode = evalN . input
-instance (Ord v, HasTrie v, Show v) => Decode (Natural v) Int v where decode = evalN . nat
-
-evalDecode :: (Ord var, HasTrie var, Show var, Decode (Eval var) b var) => Eval var -> EvalM var b
-evalDecode x = decode x
 
 -- ----------------------------
 -- SMT MonadSAT implementation
@@ -139,7 +81,7 @@ newtype SMTY id a = SMTY {unSMTY :: State (StY id) a} deriving (Functor, Monad, 
 
 smtSerial :: (HasTrie id, Ord id, Show id, Pretty id) => Int -> SMTY id (EvalM Var a) -> IO (Maybe a)
 smtSerial timeout (SMTY my) = do
-  let (me, StY{..}) = runState my (StY [V 2 ..] [] Serial.emptyYMaps)
+  let (me, StY{..}) = runState my (StY [V 1000 ..] [] Serial.emptyYMaps)
 --  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
   bienv <- solveDeclarations (Just timeout) (generateDeclarations stY ++ cmdY)
 --  debug (unlines $ map show $ Set.toList symbols)
@@ -178,7 +120,7 @@ smtFFI (SMTY' my) = do
 --  setVerbosity 10
 --  setLogFile "yices.log"
 #endif
-  (me, StY'{..}) <- runStateT my (StY' [V 2 ..] (FFI.emptyYMaps ctx))
+  (me, StY'{..}) <- runStateT my (StY' [V 1000 ..] (FFI.emptyYMaps ctx))
 --  let symbols = getAllSymbols $ mconcat
 --                [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
 #ifdef DEBUG
@@ -233,9 +175,6 @@ instance (Ord v, HasTrie v, Show v) => MonadSAT (Shared tid tvar) v (SAT tid tva
   assert   [] = return ()
   assert    a = do {st <- get; put st{circuit = orL a `and` circuit st}}
   assertW w a = return () -- = do {st <- get; put st{weightedClauses = ( w, a) : weightedClauses st}}
-
-assertAll :: MonadSAT repr v m => [repr v] -> m ()
-assertAll = mapM_ (assert . (:[]))
 
 st0 = St [minBound..] true []
 

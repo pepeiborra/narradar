@@ -65,31 +65,33 @@ instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), P
   MkProblem Rewriting (NarradarTRS t v)
  where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
-  mapR f (RewritingProblem rr pp s m) = mkDPProblem' (MkRewriting s m) (f rr) pp
+  mapR f (RewritingProblem rr pp s m) = mkDPProblem (MkRewriting s m) (f rr) pp
 
 instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), Pretty (t(Term t v))) =>
   MkProblem IRewriting (NarradarTRS t v)
  where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
-  mapR f (RewritingProblem rr pp s m) = mkDPProblem' (MkRewriting s m) (f rr) pp
+  mapR f (RewritingProblem rr pp s m) = mkDPProblem (MkRewriting s m) (f rr) pp
 
 instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem Rewriting (NarradarTRS t v)
  where
   mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
-  mkDPProblem it@(MkRewriting s m) rr dd = mkDPProblem' it rr dd
+  mkDPProblem it@(MkRewriting s m) rr dd = mkDPProblem it rr (dpTRS it rr dd)
   mapP f (RewritingProblem rr pp s m) = case f pp of
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
-                                          pp' -> mkDPProblem' (MkRewriting s m) rr pp'
+                                          pp' -> let typ = MkRewriting s m
+                                                 in RewritingProblem rr (dpTRS typ rr pp') s m
 
-instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(Term t v))) =>
+instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem IRewriting (NarradarTRS t v)
  where
   mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
-  mkDPProblem it@(MkRewriting s m) rr dd = mkDPProblem' it rr dd
+  mkDPProblem it@(MkRewriting s m) rr dd = mkDPProblem it rr (dpTRS it rr dd)
   mapP f (RewritingProblem rr pp s m) = case f pp of
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
-                                          pp' -> mkDPProblem' (MkRewriting s m) rr pp'
+                                          pp' -> let typ = MkRewriting s m
+                                                 in RewritingProblem rr (dpTRS typ rr pp') s m
 
 -- Prelude
 

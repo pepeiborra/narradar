@@ -9,6 +9,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Narradar.Constraints.SAT.RPOAF (
    RPOSsymbol(..), SymbolRes(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
@@ -38,16 +39,21 @@ import qualified Data.Set as Set
 import Data.Traversable (Traversable, traverse)
 import Narradar.Framework.Ppr as Ppr
 
-import Narradar.Constraints.SAT.Combinators
+import Narradar.Constraints.SAT.MonadSAT
 import Narradar.Constraints.SAT.RPOAF.Symbols
-import qualified Narradar.Constraints.RPO as RPO
-import qualified Narradar.Types as Narradar
-import Narradar.Types hiding (symbol, fresh, constant, Var)
+import Narradar.Framework
+import Narradar.Types.DPIdentifiers
+import Narradar.Types.Term
+import Narradar.Types.TRS
+import Narradar.Types.Problem
 import Narradar.Types.Problem.InitialGoal
+import Narradar.Types.Problem.NarrowingGen
 import Narradar.Utils
 import Narradar.Types.ArgumentFiltering (AFId)
 
 import qualified Funsat.ECircuit as ECircuit
+import qualified Narradar.Constraints.RPO as RPO
+import qualified Narradar.Types as Narradar
 import qualified Narradar.Types.ArgumentFiltering as AF
 import qualified Prelude as P
 import Prelude hiding (catch, lex, not, and, or, any, all, quot, (>))
@@ -605,6 +611,35 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
 
 rulesFor :: (HasId t, TermId t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
+
+-- --------------------------------------
+-- Support for Goal-problems identifiers
+-- --------------------------------------
+
+instance (Show a, GenSymbol a) => GenSymbol (RPOSsymbol Var a) where
+    genSymbol = Symbol{ theSymbol    = genSymbol
+                      , encodePrec   = V 10
+                      , encodeUsable = V 11
+                      , encodeAFlist = V 12
+                      , encodeAFpos  = []
+                      , encodePerm   = []
+                      , encodeUseMset= V 13
+                      , decodeSymbol = mkSymbolDecoder genSymbol (Natural $ V 10) (V 11) (V 12) [] [] (V 13)
+                      }
+    goalSymbol = Symbol{ theSymbol    = genSymbol
+                       , encodePrec   = error "RPOAF.Symbol : goalSymbol"
+                       , encodeUsable = error "RPOAF.Symbol : goalSymbol"
+                       , encodeAFlist = error "RPOAF.Symbol : goalSymbol"
+                       , encodeAFpos  = error "RPOAF.Symbol : goalSymbol"
+                       , encodePerm   = []
+                       , encodeUseMset= error "RPOAF.Symbol : goalSymbol"
+                       , decodeSymbol = return (SymbolRes goalSymbol 0 False (Lex Nothing) (Right []))
+                       }
+
+deriving instance (Show a, GenSymbol a) => GenSymbol (LPOsymbol  Var a)
+deriving instance (Show a, GenSymbol a) => GenSymbol (LPOSsymbol Var a)
+deriving instance (Show a, GenSymbol a) => GenSymbol (MPOsymbol  Var a)
+deriving instance (Show a, GenSymbol a) => GenSymbol (RPOsymbol  Var a)
 
 -- --------
 -- Testing

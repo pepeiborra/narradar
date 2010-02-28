@@ -35,8 +35,7 @@ import qualified Data.NarradarTrie as Trie
 import Data.Traversable (Traversable)
 import Narradar.Framework.Ppr as Ppr
 
-import Narradar.Constraints.SAT.Combinators
-import Narradar.Constraints.SAT.Solve
+import Narradar.Constraints.SAT.MonadSAT
 import qualified Narradar.Types as Narradar
 import Narradar.Types hiding (symbol, fresh, constant, Var)
 import Narradar.Utils (fmap2)
@@ -101,10 +100,6 @@ instance Functor (RPOSsymbol v) where
                                decodeSymbol = fmap2 f decodeSymbol, ..}
 instance Foldable (RPOSsymbol v) where foldMap f Symbol{..} = f theSymbol
 
-instance GenSymbol a => GenSymbol (RPOSsymbol v a) where
-    genSymbol  = mkGenSymbol genSymbol
-    goalSymbol = mkGenSymbol goalSymbol
-
 instance DPSymbol a => DPSymbol (RPOSsymbol v a) where
    markDPSymbol   = fmap markDPSymbol
    unmarkDPSymbol = fmap unmarkDPSymbol
@@ -132,19 +127,12 @@ instance HasTrie a => HasTrie (RPOSsymbol v a) where
   insert k v (RPOSsymbolTrie m) = RPOSsymbolTrie $ Trie.insert (theSymbol k) (k,v) m
   toList (RPOSsymbolTrie m)     = map snd $ Trie.toList m
 
-mkGenSymbol a = Symbol{ theSymbol = a
-                          , encodePrec = error "RPOAF.Symbol : genSymbol"
-                          , encodeUsable = error "RPOAF.Symbol : genSymbol"
-                          , encodeAFlist = error "RPOAF.Symbol : genSymbol"
-                          , encodeAFpos  = error "RPOAF.Symbol : genSymbol"
-                          , encodePerm   = []
-                          , encodeUseMset= error "RPOAF.Symbol : genSymbol"
-                          , decodeSymbol = return (SymbolRes genSymbol 0 False (Lex Nothing) (Right []))
-                          }
 
 type SymbolFactory s = forall id symb m repr . (Show id, Pretty id, DPSymbol id, MonadSAT repr Var m ) => (id, Int, Bool) -> m (s Var id)
 
 --rpos :: SymbolFactory RPOSsymbol
+rpos :: (DPSymbol id, MonadSAT repr v m, Show id, Decode v Bool v) =>
+        (id, Int, Bool) -> m (RPOSsymbol v id)
 rpos (x, ar, defined) = do
   n_b      <- natural
   perm_bb  <- replicateM ar (replicateM ar boolean)
@@ -216,7 +204,7 @@ mkSymbolDecoder id n_b usable_b list_b pos_bb perm_bb mset = do
 newtype LPOSsymbol v a = LPOS{unLPOS::RPOSsymbol v a}
     deriving (Eq, Ord, Show, HasArity
              ,HasPrecedence v, HasStatus v, HasFiltering v
-             ,UsableSymbol v, GenSymbol, DPSymbol, Functor, Foldable)
+             ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (LPOSsymbol v a) (SymbolRes a) v where decode = decode . unLPOS
 
@@ -244,7 +232,7 @@ instance Pretty a => Pretty (LPOSsymbol v a) where
 newtype LPOsymbol v a = LPO{unLPO::RPOSsymbol v a}
     deriving (Eq, Ord, Show, HasArity
              ,HasPrecedence v, HasFiltering v
-             ,UsableSymbol v, GenSymbol, DPSymbol, Functor, Foldable)
+             ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (LPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unLPO
 
@@ -274,7 +262,7 @@ instance (Ord v, Show v) => HasStatus v (LPOsymbol v a) where
 newtype MPOsymbol v a = MPO{unMPO::RPOSsymbol v a}
     deriving (Eq, Ord, Show, HasArity
              ,HasPrecedence v, HasStatus v, HasFiltering v
-             ,UsableSymbol v, GenSymbol, DPSymbol, Functor, Foldable)
+             ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (MPOsymbol v a) (SymbolRes a) v where decode = decode . unMPO
 
@@ -298,7 +286,7 @@ mpo x = do
 newtype RPOsymbol v a = RPO{unRPO::RPOSsymbol v a}
     deriving (Eq, Ord, Show, HasArity
              ,HasPrecedence v, HasStatus v, HasFiltering v
-             ,UsableSymbol v, GenSymbol, DPSymbol, Functor, Foldable)
+             ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (RPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unRPO
 

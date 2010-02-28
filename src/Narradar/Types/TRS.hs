@@ -260,6 +260,9 @@ mapNarradarTRS' _ fr (PrologTRS rr sig) = error "mapNarradarTRS': PrologTRS - so
 mapNarradarTRS' ft fr (DPTRS rr g (u1 :!: u2) _) = let rr' = fmap fr rr
                                               in DPTRS rr' g (fmap3 ft u1 :!: fmap3 ft u2) (getSignature $ A.elems rr')
 
+filterNarradarTRS :: Foldable t => (Rule t v -> Bool) -> NarradarTRS t v -> NarradarTRS t v
+filterNarradarTRS p (TRS rr sig) = mkTRS (filter p (Set.toList rr))
+
 isDPTRS :: NarradarTRSF a -> Bool
 isDPTRS DPTRS{} = True; isDPTRS _ = False
 

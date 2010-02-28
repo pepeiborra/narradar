@@ -66,35 +66,8 @@ mkNewProblem ::
     , NCap typ (DPIdentifier id)
     , NUsableRules typ (DPIdentifier id)
     ) => typ -> trs -> NProblem typ (DPIdentifier id)
-mkNewProblem typ trs = mkDPProblem' typ  rr' (getPairs typ rr') where
+mkNewProblem typ trs = mkDPProblem typ  (tRS rr') (tRS $ getPairs typ rr') where
    rr' = mapTermSymbols IdFunction <$$> rules trs
-
-mkDPProblem' :: ( Enum v, Ord v, Pretty v
-                , rr ~ [Rule t v]
-                , ntrs ~ NarradarTRS t v
-                , Unify t, HasId t, Ord (Term t v)
-                , MkDPProblem typ (NarradarTRS t v)
---                , MkDPProblem typ [Rule t v]
-                , Traversable (Problem typ)
-                , ICap t v (typ, ntrs)
-                , IUsableRules t v typ ntrs
-                , Pretty (Term t v), Pretty typ
-                , IsTRS t v trs
-                ) => typ -> trs -> trs -> Problem typ (NarradarTRS t v)
-
-{-# SPECIALIZE mkDPProblem'
-  :: ( Ord id, Pretty id, Pretty typ
-     , MkDPProblem typ (NTRS id), Traversable (Problem typ)
-     , NCap typ id, NUsableRules typ id
-     ) =>
-     typ -> NTRS id -> NTRS id -> Problem typ (NTRS id) #-}
-
-mkDPProblem' typ (rules -> rr) (rules -> dps) = mkDPProblem typ rrtrs dptrs
-  where
-      rrtrs = tRS rr
-      dptrs = dpTRS typ rrtrs (tRS dps)
-
-
 
 -- ---------------------------
 -- Computing Dependency Pairs

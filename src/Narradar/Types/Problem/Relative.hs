@@ -45,9 +45,16 @@ instance MkProblem p trs => MkProblem (Relative trs p) trs where
   mkProblem (Relative r0 p) rr = RelativeProblem r0 (mkProblem p rr)
   mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
 
-instance MkDPProblem p trs => MkDPProblem (Relative trs p) trs where
+--instance (Monoid trs, MkDPProblem p trs) => MkDPProblem (Relative trs p) trs where
+instance (Foldable t, HasId t, Ord v, Ord (Term t v), MkDPProblem p (NarradarTRS t v)) =>
+    MkDPProblem (Relative (NarradarTRS t v) p) (NarradarTRS t v)
+ where
   mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
-  mkDPProblem (Relative trs0 p) = (RelativeProblem trs0 .) . mkDPProblem p
+  mkDPProblem (Relative trs0 p) rr dps
+     = let p0  = mkDPProblem p (rr `mappend` trs0) dps
+           p0' = mapR (filterNarradarTRS (`Set.notMember` Set.fromList (rules trs0))) p0
+       in  RelativeProblem trs0 p0'
+        -- Assumes that mapR does ^^ not recompute the dependency graphs stored inside the underlying problem
 
 instance FrameworkExtension (Relative id) where
   getBaseFramework = baseProblemType
