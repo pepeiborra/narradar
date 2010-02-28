@@ -76,8 +76,8 @@ instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), P
 instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem Rewriting (NarradarTRS t v)
  where
-  mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
-  mkDPProblem it@(MkRewriting s m) rr dd = mkDPProblem it rr (dpTRS it rr dd)
+--  mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
+  mkDPProblem it@(MkRewriting s m) rr dd = RewritingProblem rr (dpTRS it rr dd) s m
   mapP f (RewritingProblem rr pp s m) = case f pp of
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
                                           pp' -> let typ = MkRewriting s m
@@ -86,8 +86,8 @@ instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, P
 instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem IRewriting (NarradarTRS t v)
  where
-  mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
-  mkDPProblem it@(MkRewriting s m) rr dd = mkDPProblem it rr (dpTRS it rr dd)
+--  mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
+  mkDPProblem it@(MkRewriting s m) rr dd = RewritingProblem rr (dpTRS it rr dd) s m
   mapP f (RewritingProblem rr pp s m) = case f pp of
                                           pp'@DPTRS{} -> RewritingProblem rr pp' s m
                                           pp' -> let typ = MkRewriting s m

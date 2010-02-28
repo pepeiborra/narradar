@@ -153,10 +153,10 @@ instance (trs ~ NarradarTRS t v
    | null currentPairs      = [return p]
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p
-                             (mkDerivedDPProblem typ' p')
+                           (initialGoalProblem goals (Just dgraph') p')
                      | (i,olddp, newdps) <- dpss
                      , let dgraph' = expandDGraph p olddp newdps
-                     , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
+--                     , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
                      , let p'   = expandDPair (getBaseProblem p) i newdps
                  ]
 
@@ -217,18 +217,18 @@ instance (v ~ Var
   | null currentPairs      = [return p]
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
   | isCollapsing (getR p)  = mzero  -- no point in instantiating everything around
-  | otherwise = [ singleP (FInstantiationProof olddp newdps) p (mkDerivedDPProblem typ' p')
+  | otherwise = [ singleP (FInstantiationProof olddp newdps) p (initialGoalProblem goals (Just dgraph') p')
                      | (i, olddp, newdps) <- dpss
                      , let dgraph'= expandDGraph p olddp newdps
-                     , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
+--                     , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
                      , let p'     = expandDPair (getBaseProblem p) i newdps
                 ]
-   where currentPairs =  [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
+   where currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
          dpss = [ (i, olddp, newdps)
                               | (i,(j,olddp)) <-currentPairs
                               , let newdps = f j olddp
                               , not (null newdps)]
-         err = error "Instantiation processor: unexpected"
+         err = error "F Instantiation processor: unexpected"
 
          f i olddp@(s :-> t)
                   | EqModulo olddp `notElem` (EqModulo <$> newdps) = newdps
@@ -373,10 +373,9 @@ narrowingIG p0@InitialGoalProblem{..}
   | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingIG Processor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0
-                           (mkDerivedDPProblem typ' (expandDPair (getBaseProblem p0) i newdps))
+                           (initialGoalProblem goals (Just dgraph') (expandDPair (getBaseProblem p0) i newdps))
                      | (i, olddp, newdps) <- dpss
-                     , let dgraph' = expandDGraph p0 olddp newdps
-                     , let typ'    = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
+                     , let dgraph' = expandDGraph p0 olddp newdps]
     where
           allPairs     = rulesArray $ pairs dgraph
           currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p0)
@@ -417,10 +416,9 @@ narrowing_innermostIG p0@InitialGoalProblem{..}
   | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0
-                          (mkDerivedDPProblem typ' (expandDPair (getBaseProblem p0) i newdps))
+                          (initialGoalProblem goals (Just dgraph') (expandDPair (getBaseProblem p0) i newdps))
                      | (i, olddp, newdps) <- dpss
-                     , let dgraph'= expandDGraph p0 olddp newdps
-                     , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)]
+                     , let dgraph'= expandDGraph p0 olddp newdps]
     where
           allPairs     = rulesArray $ pairs dgraph
           currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p0)
