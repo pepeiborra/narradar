@@ -8,7 +8,6 @@ import Text.HTML.TagSoup
 import Text.ParserCombinators.Parsec.Prim  hiding ((<|>), many)
 import Text.ParserCombinators.Parsec.Combinator (many1)
 import Text.ParserCombinators.Parsec.Pos
-import Text.ParserCombinators.Parsec.Applicative ()
 
 type TagParser st = GenParser Tag st
 

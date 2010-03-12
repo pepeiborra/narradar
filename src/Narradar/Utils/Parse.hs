@@ -3,7 +3,6 @@ module Narradar.Utils.Parse (module Text.ParserCombinators.Parsec, module Narrad
 import qualified Text.ParserCombinators.Parsec.Token as P
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Language( emptyDef )
-import Text.ParserCombinators.Parsec.Applicative ()
 
 -- ------------------------------
 -- General purpose Parsec lexer
