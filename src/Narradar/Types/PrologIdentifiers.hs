@@ -72,7 +72,7 @@ setUId i = mapUId (const i)
 
 instance PrologSymbol (PrologId a) where
     isOutId OutId{} = True; isOutId  _ = False
-    isInId InId{}   = True; isInId   _ = False
+    isInId  InId{}  = True; isInId   _ = False
     getUId   (UId i) = Just i         ; getUId   _ = Nothing
     mapUId f (UId i) = Just(UId $ f i); mapUId _ _ = Nothing
     isFunctorId FunctorId{} = True; isFunctorId _ = False
@@ -80,7 +80,7 @@ instance PrologSymbol (PrologId a) where
 instance (Traversable l, PrologSymbol a) => PrologSymbol (l a) where
     isInId      = getAny . foldMap (Any . isInId)
     isOutId     = getAny . foldMap (Any . isOutId)
-    getUId   x | [x'] <- toList x = getUId   x'; getUId   _ = Nothing
+    getUId   x | [x'] <- toList x = getUId x'; getUId   _ = Nothing
     mapUId f x = mapUId f `T.mapM` x; mapUId _ _ = Nothing
     isFunctorId = getAny . foldMap (Any . isFunctorId)
 
@@ -120,13 +120,13 @@ instance HasTrie a => HasTrie (PrologId a) where
                                         (Int :->: x)
                                         (a :->: x)
   empty = PrologIdTrie Trie.empty Trie.empty Trie.empty Trie.empty
-  lookup (InId k)  (PrologIdTrie i o u f) = Trie.lookup k i
+  lookup (InId  k) (PrologIdTrie i o u f) = Trie.lookup k i
   lookup (OutId k) (PrologIdTrie i o u f) = Trie.lookup k o
-  lookup (UId k)   (PrologIdTrie i o u f) = Trie.lookup k u
+  lookup (UId   k) (PrologIdTrie i o u f) = Trie.lookup k u
   lookup (FunctorId k) (PrologIdTrie i o u f) = Trie.lookup k f
-  insert (InId k)  v (PrologIdTrie i o u f) = PrologIdTrie (Trie.insert k v i) o u f
+  insert (InId  k) v (PrologIdTrie i o u f) = PrologIdTrie (Trie.insert k v i) o u f
   insert (OutId k) v (PrologIdTrie i o u f) = PrologIdTrie i (Trie.insert k v o) u f
-  insert (UId k)   v (PrologIdTrie i o u f) = PrologIdTrie i o (Trie.insert k v u) f
+  insert (UId   k) v (PrologIdTrie i o u f) = PrologIdTrie i o (Trie.insert k v u) f
   insert (FunctorId k) v (PrologIdTrie i o u f) = PrologIdTrie i o u (Trie.insert k v f)
   toList (PrologIdTrie i o u f) = map (first InId)      (Trie.toList i) ++
                                   map (first OutId)     (Trie.toList o) ++
