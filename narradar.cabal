@@ -169,14 +169,12 @@ Library
      Narradar.Types.Term,
      Narradar.Types.TRS,
      Narradar.Types.Var,
-     Narradar.Processor.Aprove,
      Narradar.Processor.ExtraVariables,
      Narradar.Processor.Graph,
      Narradar.Processor.GraphTransformation,
      Narradar.Processor.NarrowingProblem,
      Narradar.Processor.InitialGoalNarrowingProblem,
      Narradar.Processor.InfinitaryProblem,
---     Narradar.Processor.ReductionPair,
      Narradar.Processor.RPO
 --     Narradar.Processor.RPOFunsat
      Narradar.Processor.UsableRules,
