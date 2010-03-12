@@ -104,9 +104,9 @@ instance FrameworkExtension MkNarrowingGen where
   setBaseProblem p0 p = p{baseProblem=p0}
 
 instance IsProblem p => IsProblem (MkNarrowingGen p) where
-  data Problem (MkNarrowingGen p) a    = NarrowingGenProblem {baseProblem::Problem p a}
+  data Problem (MkNarrowingGen p) a      = NarrowingGenProblem {baseProblem::Problem p a}
   getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
-  getR   (NarrowingGenProblem p) = getR p
+  getR   (NarrowingGenProblem p)         = getR p
 
 instance MkProblem p trs => MkProblem (MkNarrowingGen p) trs where
   mkProblem (NarrowingGen p) rr = NarrowingGenProblem (mkProblem p rr)
@@ -120,13 +120,14 @@ instance (Ord id, GenSymbol id, MkDPProblem p (NTRS id)) =>
   MkDPProblem (MkNarrowingGen p) (NTRS id)
  where
   mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
-  mkDPProblem (NarrowingGen typ) trs dps = NarrowingGenProblem $ mkDPProblem typ trs' dps'
+  mkDPProblem (NarrowingGen typ) trs dps
+         = NarrowingGenProblem $ mkDPProblem typ trs' dps'
    where
     trs' = mapNarradarTRS' id extraVarsToGen trs
     dps' = mapNarradarTRS' id extraVarsToGen dps
 
-narrowingGen        = NarrowingGen  rewriting
-cnarrowingGen       = NarrowingGen  irewriting
+narrowingGen  = NarrowingGen  rewriting
+cnarrowingGen = NarrowingGen  irewriting
 
 -- ----------
 -- Instances

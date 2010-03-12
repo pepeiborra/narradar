@@ -19,7 +19,14 @@ source-repository head
 
 Flag base4
    default: True
+Flag lopstr-cli
+   description: build the LOPSTR09 command line interface
+   default: False
 Flag web
+   description: build the safe-tools.dsic.upv.es/narradar CGI applet
+   default: False
+Flag lopstr-web
+   description: build the LOPSTR09 CGI applet
    default: False
 Flag debug
    default: False
@@ -28,6 +35,9 @@ Flag tests
 Flag hood
    default: False
 Flag transformers
+   default: False
+Flag aprove
+   description: include the Aprove processor in the build
    default: False
 
 Library
@@ -53,7 +63,8 @@ Library
      build-depends: mtl
   buildable: True
 --  cpp-options: -DGHCI
-  ghc-prof-options: -auto
+  ghc-options: 
+  ghc-prof-options: -auto-all
   hs-source-dirs: src
   extensions:   FlexibleContexts,
                 FlexibleInstances,
@@ -69,6 +80,8 @@ Library
                 MultiParamTypeClasses,
                 RankNTypes
 
+  extra_libraries: yices
+
   build-Depends:  base,
                   failure,
                   control-monad-failure,
@@ -77,25 +90,29 @@ Library
                   containers, 
                   process, 
                   directory,
-                  bytestring, 
+                  bytestring,
                   GraphSCC, 
                   bimap,
                   bytestring-trie,
                   triefamily,
                   xhtml, 
-                  tagsoup, 
-                  network, 
+                  timeit,
                   filepath, 
                   graphviz == 2999.1.0.2, 
                   deepseq,
                   strict, 
                   fgl,
-                  parsec < 3, 
+                  parallel > 2,
+                  parsec > 3, 
                   unix, 
                   template-haskell,
                   control-monad-free >= 0.4.1, 
                   logict, 
                   rmonad, 
+                  split,
+--                  parse-dimacs,
+                  yices > 0.0.0.4,
+                  bindings-yices,
                   alacarte >= 0.4, 
                   funsat >= 0.6.2,
                   parse-dimacs,
@@ -104,6 +121,15 @@ Library
                   TRSParser >= 0.3, 
                   prolog >= 0.1.20090915, 
                   prolog-tools >= 0.1.20090915
+
+  if flag(aprove)
+    build-depends:network, 
+                  tagsoup
+    exposed-modules:
+     Narradar.Processor.Aprove
+--   Narradar.Processor.ReductionPair,
+    other-modules:
+     Text.ParserCombinators.Parsec.Tag
 
   exposed-modules:
      Narradar,
@@ -117,6 +143,8 @@ Library
      Narradar.Constraints.SAT.Combinators,
      Narradar.Constraints.SAT.Solve,
      Narradar.Constraints.SAT.RPOCircuit,
+     Narradar.Constraints.SAT.YicesCircuit,
+     Narradar.Constraints.SAT.YicesFFICircuit,
 --     Narradar.Constraints.SAT.RPO,
      Narradar.Constraints.SAT.RPOAF,
      Narradar.Constraints.SAT.RPOAF.Symbols,
@@ -167,39 +195,83 @@ Library
   other-modules:
      Data.UniqueList,
      Paths_narradar
-     Text.ParserCombinators.Parsec.Tag
 
-Executable narradar
-  buildable: False
-  main-is:             Main.hs
-  ghc-options:  -threaded
-  hs-source-dirs:         src
+Executable LOPSTR09
+  if flag(lopstr-cli)
+    buildable: True
+  else
+    buildable: False
+  hs-source-dirs:  strategies
+  main-is:         LOPSTR09-new.hs
+  ghc-options:     -threaded
+  hs-source-dirs:  src
+  build-depends:   
+  c-sources:       c_bits/rts.c
+  cpp-options:     -DTHREADED
 
 
 Executable narradarCgi
   if flag(web)
-    buildable: False
-  else
-    buildable: False
-  build-depends: cgi
-  main-is:             MainWeb.hs
-  ghc-options:         -O2 -threaded
-  hs-source-dirs:      src
-  build-Depends:       
-
-  other-modules:
-
-
-
-Executable LOPSTR09
-  if flag(web)
     buildable: True
   else
     buildable: False
-  build-depends: cgi, file-embed
+  build-depends:       cgi
+  main-is:             MainWeb.hs
+  ghc-options:         -O2 -threaded
+  hs-source-dirs:      src
+
+
+Executable LOPSTR09cgi
+  if flag(transformers)
+     build-depends: transformers, monads-fd
+  else
+     build-depends: mtl
+  if flag(lopstr-web)
+    buildable: True
+  else
+    buildable: False
+  build-depends: base, cgi, file-embed, safe-failure
+  build-Depends:  base,
+                  failure,
+                  control-monad-failure,
+                  prettyclass,
+                  array,
+                  containers, 
+                  process, 
+                  directory,
+                  bytestring,
+                  GraphSCC, 
+                  bimap,
+                  bytestring-trie,
+                  triefamily,
+                  xhtml, 
+                  timeit,
+                  filepath, 
+                  graphviz == 2999.1.0.2, 
+                  deepseq,
+                  strict, 
+                  fgl,
+                  parallel > 2,
+                  parsec > 3, 
+                  unix, 
+                  template-haskell,
+                  control-monad-free >= 0.4.1, 
+                  logict, 
+                  rmonad, 
+                  split,
+--                  parse-dimacs,
+                  yices > 0.0.0.4,
+                  bindings-yices,
+                  alacarte >= 0.4, 
+                  funsat >= 0.6.2,
+                  muterm-framework >= 1.3.1,
+                  term >= 0.1.20100131,
+                  TRSParser >= 0.4, 
+                  prolog >= 0.1.20100131,
+                  prolog-tools >= 0.1.20100131
+
   main-is:             LOPSTR09web.hs
   ghc-options:         -O2 -threaded
   hs-source-dirs:      src
 
-  other-modules:
 

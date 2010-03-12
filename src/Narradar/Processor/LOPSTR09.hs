@@ -11,6 +11,7 @@ module Narradar.Processor.LOPSTR09 where
 
 import Control.Applicative
 import Control.Monad
+import Data.Monoid
 import qualified Data.Set as Set
 import Data.Traversable (Traversable)
 import Lattice
@@ -30,14 +31,6 @@ instance Pretty SKTransformProof where
       = text "Transformed into an initial goal narrowing problem" $$
         text "(Schneider-Kamp transformation)"
 
-instance Pretty id => Pretty (NarrowingGoalToRewritingProof id) where
-    pPrint NarrowingGoalToRewritingFail = text "Failed to find a safe argument filtering"
-
-    pPrint (NarrowingGoalToRewritingProof af) = text "Termination of the following rewriting DP problem implies" <+>
-                                               text "termination of the original problem [FLOPS08]." $$
-                                               text "The argument filtering used is:" $$
-                                               pPrint af
-
 
 -- SK Transform
 -- ------------
@@ -49,10 +42,12 @@ instance Info info SKTransformProof =>
  where
   apply SKTransform p0@PrologProblem{..} =
    andP SKTransformProof p0
-     [ mkNewProblem (narrowingGoal (IdFunction <$> skTransformGoal goal)) sk_p
+     [ mkNewProblem (narrowingGoal the_goal) sk_p
          | let sk_p = prologTRS'' rr (getSignature rr)
                rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal    <- goals
+         , let the_goal = -- (IdFunction <$> skTransformGoal goal) `mappend`
+                          (IdDP       <$> skTransformGoal goal)
      ]
 data SKTransformProof = SKTransformProof
   deriving (Eq, Show)
@@ -74,8 +69,9 @@ instance (Info info SKTransformProof
        sk_p = prologTRS'' rr (getSignature rr)
        rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
 
--- Solving narrowing as infinitary problems
--- -----------------------------------------
+
+-- Solving narrowing as infinitary problems (FLOPS'08)
+-- ---------------------------------------------------
 data NarrowingGoalToRewriting heu = NarrowingGoalToRewriting (MkHeu heu)
 instance (t   ~ TermF id
          ,v   ~ Var
@@ -98,10 +94,17 @@ instance (t   ~ TermF id
      orProblems = do
        let heu = mkHeu mk p
            base_p = getProblemType (getBaseProblem p)
-       af' <-  Set.toList $ invariantEV heu p (NarrowingGoal.pi p)
+       af' <- Set.toList $ invariantEV heu p (NarrowingGoal.pi p)
        let p' = mkDerivedDPProblem base_p p
        return $ singleP (NarrowingGoalToRewritingProof af') p (AF.apply af' p')
 
 data NarrowingGoalToRewritingProof id where
     NarrowingGoalToRewritingProof :: AF_ id -> NarrowingGoalToRewritingProof id
     NarrowingGoalToRewritingFail  :: NarrowingGoalToRewritingProof id
+instance Pretty id => Pretty (NarrowingGoalToRewritingProof id) where
+    pPrint NarrowingGoalToRewritingFail = text "Failed to find a safe argument filtering"
+
+    pPrint (NarrowingGoalToRewritingProof af) = text "Termination of the following rewriting DP problem implies" <+>
+                                               text "termination of the original problem [FLOPS08]." $$
+                                               text "The argument filtering used is:" $$
+                                               pPrint af

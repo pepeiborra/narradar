@@ -4,6 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Narradar.Framework (
         module Narradar.Framework,
@@ -13,9 +14,12 @@ module Narradar.Framework (
         module MuTerm.Framework.Strategy)
   where
 
+import Control.Exception (Exception)
 import Control.Monad
 import Data.Foldable (toList)
 import Data.Term (foldTerm, getId)
+import Data.Traversable (Traversable)
+import Data.Typeable
 
 import MuTerm.Framework.DotRep
 import MuTerm.Framework.Problem
@@ -105,3 +109,10 @@ pprTermTPDB t = foldTerm pPrint f t where
             | null tt = pPrint id
             | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
          where tt = toList t
+
+-- ---------------------
+-- Framework Exceptions
+-- ---------------------
+
+data TimeoutException = TimeoutException deriving (Show, Typeable)
+instance Exception TimeoutException

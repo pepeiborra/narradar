@@ -9,6 +9,7 @@ module Narradar.Constraints.RPO where
 import Prelude hiding ((>))
 import qualified Prelude
 
+import Control.DeepSeq
 import Control.Exception(assert)
 import Control.Monad
 import Data.Foldable (Foldable)
@@ -37,6 +38,7 @@ mkStatus mul perm
     oneOrNone (True:xx)  = not $ or xx
 
 instance Pretty Status where pPrint = text.show
+instance NFData Status where rnf Mul = (); rnf (Lex mi) = rnf mi
 
 data RPO m a = RPO {(>), (>~), (~~) :: a -> a -> m Bool}
 
@@ -280,3 +282,64 @@ allM  f xx = and `liftM` mapM f xx
 anyM  f xx = or  `liftM` mapM f xx
 
 permute ff ii = map fst $ dropWhile ( (<0) . snd) $ sortBy (compare `on` snd) (zip ff ii)
+
+
+{-
+
+verifyRPOAF typ the_rules the_pairs decPairs =
+  let theAf = AF.fromList' $ map getFiltering (toList $ getAllSymbols signature)
+      theFilteredPairs = rules $ AF.apply theAf the_pairs
+
+      theDecPairs = CE.assert (P.all (P.< npairs) decPairs) $
+                  select decPairs (rules the_pairs)
+      theWeakPairs = select ([0..npairs - 1] \\ decPairs) (rules the_pairs)
+
+      theUsableRules = Set.fromList
+                       [ l:->r
+                             | l:->r <- rules the_rules
+                             , let Just id = rootSymbol l
+                             , usable id
+                             ]
+
+      expectedUsableRules =
+        Set.fromList
+         [ rule
+         | let urAf = Set.fromList $
+                      rules(iUsableRules3 typ the_rules the_pairs (rhs <$> theFilteredPairs))
+         , rule <- rules the_rules
+         , AF.apply theAf rule `Set.member` urAf]
+
+      falseDecreasingPairs = [ s:->t | s:->t <- theDecPairs, not(s > t))
+     return (s:->t)
+
+  falseWeaklyDecreasingPairs <- runListT $ do
+     s:->t <- li theWeakPairs
+     guard =<< lift (evalDecode $ not( s >~  t))
+     return (s:->t)
+
+  falseWeaklyDecreasingRules <- runListT $ do
+     s:->t <- li (toList theUsableRules)
+     guard =<< lift (evalDecode $ not( s >~  t))
+     return (s:->t)
+
+  let missingUsableRules = [] -- toList (Set.difference expected_usableRules the_usableRules)
+      excessUsableRules  = [] -- toList (Set.difference the_usableRules expected_usableRules)
+
+  return VerifyRPOAF{thePairs = rules the_pairs, ..}
+
+ where
+  signature = getSignature (the_rules `mappend` the_pairs)
+
+  getFiltering s = do
+    isListAF  <- evalDecode $ listAF s
+    filterings <- mapM decode (filtering_vv s)
+    let positions = [ i | (i,True) <- zip [1..(getArity signature s)] filterings]
+    return $ if isListAF
+              then (s, Right positions)
+              else case positions of
+                     [p] -> (s, Left p)
+                     _   -> error ("Invalid collapsing filtering " ++ show positions ++
+                                   " for symbol " ++ show (pPrint s))
+
+  npairs    = length (rules the_pairs)
+-}

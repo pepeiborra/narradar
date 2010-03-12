@@ -1,19 +1,32 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances, FlexibleInstances #-}
 
-module Narradar.Framework.Ppr (module Narradar.Framework.Ppr, module Text.PrettyPrint.HughesPJClass) where
+module Narradar.Framework.Ppr ( module Narradar.Framework.Ppr
+                              , module MuTerm.Framework.Output
+                              , module Text.PrettyPrint.HughesPJClass) where
 
+import Data.AlaCarte.Ppr
 import Data.Array
+
+import Data.Term.Rules ()
+import Data.Term.Ppr ()
+import Data.Strict(Pair(..), (:!:))
+import Language.Prolog.Syntax ()
 
 import qualified Text.PrettyPrint.HughesPJClass as Ppr
 import Text.PrettyPrint.HughesPJClass
                         ( Pretty(..), Doc, equals,
                           text, int, char, comma, colon, empty, render)
 
-import Data.Term.Rules ()
-import Data.Term.Ppr ()
-import Data.Strict(Pair(..), (:!:))
-import Language.Prolog.Syntax ()
+import Data.Set (Set)
+import Data.Map (Map)
+import qualified Data.Set as Set
+import qualified Data.Map as Map
+
+import MuTerm.Framework.Output
+
+instance PprF f => Pretty (Expr f) where pPrint = foldExpr pprF
+instance PprF f =>Show (Expr f) where show = show . pPrint
 
 instance (Ix i, Ix j, Enum i, Enum j, Pretty a) => Pretty (Array (i,j) a) where
     pPrint a = vcat [ hsep [ pPrint (a ! (x,y))
@@ -30,6 +43,11 @@ instance (Ix i, Ix j, Enum i, Enum j) => Pretty (Array (i,j) String) where
        ((min_x,min_y), (max_x,max_y)) = bounds a
 
 instance (Pretty a, Pretty b) => Pretty (Pair a b) where pPrint (a:!:b) = pPrint (a,b)
+
+
+instance Pretty a => Pretty (Set a) where pPrintPrec l _ = pPrintList l .  Set.toList
+instance (Pretty k, Pretty a) => Pretty (Map k a) where
+    pPrint m = vcat [pPrint k <> colon <+> pPrint v | (k,v) <-  Map.toList m]
 
 
 (<+>) :: (Pretty a, Pretty b) => a -> b -> Doc

@@ -17,3 +17,4 @@ pckt(src,address(ip(123,123,1,1),port),new) ->  natroute(pckt(src,address(ip( 10
 natroute (x,y) -> x
 natroute (x,y) -> y
 )
+(STRATEGY NARROWING)

@@ -7,7 +7,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE Rank2Types, ImpredicativeTypes #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Narradar.Types.Problem.InitialGoal where
 
@@ -407,6 +407,8 @@ mkDGraph' typ trs pairs@(DPTRS dps_a fullgraph _ _) goals = runIcap (rules trs +
   assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
   -- No duplicate edges in the graph
    assert (noDuplicateEdges fullgraph) $
+  -- There must be at least one initial pair, right ?
+   assert (not $ Set.null initialPairsG)
    return the_dgraph
 
   where liftL = ListT . return
@@ -426,13 +428,14 @@ expandDGraph ::
       ) =>
       Problem (InitialGoal t typ) (NarradarTRS t Var) -> Rule t Var -> [Rule t Var] -> DGraph t Var
 -}
-expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},..} olddp newdps
-   | Nothing <- Map.lookup olddp pairsMap = dg
+expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} olddp newdps
+   = case lookupNode olddp dg of
+      Nothing -> dg
+      Just i -> expandDGraph' p i newdps
 
-   | Just i  <- Map.lookup olddp pairsMap
-   , p' <- expandDPair (setP pairs p) i newdps
-   = mkDGraph p' goals
-
+expandDGraph' p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} i newdps
+   = let p' = expandDPair (setP pairs p) i newdps
+     in mkDGraph p' goals
 
 instance Ord a => Suitable DGraphF a where
   data Constraints DGraphF a = Ord a => DGraphConstraints

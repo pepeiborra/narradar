@@ -7,10 +7,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
+import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Stream
+import Control.Parallel.Strategies
 import Data.Maybe
 import qualified Language.Prolog.Syntax as Prolog
+import MuTerm.Framework.Proof (parAnds)
 import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
@@ -25,7 +28,7 @@ instance IsMZero Stream where
 
 --import Narradar.Utils
 
-main = narradarMain (listToMaybe.runStream)
+main = narradarMain (listToMaybe)
 
 
 -- Missing dispatcher cases
@@ -41,51 +44,65 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
+  dispatch = sc >=> rpoPlusTransforms >=> final
 
-instance (id ~ DPIdentifier a, Pretty id, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = mkDispatcher (sc >=> rpoPlusTransforms LPOSAF)
+instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProblem IRewriting id) where
+  dispatch = sc >=> rpoPlusTransformsPar >=> final
+
+-- Narrowing
+instance Dispatch (NProblem Narrowing Id) where
+  dispatch = rpoPlusTransforms >=> final
+
+instance Dispatch (NProblem CNarrowing Id) where
+  dispatch = rpoPlusTransformsPar >=> final
 
 -- Narrowing Goal
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+  dispatch = rpoPlusTransforms >=> final
 
-instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
+  dispatch = rpoPlusTransformsPar >=> final
 
-instance (Pretty (GenId id), Ord id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = mkDispatcher (rpoPlusTransforms LPOSAF)
+instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
+  dispatch = rpoPlusTransforms >=> final
 
 -- Relative
 instance (Dispatch (NProblem base id)
-         ,Pretty id, Ord id, Pretty base, Pretty (TermN id)
-         ,IsDPProblem base, MkProblem base (NTRS id), HasMinimality base
+         ,Pretty id, Ord id, HasTrie id
+         ,Pretty (TermN id)
+         ,Pretty base, IsDPProblem base, MkProblem base (NTRS id), HasMinimality base
          ,PprTPDB (NProblem base id), ProblemColor (NProblem base id)
          ,Pretty (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
-sc = apply DependencyGraphSCC >=> apply SubtermCriterion
+sc = apply DependencyGraphSCC >=> try SubtermCriterion
 
-rpoPlusTransforms rpo_strategy
-  =  depGraph >=>
-     repeatSolver 5 ( (lpo .|.
-                       graphTransform .|.
-                       custom_rpo .|.
-                       rpo)
-                       >=> depGraph)
+rpoPlusTransforms
+   = depGraph >=>
+     repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> depGraph)
   where
-    lpo = apply (RPOProc LPOAF (Yices 60))
-    rpo = apply (RPOProc RPOSAF (Yices 60))
-    custom_rpo =  apply (RPOProc rpo_strategy (Yices 60))
+    lpo  = apply (RPOProc LPOAF  SMTFFI)
+    mpo  = apply (RPOProc MPOAF  SMTFFI)
+    lpos = apply (RPOProc LPOSAF SMTFFI)
+    rpo  = apply (RPOProc RPOAF  SMTFFI)
+    rpos = apply (RPOProc RPOSAF SMTFFI)
 
 
-graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
+rpoPlusTransformsPar = parallelize f where
+ f = depGraph >=>
+     repeatSolver 5 ( (lpo .||. rpos .||. graphTransform) >=> depGraph)
+  where
+    lpo  = apply (RPOProc LPOAF  (SMTSerial 60))
+    rpos = apply (RPOProc RPOSAF (SMTSerial 60))
+
+
+graphTransform = apply NarrowingP .||. apply FInstantiation .||. apply Instantiation

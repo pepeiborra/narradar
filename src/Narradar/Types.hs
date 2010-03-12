@@ -61,7 +61,7 @@ import MuTerm.Framework.Output
 import Narradar.Constraints.Unify
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types.DPIdentifiers
+import Narradar.Types.DPIdentifiers         hiding (ArityId(..), StringId)
 import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Labellings
 import Narradar.Types.Goal
@@ -121,7 +121,7 @@ bestError = maximumBy (compare `on` errorPos)
 -- ---------------------------------
 
 class Dispatch thing where
-    dispatch :: MonadPlus m => thing -> Proof (PrettyInfo, DotInfo) m ()
+    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyInfo, DotInfo) m ()
 
 mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m ()
 mkDispatcher f = fmap (const ()) . f
@@ -142,7 +142,7 @@ data AProblem t trs where
     APrologProblem            :: PrologProblem -> AProblem t trs
 
 
-dispatchAProblem :: (MonadPlus m
+dispatchAProblem :: (Traversable m, MonadPlus m
                     ,Dispatch (Problem Rewriting  trs)
                     ,Dispatch (Problem IRewriting trs)
                     ,Dispatch (Problem (InitialGoal t Rewriting) trs)

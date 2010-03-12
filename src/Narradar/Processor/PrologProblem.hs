@@ -11,7 +11,6 @@
 {-# LANGUAGE TransformListComp #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Processor.PrologProblem (
   SKTransformInfinitary(..), SKTransformNarrowing(..), SKTransformProof(..)
@@ -42,7 +41,7 @@ import Data.List as List hiding (any,notElem)
 import Data.Maybe
 import Data.Monoid      (Monoid(..))
 import Data.Foldable    (Foldable(foldMap,foldr), toList, notElem)
-import Data.Traversable (Traversable(traverse))
+import Data.Traversable (Traversable(traverse), foldMapDefault, fmapDefault)
 import qualified Data.Foldable    as F
 import qualified Data.Traversable as T
 import Data.Map (Map)
@@ -87,9 +86,9 @@ import qualified Language.Prolog.Syntax as Prolog
 import qualified Language.Prolog.Parser as Prolog (program)
 import Language.Prolog.Signature
 import Language.Prolog.SharingAnalysis (infer)
-import Language.Prolog.PreInterpretation (computeSuccessPatterns, ComputeSuccessPatternsOpts(..),
-                                          computeSuccessPatternsOpts, DatalogTerm, Abstract,
-                                          abstractCompileGoal)
+-- import Language.Prolog.PreInterpretation (computeSuccessPatterns, ComputeSuccessPatternsOpts(..),
+--                                           computeSuccessPatternsOpts, DatalogTerm, Abstract,
+--                                           abstractCompileGoal)
 import qualified Language.Prolog.Representation as Prolog
 import Language.Prolog.Representation (representTerm, representProgram,
                                        Term0, term0, T(..), PrologT, PrologP, V, NotVar, Compound(..),
@@ -130,6 +129,22 @@ instance (Info info SKTransformProof
          ,PolyHeuristic heu DRP
          ) =>
          Processor info (SKTransformInfinitary heu)
+                   PrologProblem {- ==> -} (NProblem (Infinitary DRP Rewriting) DRP)
+ where
+  apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
+   andP SKTransformInfinitaryProof p0 =<< sequence
+     [  msum (map return probs)
+         | goal    <- goals
+         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
+     ]
+    where
+       sk_p = prologTRS'' rr (getSignature rr)
+       rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
+{-
+instance (Info info SKTransformProof
+         ,PolyHeuristic heu DRP
+         ) =>
+         Processor info (SKTransformInfinitary heu)
                    PrologProblem {- ==> -} (NProblem (Infinitary DRP IRewriting) DRP)
  where
   apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
@@ -141,7 +156,7 @@ instance (Info info SKTransformProof
     where
        sk_p = prologTRS'' rr (getSignature rr)
        rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
-
+-}
 -- -------
 -- Proofs
 -- -------
@@ -176,7 +191,13 @@ type DLRP = DPIdentifier LRP
 data ClauseRules a =
         FactRule    {inRule :: a}
       | ClauseRules {inRule :: a, outRules' :: [a], uRules :: [a]}
- deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+ deriving (Eq, Ord, Show)
+
+instance Functor ClauseRules where fmap = fmapDefault
+instance Foldable ClauseRules where foldMap = foldMapDefault
+instance Traversable ClauseRules where
+  traverse f (FactRule a) = FactRule <$> f a
+  traverse f (ClauseRules a bb cc) = ClauseRules <$> f a <*> traverse f bb <*> traverse f cc
 
 outRules (FactRule r) = [r]
 outRules rr = outRules' rr
@@ -1096,7 +1117,7 @@ prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0
 
 --newtype PrologM id v a = PrologM {unPrologM:: StateT (PrologMState id v) (StateT [v]  (AsMonad Set)) a}
 newtype PrologM id v a = PrologM {unPrologM:: RWST String [String] (PrologMState id v) (StateT [v] Identity) a}
-  deriving (Functor, Monad, MonadFresh v, MonadWriter [String])
+  deriving (Functor, Monad, MonadVariant v, MonadWriter [String])
 
 --evalPrologM (PrologM m) st0 = m `evalRWST` st0 `evalStateT` ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0))
 execPrologM (PrologM m) st0 = trace ("running PrologM with max depth " ++ show (prologM_maxdepth st0)) $

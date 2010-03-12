@@ -13,8 +13,9 @@ module Narradar.Utils where
 
 import Control.DeepSeq
 import Control.Applicative
+import Control.Concurrent
 import Control.Exception (bracket)
-import Control.Monad  (liftM2, ap)
+import Control.Monad  (liftM2, ap, when)
 import Control.Monad.Identity(Identity(..))
 import Control.Failure
 import Control.Monad.List (lift, ListT(..))
@@ -32,7 +33,8 @@ import qualified Data.HashTable as HT
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
 import Data.Int
-import Data.List (group, sort)
+import Data.List (group, sort, nubBy)
+import Data.List.Split (chunk)
 import Data.Maybe
 import Data.String
 import Data.Term (Term)
@@ -46,6 +48,7 @@ import Data.Suitable
 import Data.Traversable
 import System.IO
 import System.Directory
+import System.Process
 
 import Data.Term.Rules as Term
 import Narradar.Framework.Ppr
@@ -60,7 +63,7 @@ import Prelude hiding (mapM)
 import qualified Debug.Trace
 trace = Debug.Trace.trace
 debug :: String -> IO ()
-debug = hPutStrLn stderr
+debug msg = do {hPutStrLn stderr msg; hFlush stderr}
 #else
 {-# INLINE trace #-}
 trace _ x = x
@@ -88,14 +91,15 @@ instance (Functor f, Functor g) => Functor (O f g) where fmap f (O fgx) = O (fma
 -- --------------------------------
 -- fmap / mapM / foldMap / toList n
 -- --------------------------------
-fmap2  = fmap . fmap
-fmap3  = fmap . fmap . fmap
-(<$$>) = fmap2
-(<$$$>)= fmap3
-(<$$$$>)= fmap . fmap . fmap . fmap
+fmap2 = fmap . fmap
+fmap3 = fmap . fmap . fmap
+fmap4 = fmap . fmap . fmap . fmap
+(<$$>)   = fmap2
+(<$$$>)  = fmap3
+(<$$$$>) = fmap4
 
-mapM2  = mapM . mapM
-
+mapM2   = mapM . mapM
+mapM3   = mapM . mapM . mapM
 return2 = return . return
 
 foldMap2 :: (Foldable t, Foldable t', Monoid m) => (a -> m) -> t(t' a) -> m
@@ -192,7 +196,7 @@ tag f xx = [ (f x, x) | x <- xx]
 inhabiteds :: [[a]] -> [[a]]
 inhabiteds = filter (not.null)
 
-select = selectSafe ""
+-- select = selectSafe ""
 
 selectSafe :: String -> [Int] -> [a] -> [a]
 selectSafe msg ii xx
@@ -205,7 +209,7 @@ selectSafe msg ii xx
         | i < 0       = error ("select(" ++ msg ++ "): negative index")
         | otherwise = xx !! i
 
-propSelect ii xx = map (xx!!) ii' == select ii' xx
+propSelect ii xx = map (xx!!) ii' == selectSafe "" ii' xx
   where _types = (xx::[Int], ii::[Int])
         ii'   = filter (< length xx) (map abs ii)
 
@@ -219,11 +223,15 @@ asTypeOfArg1 x _ = x
 asTypeOfArg21 :: f a b -> f' a b' -> f a b
 asTypeOfArg21 x _ = x
 
-chunks n _ | n < 1 = error "chunks: zero or negative chunk size"
-chunks _ []   = []
-chunks n list = xx : chunks n rest  where (xx, rest) = (take n list, drop n list)
+chunks = chunk
 
-withTempFile dir name m = bracket (openTempFile dir name) (removeFile . fst) (uncurry m)
+--withTempFile dir name m = bracket (openTempFile dir name) (removeFile . fst) (uncurry m)
+
+withTempFile dir name m = do
+  (fp, h) <- openTempFile dir name
+  (delete, res)  <- m fp h
+  when delete $ removeFile fp
+  return res
 
 -- Implementacion libre de:
 --  "A new way to enumerate cycles in graph" - Hongbo Liu, Jiaxin Wang
@@ -301,6 +309,31 @@ infixr 3 .|.
 infixr 3 ..&..
 infixr 3 ..|..
 
+-- ----------------------------------------------
+-- Running external processes feeding bytestrings
+-- ----------------------------------------------
+
+readProcessWithExitCodeBS exec args input = do
+        let nice = ""
+        debug (unwords $ nice : exec : args)
+        outMVar <- newEmptyMVar
+        errMVar <- newEmptyMVar
+        (hIn, hOut, hErr, hProc) <- runInteractiveProcess "time" (exec:args) Nothing Nothing
+        (code, out, err) <- do
+          _ <- forkIO (BS.hGetContents hOut >>= putMVar outMVar)
+          _ <- forkIO (BS.hGetContents hErr >>= putMVar errMVar)
+          when (not $ LBS.null input) $ LBS.hPut hIn input
+          hClose hIn
+
+          out <- takeMVar outMVar
+          err <- takeMVar errMVar
+
+          code <- waitForProcess hProc
+
+          return (code, out, err)
+        return (code, out, err)
+  where
+   ignore _ = return ()
 
 -- ---------------------------------------
 -- Missing Applicative instances
@@ -376,3 +409,4 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
 
 instance NFData BS.ByteString where rnf = rnf . show
 instance NFData LBS.ByteString where rnf = rnf . show
+

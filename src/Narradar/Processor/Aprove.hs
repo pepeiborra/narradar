@@ -155,8 +155,8 @@ aproveProc path = go where
               output            <- hGetContents out
               errors            <- hGetContents err
               unless (null errors) (error ("Aprove failed with the following error: \n" ++ errors))
-              return$ (if take 3 output == "YES" then success else dontKnow)
-                        (AproveProof [OutputHtml(pack $ massage output)] ) prob
+              return$ (True, (if take 3 output == "YES" then success else dontKnow)
+                             (AproveProof [OutputHtml(pack $ massage output)] ) prob)
 
 aproveSrvPort    = 5250
 
@@ -221,7 +221,7 @@ callAproveSrv' (strat, timeout, p) = withSocketsDo $ withTempFile "/tmp" "ntt.tr
     res <- hGetContents hAprove
     evaluate (length res)
     hClose hAprove
-    return res
+    return (True, res)
 
 aproveSrvXML strat (timeout :: Int) prob =
     let p = show(pprTPDB prob) in callAproveSrv strat timeout p

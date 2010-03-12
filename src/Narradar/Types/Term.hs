@@ -86,6 +86,7 @@ instance (Ord v, Functor t, Foldable t) => ExtraVars v (Rule t v) where
 -- Specific instance for TermF, only for efficiency
 instance Eq id => Unify (TermF id) where
   {-# SPECIALIZE instance Unify (TermF String) #-}
+  {-# SPECIALIZE instance Unify (TermF StringId) #-}
   unifyM = unifyF where
    unifyF t s = do
     t' <- find' t
@@ -167,19 +168,25 @@ instance Pretty a => Pretty (TermF String a) where
 instance (HasTrie a, HasTrie (f (Free f a))) => HasTrie (Free f a) where
   data Free f a :->: x = FreeTrie !(a :->: x) !(f (Free f a) :->: x)
   empty = FreeTrie Trie.empty Trie.empty
-  lookup (Pure k) (FreeTrie pt it) = Trie.lookup k pt
-  lookup (Impure k) (FreeTrie pt it) = Trie.lookup k it
+  lookup = lookupFree
   insert (Pure k) v (FreeTrie pt it) = FreeTrie (Trie.insert k v pt) it
   insert (Impure k) v (FreeTrie pt it) = FreeTrie pt (Trie.insert k v it)
   toList (FreeTrie pt it) = map (first Pure)   (Trie.toList pt) ++
                             map (first Impure) (Trie.toList it)
 
+{-# INLINE lookupFree #-}
+lookupFree (Pure k) (FreeTrie pt it) = Trie.lookup k pt
+lookupFree (Impure k) (FreeTrie pt it) = Trie.lookup k it
+
 instance (HasTrie id, HasTrie a) => HasTrie (TermF id a) where
   newtype TermF id a :->: x = TermTrie ((id, [a]) :->: x)
   empty = TermTrie Trie.empty
-  lookup (Term id tt) (TermTrie m) = Trie.lookup (id,tt) m
+  lookup  = lookupTermF
   insert (Term id tt) v (TermTrie m) = TermTrie $ Trie.insert (id,tt) v m
   toList (TermTrie m) = map (first (uncurry Term)) (Trie.toList m)
+
+{-# INLINE lookupTermF #-}
+lookupTermF (Term id tt) (TermTrie m) = Trie.lookup (id,tt) m
 {-
 instance HasTrie id => HasTrie (TermN id) where
   data TermN id :->: x = TermNTrie !(Var :->: x) !( (id,[TermN id]) :->: x)
@@ -194,9 +201,12 @@ instance HasTrie id => HasTrie (TermN id) where
 instance HasTrie a => HasTrie (ArityId a) where
   newtype ArityId a :->: x = ArityIdTrie ((a,Int) :->: x)
   empty = ArityIdTrie Trie.empty
-  lookup (ArityId a i) (ArityIdTrie m) = Trie.lookup (a,i) m
+  lookup = lookupArityId
   insert (ArityId a i) v (ArityIdTrie m) = ArityIdTrie $ Trie.insert (a,i) v m
   toList (ArityIdTrie m) = map (first (uncurry ArityId)) (Trie.toList m)
+
+{-# INLINE lookupArityId #-}
+lookupArityId (ArityId a i) (ArityIdTrie m) = Trie.lookup (a,i) m
 
 instance HasTrie Var where
   newtype Var :->: x = VarTrie (Int :->: (Maybe String, x))
@@ -224,3 +234,6 @@ instance NFData id => NFData (Signature id) where
 
 instance NFData id => NFData (ArityId id) where
   rnf (ArityId a i) = rnf i `seq` rnf a `seq` ()
+
+instance (NFData k, NFData a) => NFData (SubstitutionF k a) where
+  rnf = rnf . unSubst

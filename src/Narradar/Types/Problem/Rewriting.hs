@@ -8,9 +8,9 @@
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Problem.Rewriting
-         ( Problem(..), MkRewriting(..), Rewriting, IRewriting, rewriting, irewriting
-         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
-         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
+         ( MkRewriting(..), Rewriting, IRewriting, rewriting, irewriting
+--         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
+--         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
          ) where
 
 import Control.Applicative

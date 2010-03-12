@@ -12,9 +12,9 @@
 
 module Narradar.Constraints.SAT.RPOAF (
    RPOSsymbol(..), SymbolRes(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
-  ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, Omega
+  ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
   ,rpo, rpos, lpo, lpos, mpo
-  ,verifyRPOAF
+  ,verifyRPOAF, isCorrect
   ) where
 
 import Control.Applicative
@@ -23,17 +23,19 @@ import Control.Monad
 import Control.Monad.Cont
 import Control.Monad.Identity
 import Control.Monad.List
+import Control.Monad.Reader
 import qualified Control.RMonad as R
 import qualified Data.Array as A
 import Data.Foldable (Foldable, foldMap, toList)
-import Data.List ((\\), transpose, inits, zip4)
+import Data.List ((\\), transpose, inits, tails, zip4)
 import Data.Maybe
 import Data.Monoid
 import Data.NarradarTrie (HasTrie)
+import Data.Traversable (traverse)
 import Data.Typeable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Traversable (Traversable)
+import Data.Traversable (Traversable, traverse)
 import Narradar.Framework.Ppr as Ppr
 
 import Narradar.Constraints.SAT.Combinators
@@ -78,21 +80,21 @@ rpoAF_DP' allowCol con p
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
 
---  assertAll [omega p']
+  assertAll [omega p']
   assertAll [ l >~ r | l:->r <- rules dps']
 
-  assertAll [(l > r) <-->  input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
+  assertAll [(l > r) <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
   assert (map input decreasing_dps)
 
   -- Ensure that we find the solution which removes the most pairs possible
-  sequence_ [ assertW 1 [lit b] | b <- decreasing_dps]
+  sequence_ [ assertW 1 [input b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
-  mapM_ (assertW 1 . (:[]) . negate . lit . usable) (Map.elems dict)
+  mapM_ (assertW 1 . (:[]) . not . input . usable) (Map.elems dict)
 
   return $ do
     decreasing <- decode decreasing_dps
-    let the_non_decreasing_pairs = [ r | (r,False) <- zip [0..] decreasing]
+    let the_non_decreasing_pairs = [ r | (r,False) <- zip [(0::Int)..] decreasing]
     return the_non_decreasing_pairs
 
 
@@ -104,7 +106,6 @@ rpoAF_IGDP :: (Ord id
               ,NeededRules (TermF sid) Narradar.Var base (NTRS sid)
               ,HasMinimality base
               ,DPSymbol id, Pretty id
-              ,RPOExtCircuit (Shared sid) sid
               ,Ord sid, Pretty sid, Show sid
               ,UsableSymbol Var sid
               ,DPSymbol sid
@@ -113,9 +114,12 @@ rpoAF_IGDP :: (Ord id
               ,HasFiltering Var sid
               ,HasTrie sid
               ,Decode sid (SymbolRes id) Var
-              ) => Bool -> (Int -> (id,Int,Bool) -> SAT sid Var sid)
+              ,MonadSAT repr Var m
+              ,RPOExtCircuit repr sid Narradar.Var
+              ,HasSignature (NProblem (InitialGoal (TermF id) base) id)
+              ) => Bool -> ((id,Int,Bool) -> m sid)
                 -> NProblem (InitialGoal (TermF id) base) id
-                -> SAT sid Var (EvalM Var ([Int], [SymbolRes id]))
+                -> m (EvalM Var ([Int], BIEnv Var, [sid]))
 
 rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   = runRPOAF con allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
@@ -127,7 +131,7 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
                          (getProblemType baseProblem)
       p'   = mkDPProblem typ' trs' dps'
 
-  assertAll (omega  p' : [ l >~ r | l:->r <- rules dps'])
+  assertAll (omegaIG p' : [ l >~ r | l:->r <- rules dps'])
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
@@ -135,7 +139,7 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   assert (map input decreasing_dps)
 
   -- Ensure that we find the solution which removes the most pairs possible
-  sequence_ [ assertW 1 [lit b] | b <- decreasing_dps]
+  sequence_ [ assertW 1 [input b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
 
@@ -144,22 +148,23 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   return $ do
 
     decreasing <- decode decreasing_dps
-
+    return [ r | (r,False) <- zip [(0::Int)..] decreasing]
+{-
     (weakly, strictly) <- do
-       weakly   <- evalB (and $ omega  p' :
+       weakly   <- evalB (and $ omegaIG  p' :
                                [l >~ r | (False, l:->r) <- zip decreasing (rules dps')])
        strictly <- evalB (and [l > r | (True, l:->r) <- zip decreasing (rules dps')])
        return (weakly, strictly)
-    (weaklyS, strictlyS) <- do
-       weaklyS <- evalB (ECircuit.removeComplex $ ECircuit.runShared $ removeComplex $ runShared $
-                        and $ omega p' : [l >~ r | (False, l:->r) <- zip decreasing (rules dps')])
 
-       strictlyS <- evalB (ECircuit.removeComplex $ ECircuit.runShared $ removeComplex $ runShared $
-                           and [l > r | (True, l:->r) <- zip decreasing (rules dps')])
+    (weaklyS, strictlyS) <- do
+       weaklyS <- evalB (and $ omegaIG p' : [l >~ r | (False, l:->r) <- zip decreasing (rules dps')])
+
+       strictlyS <- mapM evalB ([l > r | (True, l:->r) <- zip decreasing (rules dps')])
 
        return (weaklyS, strictlyS)
-{-
-    verification <- verifyRPOAF (getProblemType p) trs' dps' decreasing_dps
+
+
+    verification <- verifyRPOAF typ' trs' dps' decreasing_dps
     let isValidProof
           | isCorrect verification = True
           | otherwise = pprTrace verification False
@@ -167,11 +172,10 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
     CE.assert isValidProof $
 -}
 
-    CE.assert strictlyS $
-     CE.assert weaklyS $
-     CE.assert strictly $
+--    CE.assert  (null strictlyS) $
+--     CE.assert (null weaklyS) $
+--     CE.assert strictly $
 --     CE.assert weakly $
-     return [ r | (r,False) <- zip [0..] decreasing]
 
  where isTheRightKind :: InitialGoal (f id) base -> InitialGoal (f id) base
        isTheRightKind = id
@@ -195,7 +199,7 @@ rpoAF_NDP allowCol con p
              [ l >~ r | l:->r <- rules dps'])
 
   -- Ensure that we find the solution which removes the most pairs possible
-  sequence_ [ assertW 1 [lit b] | b <- decreasing_dps]
+  sequence_ [ assertW 1 [input b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
 
@@ -203,15 +207,15 @@ rpoAF_NDP allowCol con p
   return $ do
     decreasing <- decode decreasing_dps
     af_ground  <- decode (af_ground_rhs_dps :: [Eval Var])
-    return ([ r | (r,False) <- zip [0..] decreasing]
-           ,[ r | (r,False) <- zip [0..] af_ground])
+    return ([ r | (r,False) <- zip [(0::Int)..] decreasing]
+           ,[ r | (r,False) <- zip [(0::Int)..] af_ground])
 
 
 runRPOAF con allowCol sig f = do
   let ids  = getArities sig
       bits = calcBitWidth $ Map.size ids
 
-  symbols <- mapM (con bits)
+  symbols <- mapM con
                   [ (f, ar, def)
                     | (f,ar) <-  Map.toList ids
                     , let def = Set.member f (getDefinedSymbols sig)]
@@ -223,16 +227,17 @@ runRPOAF con allowCol sig f = do
   let dict       = Map.fromList (zip (Map.keys ids) symbols)
   mkRes <- f dict
   return $ do -- Debug.trace ("The symbols are:\n" ++ show symbols) $ do
-    symbolsres <- mapM decode symbols
+    env <- ask
     res <- mkRes
-    return (res, symbolsres)
+    return (res, env, symbols)
 
 -- ----------------------
 -- Symbols set extensions
 -- ----------------------
 
-instance (RPOCircuit repr (RPOSsymbol v a), FreshCircuit repr, OneCircuit repr, ECircuit repr, Ord a) =>
-    RPOExtCircuit repr (RPOSsymbol v a) where
+instance ( RPOCircuit repr (RPOSsymbol v a) tvar, ExistCircuit repr, OneCircuit repr, ECircuit repr
+         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar, Ord a, Pretty a) =>
+    RPOExtCircuit repr (RPOSsymbol v a) tvar where
      exEq s t ss tt =
        and [useMul s, useMul t, muleq s t ss tt]
        \/
@@ -241,34 +246,49 @@ instance (RPOCircuit repr (RPOSsymbol v a), FreshCircuit repr, OneCircuit repr, 
      exGt s t ss tt =
        and [useMul s, useMul t, mulgt s t ss tt]
        \/
-       and [not$ useMul s, not$ useMul t, lexpgt s t ss tt]
+       and [not$ useMul s, not$ useMul t, lexpgt_exist s t ss tt]
 
-instance (RPOCircuit repr (LPOSsymbol v a), OneCircuit repr, ECircuit repr, Ord a) =>
-  RPOExtCircuit repr (LPOSsymbol v a) where
-  exEq s t = lexpeq  s t
-  exGt s t = lexpgt  s t
+     exGe s t ss tt =
+       and [useMul s, useMul t, mulgt s t ss tt \/ muleq s t ss tt]
+       \/
+       and [not$ useMul s, not$ useMul t, lexpgt_exist s t ss tt \/ lexpeq s t ss tt]
+{-
+     exGe s t ss tt =
+       and [useMul s, useMul t, mulge s t ss tt]
+       \/
+       and [not$ useMul s, not$ useMul t, lexpge_exist s t ss tt]
+-}
+instance (RPOCircuit repr (LPOSsymbol v a) tvar, OneCircuit repr, ECircuit repr, ExistCircuit repr, Ord a, Pretty a
+         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+  RPOExtCircuit repr (LPOSsymbol v a) tvar where
+  exEq s t = lexpeq s t
+  exGt s t = lexpgt_exist s t
+--  exGe = lexpge_exist
 
-instance (RPOCircuit repr (LPOsymbol v a), OneCircuit repr, ECircuit repr, Ord a) =>
-  RPOExtCircuit repr (LPOsymbol v a) where
-  exEq s t = lexeq s t
-  exGt s t = lexgt s t
+instance (RPOCircuit repr (LPOsymbol v a) tvar, OneCircuit repr, ECircuit repr, ExistCircuit repr, Ord a
+         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+  RPOExtCircuit repr (LPOsymbol v a) tvar where
+  exEq s t = lexeq_exist s t
+  exGt s t = lexgt_exist s t
 
-instance (RPOCircuit repr (MPOsymbol v a), FreshCircuit repr, OneCircuit repr, ECircuit repr, Ord a) =>
-  RPOExtCircuit repr (MPOsymbol v a) where
+instance (RPOCircuit repr (MPOsymbol v a) tvar, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
+         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+  RPOExtCircuit repr (MPOsymbol v a) tvar where
   exEq s t = muleq s t
   exGt s t = mulgt s t
 
-instance (RPOCircuit repr (RPOsymbol v a), FreshCircuit repr, OneCircuit repr, ECircuit repr, Ord a) =>
-  RPOExtCircuit repr (RPOsymbol v a) where
+instance (RPOCircuit repr (RPOsymbol v a) tvar, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
+         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+  RPOExtCircuit repr (RPOsymbol v a) tvar where
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]
       \/
-      and [not$ useMul s, not$ useMul t, lexeq s t ss tt]
+      and [not$ useMul s, not$ useMul t, lexeq_exist s t ss tt]
 
   exGt s t ss tt =
       and [useMul s, useMul t, mulgt s t ss tt]
       \/
-      and [not$ useMul s, not$ useMul t, lexgt s t ss tt]
+      and [not$ useMul s, not$ useMul t, lexgt_exist s t ss tt]
 
 -- -------------------------
 -- Narrowing related stuff
@@ -283,30 +303,93 @@ afGroundRHS (_ :-> t) = and  [ or [ not(inAF i f)
 -- Lexicographic extension with AF
 -- -----------------------------------
 
-lexgt id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
-  go []     []     = false
+lexgt id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
+                           (zip (map input $ filtering_vv id_g) gg)
+ where
   go []     _      = false
-  go ff      []    = or [inAF i id_f | (_,i) <- ff]
-  go ((f,i):ff) ((g,j):gg)
-    =  ite (inAF i id_f)
-           (ite (inAF j id_g)
+  go ff      []    = or [ af_f | (af_f,_) <- ff]
+  go ((af_f,f):ff) ((af_g,g):gg)
+    =  ite af_f
+           (ite af_g
                 ((f > g) \/ ((f ~~ g) /\ go ff gg))
-                (go ((f,i):ff) gg))
-           (go ff ((g,j):gg))
+                (go ((af_f,f):ff) gg))
+           (go ff ((af_g,g):gg))
 
-lexeq id_f id_g ff gg = go (zip ff [1..]) (zip gg [1..]) where
-  go []         [] = true
-  go ff         [] = not $ or [inAF i id_f | (_,i) <- ff]
-  go []         gg = not $ or [inAF j id_g | (_,j) <- gg]
-  go ((f,i):ff) ((g,j):gg)
-    = ite (inAF i id_f)
-          (ite (inAF j id_g)
-               ((f ~~ g) /\ go ff gg)
-               (go ((f,i):ff) gg))
-          (go ff ((g,j):gg))
+lexeq id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
+                           (zip (map input $ filtering_vv id_g) gg)
+ where
+  go []     []     = true
+  go ff      []    = not $ or [ af_f | (af_f,_) <- ff]
+  go []      gg    = not $ or [ af_g | (af_g,_) <- gg]
+  go ((af_f,f):ff) ((af_g,g):gg)
+    =  ite af_f
+           (ite af_g
+                ((f ~~ g) /\ go ff gg)
+                (go ((af_f,f):ff) gg))
+           (go ff ((af_g,g):gg))
+
+lexgt_exist _    _    [] _  = false
+lexgt_exist id_f _    ff [] = or . map input . filtering_vv $ id_f
+lexgt_exist id_f id_g ff gg = (`runCont` id) $ do
+-- We build a matrix M of dim n_f x n_g containing all
+-- the comparisons between tails of ff and gg
+-- That is, M[0,0] = lexgt ff gg
+--          M[1,0] = lexgt (drop 1 ff) gg
+--          M[0,1] = lexgt ff (drop 1 gg)
+--          ...
+-- Actually, the matrix containts additional elements
+--          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
+--          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
+-- The proposition is true iff M[0,0] is true
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
+                      | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
+                      , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
+                                        `zip` tails (zip filters_g gg))]
+
+  return ( m!!0!!0 /\ and assertions)
+ where
+   filters_f = map input (filtering_vv id_f)
+   filters_g = map input (filtering_vv id_g)
+
+   constraint _ []     _      = false
+   constraint _ ff      []    = or [ af_f | (af_f,_) <- ff]
+   constraint m ((af_f,f):ff) ((af_g,g):gg)
+             =  ite af_f
+                    (ite af_g
+                         (f>g \/ (f~~g /\ m!!1!!1))
+                         (m!!0!!1))
+                    (m!!1!!0)
+
+lexeq_exist _    _    [] [] = true
+lexeq_exist id_f _    _  [] = not . or . map input . filtering_vv $ id_f
+lexeq_exist _    id_g [] _  = not . or . map input . filtering_vv $ id_g
+lexeq_exist id_f id_g ff gg = (`runCont` id) $ do
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
+                      | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
+                      , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
+                                        `zip` tails (zip filters_g gg)]
+
+  return ( m!!0!!0 /\ and assertions)
+ where
+   filters_f = map input (filtering_vv id_f)
+   filters_g = map input (filtering_vv id_g)
+
+   constraint _ []     []     = true
+   constraint _ ff      []    = not $ or [ af_f | (af_f,_) <- ff]
+   constraint _ []      gg    = not $ or [ af_g | (af_g,_) <- gg]
+   constraint m ((af_f,f):ff) ((af_g,g):gg)
+             =  ite af_f
+                    (ite af_g
+                         (f~~g /\ m!!1!!1)
+                         (m!!0!!1))
+                    (m!!1!!0)
+
 
 --lexpeq :: (ECircuit repr, RPOCircuit repr (Symbol a)) =>
 --          Symbol a -> Symbol a -> [TermN (Symbol a)] -> [TermN (Symbol a)] -> repr Var
+--lexpeq id_f id_g ss tt | pprTrace (text "encoding " <+> ss <+> text "~" <+> tt) False = undefined
 lexpeq id_f id_g ss tt =
   eqArity /\
   and ( [ (f_ik /\ g_jk) --> s_i ~~ t_j
@@ -320,59 +403,109 @@ lexpeq id_f id_g ss tt =
                      )
        m   = max (length ff) (length gg)
 
-lexpgt id_f id_g ss tt = exgt_k (transpose $ enc_f) (transpose $ enc_g)
+--lexpgt id_f id_g ss tt | pprTrace (text "encoding " <+> ss <+> text ">" <+> tt) False = undefined
+lexpgt id_f id_g ss tt = expgt_k (transpose $ enc_f) (transpose $ enc_g)
      where
        Just enc_f = lexPerm id_f
        Just enc_g = lexPerm id_g
        n = length ss
        m = length tt
-       exgt_k [] _ = false
-       exgt_k (f_k:_) [] = or f_k
-       exgt_k (f_k:ff) (g_k:gg)
-         = or [f_ik /\ and [ g_jk --> s_i > t_j \/
-                                      (s_i ~~ t_j /\ exgt_k ff gg)
+       expgt_k [] _ = false
+       expgt_k (f_k:_) [] = or f_k
+       expgt_k (f_k:ff) (g_k:gg)
+         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
+                                      (s_i ~~ t_j /\ expgt_k ff gg))
                             | (g_jk, t_j) <- zip g_k tt]
-                | (f_i,f_ik, s_i) <- zip3 enc_f f_k ss]
+                | (f_ik, s_i) <- zip f_k ss]
+
+lexpgt_exist id_f id_g [] _  = false
+lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
+  let k = min (length ss) (length tt) + 1
+  vf_k <- replicateM k (Cont exists)
+  let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
+                    [the_tail]
+      the_tail = if length ss P.> length tt
+                   then or (transpose enc_f !! length tt)
+                   else false
+
+  let assertions = zipWith (<-->) vf_k constraints
+  return (head vf_k /\ and assertions)
+     where
+       Just enc_f = lexPerm id_f
+       Just enc_g = lexPerm id_g
+
+       expgt_k f_k g_k next
+         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
+                                      (s_i ~~ t_j /\ next))
+                            | (g_jk, t_j) <- zip g_k tt]
+                | (f_ik, s_i) <- zip f_k ss]
+
+lexpge_exist id_f id_g ss tt = (`runCont` id) $ do
+  let k = min (length ss) (length tt) + 1
+  vf_k <- replicateM k (Cont exists)
+  let constraints = zipWith3 expge_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
+                    [the_tail]
+      the_tail = if length ss P.> length tt
+                   then eqArity \/ or (enc_f !! length tt)
+                   else eqArity
+
+  let assertions = zipWith (<-->) vf_k constraints
+  return (head vf_k /\ and assertions)
+     where
+       Just enc_f = lexPerm id_f
+       Just enc_g = lexPerm id_g
+
+       expge_k f_k g_k next
+         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
+                                      (s_i ~~ t_j /\ next))
+                            | (g_jk, t_j) <- zip g_k tt]
+                | (f_ik, s_i) <- zip f_k ss]
+
+       m = max (length enc_f) (length enc_g)
+       eqArity = and ( take m (zipWith (<-->) (map or enc_f ++ repeat false)
+                                              (map or enc_g ++ repeat false))
+                     )
+
+
 
 -- ---------------------------
 -- Multiset extension with AF
 -- ---------------------------
+mulge id_f id_g [] gg = none $ map (`inAF` id_g) [1..length gg]
+mulge id_f id_g ff gg = mulgen id_f id_g ff gg (const true)
 
--- We avoid memoizing constraints derived from multiset extensions,
--- There is nothing to win since the involved gammas and epsilons are fresh for
--- every multiset comparison and do not carry over to the rest of the problem
-
-mulgt id_f id_g [] _  = false
---mulgt id_f id_g [x] [y] = inAF 1 id_f /\ (inAF 1 id_g --> x > y)
-mulgt id_f id_g ff gg =
+mulgt id_f id_g []  _   = false
+mulgt id_f id_g ff  gg  =
     mulgen id_f id_g ff gg (\epsilons ->
                                 not $ and [inAF i id_f --> ep_i
                                            | (i, ep_i) <- zip [1..] epsilons])
+
 muleq id_f id_g [] [] = true
---muleq id_f id_g [t] [u] = (not(inAF 1 id_f) /\ not (inAF 1 id_g)) \/ (inAF 1 id_f /\ inAF 1 id_g /\ t ~~ u)
+muleq id_f id_g [] gg = none $ map (`inAF` id_g) [1..length gg]
 muleq id_f id_g ff gg =
     mulgen id_f id_g ff gg (\epsilons ->
                                 and [inAF i id_f --> ep_i
                                       | (i, ep_i) <- zip [1..] epsilons])
 
+
 mulgen id_f id_g ff gg k = (`runCont` id) $ do
     let (i,j)    = (length ff, length gg)
 
-    epsilons <-  replicateM i (Cont fresh)
-    gammasM  <-  replicateM j $ replicateM i (Cont fresh)
-    let gammasM_t = transpose gammasM
+    epsilons  <- replicateM i (Cont exists)
+    gammasM_t <- replicateM i $ replicateM j (Cont exists)
+    let gammasM = transpose gammasM_t
 
         oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms =
           [ ite (inAF j id_g)
-                (one gammas_j)
-                (and (not <$> gammas_j))
+                (one  gammas_j)
+                (none gammas_j)
             | (j, gammas_j) <- zip [1..] gammasM ]
 
         filteredSubtermsCannotCover =
-          [ not(inAF i id_f) --> and (not <$> gammas_i)
+          [ not(inAF i id_f) --> none gammas_i
             | (i, gammas_i) <- zip [1..] gammasM_t]
 
-        subtermUsedForEqualityCanOnlyCoverOnce =
+        subtermUsedForEqualityMustCoverOnce =
           [ ep_i --> one gamma_i
             | (ep_i, gamma_i) <- zip epsilons gammasM_t]
 
@@ -385,38 +518,19 @@ mulgen id_f id_g ff gg k = (`runCont` id) $ do
        and ( k epsilons
            : oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms
           ++ filteredSubtermsCannotCover
-          ++ subtermUsedForEqualityCanOnlyCoverOnce
+          ++ subtermUsedForEqualityMustCoverOnce
           ++ greaterOrEqualMultisetExtension
            )
 
 -- ------------------------
 -- Usable Rules with AF
 -- ------------------------
-class Omega typ id where
-    omega :: (ECircuit repr, RPOCircuit repr id) => Problem typ (NTRS id) -> repr Var
 
-instance (p  ~ Problem typ
-         ,IsDPProblem typ
-         ,HasMinimality typ
-         ,trs ~ NTRS id
-         ,t   ~ TermF id
-         ,v   ~ Narradar.Var
-         ,Traversable p
-         ,Ord id
-         ,HasFiltering Var id, UsableSymbol Var id
-         ,Pretty id
-         ,NUsableRules typ id
-         ,NeededRules t v typ trs
-         ,MkDPProblem typ (NTRS id)
-         ,RPOExtCircuit (Shared id) id
-         ,HasPrecedence Var id
-         ,HasStatus Var id
-         ) => Omega typ id
- where
-  omega p = and ([go r trs | _:->r <- dps] ++
+omega p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
+            and ([go r trs | _:->r <- dps] ++
                  [iusable f --> and [ l >~ r | l:->r <- rulesFor f trs]
-                   | f <- Set.toList dd ] ++
-                 [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                   | f <- Set.toList dd ]
+--                 [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                 )
 
    where
@@ -446,27 +560,7 @@ instance (p  ~ Problem typ
          rls       = rulesFor id_t trs
          rest      = trs \\ rls -- :: [Rule t Var]
 
-instance (p   ~ Problem (InitialGoal (TermF id) typ)
---         ,id ~ SignatureId (Problem typ trs), id ~ symbol a
-         ,t   ~ TermF id
-         ,v   ~ Narradar.Var
-         ,trs ~ NarradarTRS t v
-         ,HasMinimality typ
-         ,Pretty typ
-         ,MkDPProblem typ trs
-         ,HasSignature (Problem typ trs)
-         ,Traversable (Problem typ)
-         ,Pretty id, Ord id, DPSymbol id
-         ,HasFiltering Var id, UsableSymbol Var id
-         ,NUsableRules typ id
-         ,NeededRules t v typ trs
-         ,NCap typ id
-         ,HasPrecedence Var id, HasStatus Var id
-         ,RPOExtCircuit (Shared id) id
-         ) => Omega (InitialGoal (TermF id) typ) id
- where
-
-  omega p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are: " <> ip) $
+omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are: " <> ip $$ text "and dd=" <+> dd ) $
             and ([go l r trs | l:->r <- ip] ++
                  [iusable f --> and [ l >~ r | l:->r <- rulesFor f trs]
                     | f <- Set.toList dd ] ++
@@ -516,25 +610,14 @@ rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
 -- Testing
 -- --------
 
-{-
-verifyRPOAF :: (var ~ Var
-               ,HasFiltering var symb
-               ,HasStatus    var symb
-               ,HasPrecedence var symb
-               ,NUsableRules typ symb
-          ) => typ -> NTRS symb -> NTRS symb -> [var]
-           -> EvalM var (VerifyRPOAF (RuleN symb))
--}
-verifyRPOAF typ the_rules the_pairs dec_pairs = do
+verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
 
   theAf <- AF.fromList' `liftM` mapM getFiltering (toList $ getAllSymbols signature)
   let theFilteredPairs = rules $ AF.apply theAf the_pairs
 
-  decPairs <- mapM (evalDecode . input) dec_pairs
-
-  let theDecPairs = CE.assert (P.all (P.< npairs) decPairs) $
-                  select decPairs (rules the_pairs)
-      theWeakPairs = select ([0..npairs - 1] \\ decPairs) (rules the_pairs)
+  let theWeakPairs = CE.assert (P.all (P.< npairs) nonDecPairsIx) $
+                     selectSafe "verifyRPOAF 1" nonDecPairsIx (rules the_pairs)
+      theDecPairs  = selectSafe "verifyRPOAF 2" ([0..npairs - 1] \\ nonDecPairsIx) (rules the_pairs)
 
   theUsableRules <- liftM Set.fromList $ runListT $ do
                        l:->r <- msum $ map return $ rules the_rules
@@ -574,15 +657,14 @@ verifyRPOAF typ the_rules the_pairs dec_pairs = do
   signature = getSignature (the_rules `mappend` the_pairs)
 
   getFiltering s = do
-    isListAF  <- evalDecode $ listAF s
-    filterings <- mapM evalDecode [inAF i s | i <- [1..pred(getArity signature s)]]
-    let positions = [ i | (i,True) <- zip [1..pred(getArity signature s)] filterings]
+    isListAF   <- evalDecode $ listAF s
+    filterings <- mapM decode (filtering_vv s)
+    let positions = [ i | (i,True) <- zip [1..(getArity signature s)] filterings]
     return $ if isListAF
               then (s, Right positions)
-              else CE.assert (length positions == 1) $
-                   (s, Left $ head positions)
+              else case positions of
+                     [p] -> (s, Left p)
+                     _   -> error ("Invalid collapsing filtering " ++ show positions ++
+                                   " for symbol " ++ show (pPrint s))
 
   npairs    = length (rules the_pairs)
-
-
-

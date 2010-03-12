@@ -56,12 +56,10 @@ instance (t   ~ TermF id
      orProblems = do
        let heu    = mkHeu mk p
            base_p = getProblemType (Infinitary.baseProblem p)
-       af' <-  Set.toList $ invariantEV heu p (Infinitary.pi p)
-       let p' = mkDerivedDPProblem base_p $
-                if usable then iUsableRules p (rhs <$> rules (getP p)) else p
-       return $ singleP (InfinitaryToRewritingProof af') p (AF.apply af' p')
-
-
+       let p' = if usable then iUsableRules p (rhs <$> rules (getP p)) else p
+       af' <-  Set.toList $ invariantEV heu p' (Infinitary.pi p')
+       return $ singleP (InfinitaryToRewritingProof af') p
+                        (AF.apply af' . mkDerivedDPProblem base_p $ p')
 
 -- -------------
 -- Proofs
@@ -74,8 +72,8 @@ data InfinitaryToRewritingProof id where
 instance Pretty id => Pretty (InfinitaryToRewritingProof id) where
     pPrint InfinitaryToRewritingFail = text "Failed to find an argument filtering that satisfies" <>
                                          text "the variable condition."
-    pPrint (InfinitaryToRewritingProof af) = text "Termination of the following rewriting DP problem" <+>
-                                               text "implies termination of the original problem." $$
+    pPrint (InfinitaryToRewritingProof af) = text "(SGST07) Termination of the following rewriting DP problem" <+>
+                                               text "implies termination of the infinitary rewriting problem." $$
                                                text "The argument filtering used is:" $$
                                                pPrint af
 

@@ -11,15 +11,14 @@ module Narradar.Constraints.SAT.Combinators
     , module Narradar.Constraints.SAT.Solve
     , Status(..), mkStatus
     , Circuit, ECircuit, NatCircuit, OneCircuit, RPOCircuit
-    , RPOExtCircuit(..), FreshCircuit(..)
+    , RPOExtCircuit(..), ExistCircuit(..)
     , castCircuit, Clause
-    , Eval, evalB, evalN
+    , Eval, evalB, evalN, BIEnv
     , input, true, false, not, ite, eq, lt, gt, lit, one
     , Shared, runShared, removeComplex
     , HasPrecedence(..), precedence
     , HasFiltering(..), listAF, inAF
     , HasStatus(..), useMul, lexPerm
-    , EvalM
     ) where
 
 import Data.List (foldl')
@@ -43,6 +42,8 @@ import qualified Prelude as P
 
 calcBitWidth = length . takeWhile (P.>0) . iterate (`div` 2) . pred
 
+infix 9 >
+infix 9 ~~
 infixl 8 /\,\/
 infixl 7 -->
 infix 6 <-->
@@ -52,10 +53,10 @@ constant False = false
 
 (>)  = Funsat.termGt
 (~~) = Funsat.termEq
-t >~ u = t > u \/ t ~~ u
+(>~) = Funsat.termGe
 
-and = foldl' Funsat.and true
-or  = foldl' Funsat.or  false
+and = andL
+or  = orL
 (/\) = Funsat.and
 (\/) = Funsat.or
 
@@ -67,6 +68,7 @@ every = flip all
 (-->) = onlyif
 (<-->) = iff
 
+none = andL . map not
 -- ---------
 -- Testing
 -- ---------
@@ -115,5 +117,4 @@ instance (Eq a, Pretty a) => Pretty (VerifyRPOAF a) where
 
 isCorrect VerifyRPOAF{..} = null (falseDecreasingPairs ++ falseWeaklyDecreasingPairs ++ falseWeaklyDecreasingRules ++ excessUsableRules ++ missingUsableRules)
 isCorrect FailedWithStatusMismatch{} = False
-
 

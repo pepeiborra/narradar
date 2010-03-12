@@ -7,7 +7,6 @@
 
 module Narradar ( narradarMain, prologMain
                 , Options(..), defOpts
-                , PprTPDB(..)      -- module Narradar.Framework.GraphViz
                 , module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
                 , module Narradar.Processor.GraphTransformation
@@ -22,11 +21,14 @@ module Narradar ( narradarMain, prologMain
                 , module Narradar.Types
                 ) where
 
-
+import Control.Concurrent
+import Control.Exception (evaluate)
+import qualified Control.Exception as CE
 import Control.Monad.Free
 import Data.Foldable (Foldable)
 import Data.Maybe
 import Data.Monoid
+import Data.Traversable (Traversable)
 import System.Cmd
 import System.Directory
 import System.Environment
@@ -48,7 +50,7 @@ import MuTerm.Framework.DotRep (DotInfo)
 import MuTerm.Framework.Output
 
 import Narradar.Types hiding (note, dropNote)
-import Narradar.Framework.GraphViz (dotProof', DotProof(..), sliceWorkDone)
+import Narradar.Framework.GraphViz (dotProof', DotProof(..))
 import Narradar.Utils
 
 import Narradar.Types.Problem.Relative
@@ -73,7 +75,7 @@ import Test.Framework.Runners.Options
 #endif
 
 narradarMain :: forall mp.
-                 (IsMZero mp
+                 (IsMZero mp, Traversable mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
@@ -88,7 +90,7 @@ narradarMain :: forall mp.
                  ,Dispatch (Problem (CNarrowingGoal Id) (NTRS Id))
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
-narradarMain run = do
+narradarMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
   tmp <- getTemporaryDirectory
   let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
@@ -102,14 +104,15 @@ narradarMain run = do
 #ifdef DEBUG
                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-                               ignore $ system (printf "dot -Tpdf %s -o %s" fp the_pdf)
+                               dotOk <- system (printf "dot -Tpdf %s -o %s" fp the_pdf)
                                hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
+                               return (dotOk == ExitSuccess, ())
 
   a_problem <- eitherM $ narradarParse problemFile input
 
   let proof    = dispatchAProblem a_problem
-      sol      = run (runProof proof)
-      diagrams = isJust pdfFile
+  sol <- evaluate $ run (runProof proof)
+  let diagrams = isJust pdfFile
 
   case sol of
     Just sol -> do putStrLn "YES"
@@ -118,16 +121,34 @@ narradarMain run = do
 
     Nothing  -> do
              putStrLn "MAYBE"
-             when (diagrams && verbose > 0) $ do
-                  print $ pPrint proof
-                  printDiagram (sliceWorkDone proof)
+             when (verbose > 0) $ print $ pprProofFailures proof
+             when diagrams $ printDiagram (sliceProof proof)
   where
+    catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE")
+
+
+withTimeout t m = do
+  res  <- newEmptyMVar
+  done <- newMVar ()
+
+  worker_id <- forkIO $ (`CE.catch` \TimeoutException -> return ()) $ do
+             val <- m
+             takeMVar done
+             putMVar res (Just val)
+
+  clocker_id <- forkIO $ do
+             threadDelay (t * 1000000)
+             takeMVar done
+             throwTo worker_id TimeoutException
+             putMVar res Nothing
+
+  takeMVar res
 
 prologMain :: forall mp.
-                 (IsMZero mp, Foldable mp
+                 (IsMZero mp, Traversable mp
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
-prologMain run = do
+prologMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
   tmp <- getTemporaryDirectory
   let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
@@ -142,8 +163,9 @@ prologMain run = do
 #ifdef DEBUG
                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-                               ignore $ system (printf "dot -Tpdf %s -o %s" fp the_pdf)
+                               dotok <- system (printf "dot -Tpdf %s -o %s" fp the_pdf)
                                hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
+                               return (dotok == ExitSuccess, ())
 
   prologProblem <- eitherM $ parse prologParser problemFile input
 
@@ -160,9 +182,9 @@ prologMain run = do
              putStrLn "MAYBE"
              when (diagrams && verbose > 0) $ do
                   print $ pPrint proof
-                  printDiagram (sliceWorkDone proof)
+                  printDiagram (sliceProof proof)
   where
-
+    catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE")
 -- ------------------------------
 -- Command Line Options handling
 -- ------------------------------
@@ -207,14 +229,20 @@ runTests mb_threads _ = do
  where
   runnerOpts = RunnerOptions (fmap read mb_threads) (Just to) Nothing
   to = TestOptions {topt_seed = Nothing
-                   ,topt_maximum_generated_tests = Just 1000
+                   ,topt_maximum_generated_tests = Just 5000
                    ,topt_maximum_unsuitable_generated_tests = Just 1000
                    ,topt_timeout = Just(Just (ms 3000)) }
   ms = (*1000000)
 #endif
+
 setTimeout arg opts = do
   scheduleAlarm (read arg)
-  installHandler sigALRM  (Catch (putStrLn "timeout" P.>> exitImmediately (ExitFailure 2))) Nothing
+  t_id <- myThreadId
+  installHandler sigALRM (Catch $ do
+                            throwTo t_id TimeoutException
+                            debug "timeout"
+                          )
+                         Nothing
   P.return opts
 
 setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1}

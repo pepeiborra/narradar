@@ -83,8 +83,8 @@ data NarradarTRSF a where
                  Map (WithoutPrologId (TermId t)) (Set (Rule t v)) -> Signature (TermId t) -> NarradarTRSF (Rule t v)
     DPTRS     :: (HasId t, Ord (Term t v)) =>
                  Array Int (Rule t v) -> Graph -> Unifiers t v :!: Unifiers t v -> Signature (TermId t) -> NarradarTRSF (Rule t v)
-    ListTRS  -- Used in very few places instead of TRS, when the order of the rules is important
-        :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (TermId t) -> NarradarTRSF (Rule t v)
+      -- | Used in very few places instead of TRS, when the order of the rules is important
+    ListTRS :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (TermId t) -> NarradarTRSF (Rule t v)
 
 type Unifiers t v = Array (Int,Int) (Maybe (Substitution t v))
 
@@ -125,6 +125,11 @@ instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
 
 instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (NarradarTRS t v) where
     rnf (TRS rr sig) = rnf rr `seq` rnf sig `seq` ()
+    rnf (DPTRS rr g unif sig) = rnf rr `seq` rnf sig `seq` rnf unif `seq` rnf sig
+--    rnf (PrologTRS rr sig)    = rnf rr
+
+instance (NFData a, NFData b) => NFData (a :!: b) where
+    rnf (a :!: b) = rnf a `seq` rnf b `seq` ()
 
 isNarradarTRS :: NarradarTRS t v -> NarradarTRS t v
 isNarradarTRS = id
@@ -259,9 +264,9 @@ isDPTRS :: NarradarTRSF a -> Bool
 isDPTRS DPTRS{} = True; isDPTRS _ = False
 
 restrictTRS :: Foldable t => NarradarTRS t v -> [Int] -> NarradarTRS t v
-restrictTRS (TRS rr _) indexes = let rr' = Set.fromList (select indexes (toList rr))
+restrictTRS (TRS rr _) indexes = let rr' = Set.fromList (selectSafe "restrictTRS 1" indexes (toList rr))
                                    in TRS rr' (getSignature rr')
-restrictTRS (PrologTRS rr _) indexes = let rr'  = Map.fromList (select indexes (Map.toList rr))
+restrictTRS (PrologTRS rr _) indexes = let rr'  = Map.fromList (selectSafe "restrictTRS 2" indexes (Map.toList rr))
                                            sig' = getSignature (Map.elems rr')
                                        in PrologTRS rr' (getSignature rr')
 

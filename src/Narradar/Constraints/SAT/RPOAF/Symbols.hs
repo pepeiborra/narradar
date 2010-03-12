@@ -18,6 +18,7 @@ module Narradar.Constraints.SAT.RPOAF.Symbols where
 import Control.Applicative
 import qualified Control.Exception as CE
 import Control.Monad
+import Control.DeepSeq
 import Control.Monad.Identity
 import Control.Monad.List
 import qualified Control.RMonad as R
@@ -67,12 +68,15 @@ instance Functor SymbolRes where fmap f SymbolRes{..} = SymbolRes{theSymbolR = f
 instance Pretty a => Pretty (SymbolRes a) where
     pPrint SymbolRes{theSymbolR} = pPrint theSymbolR
 
+instance NFData a => NFData (SymbolRes a) where
+  rnf (SymbolRes s p u st af) = rnf s `seq` rnf p `seq` rnf u `seq` rnf st `seq` rnf af
+
 -- -------------------------------------------------
 -- Encoding of RPO symbols with AF and usable rules
 -- -------------------------------------------------
 
-data RPOSsymbol v a = Symbol { theSymbol   :: a
-                             , encodePrec   :: [v]
+data RPOSsymbol v a = Symbol { theSymbol    :: a
+                             , encodePrec   :: v
                              , encodeUsable :: v
                              , encodeAFlist :: v
                              , encodeAFpos  :: [v]
@@ -110,16 +114,14 @@ instance HasArity a => HasArity (RPOSsymbol v a) where getIdArity = getIdArity .
 
 instance UsableSymbol v (RPOSsymbol v a) where usable = encodeUsable
 
-instance HasPrecedence v (RPOSsymbol v a) where precedence_vv = encodePrec
+instance HasPrecedence v (RPOSsymbol v a) where precedence_v = encodePrec
 instance HasStatus     v (RPOSsymbol v a) where
     useMul_v   = encodeUseMset
     lexPerm_vv = Just . encodePerm
 
 instance HasFiltering v (RPOSsymbol v a) where
     listAF_v   = encodeAFlist
-    inAF_v i s = encodeAFpos s `safeAt` i
-     where
-      safeAt l i = CE.assert (i <= length l) (l !! pred i)
+    filtering_vv = encodeAFpos
 
 instance Decode (RPOSsymbol v a) (SymbolRes a) v where decode = decodeSymbol
 
@@ -140,11 +142,11 @@ mkGenSymbol a = Symbol{ theSymbol = a
                           , decodeSymbol = return (SymbolRes genSymbol 0 False (Lex Nothing) (Right []))
                           }
 
-type SymbolFactory s = forall id symb. DPSymbol id => Int -> (id, Int, Bool) -> SAT symb Var (s Var id)
+type SymbolFactory s = forall id symb m repr . (Show id, Pretty id, DPSymbol id, MonadSAT repr Var m ) => (id, Int, Bool) -> m (s Var id)
 
 --rpos :: SymbolFactory RPOSsymbol
-rpos bits (x, ar, defined) = do
-  n_b      <- natural bits
+rpos (x, ar, defined) = do
+  n_b      <- natural
   perm_bb  <- replicateM ar (replicateM ar boolean)
   mset     <- boolean
   (list_b:pos_bb) <- case ar of
@@ -185,10 +187,10 @@ rpos bits (x, ar, defined) = do
              , encodeUseMset= mset
              , decodeSymbol = mkSymbolDecoder x n_b usable_b list_b pos_bb perm_bb mset}
 
-mkSymbolDecoder :: (Decode v Bool v, Ord v, HasTrie v, Show v
+mkSymbolDecoder :: (Decode v Bool v, Ord v, HasTrie v, Show v, Show id
                    )=> id -> Natural v -> v -> v -> [v] -> [[v]] -> v -> EvalM v (SymbolRes id)
 mkSymbolDecoder id n_b usable_b list_b pos_bb perm_bb mset = do
-                 n          <- fromInteger `liftM` decode n_b
+                 n          <- decode n_b
                  isList     <- decode list_b
                  pos        <- decode pos_bb
                  isUsable   <- decode usable_b
@@ -199,8 +201,11 @@ mkSymbolDecoder id n_b usable_b list_b pos_bb perm_bb mset = do
                  return$
                   if P.not isList
                    then CE.assert (length the_positions == 1)
-                        (SymbolRes id n isUsable statusMsg (Left $ head the_positions))
+                        (SymbolRes id n isUsable statusMsg (Left $ headS the_positions))
                    else (SymbolRes id n isUsable statusMsg (Right the_positions))
+  where
+   headS [] = error ("mkSymbolDecoder: invalid null collapsing AF for  (" ++ show id ++ ")")
+   headS (x:_) = x
 
 -- --------
 -- Variants
@@ -218,13 +223,18 @@ instance Decode (LPOSsymbol v a) (SymbolRes a) v where decode = decode . unLPOS
 instance HasTrie a => HasTrie (LPOSsymbol v a) where
   newtype LPOSsymbol v a :->: x = LPOSsymbolTrie (a :->: (LPOSsymbol v a, x))
   empty = LPOSsymbolTrie Trie.empty
-  lookup k (LPOSsymbolTrie m)   = fmap snd $ Trie.lookup (theSymbol $ unLPOS k) m
+  lookup = lookupLPOS
   insert k v (LPOSsymbolTrie m) = LPOSsymbolTrie $ Trie.insert (theSymbol $ unLPOS k) (k,v) m
   toList (LPOSsymbolTrie m)     = map snd $ Trie.toList m
 
+{-# INLINE lookupLPOS #-}
+lookupLPOS k (LPOSsymbolTrie m) = fmap snd $ Trie.lookup (theSymbol $ unLPOS k) m
 
---lpos :: SymbolFactory LPOSsymbol
-lpos sig = liftM LPOS . rpos sig
+--lpo :: SymbolFactory LPOsymbol
+lpos x = do
+  s <- rpos x
+  assert [not $ useMul s]
+  return (LPOS s)
 
 instance Pretty a => Pretty (LPOSsymbol v a) where
     pPrint = pPrint . unLPOS
@@ -233,7 +243,7 @@ instance Pretty a => Pretty (LPOSsymbol v a) where
 
 newtype LPOsymbol v a = LPO{unLPO::RPOSsymbol v a}
     deriving (Eq, Ord, Show, HasArity
-             ,HasPrecedence v, HasStatus v, HasFiltering v
+             ,HasPrecedence v, HasFiltering v
              ,UsableSymbol v, GenSymbol, DPSymbol, Functor, Foldable)
 
 instance Decode (LPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unLPO
@@ -249,12 +259,16 @@ removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
 removePerm symbolRes = symbolRes
 
 --lpo :: SymbolFactory LPOsymbol
-lpo sig x = do
-  s <- rpos sig x
+lpo x = do
+  s <- rpos x
   assert [not $ useMul s]
   return (LPO s)
 
 instance Pretty a => Pretty (LPOsymbol v a) where pPrint = pPrint . unLPO
+
+instance (Ord v, Show v) => HasStatus v (LPOsymbol v a) where
+    useMul_v     = encodeUseMset . unLPO
+    lexPerm_vv _ = Nothing
 
 -- MPO
 newtype MPOsymbol v a = MPO{unMPO::RPOSsymbol v a}
@@ -275,8 +289,8 @@ instance HasTrie a => HasTrie (MPOsymbol v a) where
   toList (MPOsymbolTrie m)     = map snd $ Trie.toList m
 
 --mpo :: SymbolFactory MPOsymbol
-mpo sig x = do
-  s <- rpos sig x
+mpo x = do
+  s <- rpos x
   assert [useMul  s]
   return (MPO s)
 
@@ -298,6 +312,6 @@ instance HasTrie a => HasTrie (RPOsymbol v a) where
   toList (RPOsymbolTrie m)     = map snd $ Trie.toList m
 
 --rpo :: SymbolFactory RPOsymbol
-rpo sig x = do
-  s <- rpos sig x
+rpo x = do
+  s <- rpos x
   return (RPO s)

@@ -92,7 +92,7 @@ instance DPSymbol (DPIdentifier id) where
 functionSymbol = IdFunction; dpSymbol = IdDP
 symbol (IdFunction f) = f; symbol(IdDP f) = f
 
-markDP, unmarkDP :: (MapId t, Functor (t id), DPSymbol id) => Term (t id) v -> Term (t id) v
+--markDP, unmarkDP :: (MapId t, Functor (t id), DPSymbol id) => Term (t id) v -> Term (t id) v
 markDP   = evalTerm return (Impure . mapId markDPSymbol)
 unmarkDP = evalTerm return (Impure . mapId unmarkDPSymbol)
 returnDP = foldTerm return (Impure . mapId IdFunction)
