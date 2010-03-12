@@ -27,25 +27,25 @@ import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Types.ArgumentFiltering as AF (AF_, ApplyAF(..))
 
-class Monoid trs => IUsableRules t v typ trs | trs -> t v where
-    iUsableRulesM    :: MonadFresh v m => typ -> trs -> trs -> [Term t v] -> m trs
-    iUsableRulesVarM :: MonadFresh v m => typ -> trs -> trs -> v -> m(Set (Rule t v))
+class (Rename v, Monoid trs) => IUsableRules t v typ trs | trs -> t where
+    iUsableRulesM    :: MonadVariant v m => typ -> trs -> trs -> [Term t v] -> m trs
+    iUsableRulesVarM :: MonadVariant v m => typ -> trs -> trs -> v -> m(Set (Rule t v))
 
 data Proxy a
 proxy = undefined
 
 deriveUsableRulesFromTRS :: forall t v typ trs m.
-                            (IUsableRules t v typ trs, IsTRS t v trs, MonadFresh v m) =>
+                            (IUsableRules t v typ trs, IsTRS t v trs, MonadVariant v m) =>
                             Proxy trs -> typ -> [Rule t v] -> [Rule t v] -> [Term t v] -> m [Rule t v]
 deriveUsableRulesFromTRS _   typ r p = liftM rules . iUsableRulesM typ (tRS r :: trs) (tRS p :: trs)
 
 deriveUsableRulesVarFromTRS :: forall t v typ trs m.
-                              (IUsableRules t v typ trs, IsTRS t v trs, MonadFresh v m) =>
+                              (IUsableRules t v typ trs, IsTRS t v trs, MonadVariant v m) =>
                             Proxy trs -> typ -> [Rule t v] -> [Rule t v] -> v -> m (Set(Rule t v))
 deriveUsableRulesVarFromTRS _ typ r p = iUsableRulesVarM typ (tRS r :: trs) (tRS p :: trs)
 
 iUsableRules :: ( p ~ Problem typ
-                , Ord (Term t v), Enum v
+                , Ord (Term t v), Enum v, Rename v
                 , MkProblem typ trs, IsDPProblem typ, Traversable p
                 , IsTRS t v trs, GetVars v trs, IUsableRules t v typ trs
                 ) =>
@@ -53,7 +53,7 @@ iUsableRules :: ( p ~ Problem typ
 iUsableRules p = runIcap p . iUsableRulesMp p
 
 iUsableRulesVar :: ( p ~ Problem typ
-                , Ord (Term t v), Enum v
+                , Ord (Term t v), Enum v, Rename v
                 , IsDPProblem typ, Traversable p
                 , IsTRS t v trs, GetVars v trs, IUsableRules t v typ trs
                 ) =>
@@ -66,7 +66,7 @@ iUsableRulesMp ::
   (MkProblem typ trs,
    IsDPProblem typ,
    IUsableRules t v typ trs,
-   MonadFresh v m) =>
+   MonadVariant v m) =>
   Problem typ trs -> [Data.Term.Term t v] -> m (Problem typ trs)
 
 iUsableRulesMp p tt = do { trs' <- iUsableRulesM (getProblemType p) (getR p) (getP p) tt
@@ -90,7 +90,7 @@ f_UsableRules :: forall term vk acc t v trs typ problem m.
                  , acc ~ Set (Rule t v)
                  , HasRules t v trs, GetVars v trs
                  , ICap t v problem
-                 , MonadFresh v m
+                 , MonadVariant v m
                  ) =>
                  problem -> vk -> [term] -> m acc
 f_UsableRules p@(_,trs) _  tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined
@@ -115,7 +115,7 @@ f_UsableRulesAF :: forall term vk acc t id v trs typ problem m.
                  , Ord (Term t v), Unify t, Ord v, ApplyAF term
                  , HasRules t v trs, ApplyAF trs, GetVars v trs
                  , ICap t v problem
-                 , MonadFresh v m
+                 , MonadVariant v m
                  ) =>
                  problem -> AF_ id -> vk -> [term] -> m acc
 
@@ -139,8 +139,8 @@ f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
 -- Needed Rules
 -- ----------------
 
-class Monoid trs => NeededRules t v typ trs | trs -> t v where
-    neededRulesM :: MonadFresh v m => typ -> trs -> trs -> [Term t v] -> m trs
+class (Rename v, Monoid trs) => NeededRules t v typ trs | trs -> t v where
+    neededRulesM :: MonadVariant v m => typ -> trs -> trs -> [Term t v] -> m trs
 
 -- We lift the needed rules automatically
 instance (FrameworkExtension ext, NeededRules t v base trs) => NeededRules t v (ext base) trs
@@ -148,7 +148,7 @@ instance (FrameworkExtension ext, NeededRules t v base trs) => NeededRules t v (
 
 
 neededRules :: ( p ~ Problem typ
-                , Ord (Term t v), Enum v
+                , Ord (Term t v), Enum v, Rename v
                 , MkProblem typ trs, IsDPProblem typ, Traversable p
                 , IsTRS t v trs, GetVars v trs, NeededRules t v typ trs
                 ) =>

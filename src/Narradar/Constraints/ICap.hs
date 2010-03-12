@@ -24,16 +24,16 @@ import Narradar.Framework
 -- -----------------
 -- This should not live here, it does just to make GHC happy (avoid recursive module dependencies)
 
-ren :: (Enum v, Traversable t, MonadFresh v m) => Term t v -> m(Term t v)
-ren = foldTermM (\_ -> return `liftM` freshVar) (return . Impure)
+ren :: (Enum v, Traversable t, MonadVariant v m) => Term t v -> m(Term t v)
+ren = foldTermM (\v -> return `liftM` renaming v) (return . Impure)
 
 -- | Use unification instead of just checking if it is a defined symbol
 -- This is the icap defined in Rene Thiemann, i.e. it does integrate the REN function
-class ICap t v problem | problem -> t v where
-    icap :: MonadFresh v m => problem -> Term t v -> m (Term t v)
+class Rename v => ICap t v problem where
+    icap :: MonadVariant v m => problem -> Term t v -> m (Term t v)
 
 -- Default instance for unrestricted rewriting
-instance (Ord v, Unify t) => ICap t v [Rule t v] where
+instance (Ord v, Rename v, Unify t) => ICap t v [Rule t v] where
   icap trs t = do
 #ifdef DEBUG
     when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
@@ -44,7 +44,7 @@ instance (Ord v, Unify t) => ICap t v [Rule t v] where
     rr <- {-getFresh-} return (rules trs)
     let go t = if any (unifies (Impure t) . lhs) rr
                 then return `liftM` freshVar else return (Impure t)
-        doVar v = return `liftM` freshVar
+        doVar v = return `liftM` renaming v
     foldTermM doVar go t
 
 

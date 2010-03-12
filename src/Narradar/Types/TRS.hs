@@ -305,9 +305,9 @@ computeDPUnifiers :: forall unif typ trs t v term m.
                      , HasRules t v trs, GetFresh t v trs
                      , IUsableRules t v typ trs
                      , ICap t v (typ, trs)
-                     , MonadFresh v m) =>
+                     , MonadVariant v m) =>
                      typ -> trs -> trs -> m(unif :!: unif)
---computeDPUnifiers _ _ dps | trace ("computeDPUnifiers dps=" ++ show(length dps)) False = undefined
+computeDPUnifiers _ _ dps | trace "computeDPUnifiers" False = undefined
 computeDPUnifiers typ trs dps = do
    trs_f <- getFresh trs
 

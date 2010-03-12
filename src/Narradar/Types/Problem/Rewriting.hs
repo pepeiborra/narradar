@@ -61,19 +61,19 @@ instance MkProblem (MkRewriting st) trs => MkDPProblem (MkRewriting st) trs wher
   mkDPProblem (MkRewriting s m) r p = RewritingProblem r p s m
   mapP f (RewritingProblem r p s m) = RewritingProblem r (f p) s m
 
-instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
+instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), Pretty (t(Term t v))) =>
   MkProblem Rewriting (NarradarTRS t v)
  where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
   mapR f (RewritingProblem rr pp s m) = mkDPProblem' (MkRewriting s m) (f rr) pp
 
-instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Ord (Term t v), Pretty (t(Term t v))) =>
+instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), Pretty (t(Term t v))) =>
   MkProblem IRewriting (NarradarTRS t v)
  where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
   mapR f (RewritingProblem rr pp s m) = mkDPProblem' (MkRewriting s m) (f rr) pp
 
-instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Pretty (t(Term t v))) =>
+instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem Rewriting (NarradarTRS t v)
  where
   mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
@@ -175,8 +175,8 @@ instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
 
 -- ICap
 
-instance (Unify t, Ord v) => ICap t v (MkRewriting st, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
-instance (Ord v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) where
+instance (Unify t, Rename v, Ord v) => ICap t v (MkRewriting st, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
+instance (Ord v, Rename v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) where
   icap (MkRewriting st m, trs) t
     | not(isInnermost st) = icap trs t 
     | otherwise = do
@@ -194,7 +194,7 @@ instance (Ord v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) where
 
 -- Usable Rules
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (MkRewriting st) (NarradarTRS t v) where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v (MkRewriting st) (NarradarTRS t v) where
   iUsableRulesM m trs dps tt = do
     trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) =<< getFresh tt
     return (tRS $ toList trs')
@@ -203,15 +203,15 @@ instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v (MkRewriti
     | isInnermost st = return Set.empty
     | otherwise      = return $ Set.fromList $ rules trs
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v Rewriting [Rule t v] where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v Rewriting [Rule t v] where
   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
   iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => IUsableRules t v IRewriting [Rule t v] where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v IRewriting [Rule t v] where
   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
   iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
-instance (Ord(Term t v), Ord v, Unify t, HasId t) => NeededRules t v (MkRewriting st) (NarradarTRS t v) where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => NeededRules t v (MkRewriting st) (NarradarTRS t v) where
   neededRulesM _ = iUsableRulesM irewriting
 
 -- Insert Pairs

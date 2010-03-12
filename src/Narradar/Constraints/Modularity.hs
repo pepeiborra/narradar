@@ -14,7 +14,7 @@ isHierarchicalCombination ex base =
   Set.null(getConstructorSymbols base `Set.intersection` getDefinedSymbols ex)
 
 isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules t v trs, Ord (Term t v)
-                                        , HasId t, Match t, Traversable t, Enum v, Ord v
+                                        , HasId t, Match t, Traversable t, Enum v, Ord v, Rename v
                                         , TermId t ~ SignatureId trs
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =

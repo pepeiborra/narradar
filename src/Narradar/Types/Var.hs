@@ -2,6 +2,7 @@
 
 module Narradar.Types.Var where
 
+import Data.Term (Rename(..))
 import Data.Term.Rules
 import Data.Set as Set
 import Narradar.Framework.Ppr
@@ -27,5 +28,8 @@ uniqueId (Var _ i) = i
 instance Pretty Var where
     pPrint (Var (Just l) _i) = text l -- <> char '_' <> int _i
     pPrint (Var _ i)        = char 'v' <> int i
+
+instance Rename Var where
+    rename (Var name i) (Var _ i') = Var name i'
 
 instance GetVars Var Var where getVars = Set.singleton

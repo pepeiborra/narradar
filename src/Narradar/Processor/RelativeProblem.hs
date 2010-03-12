@@ -25,7 +25,7 @@ instance Pretty RelativeToRegularProof where
 
 instance ( MkProblem base trs
          , SignatureId trs ~ TermId t
-         , Ord (t(Term t v)), Ord v, Enum v, HasId t, Match t
+         , Ord (t(Term t v)), Ord v, Enum v, Rename v, HasId t, Match t
          , Monoid trs, HasRules t v trs, HasSignature trs
          , Info info RelativeToRegularProof
          , HasMinimality base
