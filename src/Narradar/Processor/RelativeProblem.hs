@@ -11,6 +11,9 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Types
 
+-- --------------------------------------------------------------------
+-- Convert a relative DP problem into a vanilla DP problem (LOPSTR09)
+-- --------------------------------------------------------------------
 data RelativeToRegular = RelativeToRegular
 data RelativeToRegularProof = RelativeToRegularProof | RelativeToRegularProofFail
           deriving (Eq, Ord, Show)

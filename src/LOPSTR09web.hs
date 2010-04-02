@@ -46,8 +46,8 @@ import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Processor.Graph
 import Narradar.Processor.GraphTransformation
+import Narradar.Processor.LOPSTR09
 import Narradar.Processor.RPO
-import Narradar.Processor.InitialGoalNarrowingProblem
 import Narradar.Processor.RelativeProblem
 
 

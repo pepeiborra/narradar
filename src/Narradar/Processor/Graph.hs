@@ -7,7 +7,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
 
-module Narradar.Processor.Graph where
+module Narradar.Processor.Graph
+ ( DependencyGraphSCC(..)
+ , DependencyGraphCycles(..)
+ , DependencyGraphProof(..)
+ ) where
 
 import Control.Applicative
 import Control.Monad
@@ -39,8 +43,6 @@ import Narradar.Framework.Ppr
 -- -------------------------------------
 -- DP Processors estimating the graph
 -- -------------------------------------
-
-depGraph p = apply DependencyGraphSCC p
 
 data DependencyGraphSCC    = DependencyGraphSCC    deriving (Eq, Ord, Show)
 data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
