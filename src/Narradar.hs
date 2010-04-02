@@ -90,20 +90,22 @@ narradarMain :: forall mp.
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
+  let echoV str = when (verbose>1) $ hPutStrLn stderr str
   tmp <- getTemporaryDirectory
   let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
       printDiagram proof
        | isNothing pdfFile = return ()
-       | isJust pdfFile    = withTempFile tmp "narradar.dot" $ \fp h -> do
+       | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
                                let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
-                                   the_pdf = fromJust pdfFile
                                hPutStrLn h dotSrc
                                hClose h
 #ifdef DEBUG
                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-                               dotOk <- system (printf "dot -Tpdf %s -o %s" fp the_pdf)
-                               hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
+                               let dotCmd = printf "dot -Tpdf %s -o%s" fp the_pdf
+                               echoV dotCmd
+                               dotOk <- system dotCmd
+                               echo ("PDF proof written to " ++ the_pdf)
                                return (dotOk == ExitSuccess, ())
 
   a_problem <- eitherM $ narradarParse problemFile input
@@ -148,21 +150,22 @@ prologMain :: forall mp.
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 prologMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
+  let echoV str = when (verbose>1) $ hPutStrLn stderr str
   tmp <- getTemporaryDirectory
   let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
       printDiagram proof
        | isNothing pdfFile = return ()
-       | isJust pdfFile    = withTempFile tmp "narradar.dot" $ \fp h -> do
-
+       | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
                                let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
-                                   the_pdf = fromJust pdfFile
                                hPutStrLn h dotSrc
                                hClose h
 #ifdef DEBUG
                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-                               dotok <- system (printf "dot -Tpdf %s -o %s" fp the_pdf)
-                               hPutStrLn stderr ("PDF proof written to " ++ the_pdf)
+                               let dotcmd = printf "dot -Tpdf %s -o%s" fp the_pdf
+                               echoV dotcmd
+                               dotok <- system dotcmd
+                               echo ("PDF proof written to " ++ the_pdf)
                                return (dotok == ExitSuccess, ())
 
   prologProblem <- eitherM $ parse prologParser problemFile input
@@ -254,4 +257,4 @@ setVerbosity (Just i) opts@Options{..}
          `catch` (\e -> error "cannot parse the verbosity level")
 
 setPdfPath Nothing  opts = P.return opts{ pdfFile = Just (problemFile opts <.> "pdf") }
-setPdfPath (Just f) opts = P.return opts{ pdfFile = Just $ f }
+setPdfPath (Just f) opts = P.return opts{ pdfFile = Just f }
