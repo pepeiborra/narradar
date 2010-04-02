@@ -186,11 +186,12 @@ reachableUsableRules :: (t ~ f id, Ord(Term t Var), HasId t, Foldable t, Unify t
                         ,MkDPProblem base (NarradarTRS t Var), Traversable (Problem base)
                         ,ICap t Var (base, NarradarTRS t Var)
                         ,IUsableRules t Var base (NarradarTRS t Var)
+                        ,NeededRules t Var base (NarradarTRS t Var)
                         ,Pretty base, Pretty (Term t Var)
                         ,DPSymbol id
                         ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
 
-reachableUsableRules p = forDPProblem iUsableRules3 (baseProblem p) (rhs <$> forDPProblem involvedPairs p)
+reachableUsableRules p = getR $ neededRules (getBaseProblem p) (rhs <$> forDPProblem involvedPairs p)
 
 -- ---------
 -- Instances
