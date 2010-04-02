@@ -94,13 +94,13 @@ getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSub
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem Narrowing trs) where
-  pprTPDB p = pprTPDB p $$ text "(STRATEGY NARROWING)"
+  pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY NARROWING)"
 
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
          ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem CNarrowing trs) where
-  pprTPDB p = pprTPDB (mkDerivedDPProblem rewriting p) $$ text "(STRATEGY CNARROWING)"
+  pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY CNARROWING)"
 
 
 -- ICap
