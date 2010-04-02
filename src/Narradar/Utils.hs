@@ -15,7 +15,7 @@ import Control.DeepSeq
 import Control.Applicative
 import Control.Concurrent
 import Control.Exception (bracket)
-import Control.Monad  (liftM2, ap, when)
+import Control.Monad  (liftM2, ap, when, MonadPlus, msum)
 import Control.Monad.Identity(Identity(..))
 import Control.Failure
 import Control.Monad.List (lift, ListT(..))
@@ -36,6 +36,7 @@ import Data.Int
 import Data.List (group, sort, nubBy)
 import Data.List.Split (chunk)
 import Data.Maybe
+import Data.Set (Set)
 import Data.String
 import Data.Term (Term)
 import Data.Monoid
@@ -73,6 +74,7 @@ debug _ = return ()
 
 pprTrace = trace . render . pPrint
 pprError = error . render . pPrint
+echo = hPutStrLn stderr
 
 -- ----------
 -- Type hints
@@ -142,19 +144,31 @@ safeAtL msg (x:_) 0 = x
 safeAtL msg (_:xx) i = safeAtL msg xx (pred i)
 
 -- --------------
--- Various stuff
+-- Miscellanea
 -- --------------
+subsetOf :: Ord a => [a] -> Set a -> Bool
+subsetOf s1 s2 = all (`Set.member` s2) s1
+
+ignore :: Monad m => m a -> m ()
 ignore m = m >> return ()
 
+li :: MonadPlus m => [a] -> m a
+li = msum . map return
 
-li = ListT . return
-
+swap :: (a,b) -> (b,a)
 swap (a,b) = (b,a)
 
+fst3 :: (a,b,c) -> a
+snd3 :: (a,b,c) -> b
 fst3 (a,_,_) = a
 snd3 (_,b,_) = b
+
+fst4 :: (a,b,c,d) -> a
 fst4 (a,_,_,_) = a
 
+first3  :: (a -> a') -> (a,b,c) -> (a',b,c)
+second3 :: (b -> b') -> (a,b,c) -> (a,b',c)
+third3  :: (c -> c') -> (a,b,c) -> (a,b,c')
 first3  f (a,b,c) = (f a, b, c)
 second3 f (a,b,c) = (a, f b, c)
 third3  f (a,b,c) = (a, b, f c)
