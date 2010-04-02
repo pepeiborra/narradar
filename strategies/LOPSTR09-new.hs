@@ -84,11 +84,13 @@ instance (Dispatch (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
-sc = apply DependencyGraphSCC >=> try SubtermCriterion
+dg = apply DependencyGraphSCC
+sc = dg >=> try SubtermCriterion
+
 
 rpoPlusTransforms
-   = depGraph >=>
-     repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> depGraph)
+   = dg >=>
+     repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  SMTFFI)
     mpo  = apply (RPOProc MPOAF  SMTFFI)
@@ -98,8 +100,8 @@ rpoPlusTransforms
 
 
 rpoPlusTransformsPar = parallelize f where
- f = depGraph >=>
-     repeatSolver 5 ( (lpo .||. rpos .||. graphTransform) >=> depGraph)
+ f = dg >=>
+     repeatSolver 5 ( (lpo.||. rpos .||. graphTransform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  SMTSerial)
     rpos = apply (RPOProc RPOSAF SMTSerial)

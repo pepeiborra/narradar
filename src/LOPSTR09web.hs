@@ -176,7 +176,7 @@ instance (id ~ DPIdentifier a, Pretty id, HasTrie id, Ord a) => Dispatch (NProbl
 
 -- Narrowing
 instance Dispatch (NProblem Narrowing Id) where
-  dispatch = apply DependencyGraphSCC >=> final -- rpoPlusTransforms >=> final
+  dispatch = rpoPlusTransforms >=> final
 
 instance Dispatch (NProblem CNarrowing Id) where
   dispatch = rpoPlusTransforms >=> final
