@@ -94,7 +94,7 @@ getEDG :: (Ord v, Enum v
           ,ICap t v (typ, NarradarTRS t v)
           ,IUsableRules t v typ (NarradarTRS t v)
           ) => Problem typ (NarradarTRS t v) -> G.Graph
-getEDG p@(getP -> DPTRS _ gr _ _) = gr
+getEDG p@(getP -> DPTRS _ _ gr _ _) = gr
 getEDG p = filterSEDG p $ getdirectEDG p
 
 getdirectEDG :: (Traversable (Problem typ)
@@ -102,7 +102,7 @@ getdirectEDG :: (Traversable (Problem typ)
                 ,ICap t v (typ, NarradarTRS t v)
                 ,Pretty v, Pretty (Term t v), Pretty typ
                 ) => Problem typ (NarradarTRS t v) -> G.Graph
-getdirectEDG p@(getP -> DPTRS dps _ (unif :!: _) _) =
+getdirectEDG p@(getP -> DPTRS dps _ _ (unif :!: _) _) =
     assert (isValidUnif p) $
     G.buildG (A.bounds dps) [ xy | (xy, Just _) <- A.assocs unif]
 
@@ -249,7 +249,7 @@ expandDPair :: ( v ~ Var
                ) =>
                Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
 
-expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
+expandDPair p@(getP -> DPTRS dps rr gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
  = runIcap (rules p ++ newdps) $ do
     let dps'     = dps1 ++ dps2 ++ newdps
         l_dps'   = l_dps + l_newdps
@@ -267,7 +267,7 @@ expandDPair p@(getP -> DPTRS dps gr (unif :!: unifInv) _) i (filter (`notElem` e
                                          -- The use of listTRS here is important ^^
     let unif'    = mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
-        dptrs'   = dpTRS' a_dps' (unif' :!: unifInv')
+        dptrs'   = dpTRS' a_dps' rr (unif' :!: unifInv')
 --      dptrs_new= dpTRS' a_dps' (unif_new :!: unifInv_new)
 
     let res = setP dptrs' p
@@ -299,7 +299,7 @@ insertDPairsDefault ::
          ,NCap typ id
          ) => NProblem typ id -> NTRS id -> NProblem typ id
 
-insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs
+insertDPairsDefault p@(getP -> DPTRS dps rr _ (unif :!: unifInv) sig) newPairs
     = runIcap (getVars p `mappend` getVars newPairs) $ do
       let (zero,l_dps) = bounds dps
           l_newPairs  = length $ rules newPairs
@@ -319,7 +319,7 @@ insertDPairsDefault p@(getP -> DPTRS dps _ (unif :!: unifInv) sig) newPairs
       let unif'    = mkUnif unif unif_new
           unifInv' = mkUnif unifInv unifInv_new
 
-          dptrs'   = dpTRS' a_dps' (unif' :!: unifInv')
+          dptrs'   = dpTRS' a_dps' rr (unif' :!: unifInv')
           p'       = setP dptrs' p
           gr'      = getEDG p'
 
@@ -337,7 +337,7 @@ isValidUnif :: ( p   ~ Problem typ
                , ICap t v (typ, NarradarTRS t v)
                , Pretty v, Pretty (Term t v)
                ) => p (NarradarTRS t v) -> Bool
-isValidUnif p@(getP -> DPTRS dps _ (unif :!: _) _)
+isValidUnif p@(getP -> DPTRS dps _ _ (unif :!: _) _)
   | valid = True
   | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
                           text "Problem type:" <+> pPrint (getProblemType p) $$

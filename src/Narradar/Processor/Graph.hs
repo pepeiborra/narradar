@@ -74,7 +74,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
   apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
-                                               , baseProblem = (getP -> dps@(DPTRS dd gr unif sig))}
+                                               , baseProblem = (getP -> dps@(DPTRS dd _ gr unif sig))}
    = do
     let reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
         isReachable p =  fromMaybe False (flip Set.member reachablePairsG <$> lookupNode p dg)
@@ -246,19 +246,19 @@ type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 
-sccProcessor problem@(getP -> dps@(DPTRS dd gr unif sig))
+sccProcessor problem@(getP -> dps@(DPTRS dd _ gr unif sig))
   | null cc   = success NoCycles problem
   | [c] <- cc, sort c == sort (vertices gr) = return problem
   | otherwise = andP (SCCs gr (map Set.fromList cc)) problem
-                 [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
+                 [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
     where
       cc  = [vv | CyclicSCC vv <- GSCC.sccList gr]
 
-cycleProcessor problem@(getP -> DPTRS dd gr unif sig)
+cycleProcessor problem@(getP -> dps@(DPTRS dd _ gr unif sig))
   | null cc   = success NoCycles problem
   | [c] <- cc, sort c == sort (vertices gr) = return problem
   | otherwise = andP (Cycles gr) problem
-                 [setP (restrictTRS (DPTRS dd gr unif sig) ciclo) problem | ciclo <- cc]
+                 [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
     where
       cc = cycles gr
 

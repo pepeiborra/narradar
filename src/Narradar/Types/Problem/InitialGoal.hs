@@ -91,7 +91,7 @@ instance ( t ~ f id, MapId f, DPSymbol id
      MkProblem (InitialGoal t p) (NarradarTRS t Var)
  where
   mkProblem (InitialGoal gg gr p) rr = initialGoalProblem gg gr (mkProblem p rr)
-  mapR f (InitialGoalProblem goals g@DGraph{..} p) = initialGoalProblem goals Nothing (mapR f p)
+  mapR f (InitialGoalProblem goals _ p) = initialGoalProblem goals Nothing (mapR f p)
 
 instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
   getP   (InitialGoalProblem _     _ p) = getP p
@@ -348,7 +348,7 @@ mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , IUsableRules t v typ (NarradarTRS t v)
             ) => Problem typ (NarradarTRS t v) -> [Term t v] -> DGraph t v
 
-mkDGraph p@(getP -> DPTRS _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg
+mkDGraph p@(getP -> DPTRS _ _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg
 
 mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
              , v ~ Var
@@ -356,7 +356,7 @@ mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
              , HasId t, Unify t, Pretty (Term t v)
              , ICap t v (typ, NarradarTRS t v)
              ) => typ -> NarradarTRS t v -> NarradarTRS t v -> [Term t v] -> DGraph t v
-mkDGraph' typ trs pairs@(DPTRS dps_a fullgraph _ _) goals = runIcap (rules trs ++ rules pairs) $ do
+mkDGraph' typ trs pairs@(DPTRS dps_a _ fullgraph _ _) goals = runIcap (rules trs ++ rules pairs) $ do
   let pairsMap = Map.fromList (map swap $ assocs dps_a)
       p   = (typ,trs)
 

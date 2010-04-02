@@ -4,6 +4,7 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE CPP #-}
 
@@ -52,10 +53,9 @@ instance IsProblem (MkRewriting st) where
 instance IsDPProblem (MkRewriting st) where
   getP   (RewritingProblem _ p _ _) = p
 
-instance Monoid trs => MkProblem (MkRewriting st) trs where
+instance (MkDPProblem (MkRewriting st) trs, Monoid trs) => MkProblem (MkRewriting st) trs where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
-  mapR f (RewritingProblem r p s m) = RewritingProblem (f r) p s m
-
+  mapR f (RewritingProblem r p s m) = mkDPProblem (MkRewriting s m) (f r) p
 
 instance MkProblem (MkRewriting st) trs => MkDPProblem (MkRewriting st) trs where
   mkDPProblem (MkRewriting s m) r p = RewritingProblem r p s m
@@ -76,20 +76,26 @@ instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), P
 instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem Rewriting (NarradarTRS t v)
  where
---  mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
-  mkDPProblem it@(MkRewriting s m) rr dd = RewritingProblem rr (dpTRS it rr dd) s m
+  mkDPProblem it@(MkRewriting s m) rr dd
+    = case dd of
+        pp@DPTRS{rulesUsed} | rules rr `subsetOf` rulesUsed -> RewritingProblem rr dd s m
+        otherwise -> RewritingProblem rr (dpTRS it rr dd) s m
   mapP f (RewritingProblem rr pp s m) = case f pp of
-                                          pp'@DPTRS{} -> RewritingProblem rr pp' s m
+                                          pp'@DPTRS{rulesUsed}
+                                              | rules rr `subsetOf` rulesUsed -> RewritingProblem rr pp' s m
                                           pp' -> let typ = MkRewriting s m
                                                  in RewritingProblem rr (dpTRS typ rr pp') s m
 
 instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
   MkDPProblem IRewriting (NarradarTRS t v)
  where
---  mkDPProblem (MkRewriting s m) rr dd@DPTRS{} = RewritingProblem rr dd s m
-  mkDPProblem it@(MkRewriting s m) rr dd = RewritingProblem rr (dpTRS it rr dd) s m
+  mkDPProblem it@(MkRewriting s m) rr dd
+    = case dd of
+        pp@DPTRS{rulesUsed} | rules rr `subsetOf` rulesUsed -> RewritingProblem rr dd s m
+        otherwise -> RewritingProblem rr (dpTRS it rr dd) s m
   mapP f (RewritingProblem rr pp s m) = case f pp of
-                                          pp'@DPTRS{} -> RewritingProblem rr pp' s m
+                                          pp'@DPTRS{rulesUsed}
+                                               | rules rr `subsetOf` rulesUsed -> RewritingProblem rr pp' s m
                                           pp' -> let typ = MkRewriting s m
                                                  in RewritingProblem rr (dpTRS typ rr pp') s m
 
@@ -180,7 +186,7 @@ instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
 instance (Unify t, Rename v, Ord v) => ICap t v (MkRewriting st, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
 instance (Ord v, Rename v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) where
   icap (MkRewriting st m, trs) t
-    | not(isInnermost st) = icap trs t 
+    | not(isInnermost st) = icap trs t
     | otherwise = do
 #ifdef DEBUG
     when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
