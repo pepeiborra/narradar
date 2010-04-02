@@ -79,11 +79,11 @@ data StY id = StY { poolY :: [Var]
 
 newtype SMTY id a = SMTY {unSMTY :: State (StY id) a} deriving (Functor, Monad, MonadState (StY id))
 
-smtSerial :: (HasTrie id, Ord id, Show id, Pretty id) => Int -> SMTY id (EvalM Var a) -> IO (Maybe a)
-smtSerial timeout (SMTY my) = do
+smtSerial :: (HasTrie id, Ord id, Show id, Pretty id) => SMTY id (EvalM Var a) -> IO (Maybe a)
+smtSerial (SMTY my) = do
   let (me, StY{..}) = runState my (StY [V 1000 ..] [] Serial.emptyYMaps)
 --  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
-  bienv <- solveDeclarations (Just timeout) (generateDeclarations stY ++ cmdY)
+  bienv <- solveDeclarations Nothing (generateDeclarations stY ++ cmdY)
 --  debug (unlines $ map show $ Set.toList symbols)
 --  debug (show . vcat . map (uncurry printGt.second fst) . Trie.toList . termGtMap $ stY)
 --  debug (show . vcat . map (uncurry printEq.second fst) . Trie.toList . termEqMap $ stY)

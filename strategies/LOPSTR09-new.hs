@@ -101,8 +101,8 @@ rpoPlusTransformsPar = parallelize f where
  f = depGraph >=>
      repeatSolver 5 ( (lpo .||. rpos .||. graphTransform) >=> depGraph)
   where
-    lpo  = apply (RPOProc LPOAF  (SMTSerial 60))
-    rpos = apply (RPOProc RPOSAF (SMTSerial 60))
+    lpo  = apply (RPOProc LPOAF  SMTSerial)
+    rpos = apply (RPOProc RPOSAF SMTSerial)
 
 
 graphTransform = apply NarrowingP .||. apply FInstantiation .||. apply Instantiation
