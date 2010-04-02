@@ -162,7 +162,7 @@ involvedNodes' p@InitialGoal{dgraph_PType=Just dg@DGraph{..},..} pTRS
                     to   <- embed sccsInvolved
                     embed $ nodesInPathNaive sccGraph from to
 
-
+-- | Returns the pairs corresponding to the involved nodes in the DGraph
 involvedPairs :: (t ~ f id, HasId t, MapId f, Foldable t, Unify t
                  ,IsDPProblem base, Traversable (Problem base)
                  ,Ord (Term t Var)
