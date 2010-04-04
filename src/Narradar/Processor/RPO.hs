@@ -183,25 +183,25 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
                              (NProblem (InitialGoal (TermF id) NarrowingGen) id)
                              (NProblem (InitialGoal (TermF id) NarrowingGen) id)
    where
-    apply (RPOProc RPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.rpos p)
     apply (RPOProc RPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.rpos p)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpo p)
+    apply (RPOProc RPOAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.rpo p)
     apply (RPOProc RPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpo p)
+    apply (RPOProc RPOAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.rpo p)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOSAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.lpos p)
     apply (RPOProc LPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOSAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.lpos p)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpo p)
+    apply (RPOProc LPOAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.lpo p)
     apply (RPOProc LPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpo p)
+    apply (RPOProc LPOAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.lpo p)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.mpo p)
+    apply (RPOProc MPOAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.mpo p)
     apply (RPOProc MPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.mpo p)
+    apply (RPOProc MPOAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.mpo p)
 
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
          ,Pretty (TermN id)
