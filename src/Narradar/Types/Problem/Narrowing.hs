@@ -43,7 +43,7 @@ narrowing  = MkNarrowing rewriting
 cnarrowing = MkNarrowing irewriting
 
 instance IsProblem b => IsProblem (MkNarrowing b) where
-  data Problem (MkNarrowing b) a = NarrowingProblem (Problem b a)
+  newtype Problem (MkNarrowing b) a = NarrowingProblem (Problem b a)
   getProblemType (NarrowingProblem p) = MkNarrowing (getProblemType p)
   getR (NarrowingProblem b) = getR b
 

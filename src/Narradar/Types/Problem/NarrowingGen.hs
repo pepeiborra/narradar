@@ -104,7 +104,7 @@ instance FrameworkExtension MkNarrowingGen where
   setBaseProblem p0 p = p{baseProblem=p0}
 
 instance IsProblem p => IsProblem (MkNarrowingGen p) where
-  data Problem (MkNarrowingGen p) a      = NarrowingGenProblem {baseProblem::Problem p a}
+  newtype Problem (MkNarrowingGen p) a      = NarrowingGenProblem {baseProblem::Problem p a}
   getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
   getR   (NarrowingGenProblem p)         = getR p
 
