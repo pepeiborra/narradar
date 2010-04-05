@@ -198,6 +198,7 @@ rpoAF_NDP allowCol con p
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
 
   let af_ground_rhs_dps = map afGroundRHS (rules dps')
+      variable_cond     = and $ map variableCondition (rules dps')
 
   assert (map input decreasing_dps)
   assert af_ground_rhs_dps
@@ -304,6 +305,14 @@ afGroundRHS (_ :-> t) = and  [ or [ not(inAF i f)
                                     , let Just f = rootSymbol (t ! init prefix)
                                     , let      i = last prefix]
                                | pos <- [noteV v | v <- vars(annotateWithPos t)]]
+
+variableCondition rule@(_ :-> r)
+                      = and  [ or [ not(inAF i f)
+                                    | prefix <- tail $ inits pos
+                                   , let Just f = rootSymbol (r ! init prefix)
+                                    , let      i = last prefix]
+                               | pos <- [noteV v | v <- extraVars(annotateWithPos <$> rule)]]
+
 
 -- -----------------------------------
 -- Lexicographic extension with AF

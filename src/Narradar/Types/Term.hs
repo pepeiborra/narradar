@@ -74,11 +74,10 @@ fromSimple (Simple.Term id tt) = Term (ArityId (BS.pack id) (length tt)) tt
 fromSimple' :: Simple.TermF id a -> TermF (ArityId id) a
 fromSimple' (Simple.Term id tt) = Term (ArityId id (length tt)) tt
 
-
+-- | Extra Variables are variables which occur in the right side of a rule but not in the left side
 class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]
 instance (Ord v, Functor t, Foldable t, HasRules t v trs) => ExtraVars v trs where
     extraVars = concatMap extraVars . rules
-
 instance (Ord v, Functor t, Foldable t) => ExtraVars v (Rule t v) where
     extraVars (l:->r) = Set.toList (Set.fromList(vars r) `Set.difference` Set.fromList(vars l))
 
