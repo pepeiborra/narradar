@@ -8,8 +8,9 @@
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Processor.Graph
- ( DependencyGraphSCC(..)
- , DependencyGraphCycles(..)
+ ( dependencyGraphSCC
+ , dependencyGraphCycles
+ , DependencyGraph(..)
  , DependencyGraphProof(..)
  ) where
 
@@ -44,9 +45,12 @@ import Narradar.Framework.Ppr
 -- DP Processors estimating the graph
 -- -------------------------------------
 
-data DependencyGraphSCC    = DependencyGraphSCC    deriving (Eq, Ord, Show)
-data DependencyGraphCycles = DependencyGraphCycles deriving (Eq, Ord, Show)
+data DependencyGraph = DependencyGraphSCC {useInverse::Bool}
+                     | DependencyGraphCycles {useInverse::Bool}
+        deriving (Eq, Ord, Show)
 
+dependencyGraphSCC = DependencyGraphSCC True
+dependencyGraphCycles = DependencyGraphCycles True
 
 instance ( trs ~ NarradarTRS t Var
          , problem ~ Problem typ trs, Info info problem
@@ -55,8 +59,9 @@ instance ( trs ~ NarradarTRS t Var
          , Pretty (Term t Var), Pretty typ
          , Info info DependencyGraphProof
          ) =>
-    Processor info DependencyGraphSCC (Problem typ (NarradarTRS t Var)) (Problem typ (NarradarTRS t Var)) where
-  apply DependencyGraphSCC = sccProcessor
+    Processor info DependencyGraph (Problem typ (NarradarTRS t Var)) (Problem typ (NarradarTRS t Var)) where
+  apply (DependencyGraphSCC useInverse) = sccProcessor useInverse
+  apply (DependencyGraphCycles useInverse) = cycleProcessor useInverse
 
 
 instance ( t ~ f (DPIdentifier id0), MapId f
@@ -71,12 +76,14 @@ instance ( t ~ f (DPIdentifier id0), MapId f
          , ProblemColor problem, PprTPDB problem
          , Info info DependencyGraphProof
          ) =>
-    Processor info DependencyGraphSCC
+    Processor info DependencyGraph
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
              (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
-  apply DependencyGraphSCC p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
-                                               , baseProblem = (getP -> dps@(DPTRS dd _ gr unif sig))}
+  apply DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
+  apply (DependencyGraphSCC useInverse)
+        p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
+                            , baseProblem = (getP -> dps@(DPTRS dd _ gr unif sig))}
    = do
     let reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
         isReachable p =  fromMaybe False (flip Set.member reachablePairsG <$> lookupNode p dg)
@@ -103,7 +110,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
                             }
 
     case cc of
-     [] -> if null (rules dps) then success NoCycles p else success proof2 p
+     [] -> if null (rules dps) then success (NoCycles gr) p else success proof2 p
      [c] | sort c == sort(vertices gr) -> return p
      cc -> andP proof p
                [setP (restrictTRS dps ciclo) p | ciclo <- cc]
@@ -119,7 +126,7 @@ data DependencyGraphProof = SCCs   Graph [Set Vertex]
                                        , the_sccs  :: [Set Vertex]
                                        , the_pairs :: [a]}
                           | Cycles Graph
-                          | NoCycles
+                          | NoCycles Graph
                           | forall a. Pretty a =>
                             NoUsableSCCs { gr :: Graph
                                          , initial, outOfScope, inPath :: Set Vertex
@@ -129,14 +136,20 @@ instance Pretty DependencyGraphProof where
   pPrint UsableSCCs{} = text "Dependency Graph Processor (SCCs)"
   pPrint SCCs{}   = text "Dependency Graph Processor (SCCs)"
   pPrint Cycles{} = text "Dependency Graph Processor (cycles)"
-  pPrint NoCycles = text "We need to prove termination for all the cycles." <+>
-                 text "There are no cycles, so the system is terminating"
+  pPrint NoCycles{} = text "We need to prove termination for all the cycles." <+>
+                      text "There are no cycles, so the system is terminating"
   pPrint NoUsableSCCs{} = text "We need to prove termination for all the cycles." <+>
                           text "There are no cycles, so the system is terminating"
 
 instance HTML DependencyGraphProof where toHtml = toHtml . show . pPrint
 
 instance DotRep DependencyGraphProof where
+  dot (NoCycles g) | null (G.vertices g) = Text (text "There are no cyches, this problem is finite.") []
+  dot (NoCycles g) = let nn    = G.vertices g
+                         nodes = FGL.mkGraph [(n, [label(int n)]) | n <- nn]
+                                             [(a,b,[]) | (a,b) <- G.edges g]
+                     in Nodes{nodes,attributes=[],incoming=head nn, outgoing=head nn, legend=Nothing}
+
   dot (Cycles g) = let n     = head (G.vertices g)
                        graph = FGL.mkGraph nodes edges
                        nodes = [(n, [label (int n)]) | n <- G.vertices g]
@@ -227,8 +240,6 @@ instance DotRep DependencyGraphProof where
                               | otherwise -> [])
                     | (a,b) <- G.edges gr]
 
-  dot NoCycles = Text (text "There are no cycles, so the system is terminating.") []
-
 
 colors = cycle $ map mkColor ["darkorange", "hotpink", "hotpink4", "purple", "brown","red","green","yellow"]
 
@@ -243,25 +254,34 @@ type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
                                  ,Unify t, ICap t Var (typ, trs)
                                  ,Info info DependencyGraphProof
                                  ,Monad mp
-                                 ) =>
+                                 ) => Bool ->
                                     Problem typ (NarradarTRS t Var) -> Proof info mp problem
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 
-sccProcessor problem@(getP -> dps@(DPTRS dd _ gr unif sig))
-  | null cc   = success NoCycles problem
-  | [c] <- cc, sort c == sort (vertices gr) = return problem
-  | otherwise = andP (SCCs gr (map Set.fromList cc)) problem
-                 [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
-    where
-      cc  = [vv | CyclicSCC vv <- GSCC.sccList gr]
+sccProcessor useInverse problem@(getP -> dps@(DPTRS dd _ gr unif sig))
+  | null cc   = success (NoCycles graph) problem
 
-cycleProcessor problem@(getP -> dps@(DPTRS dd _ gr unif sig))
-  | null cc   = success NoCycles problem
-  | [c] <- cc, sort c == sort (vertices gr) = return problem
-  | otherwise = andP (Cycles gr) problem
+-- The case below removes 'identity' applications of this processor from the proof log
+-- Generally you want to do this for clarity, but there is one exception.
+-- In the first step of a termination proof this processor is always applied, and you want to show it in the proof log.
+-- However the case below will prevent that from happening,
+-- in cases where there is one big scc that includes all the pairs in the problem
+--  | [c] <- cc, sort c == sort (vertices graph) = return problem
+
+  | otherwise = andP (SCCs graph (map Set.fromList cc)) problem
                  [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
     where
-      cc = cycles gr
+      graph = if useInverse then gr else getEDGfromUnifiers unif
+      cc  = [vv | CyclicSCC vv <- GSCC.sccList graph]
+
+cycleProcessor useInverse problem@(getP -> dps@(DPTRS dd _ gr unif sig))
+  | null cc   = success (NoCycles graph) problem
+  | [c] <- cc, sort c == sort (vertices graph) = return problem
+  | otherwise = andP (Cycles graph) problem
+                 [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
+    where
+      graph = if useInverse then gr else getEDGfromUnifiers unif
+      cc = cycles graph
 
 

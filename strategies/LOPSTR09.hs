@@ -84,7 +84,7 @@ instance (Dispatch (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegular >=> dispatch
 
-dg = apply DependencyGraphSCC
+dg = apply DependencyGraphSCC{useInverse=True}
 sc = dg >=> try SubtermCriterion
 
 

@@ -251,7 +251,7 @@ dpTRS typ trs dps = dpTRS' dps_a (Set.fromList $ rules trs) unifs
 
 dpTRS' :: ( Foldable t, HasId t, Ord (Term t v)) =>
          Array Int (Rule t v) -> Set (Rule t v) -> (Unifiers t v :!: Unifiers t v) -> NarradarTRS t v
-dpTRS' dps rr unifiers = DPTRS dps rr (getEDGfromUnifiers unifiers) unifiers (getSignature $ elems dps)
+dpTRS' dps rr unifiers = DPTRS dps rr (getIEDGfromUnifiers unifiers) unifiers (getSignature $ elems dps)
 
 
 -- ----------
@@ -332,24 +332,10 @@ computeDPUnifiers _ _ dps | trace "computeDPUnifiers" False = undefined
 computeDPUnifiers typ trs dps = do
    trs_f <- getFresh trs
 
-   u_rr <- (listArray (0,ldps)) `liftM`
-           P.sequence [iUsableRulesM typ trs_f dps [r] | _:->r <- the_dps]
-
-   unif <- computeDirectUnifiers (typ, trs_f) dps
-   unifInv <- runListT $ do
-                (x, _ :-> r) <- liftL $ zip [0..] the_dps
-                (y, l :-> _) <- liftL $ zip [0..] the_dps
-                let p_inv = (map swapRule . rules) (u_rr ! x)
-                l' <- lift (getFresh l >>= icap p_inv)
-                let unifier = unify l' r
-                return ((x,y), unifier)
+   unif    <- computeDirectUnifiers  (typ, trs_f) dps
+   unifInv <- computeInverseUnifiers (typ, trs_f) dps
 
    return (unif :!: array (bounds unif) unifInv)
-
- where
-   the_dps = rules dps
-   liftL = ListT . return
-   ldps  = length the_dps - 1
 
 computeDirectUnifiers p_f (rules -> the_dps) = do
    rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p_f) the_dps
@@ -361,12 +347,32 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
                 return ((x,y), unifier)
    return $ array ( (0,0), (ldps, ldps) ) unif
  where
-   liftL = ListT . return
    ldps  = length the_dps - 1
+
+computeInverseUnifiers (typ, trs) dps = do
+
+   u_rr <- (listArray (0,ldps)) `liftM`
+           P.sequence [iUsableRulesM typ trs dps [r] | _:->r <- rules dps]
+
+   runListT $ do
+                (x, _ :-> r) <- liftL $ zip [0..] (rules dps)
+                (y, l :-> _) <- liftL $ zip [0..] (rules dps)
+                let p_inv = (map swapRule . rules) (u_rr ! x)
+                l' <- lift (getFresh l >>= icap p_inv)
+                let unifier = unify l' r
+                return ((x,y), unifier)
+ where
+   ldps  = length (rules dps) - 1
+
+
+getIEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
+  the_edges = [ xy | (xy, Just _) <- A.assocs unif
+                   , isJust (safeAt "getIEDGFromUnifiers" unifInv xy)
+                   ]
+  ((m,_),(n,_)) = bounds unif
 
 getEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
   the_edges = [ xy | (xy, Just _) <- A.assocs unif
-                   , isJust (safeAt "getEDGFromUnifiers" unifInv xy)
                    ]
   ((m,_),(n,_)) = bounds unif
 

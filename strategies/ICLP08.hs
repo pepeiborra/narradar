@@ -58,7 +58,7 @@ instance Dispatch (NProblem (NarrowingGoal Id) Id) where
   dispatch = dispatch . mkDerivedDPProblem narrowing
 
 
-dg = apply DependencyGraphSCC
+dg = apply DependencyGraphSCC{useInverse=False}
 sc = dg >=> try SubtermCriterion
 
 rpoPlusTransforms

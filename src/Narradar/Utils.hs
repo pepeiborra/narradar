@@ -93,6 +93,9 @@ instance (Functor f, Functor g) => Functor (O f g) where fmap f (O fgx) = O (fma
 -- --------------------------------
 -- fmap / mapM / foldMap / toList n
 -- --------------------------------
+liftL :: MonadPlus m => [a] -> m a
+liftL = msum . map return
+
 fmap2 = fmap . fmap
 fmap3 = fmap . fmap . fmap
 fmap4 = fmap . fmap . fmap . fmap

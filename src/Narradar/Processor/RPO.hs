@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Narradar.Processor.RPO where
 
@@ -36,13 +37,16 @@ import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO
 import Narradar.Constraints.SAT.Solve ( SAT, EvalM, BIEnv, runEvalM, decode, Var
                                       , smtSerial, smtFFI, satYices, YicesOpts(..))
-import Narradar.Constraints.SAT.RPOAF ( SymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
+import Narradar.Constraints.SAT.MonadSAT(Decode)
+import Narradar.Constraints.SAT.RPOAF ( SATSymbol
+                                      , RPOSsymbol(..), RPOsymbol(..), LPOSsymbol, LPOsymbol, MPOsymbol
+                                      , SymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
                                       , isUsable, theSymbolR, filtering
-                                      , verifyRPOAF, isCorrect)
+                                      , verifyRPOAF, isCorrect
+                                      , omegaUsable, omegaNeeded, omegaIG, omegaNone)
 --import Narradar.Constraints.SAT.RPO   (verifyRPO)
 --import qualified Narradar.Constraints.SAT.RPO as RPO
 import qualified Narradar.Constraints.SAT.RPOAF as RPOAF
-import qualified Narradar.Constraints.SAT.RPOAF.Symbols ()
 import Narradar.Utils
 import System.IO.Unsafe
 import qualified Debug.Trace
@@ -62,9 +66,15 @@ runSAT Yices = satYices YicesOpts{maxWeight = 20, timeout = Nothing}
 -- runS (YicesSimp  timeout) = unsafePerformIO . solveYicesSimp YicesOpts{maxWeight = 20, timeout = Just 60}
 -- runS (YicesSimp1 timeout) = unsafePerformIO . solveYicesSimp1 YicesOpts{maxWeight = 20, timeout = Just 60}
 
-data RPOProc   = RPOProc Extension Solver
-data Extension = RPOSAF | RPOAF | LPOSAF | MPOAF | LPOAF --  | LPOS | LPO | MPO
-data Solver    = SMTFFI | SMTSerial | SAT SATSolver
+data RPOProc where RPOProc :: SATSymbol e => Extension e -> UsableRules -> Solver -> RPOProc
+data Extension a where
+    RPOSAF :: Extension RPOSsymbol
+    RPOAF  :: Extension RPOsymbol
+    LPOSAF :: Extension LPOSsymbol
+    LPOAF  :: Extension LPOsymbol
+    MPOAF  :: Extension MPOsymbol
+data UsableRules = None | Usable | Needed
+data Solver    = SMTFFI | SMTSerial -- | SAT SATSolver
 data SATSolver = Yices | Minisat | Funsat
 
 
@@ -75,25 +85,26 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
                              (NProblem Rewriting id)
    where
 
-    apply (RPOProc RPOSAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF usablerules SMTFFI)    p = procAF p RPOSAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF p RPOSAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF p RPOAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF p RPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF p RPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.lpo p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF p LPOSAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF p LPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF p LPOSAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.lpos p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF p LPOAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF p LPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF p LPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF p MPOAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF p MPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF p MPOAF usablerules ((runSAT s .). rpoAF_DP True)
+
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
          ,Info info (RPOProof id)
@@ -101,26 +112,26 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
                              (NProblem IRewriting id)
                              (NProblem IRewriting id)
    where
+    apply (RPOProc RPOSAF usablerules SMTFFI)    p = procAF p RPOSAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF p RPOSAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc RPOSAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.rpos p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF p RPOAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF p RPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF p RPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.rpo p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF p LPOSAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF p LPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF p LPOSAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.lpo p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF p LPOAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF p LPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF p LPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.lpos p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF p MPOAF usablerules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF p MPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF p MPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procAF p (smtFFI       $ rpoAF_DP True RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procAF p (smtSerial $ rpoAF_DP True RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procAF p (runSAT s     $ rpoAF_DP True RPOAF.mpo p)
 
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
          ,Pretty (TermN id)
@@ -129,25 +140,25 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
                              (NProblem (InitialGoal (TermF id) Rewriting) id)
                              (NProblem (InitialGoal (TermF id) Rewriting) id)
    where
-    apply (RPOProc RPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpo p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
          ,Pretty (TermN id)
@@ -156,25 +167,26 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
                              (NProblem (InitialGoal (TermF id) IRewriting) id)
                              (NProblem (InitialGoal (TermF id) IRewriting) id)
    where
-    apply (RPOProc RPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpo p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+
 
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
          ,Pretty (TermN id)
@@ -183,25 +195,25 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
                              (NProblem (InitialGoal (TermF id) NarrowingGen) id)
                              (NProblem (InitialGoal (TermF id) NarrowingGen) id)
    where
-    apply (RPOProc RPOSAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.lpo p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF  SMTFFI)   p = procAF_IG p (smtFFI    $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))   p = procAF_IG p (runSAT s  $ rpoAF_IGDP True RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
          ,Pretty (TermN id)
@@ -210,25 +222,25 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
                              (NProblem (InitialGoal (TermF id) CNarrowingGen) id)
                              (NProblem (InitialGoal (TermF id) CNarrowingGen) id)
    where
-    apply (RPOProc RPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpos p)
---    apply (RPOProc RPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpos p)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.rpo p)
---    apply (RPOProc RPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpos p)
---    apply (RPOProc LPOSAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpos p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.lpo p)
---    apply (RPOProc LPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.lpo p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procAF_IG p (smtFFI       $ rpoAF_IGDP True RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procAF_IG p (smtSerial $ rpoAF_IGDP True RPOAF.mpo p)
---    apply (RPOProc MPOAF (SAT s))        p = procAF_IG p (runSAT s     $ rpoAF_IGDP True RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
          ,Info info (RPOProof id)
@@ -237,25 +249,26 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
                              (NProblem Narrowing id)
   where
    -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
-    apply (RPOProc RPOSAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.rpos p)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procNAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procNAF p RPOSAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procNAF p RPOSAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procNAF p RPOAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procNAF p RPOAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procNAF p RPOAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.lpo p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procNAF p LPOSAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procNAF p LPOSAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procNAF p LPOSAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.lpos p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procNAF p LPOAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procNAF p LPOAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procNAF p LPOAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procNAF p MPOAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procNAF p MPOAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p MPOAF usablerules ((runSAT s .). rpoAF_NDP True)
+
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
          ,Info info (RPOProof id)
@@ -264,25 +277,25 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
                         (NProblem CNarrowing id)
   where
    -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
-    apply (RPOProc RPOSAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc RPOSAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.rpos p)
-    apply (RPOProc RPOSAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.rpos p)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procNAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procNAF p RPOSAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procNAF p RPOSAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc RPOAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.rpo p)
-    apply (RPOProc RPOAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.rpo p)
-    apply (RPOProc RPOAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.rpo p)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procNAF p RPOAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procNAF p RPOAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procNAF p RPOAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc LPOAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.lpo p)
-    apply (RPOProc LPOAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.lpo p)
-    apply (RPOProc LPOAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.lpo p)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procNAF p LPOSAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procNAF p LPOSAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procNAF p LPOSAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc LPOSAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOSAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.lpos p)
-    apply (RPOProc LPOSAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.lpos p)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procNAF p LPOAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procNAF p LPOAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procNAF p LPOAF usablerules ((runSAT s .). rpoAF_NDP True)
 
-    apply (RPOProc MPOAF  SMTFFI)        p = procNAF p (smtFFI       $ rpoAF_NDP False RPOAF.mpo p)
-    apply (RPOProc MPOAF SMTSerial) p = procNAF p (smtSerial $ rpoAF_NDP False RPOAF.mpo p)
-    apply (RPOProc MPOAF (SAT s))        p = procNAF p (runSAT s     $ rpoAF_NDP False RPOAF.mpo p)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procNAF p MPOAF usablerules ((smtFFI.)   . rpoAF_NDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procNAF p MPOAF usablerules ((smtSerial.). rpoAF_NDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p MPOAF usablerules ((runSAT s .). rpoAF_NDP True)
 
 -- -----------------
 -- Implementations
@@ -292,26 +305,43 @@ wsatYices tm = satYices YicesOpts{maxWeight = 20, timeout = Just tm}
 {-
 procAF :: (Monad m
           ,sres  ~ SymbolRes id
+          ,sid   ~ satsymbol Var id
           ,Info info (NProblem typ id)
           ,Info info (RPOProof id)
           ,Pretty id, Ord id, HasTrie id
           ,Traversable  (Problem typ)
           ,MkDPProblem typ (NTRS id)
-          )=> NProblem typ id -> (IO (Maybe ([Int], BIEnv))) -> Proof info m (NProblem typ id)
+          ,Decode sid (SymbolRes id) Var
+          )=> NProblem typ id
+           -> Extension satsymbol
+           -> UsableRules
+           -> ((NProblem typ sid -> repr Var) -> NProblem typ id -> IO (Maybe ([Int], BIEnv Var, [sid])))
+           -> Proof info m (NProblem typ id)
 -}
-procAF p = f . unsafePerformIO where
- f Nothing = dontKnow (rpoFail p) p
- f (Just (nondec_dps, bienv, symbols_raw)) = singleP proof p p'
-  where
-   symbols       = runEvalM bienv $ mapM decode symbols_raw
-   proof         = RPOAFProof decreasingDps usableRules symbols
-   dps           = getP p
-   decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
-   usableRules   = [ r | r <- rules(getR p)
-                       , let Just f = rootSymbol (lhs r)
-                       , f `Set.member` usableSymbols]
-   usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]
-   p'            = setP (restrictTRS dps nondec_dps) p
+
+fixExtension :: Extension e -> [e Var id] -> [e Var id]
+fixExtension _ = id
+
+procAF p e usablerules run = (f . unsafePerformIO . run omega) p
+ where
+  omega = case usablerules of
+            Needed -> omegaNeeded
+            Usable -> omegaUsable
+            None   -> omegaNone
+
+  f Nothing = dontKnow (rpoFail p) p
+  f (Just (nondec_dps, bienv, symbols_raw)) = singleP proof p p'
+   where
+    symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
+    proof         = RPOAFProof decreasingDps usableRules symbols
+    dps           = getP p
+    decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
+    usableRules   = [ r | r <- rules(getR p)
+                        , let Just f = rootSymbol (lhs r)
+                        , f `Set.member` usableSymbols]
+    usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]
+    p'            = setP (restrictTRS dps nondec_dps) p
+
 {-
    verification  = forDPProblem verifyRPOAF p symbols nondec_dps
    isValidProof
@@ -321,13 +351,18 @@ procAF p = f . unsafePerformIO where
    CE.assert isValidProof $
 -}
 
-procAF_IG p = f . unsafePerformIO where
+procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
+ omega = case usablerules of
+            Needed -> omegaIG
+            Usable -> omegaIG
+            None   -> omegaNone
+
  f Nothing = dontKnow (rpoFail p) p
  f (Just (nondec_dps, bienv, symbols_raw))
    = -- CE.assert isValidProof $
      singleP proof p (setP (restrictTRS dps nondec_dps) p)
   where
-   symbols       = runEvalM bienv $ mapM decode symbols_raw
+   symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
    proof         = RPOAFProof decreasingDps usableRules symbols
    dps           = getP p
    decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
@@ -352,11 +387,16 @@ procAF_IG p = f . unsafePerformIO where
 -- We do not just remove the strictly decreasing pairs,
 -- Instead we create two problems, one without the decreasing pairs and one
 -- without the ground right hand sides
-procNAF p = f . unsafePerformIO where
+procNAF p e usablerules run = (f . unsafePerformIO . run omega) p where
+ omega = case usablerules of
+            Needed -> omegaNeeded
+            Usable -> omegaUsable
+            None   -> omegaNone
+
  f Nothing = dontKnow (rpoFail p) p
  f (Just ((non_dec_dps, non_rhsground_dps), bienv, symbols_raw)) =
     let proof = RPOAFProof decreasingDps usableRules symbols
-        symbols       = runEvalM bienv $ mapM decode symbols_raw
+        symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
         decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ non_dec_dps) (rules dps)
         usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
         usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]
