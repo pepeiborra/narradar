@@ -12,10 +12,12 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Narradar.Constraints.SAT.RPOAF (
-   RPOSsymbol(..), SymbolRes(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
+   SATSymbol(..), SymbolRes(..)
+  ,RPOSsymbol(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
   ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
   ,rpo, rpos, lpo, lpos, mpo
   ,verifyRPOAF, isCorrect
+  ,omegaUsable, omegaNeeded, omegaIG, omegaNone
   ) where
 
 import Control.Applicative
@@ -58,27 +60,29 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import qualified Prelude as P
 import Prelude hiding (catch, lex, not, and, or, any, all, quot, (>))
 
+class SATSymbol sid where
+  mkSATSymbol :: (Decode v Bool v, Show id, MonadSAT repr v m) =>
+                 (id, Int, Bool) -> m (sid v id)
+
+instance SATSymbol RPOSsymbol where mkSATSymbol = rpos
+instance SATSymbol RPOsymbol  where mkSATSymbol = rpo
+instance SATSymbol LPOSsymbol where mkSATSymbol = lpos
+instance SATSymbol LPOsymbol  where mkSATSymbol = lpo
+instance SATSymbol MPOsymbol  where mkSATSymbol = mpo
+
 -- | RPO + AF
 
-rpoAF rpo allowCol trs = runRPOAF rpo allowCol (getSignature trs) $ \dict -> do
+rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
   let symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
   let problem = and [ l > r | l:->r <- symb_rules]
   assert [problem]
   return (return ())
 
 
--- | RPO + AF + Usable Rules
-rpoAF_DP col ex p = rpoAF_DP' col ex p
-rposAF_P col p = rpoAF_DP' col rpos p
-lposAF_DP col p = rpoAF_DP' col lpos p
-lpoAF_DP col p = rpoAF_DP' col (lpo) p
-mpoAF_DP col p = rpoAF_DP' col (mpo) p
-
-
 -- | Returns the indexes of non decreasing pairs and the symbols used
-rpoAF_DP' allowCol con p
+rpoAF_DP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
-  = runRPOAF con allowCol (getSignature p) $ \dict -> do
+  = runRPOAF allowCol (getSignature p) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs'    = mapNarradarTRS convert (getR p)
       dps'    = mapNarradarTRS convert (getP p)
@@ -109,10 +113,12 @@ rpoAF_IGDP :: (Ord id
               ,MkDPProblem base (NTRS sid)
               ,NUsableRules base sid
               ,NCap base sid
-              ,NeededRules (TermF sid) Narradar.Var base (NTRS sid)
+--              ,NeededRules (TermF sid) Narradar.Var base (NTRS sid)
               ,HasMinimality base
               ,DPSymbol id, Pretty id
-              ,Ord sid, Pretty sid, Show sid
+              ,SATSymbol satSymbol
+              ,sid ~ satSymbol Var id
+              ,Ord sid, Pretty sid, Show id
               ,UsableSymbol Var sid
               ,DPSymbol sid
               ,HasPrecedence Var sid
@@ -123,12 +129,12 @@ rpoAF_IGDP :: (Ord id
               ,MonadSAT repr Var m
               ,RPOExtCircuit repr sid Narradar.Var
               ,HasSignature (NProblem (InitialGoal (TermF id) base) id)
-              ) => Bool -> ((id,Int,Bool) -> m sid)
+              ) => Bool -> (NProblem (InitialGoal (TermF sid) base) sid -> repr Var)
                 -> NProblem (InitialGoal (TermF id) base) id
                 -> m (EvalM Var ([Int], BIEnv Var, [sid]))
 
-rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
-  = runRPOAF con allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
+rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
+  = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
@@ -137,7 +143,7 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
                          (getProblemType baseProblem)
       p'   = mkDPProblem typ' trs' dps'
 
-  assertAll (omegaIG p' : [ l >~ r | l:->r <- rules dps'])
+  assertAll (omega p' : [ l >~ r | l:->r <- rules dps'])
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
@@ -148,7 +154,7 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
   sequence_ [ assertW 1 [input b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
-
+  mapM_ (assertW 1 . (:[]) . not . input . usable) (Map.elems dict)
 
 --  debug ("\nThe indexes are: " ++ show decreasing_dps) $
   return $ do
@@ -186,9 +192,9 @@ rpoAF_IGDP allowCol con p@InitialGoalProblem{..}
  where isTheRightKind :: InitialGoal (f id) base -> InitialGoal (f id) base
        isTheRightKind = id
 
-rpoAF_NDP allowCol con p
+rpoAF_NDP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
-  = runRPOAF con allowCol (getSignature p) $ \dict -> do
+  = runRPOAF allowCol (getSignature p) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
@@ -209,7 +215,7 @@ rpoAF_NDP allowCol con p
   sequence_ [ assertW 1 [input b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
-
+  mapM_ (assertW 1 . (:[]) . not . input . usable) (Map.elems dict)
 
   return $ do
     decreasing <- decode decreasing_dps
@@ -218,11 +224,11 @@ rpoAF_NDP allowCol con p
            ,[ r | (r,False) <- zip [(0::Int)..] af_ground])
 
 
-runRPOAF con allowCol sig f = do
+runRPOAF allowCol sig f = do
   let ids  = getArities sig
       bits = calcBitWidth $ Map.size ids
 
-  symbols <- mapM con
+  symbols <- mapM mkSATSymbol
                   [ (f, ar, def)
                     | (f,ar) <-  Map.toList ids
                     , let def = Set.member f (getDefinedSymbols sig)]
@@ -540,12 +546,44 @@ mulgen id_f id_g ff gg k = (`runCont` id) $ do
 -- ------------------------
 -- Usable Rules with AF
 -- ------------------------
+omegaNone p =  and ([ l >~ r | l:->r <- rules (getR p)] ++
+                    [ iusable f | f <- Set.toList $ getDefinedSymbols (getR p)])
 
-omega p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
+omegaUsable p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
             and ([go r trs | _:->r <- dps] ++
                  [iusable f --> and [ l >~ r | l:->r <- rulesFor f trs]
-                   | f <- Set.toList dd ]
---                 [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                   | f <- Set.toList dd ] ++
+                 [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
+                )
+
+   where
+    (trs,dps) = (rules $ getR p, rules $ getP p)
+    sig = getSignature (getR p)
+    dd = getDefinedSymbols $ getR (iUsableRules p (rhs <$> dps))
+
+    go (Pure x) _ = and $ map iusable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
+
+    go t trs
+      | id_t `Set.notMember` dd
+      = and [ inAF i id_t --> go t_i trs
+               | (i, t_i) <- zip [1..] tt ]
+      | otherwise
+      = iusable id_t /\
+        and ([ go r rest | _:->r <- rls ] ++
+             [ inAF i id_t --> go t_i rest
+                | (i, t_i) <- zip [1..] tt ]
+            )
+       where
+         Just id_t = rootSymbol t
+         tt        = directSubterms t
+         rls       = rulesFor id_t trs
+         rest      = trs \\ rls -- :: [Rule t Var]
+
+omegaNeeded p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
+            and ([go r trs | _:->r <- dps] ++
+                 [iusable f --> and [ l >~ r | l:->r <- rulesFor f trs]
+                   | f <- Set.toList dd ]  ++
+                 [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                 )
 
    where

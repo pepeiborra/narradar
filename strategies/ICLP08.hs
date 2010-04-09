@@ -65,19 +65,19 @@ rpoPlusTransforms
    = dg >=>
      repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  SMTFFI)
-    mpo  = apply (RPOProc MPOAF  SMTFFI)
-    lpos = apply (RPOProc LPOSAF SMTFFI)
-    rpo  = apply (RPOProc RPOAF  SMTFFI)
-    rpos = apply (RPOProc RPOSAF SMTFFI)
+    lpo  = apply (RPOProc LPOAF  None SMTFFI)
+    mpo  = apply (RPOProc MPOAF  None SMTFFI)
+    lpos = apply (RPOProc LPOSAF None SMTFFI)
+    rpo  = apply (RPOProc RPOAF  None SMTFFI)
+    rpos = apply (RPOProc RPOSAF None SMTFFI)
 
 
 rpoPlusTransformsPar = parallelize f where
  f = dg >=>
      repeatSolver 5 ( (lpo.||. rpos .||. graphTransform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  SMTSerial)
-    rpos = apply (RPOProc RPOSAF SMTSerial)
+    lpo  = apply (RPOProc LPOAF  None SMTSerial)
+    rpos = apply (RPOProc RPOSAF None SMTSerial)
 
 
 graphTransform = apply NarrowingP .||. apply FInstantiation .||. apply Instantiation

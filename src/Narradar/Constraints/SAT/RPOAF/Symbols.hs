@@ -131,7 +131,7 @@ instance HasTrie a => HasTrie (RPOSsymbol v a) where
 type SymbolFactory s = forall id symb m repr . (Show id, Pretty id, DPSymbol id, MonadSAT repr Var m ) => (id, Int, Bool) -> m (s Var id)
 
 --rpos :: SymbolFactory RPOSsymbol
-rpos :: (DPSymbol id, MonadSAT repr v m, Show id, Decode v Bool v) =>
+rpos :: (MonadSAT repr v m, Show id, Decode v Bool v) =>
         (id, Int, Bool) -> m (RPOSsymbol v id)
 rpos (x, ar, defined) = do
   n_b      <- natural
@@ -142,7 +142,7 @@ rpos (x, ar, defined) = do
                        _ -> replicateM (ar + 1) boolean
   usable_b <- boolean
 
-  when (P.not defined || isDPSymbol x) $ assert [not $ input usable_b]
+--  when (P.not defined || isDPSymbol x) $ assert [not $ input usable_b]
 
   let perm_ee = fmap2 input perm_bb
       pos_ee  = fmap  input pos_bb
