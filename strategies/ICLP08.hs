@@ -51,7 +51,7 @@ instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProble
 
 -- Narrowing
 instance Dispatch (NProblem Narrowing Id) where
-  dispatch = rpoPlusTransforms >=> final
+  dispatch = dg >=> apply (NarrowingToRewritingICLP08 (simpleHeu innermost)) >=> dispatch
 
 -- Narrowing Goal
 instance Dispatch (NProblem (NarrowingGoal Id) Id) where
@@ -62,8 +62,7 @@ dg = apply DependencyGraphSCC{useInverse=False}
 sc = dg >=> try SubtermCriterion
 
 rpoPlusTransforms
-   = dg >=>
-     repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
+   = repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  None SMTFFI)
     mpo  = apply (RPOProc MPOAF  None SMTFFI)

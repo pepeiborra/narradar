@@ -56,6 +56,7 @@ instance Pretty NarrowingGoalToRelativeRewritingProof where
 
 instance (gid ~ DPIdentifier (GenId id)
          ,Ord id, Pretty (GenId id)
+         ,GetPairs base
          ,Traversable (Problem base), MkDPProblem base (NTRS gid), Pretty base
          ,NCap base gid
          ,NUsableRules base gid

@@ -1,12 +1,12 @@
-#!/usr/bin/env runhaskell
-{-# LANGUAGE PatternGuards, ViewPatterns, ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE OverlappingInstances, FlexibleContexts #-}
+{-# LANGUAGE NamedFieldPuns, RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+
+module Narradar.Interface.Cgi ( narradarCgi ) where
 
 import Codec.Binary.Base64 as Base64
 import Control.Applicative
@@ -22,6 +22,7 @@ import Data.FileEmbed
 import Data.Foldable (Foldable,foldMap)
 import Data.Maybe
 import Data.Monoid
+import Data.Traversable (Traversable)
 import Network.CGI
 import qualified Safe.Failure as Safe
 import Text.Printf
@@ -36,31 +37,38 @@ import System.IO
 
 import Prelude hiding (catch)
 
-import Lattice
 import Narradar hiding ((!))
-import Narradar.Types hiding ((!))
-import Narradar.Types.ArgumentFiltering (AF_, bestHeu)
-import Narradar.Utils (eitherM, withTempFile)
 import Narradar.Framework
-import Narradar.Framework.GraphViz
-import Narradar.Framework.Ppr as Ppr
-import Narradar.Processor.Graph
-import Narradar.Processor.GraphTransformation
-import Narradar.Processor.LOPSTR09
-import Narradar.Processor.RPO
-import Narradar.Processor.RelativeProblem
-
+import Narradar.Framework.GraphViz (dotProof', DotProof(..))
+import Narradar.Utils
+import MuTerm.Framework.DotRep (DotInfo)
+import MuTerm.Framework.Output
 
 web_pdf_folder   = "/~pepe/logs"
+defPage :: MonadCGI m => m CGIResult
+defPage = outputFPS (LBS.fromChunks [defaultForm])
 
-main :: IO ()
-main = runCGI (handleErrors' cgiMain) -- (catchCGI cgiMain (output.show))
-  where
-    handleErrors' = (`catchCGI` \TimeoutException  -> output "Timeout").
+narradarCgi :: forall mp.
+                 (IsMZero mp, Traversable mp
+                 ,Dispatch (Problem Rewriting  (NTRS Id))
+                 ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id)IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) IRewriting))  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) Rewriting)  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) IRewriting)  (NTRS Id))
+                 ,Dispatch (Problem Narrowing  (NTRS Id))
+                 ,Dispatch (Problem CNarrowing (NTRS Id))
+                 ,Dispatch (Problem (NarrowingGoal Id) (NTRS Id))
+                 ,Dispatch (Problem (CNarrowingGoal Id) (NTRS Id))
+                 ,Dispatch PrologProblem
+                 ) => (forall a. mp a -> Maybe a) -> IO ()
+narradarCgi run = runCGI (handleErrors' cgiMain) where
+ handleErrors' = (`catchCGI` \TimeoutException  -> output "Timeout").
                     (`catchCGI` \e@SomeException{} -> (output.show) e)
 
-cgiMain :: CGI CGIResult
-cgiMain = do
+ cgiMain = do
   action <- getInput "action"
   tmp    <- liftIO$ getTemporaryDirectory
   case action of
@@ -75,10 +83,7 @@ cgiMain = do
     Just "solve" -> solver
     _             -> defPage
 
-defPage :: MonadCGI m => m CGIResult
-defPage = outputFPS (LBS.fromChunks [defaultForm])
-
-solver = do
+ solver = do
   mb_input <- getInput "TRS"
   timeout  <- (maybe 120 (min 120 . abs) . (>>= Safe.read)) <$> getInput "TIMEOUT"
   mypath <- fromMaybe "" <$> getInput "PATH"
@@ -86,9 +91,9 @@ solver = do
     Just input -> do
        a_problem <- eitherM $ narradarParse "INPUT" input
 
-       let proof   = dispatchAProblem a_problem      :: Proof (PrettyInfo, DotInfo) [] ()
+       let proof   = dispatchAProblem a_problem
        sol <- liftIO $ liftM Control.Monad.join $ withTimeout timeout $
-              evaluate (listToMaybe (runProof proof) :: Maybe (Proof (PrettyInfo, DotInfo) [] ()))
+              evaluate (run (runProof proof) :: Maybe(Proof (PrettyInfo, DotInfo) mp ()))
 
        let dotsol = case sol of
                        Just sol -> dotProof' DotProof{showFailedPaths = False} sol
@@ -156,85 +161,6 @@ withTimeout t m = do
 
  where
   echo = hPutStrLn stderr
-
--- ------------------------------
--- LOPSTR'09 Strategy hard-coded
--- ------------------------------
-
--- Prolog
-instance Dispatch PrologProblem where
---    dispatch = apply SKTransformInfinitary >=> dispatch
-    dispatch = apply SKTransformNarrowing >=> dispatch
-
--- Rewriting
-instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = sc >=> rpoPlusTransforms >=> final
-
-instance (id ~ DPIdentifier a, Pretty id, HasTrie id, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = sc >=> rpoPlusTransforms >=> final
-
-
--- Narrowing
-instance Dispatch (NProblem Narrowing Id) where
-  dispatch = rpoPlusTransforms >=> final
-
-instance Dispatch (NProblem CNarrowing Id) where
-  dispatch = rpoPlusTransforms >=> final
-
-
--- Narrowing Goal
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) =>
-    Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
-  dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) =>
-    Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
-  dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
-
--- Infinitary
-instance (HasTrie id, id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id) =>
-           Dispatch (NProblem (Infinitary (DPIdentifier a) IRewriting) (DPIdentifier a)) where
-  dispatch = mkDispatcher
-                (apply DependencyGraphSCC >=>
-                 apply (InfinitaryToRewriting bestHeu True) >=>
-                 dispatch)
-
--- Initial Goal
-type GId id = DPIdentifier (GenId id)
-
-instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = sc >=> rpoPlusTransforms >=> final
-
-instance Dispatch (NProblem (InitialGoal (TermF Id) IRewriting) Id) where
-  dispatch = sc >=> rpoPlusTransforms >=> final
-
-instance (Pretty (GenId id), Ord id, HasTrie id) =>
-    Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = rpoPlusTransforms >=> final
-
-instance (Pretty (GenId id), Ord id, HasTrie id) =>
-    Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = rpoPlusTransforms >=> final
-
--- Relative
-instance (Dispatch (NProblem base id)
-         ,Pretty id, Ord id, HasTrie id, Pretty (TermN id)
-         ,IsDPProblem base, Pretty base, HasMinimality base
-         ,MkProblem base (NTRS id)
-         ,PprTPDB (NProblem base id), ProblemColor (NProblem base id)
-         ,Pretty (NProblem base id)
-         ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
-  dispatch = apply RelativeToRegular >=> dispatch
-
-
-sc = apply DependencyGraphSCC >=> try SubtermCriterion
-
-graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation
-
---rpoPlusTransforms ::
-rpoPlusTransforms =  apply DependencyGraphSCC >=>
-                         repeatSolver 3 (apply (RPOProc RPOSAF SMTFFI) .|. graphTransform >=>
-                                         apply DependencyGraphSCC
-                                        )
 
 -- -------------------
 -- Embedded content

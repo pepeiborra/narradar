@@ -1,4 +1,4 @@
-#!/usr/bin/env runhaskell
+
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -6,6 +6,8 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+
+module LOPSTR09 where
 
 import Control.DeepSeq
 import Control.Monad
@@ -22,13 +24,6 @@ import Narradar.Processor.LOPSTR09
 import Narradar.Framework.GraphViz
 import Lattice
 import Narradar.Utils (pprTrace)
-
-instance IsMZero Stream where
-  isMZero = null . runStream
-
---import Narradar.Utils
-
-main = narradarMain (listToMaybe)
 
 
 -- Missing dispatcher cases
@@ -51,10 +46,10 @@ instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProble
 
 -- Narrowing
 instance Dispatch (NProblem Narrowing Id) where
-  dispatch = rpoPlusTransforms >=> final
+  dispatch = dg >=> rpoPlusTransforms >=> final
 
 instance Dispatch (NProblem CNarrowing Id) where
-  dispatch = rpoPlusTransformsPar >=> final
+  dispatch = dg >=> rpoPlusTransformsPar >=> final
 
 -- Narrowing Goal
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
@@ -66,13 +61,13 @@ instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Di
 type GId id = DPIdentifier (GenId id)
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = rpoPlusTransforms >=> final
+  dispatch = dg >=> rpoPlusTransforms >=> final
 
 instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = rpoPlusTransformsPar >=> final
+  dispatch = dg >=> rpoPlusTransformsPar >=> final
 
 instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = rpoPlusTransforms >=> final
+  dispatch = dg >=> rpoPlusTransforms >=> final
 
 -- Relative
 instance (Dispatch (NProblem base id)
@@ -89,8 +84,7 @@ sc = dg >=> try SubtermCriterion
 
 
 rpoPlusTransforms
-   = dg >=>
-     repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
+   = repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTFFI)
     mpo  = apply (RPOProc MPOAF  Needed SMTFFI)
@@ -100,8 +94,7 @@ rpoPlusTransforms
 
 
 rpoPlusTransformsPar = parallelize f where
- f = dg >=>
-     repeatSolver 5 ( (lpo.||. rpos .||. graphTransform) >=> dg)
+ f = repeatSolver 5 ( (lpo.||. rpos .||. graphTransform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTSerial)
     rpos = apply (RPOProc RPOSAF Needed SMTSerial)

@@ -22,11 +22,8 @@ Flag base4
 Flag lopstr-cli
    description: build the LOPSTR09 command line interface
    default: False
-Flag web
-   description: build the safe-tools.dsic.upv.es/narradar CGI applet
-   default: False
-Flag lopstr-web
-   description: build the LOPSTR09 CGI applet
+Flag cgi
+   description: include the Cgi driver
    default: False
 Flag debug
    default: False
@@ -130,9 +127,13 @@ Library
     other-modules:
      Text.ParserCombinators.Parsec.Tag
 
+  if flag(cgi)
+    build-depends:   safe-failure, cgi, file-embed, dataenc
+    exposed-modules: Narradar.Interface.Cgi
+
   exposed-modules:
      Narradar,
---     Narradar.Solver,
+     Narradar.Interface.Cli,
      Narradar.Constraints.ICap,
      Narradar.Constraints.UsableRules,
      Narradar.Constraints.Unify,
@@ -144,7 +145,6 @@ Library
      Narradar.Constraints.SAT.RPOCircuit,
      Narradar.Constraints.SAT.YicesCircuit,
      Narradar.Constraints.SAT.YicesFFICircuit,
---     Narradar.Constraints.SAT.RPO,
      Narradar.Constraints.SAT.RPOAF,
      Narradar.Constraints.SAT.RPOAF.Symbols,
      Narradar.Constraints.Syntactic,
@@ -207,69 +207,5 @@ Executable LOPSTR09
   c-sources:       c_bits/rts.c
   cpp-options:     -DTHREADED
 
-
-Executable narradarCgi
-  if flag(web)
-    buildable: True
-  else
-    buildable: False
-  build-depends:       cgi
-  main-is:             MainWeb.hs
-  ghc-options:         -O2 -threaded
-  hs-source-dirs:      src
-
-
-Executable LOPSTR09cgi
-  if flag(transformers)
-     build-depends: transformers, monads-fd
-  else
-     build-depends: mtl
-  if flag(lopstr-web)
-    buildable: True
-  else
-    buildable: False
-  build-depends: base, cgi, file-embed, safe-failure
-  build-Depends:  base,
-                  failure,
-                  control-monad-failure,
-                  prettyclass,
-                  array,
-                  containers, 
-                  process, 
-                  directory,
-                  bytestring,
-                  GraphSCC, 
-                  bimap,
-                  bytestring-trie,
-                  triefamily,
-                  xhtml, 
-                  timeit,
-                  filepath, 
-                  graphviz == 2999.1.0.2, 
-                  deepseq,
-                  strict, 
-                  fgl,
-                  parallel > 2,
-                  parsec > 3, 
-                  unix, 
-                  template-haskell,
-                  control-monad-free >= 0.4.1, 
-                  logict, 
-                  rmonad, 
-                  split,
---                  parse-dimacs,
-                  yices > 0.0.0.4,
-                  bindings-yices,
-                  alacarte >= 0.4, 
-                  funsat >= 0.6.2,
-                  muterm-framework >= 1.3.1,
-                  term >= 0.1.20100131,
-                  TRSParser >= 0.4, 
-                  prolog >= 0.1.20100131,
-                  prolog-tools >= 0.1.20100131
-
-  main-is:             LOPSTR09web.hs
-  ghc-options:         -O2 -threaded
-  hs-source-dirs:      src
 
 
