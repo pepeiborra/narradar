@@ -191,6 +191,9 @@ trsParser = do
       spec'   = toTerm <$$> spec
 
       strategies = sort [s | Strategy s <- spec']
+      minimality = if TRSTypes.Any (Just "MINIMALITY") [] `elem` spec
+                    then M
+                    else A
 
   let r   = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->  r) _ <- rr]
       r0  = [ mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r
@@ -238,15 +241,15 @@ trsParser = do
     ([], [], (GoalStrategy g : InnerMost : _))
         -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] irewriting) r)
     ([], dps, [])
-        -> return $ ARewritingProblem (setMinimality A $ mkDPProblem rewriting r' (mkTRS dps))
+        -> return $ ARewritingProblem (setMinimality minimality $ mkDPProblem rewriting r' (mkTRS dps))
 
     ([], dps, [GoalStrategy g])
-        -> return $ AGoalRewritingProblem (setMinimality A $ mkDPProblem (initialGoal [mkGoal g] rewriting) r' (tRS dps))
+        -> return $ AGoalRewritingProblem (setMinimality minimality $ mkDPProblem (initialGoal [mkGoal g] rewriting) r' (tRS dps))
 
     ([], dps, InnerMost:_)
-        -> return $ AIRewritingProblem (setMinimality A $ mkDPProblem irewriting r' (tRS dps))
+        -> return $ AIRewritingProblem (setMinimality minimality $ mkDPProblem irewriting r' (tRS dps))
     ([], dps, GoalStrategy g:InnerMost:_)
-        -> return $ AGoalIRewritingProblem (setMinimality A $ mkDPProblem (initialGoal [mkGoal g] irewriting) r' (tRS dps))
+        -> return $ AGoalIRewritingProblem (setMinimality minimality $ mkDPProblem (initialGoal [mkGoal g] irewriting) r' (tRS dps))
 
     (r0, [], [])
         -> return $ ARelativeRewritingProblem (mkNewProblem (relative (tRS r0) rewriting) r)
@@ -261,11 +264,11 @@ trsParser = do
 
 
     (r0, dps, [])
-        -> return $ ARelativeRewritingProblem (setMinimality A $
+        -> return $ ARelativeRewritingProblem (setMinimality minimality $
                                                mkDPProblem (relative (tRS r0) rewriting) r' (tRS dps))
 
     (r0, dps, InnerMost:_)
-        -> return $ ARelativeIRewritingProblem (setMinimality A $
+        -> return $ ARelativeIRewritingProblem (setMinimality minimality $
                                                 mkDPProblem (relative (tRS r0) irewriting) r' (tRS dps))
     (r0, dps, [GoalStrategy g])
         -> return $ AGoalRelativeRewritingProblem
