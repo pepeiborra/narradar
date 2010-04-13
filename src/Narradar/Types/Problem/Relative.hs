@@ -33,6 +33,8 @@ import Narradar.Utils
 
 data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
+--instance GetPairs p => GetPairs (Relative trs p) where getPairs = getPairs . baseProblem
+
 instance IsProblem p => IsProblem (Relative trs0 p) where
   data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs}
   getProblemType (RelativeProblem r0 p) = Relative r0 (getProblemType p)

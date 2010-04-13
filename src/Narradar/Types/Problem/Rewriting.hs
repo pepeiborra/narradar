@@ -45,6 +45,8 @@ type IRewriting = MkRewriting Innermost
 rewriting  = MkRewriting Standard  M
 irewriting = MkRewriting Innermost M
 
+instance GetPairs (MkRewriting strat) where getPairs = getPairsDefault
+
 instance IsProblem (MkRewriting st) where
   data Problem (MkRewriting st) a = RewritingProblem a a (Strategy st) Minimality deriving (Eq, Ord, Show)
   getProblemType (RewritingProblem _ _ s m) = MkRewriting s m

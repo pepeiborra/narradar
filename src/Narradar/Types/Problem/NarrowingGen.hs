@@ -94,7 +94,7 @@ instance GenSymbol a => GenSymbol (DPIdentifier a) where genSymbol = IdFunction 
 -- --------------------------------------------------------------
 type NarrowingGen  = MkNarrowingGen Rewriting
 type CNarrowingGen = MkNarrowingGen IRewriting
-instance GetPairs NarrowingGen where getPairs _ = getNPairs
+--instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
 data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 

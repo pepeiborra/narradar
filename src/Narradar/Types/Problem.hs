@@ -2,7 +2,7 @@
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -42,9 +42,10 @@ import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.TRS
+import Narradar.Types.Term hiding ((!))
+import Narradar.Framework (FrameworkExtension(..))
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Utils
-import Narradar.Types.Term hiding ((!))
 import Narradar.Constraints.ICap
 import Narradar.Constraints.Unify
 import Narradar.Constraints.UsableRules
@@ -60,7 +61,7 @@ type NProblem typ id = NarradarProblem typ (TermF id)
 
 mkNewProblem ::
     ( HasRules (TermF id) Var trs
-    , Ord id, Pretty (DPIdentifier id), Pretty typ
+    , Ord id, Pretty (DPIdentifier id), Pretty typ, GetPairs typ
     , Traversable (Problem typ)
     , MkDPProblem typ (NTRS (DPIdentifier id))
     , NCap typ (DPIdentifier id)
@@ -77,9 +78,13 @@ class GetPairs typ where
               , Foldable t, MapId f, HasId t
               , SignatureId trs ~ TermId t)
                => typ -> trs -> [Rule t v]
-instance GetPairs typ where
-  getPairs _ trs =
+
+getPairsDefault typ trs =
     [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isRootDefined trs) r]
+
+-- I know, I'm gonna burn in hell ...
+instance (FrameworkExtension ext, GetPairs base) => GetPairs (ext base) where
+  getPairs typ = getPairs (getBaseFramework typ)
 
 -- ----------------------------------------
 -- Computing the estimated Dependency Graph
