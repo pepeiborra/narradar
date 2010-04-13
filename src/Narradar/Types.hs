@@ -34,7 +34,7 @@ module Narradar.Types ( module Narradar.Framework
 
 import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.Monad.Error (Error(..))
-import Control.Monad (liftM, MonadPlus(..))
+import Control.Monad (liftM, MonadPlus(..), (>=>))
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString, unpack)
 import Data.Graph (Graph, Vertex)
@@ -56,6 +56,7 @@ import Prelude as P hiding (mapM, pi, sum)
 
 
 import MuTerm.Framework.DotRep
+import MuTerm.Framework.Strategy
 import MuTerm.Framework.Output
 
 import Narradar.Constraints.Unify
@@ -121,10 +122,10 @@ bestError = maximumBy (compare `on` errorPos)
 -- ---------------------------------
 
 class Dispatch thing where
-    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyInfo, DotInfo) m ()
+    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyInfo, DotInfo) m FinalProcessor
 
-mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m ()
-mkDispatcher f = fmap (const ()) . f
+mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m FinalProcessor
+mkDispatcher f =  f >=> final
 
 data AProblem t trs where
     ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
@@ -157,7 +158,7 @@ dispatchAProblem :: (Traversable m, MonadPlus m
                     ,Dispatch (Problem (NarrowingGoal (TermId t)) trs)
                     ,Dispatch (Problem (CNarrowingGoal (TermId t)) trs)
                     ,Dispatch PrologProblem
-                    ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m ()
+                    ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m FinalProcessor
 
 dispatchAProblem (ARewritingProblem p)         = dispatch p
 dispatchAProblem (AIRewritingProblem p)        = dispatch p
