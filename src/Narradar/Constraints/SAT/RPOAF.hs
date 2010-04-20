@@ -29,6 +29,7 @@ import Control.Monad.List
 import Control.Monad.Reader
 import qualified Control.RMonad as R
 import qualified Data.Array as A
+import Data.Bifunctor
 import Data.Foldable (Foldable, foldMap, toList)
 import Data.List ((\\), transpose, inits, tails, zip4)
 import Data.Maybe
@@ -138,7 +139,7 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
-      typ' = InitialGoal (map convert goals)
+      typ' = InitialGoal (map (bimap convert convert) goals)
                          (Just $ mapDGraph convert dgraph)
                          (getFramework baseProblem)
       p'   = mkDPProblem typ' trs' dps'

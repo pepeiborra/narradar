@@ -131,7 +131,7 @@ instance Info info SKTransformProof =>
                rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal    <- goals
          , let the_goal = -- (IdFunction <$> skTransformGoal goal) `mappend`
-                          (IdDP       <$> skTransformGoal goal)
+                          (bimap IdDP id $ skTransformGoal goal)
      ]
 data SKTransformProof = SKTransformProof
   deriving (Eq, Show)
@@ -147,7 +147,7 @@ instance (Info info SKTransformProof
    andP SKTransformProof p0 =<< sequence
      [  msum (map return probs)
          | goal    <- goals
-         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
+         , let probs = mkDerivedInfinitaryProblem (bimap IdDP id $ skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
      ]
     where
        sk_p = prologTRS'' rr (getSignature rr)

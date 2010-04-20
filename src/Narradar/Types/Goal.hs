@@ -4,6 +4,8 @@
 module Narradar.Types.Goal where
 
 import Control.Applicative hiding (Alternative(..), many, optional)
+import Control.DeepSeq
+import Data.Bifunctor
 import qualified Data.Set as Set
 import Data.Term.Rules
 import qualified TRSParser
@@ -16,13 +18,19 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework.Ppr hiding (char)
 import Narradar.Types.Term
 
-data Goal id = Goal {goalId::id, goalArgs::[Mode]} deriving (Eq, Ord, Show)
+data GoalF id a = Goal {goalId::id, goalArgs::[a]} deriving (Eq, Ord, Show)
+type Goal id = GoalF id Mode
 data Mode = G | V deriving (Eq, Bounded, Show)
 
+goal :: id -> [Mode] -> Goal id
+goal = Goal
+
 deriving instance Ord Mode
+instance NFData Mode where rnf G = (); rnf V = ()
 
-instance Functor Goal where fmap f (Goal id mm) = Goal (f id) mm
-
+--instance Functor GoalF where fmap f (Goal id mm) = Goal id (f mm)
+instance Bifunctor GoalF where
+  bimap fid fmm (Goal id mm) = Goal (fid id) (map fmm mm)
 
 goalP  = Goal <$> TRSParser.identifier <*> modesP <* optional dot
 modesP = P.parens (commaSep modeP) <|> return []
@@ -35,8 +43,8 @@ parseGoal = parse (TRSParser.whiteSpace >> many (goalP <* TRSParser.whiteSpace))
 mkGoalAF (Goal f mm) = AF.singleton f [i | (G,i) <- zip mm [1..]]
 instance Pretty Mode where pPrint G = text "b"; pPrint V = text "f"
 
-instance Pretty id => Pretty (Goal id) where pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ modes)
-instance Pretty (Goal String) where pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ modes)
+instance (Pretty id, Pretty a) => Pretty (GoalF id a) where pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ modes)
+instance Pretty a => Pretty (GoalF String a) where pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ modes)
 
 
 pPrintGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc

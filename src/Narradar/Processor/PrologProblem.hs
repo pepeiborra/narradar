@@ -119,7 +119,7 @@ instance (Info info SKTransformProof
  where
   apply SKTransformNarrowing p0@PrologProblem{..} =
    andP SKTransformNarrowingProof p0
-     [ mkNewProblem (cnarrowingGoal (IdDP <$> skTransformGoal goal)) sk_p
+     [ mkNewProblem (cnarrowingGoal (bimap IdDP id $ skTransformGoal goal)) sk_p
          | let sk_p          = prologTRS'' rr (getSignature rr)
                rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
          , goal            <- goals
@@ -135,7 +135,7 @@ instance (Info info SKTransformProof
    andP SKTransformInfinitaryProof p0 =<< sequence
      [  msum (map return probs)
          | goal    <- goals
-         , let probs = mkDerivedInfinitaryProblem (IdDP <$> skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
+         , let probs = mkDerivedInfinitaryProblem (bimap IdDP id $ skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
      ]
     where
        sk_p = prologTRS'' rr (getSignature rr)
@@ -400,13 +400,13 @@ instance SkTransformAF StringId RP where
   skTransformAF sig = AF.mapSymbols (\f -> if f `Set.member` getDefinedSymbols sig
                                          then InId (mkT f)
                                          else FunctorId (mkT f))
-  skTransformGoal = fmap (InId . mkT)
+  skTransformGoal = bimap (InId . mkT) id
 
 instance SkTransformAF (Labelled StringId) LRP where
   skTransformAF sig = AF.mapSymbols (\f@(Labelling l t) -> if f `Set.member` getDefinedSymbols sig
                                          then Labelling l (InId (mkT t))
                                          else Labelling l (FunctorId (mkT t)))
-  skTransformGoal = fmap2 (InId . mkT)
+  skTransformGoal = bimap (fmap (InId . mkT)) id
 
 prepareProgram :: Program id -> Program'' (Expr (PF' id)) (TermN (Expr (PF' id)))
 prepareProgram = (`evalState` mempty) . (`evalStateT` (toEnum <$> [0..]))
