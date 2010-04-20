@@ -179,6 +179,7 @@ Library
      Narradar.Processor.RPO
 --     Narradar.Processor.RPOFunsat
      Narradar.Processor.UsableRules,
+     Narradar.Processor.InnermostProblem,
      Narradar.Processor.PrologProblem,
      Narradar.Processor.RelativeProblem,
      Narradar.Processor.SubtermCriterion,

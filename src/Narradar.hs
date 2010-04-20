@@ -14,6 +14,7 @@ module Narradar ( module Narradar.Processor.Graph
                 , module Narradar.Processor.ExtraVariables
                 , module Narradar.Processor.PrologProblem
                 , module Narradar.Processor.RelativeProblem
+                , module Narradar.Processor.InnermostProblem
                 , module Narradar.Processor.SubtermCriterion
                 , module Narradar.Types
                 ) where
@@ -29,6 +30,7 @@ import Narradar.Processor.InfinitaryProblem
 import Narradar.Processor.NarrowingProblem
 import Narradar.Processor.UsableRules
 import Narradar.Processor.ExtraVariables
+import Narradar.Processor.InnermostProblem
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem
 import Narradar.Processor.SubtermCriterion
