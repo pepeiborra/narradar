@@ -64,17 +64,8 @@ instance Info info ExtraVarsProof
     apply ExtraVarsP = return
 
 instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
-         Processor info ExtraVarsP (Problem Narrowing trs) (Problem Narrowing trs) where
-    apply _ p
-       | null (extraVars p) = return p
-       | otherwise  = refuted EVFail p
-
-instance (ExtraVars v trs, Ord v, Info info ExtraVarsProof) =>
-         Processor info ExtraVarsP (Problem CNarrowing trs) (Problem CNarrowing trs) where
-    apply _ p
-       | null (extraVars p) = return p
-       | otherwise  = refuted EVFail p
-
+         Processor info ExtraVarsP (Problem (MkNarrowing a) trs) (Problem (MkNarrowing a) trs) where
+    apply ExtraVarsP = return
 
 {-
 instance Processor (ExtraVarsAF tag) (NarrowingGoal id p) (NarrowingGoal id p)
