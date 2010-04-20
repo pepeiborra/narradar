@@ -646,7 +646,6 @@ mkDGraph' typ trs pairs@(DPTRS dpsA _ fullgraph _ _) goals = runIcap (rules trs 
   -- No duplicate edges in the graph
    assert (noDuplicateEdges fullgraph) $
   -- There must be at least one initial pair, right ?
-   assert (not $ Set.null initialPairsG)
    return the_dgraph
 
   where liftL = ListT . return
