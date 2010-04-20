@@ -69,8 +69,12 @@ subtermCriterion :: Ord id => NTRS id -> Maybe (NTRS id, Proj id)
 subtermCriterion pTRS
   | null prjs = Nothing
   | prj <- maximum prjs
-  , nonStrictPrjs <- [ i | (i, dp) <- [0..] `zip` rules pTRS, isWeakOn dp prj]
-  = Just (restrictTRS pTRS nonStrictPrjs, prj)
+  , nonStrictPrj <- [ r | r <- rules pTRS, isWeakOn r prj]
+  , length nonStrictPrj /= length (rules pTRS)
+  = Just (tRS nonStrictPrj, prj)
+
+  | otherwise = Nothing
+
   where
     prjs = validPrjs pTRS
 
