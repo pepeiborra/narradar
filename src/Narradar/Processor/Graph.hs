@@ -113,7 +113,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
      [] -> if null (rules dps) then success (NoCycles gr) p else success proof2 p
      [c] | sort c == sort(vertices gr) -> return p
      cc -> andP proof p
-               [setP (restrictTRS dps ciclo) p | ciclo <- cc]
+               [setP (restrictTRS dps scc) p | scc <- cc]
 
 -- --------------
 -- Graph Proofs
@@ -144,7 +144,7 @@ instance Pretty DependencyGraphProof where
 instance HTML DependencyGraphProof where toHtml = toHtml . show . pPrint
 
 instance DotRep DependencyGraphProof where
-  dot (NoCycles g) | null (G.vertices g) = Text (text "There are no cyches, this problem is finite.") []
+  dot (NoCycles g) | null (G.vertices g) = Text (text "There are no cycles, the problem is finite.") []
   dot (NoCycles g) = let nn    = G.vertices g
                          nodes = FGL.mkGraph [(n, [label(int n)]) | n <- nn]
                                              [(a,b,[]) | (a,b) <- G.edges g]

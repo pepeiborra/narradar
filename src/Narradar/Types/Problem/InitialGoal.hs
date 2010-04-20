@@ -306,13 +306,13 @@ type DGraph t v = DGraphF (Term t v)
 
 -- Invariant - the pairs field is always a DPTRS
 
-data DGraphF a = DGraph {pairs    :: NarradarTRSF (RuleF a)
-                        ,pairsMap :: Map (RuleF a) Int
-                        ,initialPairsG   :: Set Vertex
-                        ,reachablePairsG :: Set Vertex
-                        ,sccs     :: Array Int (SCC Vertex)
-                        ,sccsMap  :: Array Vertex (Maybe Int)
-                        ,sccGraph :: Graph}
+data DGraphF a = DGraph {pairs    :: NarradarTRSF (RuleF a)    -- ^ A DPTRS storing all the pairs in the problem and the depGraph
+                        ,pairsMap :: Map (RuleF a) Vertex      -- ^ Mapping from pairs to vertexes in the sccs graph
+                        ,initialPairsG   :: Set Vertex         -- ^ Set of vertexes corresponding to initial pairs
+                        ,reachablePairsG :: Set Vertex         -- ^ Set of vertexes corresponding to reachable pairs
+                        ,sccs     :: Array Int (SCC Vertex)    -- ^ Array of SCCs in the dep graph
+                        ,sccsMap  :: Array Vertex (Maybe Int)  -- ^ Mapping from each vertex to its SCC
+                        ,sccGraph :: Graph}                    -- ^ Graph of the reachable SCCs in the dep graph
 
 fullgraph :: DGraph t v -> Graph
 fullgraph = rulesGraph . pairs

@@ -9,7 +9,7 @@
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Types.Problem (
-          module MuTerm.Framework.Problem,
+--          module MuTerm.Framework.Problem,
           module Narradar.Types.Problem,
           module Narradar.Constraints.ICap,
           module Narradar.Constraints.UsableRules) where
@@ -217,7 +217,7 @@ instance (MkDPProblem typ (NarradarTRS t v)
      where
        typ  = getFramework p
        trs' = apply af (getR p)
-       dps' = dpTRS typ trs' (apply af dps)
+       dps' = dpTRS typ (trs'  `asTypeOf` getR p) (apply af dps)
 {-
 instance (ApplyAF trs, IsDPProblem p) => ApplyAF (Problem p trs) where
     type AFId (Problem p trs) = AFId trs

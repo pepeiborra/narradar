@@ -626,7 +626,7 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
     dd
-       | getMinimalityFromProblem p == M = getDefinedSymbols $ getR (neededRules p (rhs <$> dps))
+       | M <- getMinimalityFromProblem p = getDefinedSymbols $ getR (neededRules p (rhs <$> dps))
        | otherwise                       = getDefinedSymbols (reachableUsableRules p)
 
     go l (Pure x) _ =
@@ -647,7 +647,7 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
                | (i, t_i) <- zip [1..] tt ]
       | otherwise
       = and (  iusable id_t
-            :  [ go l r rest | l:->r <- rls ]
+            :  [ go l' r' rest | l':->r' <- rls ]
             ++ [ inAF i id_t --> go l t_i rest
                    | (i, t_i) <- zip [1..] tt ]
             )
@@ -655,7 +655,7 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
          Just id_t = rootSymbol t
          tt        = directSubterms t
          rls       = rulesFor id_t trs
-         rest      = trs \\ rls -- :: [Rule t Var]
+         rest      = trs \\ rls
 
 rulesFor :: (HasId t, TermId t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]

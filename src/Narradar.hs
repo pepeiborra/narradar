@@ -9,7 +9,6 @@ module Narradar ( module Narradar.Processor.Graph
                 , module Narradar.Processor.RPO
                 , module Narradar.Processor.GraphTransformation
                 , module Narradar.Processor.UsableRules
-                , module Narradar.Processor.InfinitaryProblem
                 , module Narradar.Processor.NarrowingProblem
                 , module Narradar.Processor.ExtraVariables
                 , module Narradar.Processor.PrologProblem
@@ -26,10 +25,9 @@ import Narradar.Types.Problem.InitialGoal
 import Narradar.Processor.Graph
 import Narradar.Processor.GraphTransformation
 import Narradar.Processor.RPO
-import Narradar.Processor.InfinitaryProblem
-import Narradar.Processor.NarrowingProblem
-import Narradar.Processor.UsableRules
 import Narradar.Processor.ExtraVariables
+import Narradar.Processor.UsableRules
+import Narradar.Processor.NarrowingProblem
 import Narradar.Processor.InnermostProblem
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem
