@@ -68,7 +68,9 @@ instance ( t ~ f (DPIdentifier id0), MapId f
          , TermId t ~ DPIdentifier id0, Ord id0
          , trs ~ NarradarTRS t Var
          , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
-         , MkDPProblem typ0 (NarradarTRS t Var), Traversable (Problem typ0)
+         , IsDPProblem typ0
+         , MkDPProblem (InitialGoal t typ0) (NarradarTRS t Var)
+         , Traversable (Problem typ0)
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (t(Term t Var)), Pretty typ0
          , ICap t Var (typ0,trs)
@@ -83,9 +85,10 @@ instance ( t ~ f (DPIdentifier id0), MapId f
   apply DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
   apply (DependencyGraphSCC useInverse)
         p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
-                            , baseProblem = (getP -> dps@(DPTRS dd _ gr unif sig))}
+                            , baseProblem = (getP -> dps@(DPTRS dd _ igr unif sig))}
    = do
-    let reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
+    let gr = if useInverse then igr else getEDGfromUnifiers unif
+        reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
         isReachable p =  fromMaybe False (flip Set.member reachablePairsG <$> lookupNode p dg)
 
         grForSccs   = buildG (bounds gr)
