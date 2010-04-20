@@ -82,11 +82,11 @@ instance ( Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v
   mkDPProblem it@(MkRewriting s m) rr dd | pprTrace (text "mkDPProblem rewriting with rules" $$ nest 2 rr) False = undefined
   mkDPProblem it@(MkRewriting s m) rr dd
     = case dd of
-        pp@DPTRS{rulesUsed} | rules rr `subsetOf` rulesUsed -> RewritingProblem rr dd s m
+        pp@DPTRS{rulesUsed} | rr == rulesUsed -> RewritingProblem rr dd s m
         otherwise -> RewritingProblem rr (dpTRS it rr dd) s m
   mapP f (RewritingProblem rr pp s m) = case f pp of
                                           pp'@DPTRS{rulesUsed}
-                                              | rules rr `subsetOf` rulesUsed -> RewritingProblem rr pp' s m
+                                              | rr == rulesUsed -> RewritingProblem rr pp' s m
                                           pp' -> let typ = MkRewriting s m
                                                  in RewritingProblem rr (dpTRS typ rr pp') s m
 
@@ -95,11 +95,11 @@ instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, P
  where
   mkDPProblem it@(MkRewriting s m) rr dd
     = case dd of
-        pp@DPTRS{rulesUsed} | rules rr `subsetOf` rulesUsed -> RewritingProblem rr dd s m
+        DPTRS{rulesUsed} | rr == rulesUsed -> RewritingProblem rr dd s m
         otherwise -> RewritingProblem rr (dpTRS it rr dd) s m
   mapP f (RewritingProblem rr pp s m) = case f pp of
                                           pp'@DPTRS{rulesUsed}
-                                               | rules rr `subsetOf` rulesUsed -> RewritingProblem rr pp' s m
+                                               | rr == rulesUsed -> RewritingProblem rr pp' s m
                                           pp' -> let typ = MkRewriting s m
                                                  in RewritingProblem rr (dpTRS typ rr pp') s m
 

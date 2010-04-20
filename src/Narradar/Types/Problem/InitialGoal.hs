@@ -50,37 +50,50 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
+import qualified Narradar.Types.Problem.Narrowing as N
+
 import Prelude hiding (pi)
 
 data InitialGoal t p = InitialGoal
-    { goals_PType     :: [Term t Var]
+    { goals_PType     :: [CAGoal t]
     , dgraph_PType    :: Maybe (DGraph t Var)
     , baseFramework :: p}
 
-instance (Eq p, Eq (Term t Var)) => Eq (InitialGoal t p) where
-    p0 == p1 = (goals_PType p0, baseProblemType p0) == (goals_PType p1, baseProblemType p1)
+data CAGoalF c a = Concrete c
+                 | Abstract a
+  deriving (Eq, Ord, Show)
+type CAGoal t = CAGoalF (Term t Var) (Term t Mode)
 
-instance (Ord p, Ord (Term t Var)) => Ord (InitialGoal t p) where
-    compare p0 p1 = compare (goals_PType p0, baseProblemType p0) (goals_PType p1, baseProblemType p1)
+instance (Eq p, Eq (Term t Var), Eq (Term t Mode)) => Eq (InitialGoal t p) where
+    p0 == p1 = (goals_PType p0, baseFramework p0) == (goals_PType p1, baseFramework p1)
 
-instance (Show p, Show (Term t Var)) => Show (InitialGoal t p) where
-    show p0 = show (goals_PType p0, baseProblemType p0)
+instance (Ord p, Ord (Term t Var), Ord (Term t Mode)) => Ord (InitialGoal t p) where
+    compare p0 p1 = compare (goals_PType p0, baseFramework p0) (goals_PType p1, baseFramework p1)
+
+instance (Show p, Show (Term t Var), Show (Term t Mode)) => Show (InitialGoal t p) where
+    show p0 = show (goals_PType p0, baseFramework p0)
 
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
+mapInitialGoal :: (Functor t, Foldable t', HasId t', Ord (Term t Var), Ord(Term t' Var)) =>
+                  (forall a. t a -> t' a) -> InitialGoal t p -> InitialGoal t' p
 mapInitialGoal f (InitialGoal goals dg p) = InitialGoal goals' dg' p
       where
-        goals' = fmap (foldTerm return f') goals
-        dg'    = mapDGraph (foldTerm return f') <$> dg
-        f'     = Impure . f
+        goals' = map (bimap f' f') goals
+        dg'    = mapDGraph f' <$> dg
+        f'     = foldTerm return (Impure . f)
 
 instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
-  data Problem (InitialGoal t p) a = InitialGoalProblem { goals       :: [Term t Var]
+  data Problem (InitialGoal t p) a = InitialGoalProblem { goals       :: [CAGoal t]
                                                         , dgraph      :: DGraph t Var
                                                         , baseProblem :: Problem p a}
-  getProblemType (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getProblemType p)
+  getFramework (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getFramework p)
   getR   (InitialGoalProblem _     _ p) = getR p
+
+instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
+  getP   (InitialGoalProblem _     _ p) = getP p
+
 
 instance ( t ~ f id, MapId f, DPSymbol id
          , MkDPProblem p (NarradarTRS t Var)
@@ -93,11 +106,15 @@ instance ( t ~ f id, MapId f, DPSymbol id
      MkProblem (InitialGoal t p) (NarradarTRS t Var)
  where
   mkProblem (InitialGoal gg gr p) rr = initialGoalProblem gg gr (mkProblem p rr)
-  mapR f (InitialGoalProblem goals _ p) = initialGoalProblem goals Nothing (mapR f p)
+  mapR f (InitialGoalProblem goals dg p)
+      = InitialGoalProblem goals dg' p'
+   where
+    p'     = mapR f p
+    dg'    = mkDGraph' (getFramework p') (getR p') pairs' goals
+    pairs' = dpTRS (getFramework p') (getR p') (pairs dg)
 
-instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
-  getP   (InitialGoalProblem _     _ p) = getP p
 
+{-
 instance (t ~ f id, MapId f, DPSymbol id
          ,HasId t, Unify t, Foldable t, Pretty p
          ,Pretty(t(Term t Var)), Ord (Term t Var), Traversable (Problem p)
@@ -108,10 +125,206 @@ instance (t ~ f id, MapId f, DPSymbol id
   mapP f (InitialGoalProblem goals g p) = InitialGoalProblem goals g (mapP f p)
   mkDPProblem (InitialGoal goals g p) = (initialGoalProblem goals g .) . mkDPProblem p
 
+
+ Necessary ugliness. Cannot give a generic MkDPProblem instance.
+ The problem is that the call to mkDPProblem in the base framework
+ computes and caches the unifiers of the problem.
+ As this computation is done in the context of the base framework,
+ then the goal directed usable rules are not employed, and we lose
+ precision when computing the dependency graph, especially in absence
+ of minimality.
+
+ The current hack is to have monolitical MkDPProblem instances
+ for every concrete framework: Initial goal rewriting, Initial goal
+ innermost, Initial goal narrowing, etc.
+ This hack has to be replicated also for other type classes, e.g.
+ InsertDPair
+
+ An alternative hack would be to disable the use of cached unifiers
+ for initial goal problems, in the dependency graph processors.
+
+ These are only patches around the problem. I'm afraid a real solution
+ calls for an encoding of inheritance to model the framework of a DP problem.
+-}
+
+instance (t ~ f id, MapId f, Unify t, DPSymbol id, HasId t
+         ,Pretty (t(Term t Var)), Ord (t(Term t Var))) =>
+    MkDPProblem (InitialGoal t Rewriting) (NarradarTRS t Var)
+  where
+  mkDPProblem (InitialGoal goals _ _) _ _
+    | not $ all isVar (properSubterms =<< concrete goals)
+      = error "Initial goals must be of the form f(x,y,z..)"
+  mkDPProblem it@(InitialGoal goals g (MkRewriting s m)) rr dd
+    = case dd of
+        DPTRS{rulesUsed} | rr == rulesUsed
+           -> initialGoalProblem goals g $
+              RewritingProblem rr dd s m
+        otherwise -> initialGoalProblem goals g $
+                     RewritingProblem rr (dpTRS it rr dd) s m
+  mapP f p@(InitialGoalProblem goals g (RewritingProblem rr pp s m))
+    = InitialGoalProblem goals g' p'
+   where
+     p' :: Problem Rewriting (NarradarTRS t Var)
+     p' = case f pp of
+        pp'@DPTRS{rulesUsed}
+            | rr == rulesUsed
+            -> RewritingProblem rr pp' s m
+
+        pp' -> RewritingProblem rr (dpTRS (getFramework p) rr pp') s m
+
+     g' = mkDGraph' (getFramework p') (getR p) (pairs g) goals
+
+instance (t ~ f id, MapId f, Unify t, DPSymbol id, HasId t
+         ,Pretty (t(Term t Var)), Ord (t(Term t Var))) =>
+    MkDPProblem (InitialGoal t IRewriting) (NarradarTRS t Var)
+  where
+  mkDPProblem it@(InitialGoal goals g (MkRewriting s m)) rr dd
+    = case dd of
+        DPTRS{rulesUsed} | rr == rulesUsed
+           -> initialGoalProblem goals g $
+              RewritingProblem rr dd s m
+        otherwise -> initialGoalProblem goals g $
+                     RewritingProblem rr (dpTRS it rr dd) s m
+  mapP f p@(InitialGoalProblem goals g (RewritingProblem rr pp s m))
+    = InitialGoalProblem goals g' p'
+   where
+     p' :: Problem IRewriting (NarradarTRS t Var)
+     p' = case f pp of
+        pp'@DPTRS{rulesUsed}
+            | rr == rulesUsed
+            -> RewritingProblem rr pp' s m
+
+        pp' -> RewritingProblem rr (dpTRS (getFramework p) rr pp') s m
+
+     g' = mkDGraph' (getFramework p') (getR p) (pairs g) goals
+
+
+
+instance (t ~ f id, MapId f, Unify t, DPSymbol id, HasId t
+         ,Pretty (t(Term t Var)), Ord (t(Term t Var))) =>
+    MkDPProblem (InitialGoal t Narrowing) (NarradarTRS t Var)
+  where
+  mkDPProblem (InitialGoal goals _ _) _ _
+    | not $ all isVar (properSubterms =<< concrete goals)
+      = error "Initial goals must be of the form f(x,y,z..)"
+  mkDPProblem it@(InitialGoal goals g (MkNarrowing (MkRewriting s m))) rr dd
+    = case dd of
+        DPTRS{rulesUsed} | rr == rulesUsed
+           -> initialGoalProblem goals g $
+              NarrowingProblem $
+              RewritingProblem rr dd s m
+        otherwise -> initialGoalProblem goals g $
+                     NarrowingProblem $
+                     RewritingProblem rr (dpTRS it rr dd) s m
+  mapP f p@(InitialGoalProblem goals g (N.baseProblem -> RewritingProblem rr pp s m))
+    = InitialGoalProblem goals g' p'
+   where
+     p' :: Problem Narrowing (NarradarTRS t Var)
+     p' = case f pp of
+        pp'@DPTRS{rulesUsed}
+            | rr == rulesUsed
+            -> NarrowingProblem $ RewritingProblem rr pp' s m
+
+        pp' -> NarrowingProblem $ RewritingProblem rr (dpTRS (getFramework p) rr pp') s m
+
+     g' = mkDGraph' (getFramework p') (getR p) (pairs g) goals
+
+
+
+instance (t ~ f id, MapId f, Unify t, DPSymbol id, HasId t
+         ,Pretty (t(Term t Var)), Ord (t(Term t Var))) =>
+    MkDPProblem (InitialGoal t INarrowing) (NarradarTRS t Var)
+  where
+  mkDPProblem it@(InitialGoal goals g (MkNarrowing (MkRewriting s m))) rr dd
+    = case dd of
+        DPTRS{rulesUsed} | rr == rulesUsed
+           -> initialGoalProblem goals g $
+              NarrowingProblem $
+              RewritingProblem rr dd s m
+        otherwise -> initialGoalProblem goals g $
+                     NarrowingProblem $
+                     RewritingProblem rr (dpTRS it rr dd) s m
+  mapP f p@(InitialGoalProblem goals g (N.baseProblem -> RewritingProblem rr pp s m))
+    = InitialGoalProblem goals g' p'
+   where
+     p' :: Problem INarrowing (NarradarTRS t Var)
+     p' = case f pp of
+        pp'@DPTRS{rulesUsed}
+            | rr == rulesUsed
+            -> NarrowingProblem $ RewritingProblem rr pp' s m
+
+        pp' -> NarrowingProblem $ RewritingProblem rr (dpTRS (getFramework p) rr pp') s m
+
+     g' = mkDGraph' (getFramework p') (getR p) (pairs g) goals
+
+
+
+instance (DPSymbol id, Pretty id, Ord id, GenSymbol id) =>
+    MkDPProblem (InitialGoal (TermF id) NarrowingGen) (NTRS id)
+  where
+  mkDPProblem (InitialGoal goals _ _) _ _
+    | not $ all isVar (properSubterms =<< concrete goals)
+      = error "Initial goals must be of the form f(x,y,z..)"
+  mkDPProblem it@(InitialGoal goals g (NarrowingGen (MkRewriting s m))) rr dd
+    = case dd of
+        DPTRS{rulesUsed} | rr == rulesUsed
+           -> initialGoalProblem goals g $
+              NarrowingGenProblem $
+              RewritingProblem rr dd s m
+        otherwise -> initialGoalProblem goals g $
+                     NarrowingGenProblem $
+                     RewritingProblem rr (dpTRS it rr dd) s m
+  mapP f p@(InitialGoalProblem goals g (getBaseProblem -> RewritingProblem rr pp s m))
+    = InitialGoalProblem goals g' p'
+   where
+     p' :: Problem NarrowingGen (NTRS id)
+     p' = case f pp of
+        pp'@DPTRS{rulesUsed}
+            | rr == rulesUsed
+            -> NarrowingGenProblem $ RewritingProblem rr pp' s m
+
+        pp' -> NarrowingGenProblem $ RewritingProblem rr (dpTRS (getFramework p) rr pp') s m
+
+     g' = mkDGraph' (getFramework p') (getR p) (pairs g) goals
+
+
+
+instance (DPSymbol id, Pretty id, Ord id, GenSymbol id) =>
+    MkDPProblem (InitialGoal (TermF id) INarrowingGen) (NTRS id)
+  where
+  mkDPProblem (InitialGoal goals _ _) _ _
+    | not $ all isVar (properSubterms =<< concrete goals)
+      = error "Initial goals must be of the form f(x,y,z..)"
+  mkDPProblem it@(InitialGoal goals g (NarrowingGen (MkRewriting s m))) rr dd
+    = case dd of
+        DPTRS{rulesUsed} | rr == rulesUsed
+           -> initialGoalProblem goals g $
+              NarrowingGenProblem $
+              RewritingProblem rr dd s m
+        otherwise -> initialGoalProblem goals g $
+                     NarrowingGenProblem $
+                     RewritingProblem rr (dpTRS it rr dd) s m
+  mapP f p@(InitialGoalProblem goals g (getBaseProblem -> RewritingProblem rr pp s m))
+    = InitialGoalProblem goals g' p'
+   where
+     p' :: Problem INarrowingGen (NTRS id)
+     p' = case f pp of
+        pp'@DPTRS{rulesUsed}
+            | rr == rulesUsed
+            -> NarrowingGenProblem $ RewritingProblem rr pp' s m
+
+        pp' -> NarrowingGenProblem $ RewritingProblem rr (dpTRS (getFramework p) rr pp') s m
+
+     g' = mkDGraph' (getFramework p') (getR p) (pairs g) goals
+
+
+
 instance FrameworkExtension (InitialGoal t) where
-  getBaseFramework = baseProblemType
+  getBaseFramework = baseFramework
   getBaseProblem   = baseProblem
-  setBaseProblem p0 p = p{baseProblem=p0}
+  liftProblem   f p = f (baseProblem p) >>= \p0' -> return p{baseProblem = p0'}
+  liftFramework f p = p{baseFramework = f $ baseFramework p}
+  liftProcessorS = liftProcessorSdefault
 
 initialGoal gg = InitialGoal gg Nothing
 
@@ -122,7 +335,7 @@ initialGoalProblem :: ( t ~ f id, MapId f, DPSymbol id
                       , ICap t Var (typ, NarradarTRS t Var)
                       , IUsableRules t Var typ (NarradarTRS t Var)
                       ) =>
-                      [Term t Var]
+                      [CAGoal t]
                    -> Maybe(DGraph t Var)
                    -> Problem typ (NarradarTRS t Var) -> Problem (InitialGoal t typ) (NarradarTRS t Var)
 
@@ -131,6 +344,8 @@ initialGoalProblem gg (Just dg) p = InitialGoalProblem gg dg p
 
 updateInitialGoalProblem p p0 = p{baseProblem = p0}
 
+concrete gg = [g | Concrete g <- gg]
+abstract gg = [g | Abstract g <- gg]
 -- ----------
 -- Functions
 -- ----------
@@ -205,20 +420,33 @@ instance Functor (Problem p) => Functor (Problem (InitialGoal id p)) where fmap 
 instance Foldable (Problem p) => Foldable (Problem (InitialGoal id p)) where foldMap f (InitialGoalProblem gg g p) = foldMap f p
 instance Traversable (Problem p) => Traversable (Problem (InitialGoal id p)) where traverse f (InitialGoalProblem gg g p) = InitialGoalProblem gg g <$> traverse f p
 
+instance Bifunctor CAGoalF where
+  bimap fc fa (Concrete c) = Concrete (fc c)
+  bimap fc fa (Abstract a) = Abstract (fa a)
+
 -- Data.Term
 
 -- NFData
 
-instance (NFData (t(Term t Var)), NFData (TermId t), NFData (Problem p trs)) => NFData (Problem (InitialGoal t p) trs) where
+instance (NFData (t(Term t Var)), NFData(Term t Mode), NFData (TermId t), NFData (Problem p trs)) =>
+  NFData (Problem (InitialGoal t p) trs)
+ where
   rnf (InitialGoalProblem gg g p) = rnf gg `seq` rnf g `seq` rnf p `seq` ()
+
+instance (NFData a, NFData c) => NFData (CAGoalF c a) where
+   rnf (Concrete g) = rnf g; rnf (Abstract g) = rnf g
 
 -- Output
 
+instance (Pretty (Term t Mode), Pretty (Term t Var)) => Pretty (CAGoal t) where
+  pPrint (Concrete g) = text "concrete" <+> g
+  pPrint (Abstract g) = text "abstract" <+> g
+
 instance Pretty p => Pretty (InitialGoal id p) where
-    pPrint InitialGoal{..} = text "Initial Goal" <+> pPrint baseProblemType
+    pPrint InitialGoal{..} = text "Initial Goal" <+> pPrint baseFramework
 
 
-instance (Pretty (Term t Var), Pretty (Problem base trs)) =>
+instance (Pretty (Term t Var), Pretty(Term t Mode), Pretty (Problem base trs)) =>
     Pretty (Problem (InitialGoal t base) trs)
  where
   pPrint InitialGoalProblem{..} =
@@ -231,8 +459,7 @@ instance HTML p => HTML (InitialGoal id p) where
 
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
 
-
-instance (Pretty (Term t Var), PprTPDB (Problem typ trs)) =>
+instance (Pretty (Term t Var), Pretty (Term t Mode), PprTPDB (Problem typ trs)) =>
     PprTPDB (Problem (InitialGoal t typ) trs)
  where
     pprTPDB (InitialGoalProblem goals _ p) =
@@ -248,6 +475,7 @@ instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
     icap (InitialGoal{..},trs) = icap (baseFramework,trs)
 
 -- Usable Rules
+
 {-
 instance (HasId t, Foldable t, Unify t, Ord (Term t Var), Pretty (Term t Var)
          ,IsDPProblem p, Traversable (Problem p), Pretty p
@@ -270,24 +498,27 @@ instance (t ~ f id, MapId f, HasId t, Foldable t, Unify t
          ,trs ~ NarradarTRS t Var
          ,ICap t Var (p, trs)
          ,IUsableRules t Var p trs
+         ,NeededRules t Var p trs
          ) =>
           IUsableRules (f id) Var (InitialGoal (f id) p) trs
   where
-    iUsableRulesVarM it@(InitialGoal _ _ p) trs dps v = do
-      reachableRules <- iUsableRulesM irewriting trs dps (rhs <$> involvedPairs it trs dps)
-      iUsableRulesVarM p reachableRules dps v
+    iUsableRulesVarM it@(InitialGoal _ _ typ) trs dps v = do
+      reachableRules <- neededRulesM typ trs dps (rhs <$> involvedPairs it trs dps)
+      iUsableRulesVarM typ reachableRules dps v
 
-    iUsableRulesM it@(InitialGoal _ _ p) trs dps tt = do
-      reachableRules <- iUsableRulesM irewriting trs dps =<< getFresh (rhs <$> involvedPairs it trs dps)
---      pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
-      iUsableRulesM p reachableRules dps tt
+    iUsableRulesM it@(InitialGoal _ _ typ) trs dps tt = do
+      reachableRules <- neededRulesM typ trs dps =<< getFresh (rhs <$> involvedPairs it trs dps)
+      pprTrace( text "The reachable rules are:" <+> pPrint reachableRules) (return ())
+      iUsableRulesM typ reachableRules dps tt
 
 
 -- Other Narradar instances
 
 instance (trs ~ NTRS id
-         ,MkDPProblem typ trs, Pretty typ, Traversable (Problem typ)
+         ,MkDPProblem (InitialGoal (TermF id) typ) trs
+         ,Pretty typ, Traversable (Problem typ)
          ,Pretty id, Ord id, DPSymbol id
+         ,NNeededRules typ id
          ,NUsableRules typ id
          ,NCap typ id
          ,InsertDPairs typ (NTRS id)
@@ -295,9 +526,8 @@ instance (trs ~ NTRS id
   InsertDPairs (InitialGoal (TermF id) typ) (NTRS id)
  where
   insertDPairs p@InitialGoalProblem{dgraph=DGraph{..},..} newPairs
-    = let base'   = insertDPairs baseProblem newPairs
-          dgraph' = insertDGraph p newPairs
-      in initialGoalProblem goals (Just dgraph') base'
+    = let dgraph' = insertDGraph p newPairs
+      in insertDPairsDefault (initialGoalProblem goals (Just dgraph') baseProblem) newPairs
 
 -- -------------------------------
 -- Dependency Graph data structure
@@ -337,6 +567,8 @@ instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (DGraph t
                                              rnf sccsm `seq`
                                              rnf sccg
 
+
+mapDGraph :: (Ord(Term t v), Ord(Term t' v), Foldable t', HasId t') => (Term t v -> Term t' v) -> DGraph t v -> DGraph t' v
 mapDGraph f (DGraph p pm ip rp sccs sccsM sccsG)
     = (DGraph (mapNarradarTRS f p) (Map.mapKeys (fmap f) pm) ip rp sccs sccsM sccsG)
 
@@ -345,31 +577,34 @@ mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , MkDPProblem typ (NarradarTRS t v)
             , Traversable (Problem typ), Pretty typ
             , HasId t, Unify t
-            , Pretty ((Term t v))
+            , Pretty (t(Term t v))
             , Ord    (Term t v)
             , ICap t v (typ, NarradarTRS t v)
             , IUsableRules t v typ (NarradarTRS t v)
-            ) => Problem typ (NarradarTRS t v) -> [Term t v] -> DGraph t v
-
-mkDGraph p@(getP -> DPTRS _ _ gr _ _) gg = mkDGraph' (getProblemType p) (getR p) (getP p) gg
+            ) => Problem typ (NarradarTRS t v) -> [CAGoal t] -> DGraph t v
+mkDGraph (getP -> dps) _ | pprTrace ("mkDGraph with pairs: "<> dps) False = undefined
+mkDGraph p@(getP -> DPTRS _ _ gr _ _) gg = mkDGraph' (getFramework p) (getR p) (getP p) gg
 
 mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
              , v ~ Var
              , IsDPProblem typ, Traversable (Problem typ), Pretty typ
              , HasId t, Unify t, Pretty (Term t v)
              , ICap t v (typ, NarradarTRS t v)
-             ) => typ -> NarradarTRS t v -> NarradarTRS t v -> [Term t v] -> DGraph t v
-mkDGraph' typ trs pairs@(DPTRS dps_a _ fullgraph _ _) goals = runIcap (rules trs ++ rules pairs) $ do
-  let pairsMap = Map.fromList (map swap $ assocs dps_a)
+             ) => typ -> NarradarTRS t v -> NarradarTRS t v -> [CAGoal t] -> DGraph t v
+mkDGraph' typ trs pairs@(DPTRS dpsA _ fullgraph _ _) goals = runIcap (rules trs ++ rules pairs) $ do
+  let pairsMap = Map.fromList (map swap $ assocs dpsA)
       p   = (typ,trs)
 
   -- List of indexes for fullgraph
   initialPairsG <- liftM Set.fromList $ runListT $ do
-                     (i,s :-> t) <- liftL (assocs dps_a)
+                     (i,s :-> t) <- liftL (assocs dpsA)
                      g           <- liftL goals
-                     g'          <- lift (getFresh g >>= icap p)
-                     guard(markDP g' `unifies` s)
-                     return i
+                     case g of
+                       Concrete g -> do g' <- lift (getFresh g >>= icap p)
+                                        guard(markDP g' `unifies` s)
+                                        return i
+                       Abstract g -> do guard (rootSymbol g == rootSymbol s)
+                                        return i
 
   let -- list of indexes for fullgraph
       reachablePairsG = Set.fromList $ concatMap (reachable fullgraph) (toList initialPairsG)
@@ -390,7 +625,7 @@ mkDGraph' typ trs pairs@(DPTRS dps_a _ fullgraph _ _) goals = runIcap (rules trs
                                  [ (ix, scc) | (scc,ix,_) <- sccGraphNodes]
 
       -- The scc for every node, with indexes from fullgraph
-      sccsMap    = array (bounds fullgraph) (zip (indices dps_a) (repeat Nothing) ++
+      sccsMap    = array (bounds fullgraph) (zip (indices dpsA) (repeat Nothing) ++
                                          [ (n, Just ix) | (scc,ix,_) <- sccGraphNodes
                                                                    , n <- flattenSCC scc])
       the_dgraph = DGraph {..}
@@ -433,8 +668,8 @@ expandDGraph ::
 -}
 expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} olddp newdps
    = case lookupNode olddp dg of
-      Nothing -> dg
-      Just i -> expandDGraph' p i newdps
+      Nothing -> p
+      Just i  -> p{dgraph=expandDGraph' p i newdps}
 
 expandDGraph' p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} i newdps
    = let p' = expandDPair (setP pairs p) i newdps

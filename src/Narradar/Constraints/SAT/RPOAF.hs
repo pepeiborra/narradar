@@ -111,7 +111,7 @@ rpoAF_DP allowCol omega p
 
 rpoAF_IGDP :: (Ord id
               ,Traversable (Problem base), Pretty base
-              ,MkDPProblem base (NTRS sid)
+              ,MkDPProblem (InitialGoal (TermF sid) base) (NTRS sid)
               ,NUsableRules base sid
               ,NCap base sid
 --              ,NeededRules (TermF sid) Narradar.Var base (NTRS sid)

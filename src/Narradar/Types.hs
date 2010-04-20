@@ -138,8 +138,10 @@ data AProblem t trs where
     AGoalRelativeIRewritingProblem :: Problem (Relative trs (InitialGoal t IRewriting)) trs -> AProblem t trs
     AGoalRewritingProblem     :: Problem (InitialGoal t Rewriting) trs  -> AProblem t trs
     AGoalIRewritingProblem    :: Problem (InitialGoal t IRewriting) trs -> AProblem t trs
-    AGoalNarrowingProblem     :: Problem (NarrowingGoal (TermId t)) trs -> AProblem t trs
-    AGoalCNarrowingProblem    :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
+--    AGoalNarrowingProblem     :: Problem (NarrowingGoal (TermId t)) trs -> AProblem t trs
+    AGoalNarrowingProblem     :: Problem (InitialGoal t Narrowing) trs -> AProblem t trs
+    AGoalCNarrowingProblem    :: Problem (InitialGoal t INarrowing) trs -> AProblem t trs
+--    AGoalCNarrowingProblem    :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
     APrologProblem            :: PrologProblem -> AProblem t trs
 --    AGoalNarrowingRelativeRewritingProblem :: Problem (Relative trs NarrowingGoal (TermId t)) trs -> AProblem t trs
 
@@ -155,8 +157,8 @@ dispatchAProblem :: (Traversable m, MonadPlus m
                     ,Dispatch (Problem (Relative  trs IRewriting)  trs)
                     ,Dispatch (Problem Narrowing  trs)
                     ,Dispatch (Problem CNarrowing trs)
-                    ,Dispatch (Problem (NarrowingGoal (TermId t)) trs)
-                    ,Dispatch (Problem (CNarrowingGoal (TermId t)) trs)
+                    ,Dispatch (Problem (InitialGoal t Narrowing) trs)
+                    ,Dispatch (Problem (InitialGoal t INarrowing) trs)
                     ,Dispatch PrologProblem
                     ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m Final
 
@@ -198,14 +200,18 @@ trsParser = do
   let r   = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->  r) _ <- rr]
       r0  = [ mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r
                   | Rules rr <- spec', TRS.Rule (l TRS.:->= r) _ <- rr]
-      dps = [markDPRule (mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r)
-                  | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
+      dps = if null [()|Pairs{}<-spec]
+              then Nothing
+              else Just [markDPRule (mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r)
+                             | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
       r' = mkTRS (mapTermSymbols IdFunction <$$> r)
 
-      mkGoal = markDP . mapTermSymbols IdFunction
+      mkGoal = Concrete . markDP . mapTermSymbols IdFunction
 
 --      mkAbstractGoal :: Monad m => Term String -> m (Goal Id)
-      mkAbstractGoal (Impure (Term id tt)) = do {tt' <- mapM mkMode tt; return (Goal (IdDP id) tt')}
+--      mkAbstractGoal (Impure (Term id tt)) = do {tt' <- mapM mkMode tt; return (Goal (IdDP id) tt')}
+      mkAbstractGoal (Impure (Term id tt)) = do {tt' <- mapM mkMode tt;
+                                                 return (Abstract $ term (IdDP id) (map return tt'))}
       mkMode (Impure (Term (the_id -> "i") [])) = return G
       mkMode (Impure (Term (the_id -> "b") [])) = return G
       mkMode (Impure (Term (the_id -> "c") [])) = return G
@@ -216,66 +222,70 @@ trsParser = do
       mkMode _                      = fail "parsing the abstract goal"
 
   case (r0, dps, strategies) of
-    ([], [], [])
+    ([], Nothing, [])
         -> return $ ARewritingProblem (mkNewProblem rewriting r)
-    ([], [], TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem narrowing r)
-    ([], [], ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
-    ([], [], InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
+    ([], Nothing, TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem narrowing r)
+    ([], Nothing, ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
+    ([], Nothing, InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
 
-    ([], [], [GoalStrategy g])
+    ([], Nothing, [GoalStrategy g])
         -> return $ AGoalRewritingProblem (mkNewProblem (initialGoal [mkGoal g] rewriting) r)
 
-    ([], [], InnerMost:_)
+    ([], Nothing, InnerMost:_)
         -> return $ AIRewritingProblem (mkNewProblem irewriting r)
 
 
-    ([], [], GoalStrategy g:TRS.Narrowing:_)
-        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (narrowingGoal g') r)}
---    (r0, [], GoalStrategy g:TRS.Narrowing:_)
+    ([], Nothing, GoalStrategy g:TRS.Narrowing:_)
+        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (initialGoal [g'] narrowing) r)}
+--    (r0, Nothing, GoalStrategy g:TRS.Narrowing:_)
 --        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingRelativeRewritingProblem
 --                                                (mkNewProblem (relative (tRS r0) (narrowingGoal g')) r)}
-    ([], [], GoalStrategy g:ConstructorNarrowing:_)
-        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (cnarrowingGoal g') r)}
-    ([], [], GoalStrategy g:InnerMost:TRS.Narrowing:_)
-        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (cnarrowingGoal g') r)}
-    ([], [], (GoalStrategy g : InnerMost : _))
+    ([], Nothing, GoalStrategy g:ConstructorNarrowing:_)
+        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (initialGoal [g'] cnarrowing) r)}
+    ([], Nothing, GoalStrategy g:InnerMost:TRS.Narrowing:_)
+        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (initialGoal [g'] cnarrowing) r)}
+    ([], Nothing, (GoalStrategy g : InnerMost : _))
         -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] irewriting) r)
-    ([], dps, [])
+    ([], Just dps, [])
         -> return $ ARewritingProblem (setMinimality minimality $ mkDPProblem rewriting r' (mkTRS dps))
 
-    ([], dps, [GoalStrategy g])
+    ([], Just dps, [GoalStrategy g])
         -> return $ AGoalRewritingProblem (setMinimality minimality $ mkDPProblem (initialGoal [mkGoal g] rewriting) r' (tRS dps))
 
-    ([], dps, InnerMost:_)
+    ([], Just dps, GoalStrategy g:TRS.Narrowing:_)
+        -> do {g' <- mkAbstractGoal g;
+               return $ AGoalNarrowingProblem (setMinimality minimality $ mkDPProblem (initialGoal [g'] narrowing) r' (tRS dps))}
+
+    ([], Just dps, InnerMost:_)
         -> return $ AIRewritingProblem (setMinimality minimality $ mkDPProblem irewriting r' (tRS dps))
-    ([], dps, GoalStrategy g:InnerMost:_)
+    ([], Just dps, GoalStrategy g:InnerMost:_)
         -> return $ AGoalIRewritingProblem (setMinimality minimality $ mkDPProblem (initialGoal [mkGoal g] irewriting) r' (tRS dps))
 
-    (r0, [], [])
+    (r0, Nothing, [])
         -> return $ ARelativeRewritingProblem (mkNewProblem (relative (tRS r0) rewriting) r)
-    (r0, [], InnerMost:_)
+    (r0, Nothing, InnerMost:_)
         -> return $ ARelativeIRewritingProblem (mkNewProblem (relative (tRS r0) irewriting) r)
 
 
-    (r0, [], [GoalStrategy g])
+    (r0, Nothing, [GoalStrategy g])
         -> return $ AGoalRelativeRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] rewriting)) r)
-    (r0, [], GoalStrategy g:InnerMost:_)
+    (r0, Nothing, GoalStrategy g:InnerMost:_)
         -> return $ AGoalRelativeIRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r)
 
 
-    (r0, dps, [])
+    (r0, Just dps, [])
         -> return $ ARelativeRewritingProblem (setMinimality minimality $
                                                mkDPProblem (relative (tRS r0) rewriting) r' (tRS dps))
 
-    (r0, dps, InnerMost:_)
+    (r0, Just dps, InnerMost:_)
         -> return $ ARelativeIRewritingProblem (setMinimality minimality $
                                                 mkDPProblem (relative (tRS r0) irewriting) r' (tRS dps))
-    (r0, dps, [GoalStrategy g])
+    (r0, Just dps, [GoalStrategy g])
         -> return $ AGoalRelativeRewritingProblem
                   $ setMinimality A
                   $ mkDPProblem (relative (tRS r0) (initialGoal [mkGoal g] rewriting)) r' (mkTRS dps)
 
-    (r0, dps, GoalStrategy g:InnerMost:_)
+    (r0, Just dps, GoalStrategy g:InnerMost:_)
         -> return $ AGoalRelativeIRewritingProblem
                   $ mkDPProblem (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r' (mkTRS dps)
 

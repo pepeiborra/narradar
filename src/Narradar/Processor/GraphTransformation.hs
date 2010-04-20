@@ -87,6 +87,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
+         , MkDPProblem (InitialGoal t Narrowing) (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Narrowing) t) (NarradarProblem (InitialGoal t Narrowing) t)
   where
@@ -95,6 +96,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
+         , MkDPProblem (InitialGoal t CNarrowing) (NarradarTRS t Var)
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowing) t) (NarradarProblem (InitialGoal t CNarrowing) t)
   where
    applySearch tag = narrowing_innermostIG
@@ -102,6 +104,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
          , t ~ f (DPIdentifier (GenId id)), MapId f
          , MkDPProblem NarrowingGen (NarradarTRS t Var)
+         , MkDPProblem (InitialGoal t NarrowingGen) (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t NarrowingGen) t) (NarradarProblem (InitialGoal t NarrowingGen) t)
   where
@@ -110,6 +113,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
          , t ~ f (DPIdentifier (GenId id)), MapId f
          , MkDPProblem CNarrowingGen (NarradarTRS t Var)
+         , MkDPProblem (InitialGoal t CNarrowingGen) (NarradarTRS t Var)
          , Info info GraphTransformationProof
          )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowingGen) t) (NarradarProblem (InitialGoal t CNarrowingGen) t)
   where
@@ -140,9 +144,11 @@ instance (trs ~ NarradarTRS t v
          ,t   ~ f id
          ,id  ~ TermId t, HasId t, MapId f, DPSymbol id
          ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (t(Term t Var))
-         ,MkDPProblem typ trs, Traversable (Problem typ)
+         ,MkDPProblem typ trs
+         ,MkDPProblem (InitialGoal t typ) trs
+         ,Traversable (Problem typ)
          ,IUsableRules t v typ (NarradarTRS t v)
-         ,IUsableRules t v typ trs
+         ,NeededRules  t v typ (NarradarTRS t v)
          ,ICap t v (typ, trs)
          ,Info info GraphTransformationProof
          ) =>
@@ -152,12 +158,10 @@ instance (trs ~ NarradarTRS t v
   applySearch Instantiation p@InitialGoalProblem{..}
    | null currentPairs      = [return p]
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
-   | otherwise = [ singleP (InstantiationProof olddp newdps) p
-                           (initialGoalProblem goals (Just dgraph') p')
+   | otherwise = [ singleP (InstantiationProof olddp newdps) p0 p1
                      | (i,olddp, newdps) <- dpss
-                     , let dgraph' = expandDGraph p olddp newdps
---                     , let typ' = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
-                     , let p'   = expandDPair (getBaseProblem p) i newdps
+                     , let p0 = expandDPair p i newdps
+                     , let p1 = expandDGraph p0 olddp newdps
                  ]
 
    where currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
@@ -187,6 +191,7 @@ instance (trs ~ NarradarTRS t Var
          ,Unify t, Pretty (Term t Var), Ord (Term t Var)
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
+         ,MkDPProblem (InitialGoal t (MkRewriting st)) trs
          ,ICap t Var (MkRewriting st, NarradarTRS t Var)
          ,IUsableRules t Var (MkRewriting st) (NarradarTRS t Var)
          ) =>
@@ -203,10 +208,12 @@ instance (v ~ Var
          ,t ~ f (DPIdentifier id), MapId f
          ,TermId t ~ DPIdentifier id, HasId t, Unify t
          ,Pretty typ
-         ,MkDPProblem typ (NarradarTRS t Var)
+         ,MkDPProblem  typ (NarradarTRS t Var)
+         ,MkDPProblem (InitialGoal t typ) (NarradarTRS t Var)
          ,Traversable (Problem typ)
          ,Pretty (t(Term t v)), Ord(t(Term t v))
          ,IUsableRules t v typ (NarradarTRS t v)
+         ,NeededRules  t v typ (NarradarTRS t v)
          ,ICap t v (typ, (NarradarTRS t Var))
          ,Info info GraphTransformationProof
          ) =>
@@ -217,11 +224,9 @@ instance (v ~ Var
   | null currentPairs      = [return p]
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
   | isCollapsing (getR p)  = mzero  -- no point in instantiating everything around
-  | otherwise = [ singleP (FInstantiationProof olddp newdps) p (initialGoalProblem goals (Just dgraph') p')
+  | otherwise = [ singleP (FInstantiationProof olddp newdps) p p'
                      | (i, olddp, newdps) <- dpss
-                     , let dgraph'= expandDGraph p olddp newdps
---                     , let typ'   = InitialGoal goals (Just dgraph') (getProblemType baseProblem)
-                     , let p'     = expandDPair (getBaseProblem p) i newdps
+                     , let p' = expandDGraph (expandDPair p i newdps) olddp newdps
                 ]
    where currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p)
          dpss = [ (i, olddp, newdps)
@@ -307,7 +312,7 @@ narrowing p0
               | otherwise = []
            where
              newdps
-              |  isLinear t
+              | isLinear t
               , isNothing (unify' (getVariant t uu) `mapM` uu)
               , new_dps <- [(i,dp')
                               | (dp',p) <- narrow1DP (rules $ getR p0) olddp
@@ -360,8 +365,11 @@ narrowingIG, narrowing_innermostIG
              ,v ~ Var
              ,TermId t  ~ DPIdentifier id, HasId t, Unify t
              ,Enum v, GetVars v v, Ord (t(Term t v))
-             ,MkDPProblem typ trs, Traversable (Problem typ)
+             ,MkDPProblem (InitialGoal t typ) trs
+             ,MkDPProblem typ trs
+             ,Traversable (Problem typ)
              ,IUsableRules t v typ (NarradarTRS t v)
+             ,NeededRules  t v typ (NarradarTRS t v)
              ,ICap t v (typ,trs)
              ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info (Problem (InitialGoal t typ) trs)
@@ -372,10 +380,9 @@ narrowingIG, narrowing_innermostIG
 narrowingIG p0@InitialGoalProblem{..}
   | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingIG Processor: expected a problem carrying a DPTRS"
-  | otherwise  = [ singleP (NarrowingProof olddp newdps) p0
-                           (initialGoalProblem goals (Just dgraph') (expandDPair (getBaseProblem p0) i newdps))
+  | otherwise  = [ singleP (NarrowingProof olddp newdps) p0 p'
                      | (i, olddp, newdps) <- dpss
-                     , let dgraph' = expandDGraph p0 olddp newdps]
+                     , let p' = expandDGraph (expandDPair p0 i newdps) olddp newdps]
     where
           allPairs     = rulesArray $ pairs dgraph
           currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p0)
@@ -415,10 +422,9 @@ narrowingIG p0@InitialGoalProblem{..}
 narrowing_innermostIG p0@InitialGoalProblem{..}
   | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
-  | otherwise = [ singleP (NarrowingProof olddp newdps) p0
-                          (initialGoalProblem goals (Just dgraph') (expandDPair (getBaseProblem p0) i newdps))
+  | otherwise = [ singleP (NarrowingProof olddp newdps) p0 p'
                      | (i, olddp, newdps) <- dpss
-                     , let dgraph'= expandDGraph p0 olddp newdps]
+                     , let p' = expandDGraph (expandDPair p0 i newdps) olddp newdps]
     where
           allPairs     = rulesArray $ pairs dgraph
           currentPairs = [0..] `zip` tag (fromMaybe err . (`lookupNode` dgraph)) (rules$ getP p0)

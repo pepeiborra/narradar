@@ -191,6 +191,9 @@ instance (Traversable t, Ord v, GetFresh t v (Set (Rule t v))) => GetFresh t v (
 class IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
 instance IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
 
+class NeededRules (TermF id) Var typ (NTRS id) => NNeededRules typ id
+instance NeededRules (TermF id) Var typ (NTRS id) => NNeededRules typ id
+
 class ICap (TermF id) Var (typ, NTRS id) => NCap typ id
 instance ICap (TermF id) Var (typ, NTRS id) => NCap typ id
 
@@ -335,7 +338,7 @@ computeDPUnifiers typ trs dps = do
    unif    <- computeDirectUnifiers  (typ, trs_f) dps
    unifInv <- computeInverseUnifiers (typ, trs_f) dps
 
-   return (unif :!: array (bounds unif) unifInv)
+   return (unif :!: unifInv)
 
 computeDirectUnifiers p_f (rules -> the_dps) = do
    rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p_f) the_dps
@@ -349,18 +352,28 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
  where
    ldps  = length the_dps - 1
 
+computeInverseUnifiers :: forall unif typ trs t v term m.
+                     ( unif ~ Unifiers t v
+                     , term ~ Term t v
+                     , Ord v, Unify t
+                     , HasRules t v trs, GetFresh t v trs
+                     , IUsableRules t v typ trs
+                     , ICap t v (typ, trs)
+                     , MonadVariant v m) =>
+                     (typ, trs) -> trs -> m unif
 computeInverseUnifiers (typ, trs) dps = do
 
    u_rr <- (listArray (0,ldps)) `liftM`
            P.sequence [iUsableRulesM typ trs dps [r] | _:->r <- rules dps]
 
-   runListT $ do
+   unif <- runListT $ do
                 (x, _ :-> r) <- liftL $ zip [0..] (rules dps)
                 (y, l :-> _) <- liftL $ zip [0..] (rules dps)
                 let p_inv = (map swapRule . rules) (u_rr ! x)
                 l' <- lift (getFresh l >>= icap p_inv)
                 let unifier = unify l' r
                 return ((x,y), unifier)
+   return $ array ((0,0), (ldps,ldps)) unif
  where
    ldps  = length (rules dps) - 1
 

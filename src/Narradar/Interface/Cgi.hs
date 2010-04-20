@@ -54,14 +54,14 @@ narradarCgi :: forall mp.
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) IRewriting))  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) IRewriting)  (NTRS Id))
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
-                 ,Dispatch (Problem (NarrowingGoal Id) (NTRS Id))
-                 ,Dispatch (Problem (CNarrowingGoal Id) (NTRS Id))
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarCgi run = runCGI (handleErrors' cgiMain) where

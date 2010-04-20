@@ -296,15 +296,19 @@ expandDPair p i newdps = setP (tRS dps') p
 class MkDPProblem typ trs => InsertDPairs typ trs where
     insertDPairs :: Problem typ trs -> trs -> Problem typ trs
 
-insertDPairsDefault ::
-         (trs ~ NTRS id
-         ,MkDPProblem typ trs, Pretty typ, Traversable (Problem typ)
-         ,Pretty id, Eq id
-         ,NUsableRules typ id
-         ,NCap typ id
-         ) => NProblem typ id -> NTRS id -> NProblem typ id
+insertDPairsDefault p newPairs = setP dps' p
+  where
+   dps' = assert (getR p == rulesUsed (getP p)) $
+          insertDPairs' (getFramework p) (getP p) (rules newPairs)
 
-insertDPairsDefault p@(getP -> DPTRS dps rr _ (unif :!: unifInv) sig) newPairs
+insertDPairs' ::
+         (trs ~ NTRS id
+         ,MkDPProblem framework trs, Pretty framework, Traversable (Problem framework)
+         ,Pretty id, Eq id
+         ,NUsableRules framework id
+         ,NCap framework id
+         ) => framework -> NTRS id -> [Rule (TermF id) Var] -> NTRS id
+insertDPairs' framework p@(DPTRS dps rr _ (unif :!: unifInv) sig) newPairs
     = runIcap (getVars p `mappend` getVars newPairs) $ do
       let (zero,l_dps) = bounds dps
           l_newPairs  = length $ rules newPairs
@@ -320,17 +324,13 @@ insertDPairsDefault p@(getP -> DPTRS dps rr _ (unif :!: unifInv) sig) newPairs
                                  | j <- new_nodes, k <- [zero..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
 
-      unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (getR p) (tRS dps')
+      unif_new :!: unifInv_new <- computeDPUnifiers framework (mkTRS$ Set.toList rr) (mkTRS dps')
       let unif'    = mkUnif unif unif_new
           unifInv' = mkUnif unifInv unifInv_new
 
           dptrs'   = dpTRS' a_dps' rr (unif' :!: unifInv')
-          p'       = setP dptrs' p
-          gr'      = getEDG p'
 
-
-      return p'
-
+      return dptrs'
 
 
 -- -------------
