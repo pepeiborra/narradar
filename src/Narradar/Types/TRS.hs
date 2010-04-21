@@ -246,17 +246,18 @@ narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 
 -- | Assumes that the rules have already been renamed apart
 dpTRS :: ( SignatureId trs ~ TermId t
+         , trs ~ NarradarTRS t v
          , Ord (Term t v), HasId t, Unify t, Enum v
          , HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
          , IUsableRules t v typ trs, ICap t v (typ, trs)
          ) =>
-         typ -> trs -> trs -> NarradarTRS t v
+         typ -> NarradarTRS t v -> NarradarTRS t v -> NarradarTRS t v
 
 dpTRS typ trs dps = dpTRS' dps_a (tRS $ rules trs) unifs
     where
       dps'    = snub (rules dps)
       dps_a   = listArray (0, length dps' - 1) dps'
-      unifs   = runIcap dps (computeDPUnifiers typ trs (tRS dps'))
+      unifs   = runIcap dps (computeDPUnifiers typ trs (listTRS dps'))
 
 
 dpTRS' :: ( Foldable t, HasId t, Ord (Term t v)) =>

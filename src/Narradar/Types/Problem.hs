@@ -324,7 +324,8 @@ insertDPairs' framework p@(DPTRS dps rr _ (unif :!: unifInv) sig) newPairs
                                  | j <- new_nodes, k <- [zero..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
 
-      unif_new :!: unifInv_new <- computeDPUnifiers framework (mkTRS$ Set.toList rr) (mkTRS dps')
+      unif_new :!: unifInv_new <- computeDPUnifiers framework rr (listTRS dps')
+                               -- The use of listTRS here is important ^^
       let unif'    = mkUnif unif unif_new
           unifInv' = mkUnif unifInv unifInv_new
 
