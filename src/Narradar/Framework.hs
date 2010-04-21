@@ -15,7 +15,8 @@ module Narradar.Framework (
   where
 
 import Control.Exception (Exception)
-import Control.Monad
+import Control.Monad.Free
+import Control.Monad.Identity
 import Data.Foldable (toList)
 import Data.Term (foldTerm, getId)
 import Data.Traversable (Traversable)
@@ -37,26 +38,29 @@ import Narradar.Utils ((<$$>))
 class FrameworkExtension ext where
     getBaseFramework :: ext base -> base
     getBaseProblem   :: Problem (ext base) trs -> Problem base trs
-    setBaseProblem   :: Problem base trs -> Problem (ext base) trs ->  Problem (ext base) trs
-    liftProcessor    :: ( Processor info tag (Problem base trs) (Problem base trs)
-                        , Info info (Problem base trs)
-                        , MonadPlus m
+    liftProblem   :: (Monad m) => (Problem base trs -> m(Problem base' trs)) ->
+                                 Problem (ext base) trs -> m(Problem (ext base') trs)
+    liftFramework :: (base -> base') -> ext base -> ext base'
+    liftProcessor    :: ( Processor info tag (Problem base trs) (Problem base' trs)
+                        , Info info (Problem base trs), Info info (Problem base' trs)
+                        , MonadPlus m, Traversable m
                         ) =>
-                        tag -> Problem (ext base) trs -> Proof info m (Problem (ext base) trs)
-    liftProcessorS :: ( Processor info tag (Problem base trs) (Problem base trs)
-                     , Info info (Problem base trs)
-                     , MonadPlus m
-                     ) => tag -> Problem (ext base) trs -> [Proof info m (Problem (ext base) trs)]
+                        tag -> Problem (ext base) trs -> Proof info m (Problem (ext base') trs)
+    liftProcessorS :: ( Processor info tag (Problem base trs) (Problem base' trs)
+                       , Info info (Problem base trs), Info info (Problem base' trs)
+                       , MonadPlus m, Traversable m
+                     ) => tag -> Problem (ext base) trs -> [Proof info m (Problem (ext base') trs)]
 
-    liftProcessor tag p = do
-      p' <- apply tag (getBaseProblem p)
-      return (setBaseProblem p' p)
+    liftProcessor  = liftProblem . apply
+    liftProcessorS = liftProcessorSdefault
 
-    liftProcessorS tag p = (`setBaseProblem` p) <$$> applySearch tag (getBaseProblem p)
+liftProcessorSdefault tag = untrans . liftProblem (trans' . applySearch tag)
 
-liftFramework :: FrameworkExtension ext =>
-                     (Problem base trs -> Problem base trs) -> Problem (ext base) trs -> Problem (ext base) trs
-liftFramework f p = setBaseProblem (f(getBaseProblem p)) p
+setBaseProblem :: FrameworkExtension ext => Problem base' trs -> Problem (ext base) trs -> Problem (ext base') trs
+setBaseProblem p = runIdentity . liftProblem (const $ return p)
+
+getBaseProblemFramework :: (FrameworkExtension ext, IsProblem (ext base)) => Problem (ext base) trs -> base
+getBaseProblemFramework = getBaseFramework . getFramework
 
 -- ---------- --
 -- Strategies --
@@ -85,17 +89,17 @@ class IsDPProblem typ => HasMinimality typ where
   setMinimality :: Minimality -> Problem typ trs -> Problem typ trs
 
 getMinimalityFromProblem :: HasMinimality typ => Problem typ trs -> Minimality
-getMinimalityFromProblem = getMinimality . getProblemType
+getMinimalityFromProblem = getMinimality . getFramework
 
 instance (IsDPProblem (p b), HasMinimality b, FrameworkExtension p) => HasMinimality (p b)
    where getMinimality = getMinimality . getBaseFramework
-         setMinimality m = liftFramework (setMinimality m)
+         setMinimality m = runIdentity . liftProblem (return . setMinimality m)
 
 -- -------------
 -- forDPProblem
 -- -------------
 
-forDPProblem f p = f (getProblemType p) (getR p) (getP p)
+forDPProblem f p = f (getFramework p) (getR p) (getP p)
 
 -- -------------------------
 -- printing TPDB problems --

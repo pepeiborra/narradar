@@ -26,7 +26,7 @@ import qualified Data.Map as Map
 import MuTerm.Framework.Output
 import MuTerm.Framework.Strategy
 
-instance Pretty FinalProcessor where pPrint _ = text "Finished"
+instance Pretty Final where pPrint _ = text "Finished"
 
 instance PprF f => Pretty (Expr f) where pPrint = foldExpr pprF
 instance PprF f =>Show (Expr f) where show = show . pPrint

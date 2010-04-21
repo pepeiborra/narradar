@@ -43,11 +43,11 @@ import Narradar.Utils (chunks)
 import Prelude hiding (pi)
 
 
-data Infinitary id p = forall heu . PolyHeuristic heu id => Infinitary {pi_PType :: AF_ id, heuristic :: MkHeu heu , baseProblemType :: p}
+data Infinitary id p = forall heu . PolyHeuristic heu id => Infinitary {pi_PType :: AF_ id, heuristic :: MkHeu heu , baseFramework :: p}
 
 instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
   data Problem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::Problem p a}
-  getProblemType (InfinitaryProblem af p) = infinitary' af (getProblemType p)
+  getFramework (InfinitaryProblem af p) = infinitary' af (getFramework p)
   getR   (InfinitaryProblem _ p) = getR p
 
 instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ SignatureId (Problem p trs)) =>
@@ -95,7 +95,7 @@ instance Traversable (Problem p) => Traversable (Problem (Infinitary id p)) wher
 -- Output
 
 instance Pretty p => Pretty (Infinitary id p) where
-    pPrint Infinitary{..} = text "Infinitary" <+> pPrint baseProblemType
+    pPrint Infinitary{..} = text "Infinitary" <+> pPrint baseFramework
 
 instance HTMLClass (Infinitary id Rewriting) where htmlClass _ = theclass "InfRew"
 instance HTMLClass (Infinitary id IRewriting) where htmlClass _ = theclass "InfIRew"
@@ -119,7 +119,7 @@ pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.i
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
     ICap t v (Infinitary id p, trs)
   where
-    icap (Infinitary{..},trs) = icap (baseProblemType,trs)
+    icap (Infinitary{..},trs) = icap (baseFramework,trs)
 
 -- Usable Rules
 
@@ -131,11 +131,11 @@ instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
  where
    iUsableRulesM Infinitary{..} trs dps tt = do
       pi_tt <- getFresh (AF.apply pi_PType tt)
-      let it = (baseProblemType, trs)
-      trs'  <- f_UsableRulesAF it pi_PType (iUsableRulesVarM baseProblemType trs dps) pi_tt
+      let it = (baseFramework, trs)
+      trs'  <- f_UsableRulesAF it pi_PType (iUsableRulesVarM baseFramework trs dps) pi_tt
       return (tRS $ rules trs')
 
-   iUsableRulesVarM Infinitary{..} = iUsableRulesVarM baseProblemType
+   iUsableRulesVarM Infinitary{..} = iUsableRulesVarM baseFramework
 
 {-
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
@@ -146,9 +146,9 @@ instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
  where
    iUsableRulesM p@(typ@Infinitary{..}, trs, dps) tt = do
       pi_tt <- getFresh (AF.apply pi_PType tt)
-      trs'  <- f_UsableRulesAF (baseProblemType, trs) pi_PType (iUsableRulesVarM p) pi_tt
+      trs'  <- f_UsableRulesAF (baseFramework, trs) pi_PType (iUsableRulesVarM p) pi_tt
       return (typ, tRS $ rules trs', dps)
 
-   iUsableRulesVarM (Infinitary{..},trs) = iUsableRulesVarM (baseProblemType, trs)
+   iUsableRulesVarM (Infinitary{..},trs) = iUsableRulesVarM (baseFramework, trs)
 -}
 

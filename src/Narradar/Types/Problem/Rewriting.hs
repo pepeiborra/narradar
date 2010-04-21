@@ -9,7 +9,7 @@
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Problem.Rewriting
-         ( MkRewriting(..), Rewriting, IRewriting, rewriting, irewriting
+         ( MkRewriting(..), Problem(..), Rewriting, IRewriting, rewriting, irewriting
 --         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
 --         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
          ) where
@@ -49,7 +49,7 @@ instance GetPairs (MkRewriting strat) where getPairs = getPairsDefault
 
 instance IsProblem (MkRewriting st) where
   data Problem (MkRewriting st) a = RewritingProblem a a (Strategy st) Minimality deriving (Eq, Ord, Show)
-  getProblemType (RewritingProblem _ _ s m) = MkRewriting s m
+  getFramework (RewritingProblem _ _ s m) = MkRewriting s m
   getR (RewritingProblem r _ _ _) = r
 
 instance IsDPProblem (MkRewriting st) where
@@ -75,9 +75,11 @@ instance (Unify t, HasId t, Enum v, Ord v, Pretty v, Rename v, Ord (Term t v), P
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
   mapR f (RewritingProblem rr pp s m) = mkDPProblem (MkRewriting s m) (f rr) pp
 
-instance (Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v, Pretty (t(Term t v))) =>
+instance ( Unify t, HasId t, Ord (Term t v), Enum v, Ord v, Pretty v, Rename v
+         , Pretty (t(Term t v))) =>
   MkDPProblem Rewriting (NarradarTRS t v)
  where
+  mkDPProblem it@(MkRewriting s m) rr dd | pprTrace (text "mkDPProblem rewriting with rules" $$ nest 2 rr) False = undefined
   mkDPProblem it@(MkRewriting s m) rr dd
     = case dd of
         pp@DPTRS{rulesUsed} | rules rr `subsetOf` rulesUsed -> RewritingProblem rr dd s m
@@ -150,7 +152,7 @@ instance Pretty Rewriting where
     pPrint (MkRewriting Standard A) = text "Rewriting (no minimality)"
 instance Pretty IRewriting where
     pPrint (MkRewriting Innermost M) = text "Innermost Rewriting"
-    pPrint (MkRewriting Innermost A) = text "Innermost (MkRewriting st) (no minimality)"
+    pPrint (MkRewriting Innermost A) = text "Innermost Rewriting (no minimality)"
 
 
 instance HTML Rewriting where

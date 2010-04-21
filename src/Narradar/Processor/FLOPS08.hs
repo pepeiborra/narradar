@@ -81,7 +81,7 @@ instance (t   ~ TermF id
    where
      orProblems = do
        let heu = mkHeu mk p
-           base_p = getProblemType (getBaseProblem p)
+           base_p = getFramework (getBaseProblem p)
        af' <-  Set.toList $ invariantEV heu p (NarrowingGoal.pi p)
        let p' = mkDerivedDPProblem base_p p
        return $ singleP (NarrowingGoalToRewritingProof af') p (AF.apply af' p')

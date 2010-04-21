@@ -92,7 +92,7 @@ instance ( HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
                    (NProblem (MkNarrowingGoal id base) id)
                    (NProblem base id)
  where
-  applySearch (NarrowingToRewritingICLP08 mk) p@(getProblemType -> NarrowingGoal _ pi_groundInfo0 _ base)
+  applySearch (NarrowingToRewritingICLP08 mk) p@(getFramework -> NarrowingGoal _ pi_groundInfo0 _ base)
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where heu = mkHeu mk p

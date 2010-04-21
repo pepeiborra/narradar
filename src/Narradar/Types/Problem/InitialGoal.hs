@@ -41,6 +41,8 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
+import Narradar.Types.Problem.Narrowing hiding (baseProblem)
+import Narradar.Types.Problem.NarrowingGen hiding (baseProblem, baseFramework)
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Types.Var
@@ -53,7 +55,7 @@ import Prelude hiding (pi)
 data InitialGoal t p = InitialGoal
     { goals_PType     :: [Term t Var]
     , dgraph_PType    :: Maybe (DGraph t Var)
-    , baseProblemType :: p}
+    , baseFramework :: p}
 
 instance (Eq p, Eq (Term t Var)) => Eq (InitialGoal t p) where
     p0 == p1 = (goals_PType p0, baseProblemType p0) == (goals_PType p1, baseProblemType p1)
@@ -141,7 +143,7 @@ initialPairs InitialGoalProblem{..} = dinitialPairs dgraph
 -- | returns the vertexes in the DGraph which are in a path from an initial pair to the current P
 involvedNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
                   ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> [Vertex]
-involvedNodes p = involvedNodes' (getProblemType p) (getP p)
+involvedNodes p = involvedNodes' (getFramework p) (getP p)
 
 -- | returns the vertexes in the DGraph which are in a path from an initial pair to a given TRS P
 involvedNodes' :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
@@ -225,7 +227,7 @@ instance (Pretty (Term t Var), Pretty (Problem base trs)) =>
 
 
 instance HTML p => HTML (InitialGoal id p) where
-    toHtml InitialGoal{..} = toHtml "Initial goal " +++ baseProblemType
+    toHtml InitialGoal{..} = toHtml "Initial goal " +++ baseFramework
 
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
 
@@ -243,7 +245,7 @@ instance (Pretty (Term t Var), PprTPDB (Problem typ trs)) =>
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
     ICap t v (InitialGoal id p, trs)
   where
-    icap (InitialGoal{..},trs) = icap (baseProblemType,trs)
+    icap (InitialGoal{..},trs) = icap (baseFramework,trs)
 
 -- Usable Rules
 {-
@@ -415,7 +417,7 @@ mkDGraph' typ trs pairs@(DPTRS dps_a _ fullgraph _ _) goals = runIcap (rules trs
   where liftL = ListT . return
 
 insertDGraph p@InitialGoalProblem{..} newdps
-    = mkDGraph' (getProblemType p') (getR p') dps' goals
+    = mkDGraph' (getFramework p') (getR p') dps' goals
   where
     p'     =  insertDPairs (setP (pairs dgraph) p) newdps
     dps'   = getP p'

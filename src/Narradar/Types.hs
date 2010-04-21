@@ -68,13 +68,13 @@ import Narradar.Types.Labellings
 import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Problem.Narrowing
-import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem)
+import Narradar.Types.Problem.Narrowing     hiding (baseProblem)
+import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, baseFramework)
 import Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
 import Narradar.Types.Problem.Prolog        hiding (goals)
-import Narradar.Types.Problem.Relative      hiding (baseProblem, baseProblemType)
-import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseProblemType, goals)
-import Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseProblemType, pi_PType)
+import Narradar.Types.Problem.Relative      hiding (baseProblem, baseFramework)
+import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseFramework, goals)
+import Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseFramework, pi_PType, heuristic)
 import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
@@ -122,9 +122,9 @@ bestError = maximumBy (compare `on` errorPos)
 -- ---------------------------------
 
 class Dispatch thing where
-    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyInfo, DotInfo) m FinalProcessor
+    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyInfo, DotInfo) m Final
 
-mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m FinalProcessor
+mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
 mkDispatcher f =  f >=> final
 
 data AProblem t trs where
@@ -158,7 +158,7 @@ dispatchAProblem :: (Traversable m, MonadPlus m
                     ,Dispatch (Problem (NarrowingGoal (TermId t)) trs)
                     ,Dispatch (Problem (CNarrowingGoal (TermId t)) trs)
                     ,Dispatch PrologProblem
-                    ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m FinalProcessor
+                    ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m Final
 
 dispatchAProblem (ARewritingProblem p)         = dispatch p
 dispatchAProblem (AIRewritingProblem p)        = dispatch p

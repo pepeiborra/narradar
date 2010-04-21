@@ -49,7 +49,7 @@ instance (Ord v, Rename v, Unify t) => ICap t v [Rule t v] where
 
 
 instance (IsDPProblem typ, ICap t v (typ, trs, trs)) => ICap t v (Problem typ trs) where
-  icap p t = icap (getProblemType p, getR p, getP p) t
+  icap p t = icap (getFramework p, getR p, getP p) t
 
 instance (IsDPProblem typ, ICap t v (typ, trs)) => ICap t v (typ, trs, trs) where
   icap (typ, trs, _dps) t = icap (typ, trs) t

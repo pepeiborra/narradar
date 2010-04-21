@@ -136,7 +136,7 @@ filterSEDG (getP -> dptrs@DPTRS{}) gr =
                        , isJust (dpUnifyInv dptrs j i)]
 
 filterSEDG p gr = G.buildG (bounds gr) edges where
-  typ = getProblemType p
+  typ = getFramework p
   dps = A.listArray (bounds gr) (rules $ getP p)
   edges = runIcap p $ runListT $ do
                 trs'   <- lift $ getFresh (rules $ getR p)
@@ -160,7 +160,7 @@ emptyArray = A.listArray (0,-1) []
 
 instance (IsDPProblem p, Pretty p, Pretty trs) => Pretty (Problem p trs) where
     pPrint p =
-            pPrint (getProblemType p) <+> text "Problem" $$
+            pPrint (getFramework p) <+> text "Problem" $$
             text "TRS:" <+> pPrint (getR p) $$
             text "DPS:" <+> pPrint (getP p)
 
@@ -180,7 +180,7 @@ instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Pretty (Te
             H.td H.! [H.theclass "DPS" ] << "Dependency Pairs" </>
                  aboves' (rules $ getP p))
 
-     where typ = getProblemType p
+     where typ = getFramework p
 
 instance (Pretty (Term t v)) =>  HTMLTABLE (Rule t v) where
     cell (lhs :-> rhs ) = td H.! [theclass "lhs"]   << show (pPrint lhs) <->
@@ -215,7 +215,7 @@ instance (MkDPProblem typ (NarradarTRS t v)
     type AFId (Problem typ (NarradarTRS t v)) = AFId (Term t v)
     apply af p@(getP -> dps@DPTRS{})= mkDPProblem typ trs' dps'
      where
-       typ  = getProblemType p
+       typ  = getFramework p
        trs' = apply af (getR p)
        dps' = dpTRS typ trs' (apply af dps)
 {-
@@ -268,7 +268,7 @@ expandDPair p@(getP -> DPTRS dps rr gr (unif :!: unifInv) _) i (filter (`notElem
                                  , let in1 = (j,k), let in2 = (k,j)])
         adjust x = if x < i then x else x-1
 
-    unif_new :!: unifInv_new <- computeDPUnifiers (getProblemType p) (getR p) (listTRS dps')
+    unif_new :!: unifInv_new <- computeDPUnifiers (getFramework p) (getR p) (listTRS dps')
                                          -- The use of listTRS here is important ^^
     let unif'    = mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
@@ -345,7 +345,7 @@ isValidUnif :: ( p   ~ Problem typ
 isValidUnif p@(getP -> DPTRS dps _ _ (unif :!: _) _)
   | valid = True
   | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
-                          text "Problem type:" <+> pPrint (getProblemType p) $$
+                          text "Problem type:" <+> pPrint (getFramework p) $$
                           text "DPS:"      <+> pPrint (elems dps) $$
                           text "Unifiers:" <+> pPrint unif        $+$ Ppr.empty $+$
                           text "Computed:" <+> pPrint unif'       $+$ Ppr.empty $+$
@@ -355,7 +355,7 @@ isValidUnif p@(getP -> DPTRS dps _ _ (unif :!: _) _)
   where
   liftL = ListT . return
   l     = length (rules $ getP p) - 1
-  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' -> computeDirectUnifiers (getProblemType p,rr') (getP p))
+  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' -> computeDirectUnifiers (getFramework p,rr') (getP p))
   validUnif = array ( (0,0), (l,l)) $ runIcap p $ runListT $ do
             (x, _ :-> r) <- liftL $ A.assocs dps
             (y, l :-> _) <- liftL $ A.assocs dps

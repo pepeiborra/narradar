@@ -98,14 +98,14 @@ instance ( t ~ f (DPIdentifier id0), MapId f
         proof = UsableSCCs{ gr         = fullgraph dg
                           , initial    = initialPairsG
                           , outOfScope = Set.fromList(vertices $ fullgraph dg) `Set.difference` reachablePairsG
-                          , inPath     = Set.fromList $ involvedNodes' (getProblemType p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
+                          , inPath     = Set.fromList $ involvedNodes' (getFramework p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
                           , the_pairs  = rules pairs
                           , the_sccs   = map Set.fromList cc }
 
         proof2= NoUsableSCCs{ gr         = fullgraph dg
                             , initial    = initialPairsG
                             , outOfScope = Set.fromList(vertices $ fullgraph dg) `Set.difference` reachablePairsG
-                            , inPath     = Set.fromList $ involvedNodes' (getProblemType p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
+                            , inPath     = Set.fromList $ involvedNodes' (getFramework p) (map (safeAt "DependencyGraphSCC" dd) (concat cc))
                             , the_pairs  = rules pairs
                             }
 

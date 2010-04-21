@@ -39,7 +39,6 @@ import MuTerm.Framework.Proof
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Framework
@@ -94,18 +93,23 @@ instance GenSymbol a => GenSymbol (DPIdentifier a) where genSymbol = IdFunction 
 -- --------------------------------------------------------------
 type NarrowingGen  = MkNarrowingGen Rewriting
 type CNarrowingGen = MkNarrowingGen IRewriting
+type INarrowingGen = MkNarrowingGen IRewriting
 --instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
-data MkNarrowingGen p = NarrowingGen {baseProblemType :: p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+data MkNarrowingGen p = NarrowingGen {baseFramework :: p}
+          deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 instance FrameworkExtension MkNarrowingGen where
-  getBaseFramework = baseProblemType
+  getBaseFramework = baseFramework
   getBaseProblem (NarrowingGenProblem p) = p
-  setBaseProblem p0 p = p{baseProblem=p0}
+  liftProblem   f p = f (baseProblem p) >>= \p0' -> return p{baseProblem = p0'}
+  liftFramework f (NarrowingGen b) = NarrowingGen (f b)
+  liftProcessorS = liftProcessorSdefault
+
 
 instance IsProblem p => IsProblem (MkNarrowingGen p) where
   newtype Problem (MkNarrowingGen p) a      = NarrowingGenProblem {baseProblem::Problem p a}
-  getProblemType (NarrowingGenProblem p) = NarrowingGen (getProblemType p)
+  getFramework (NarrowingGenProblem p) = NarrowingGen (getFramework p)
   getR   (NarrowingGenProblem p)         = getR p
 
 instance MkProblem p trs => MkProblem (MkNarrowingGen p) trs where
@@ -153,7 +157,7 @@ instance NFData (Problem p trs) => NFData (Problem (MkNarrowingGen p) trs) where
 -- Output
 
 instance Pretty p => Pretty (MkNarrowingGen p) where
-    pPrint NarrowingGen{..} = text "NarrowingGen" <+> pPrint baseProblemType
+    pPrint NarrowingGen{..} = text "NarrowingGen" <+> pPrint baseFramework
 
 instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenNarr"
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
@@ -184,6 +188,7 @@ instance (MkDPProblem (MkNarrowingGen base) trs, InsertDPairs base trs) => Inser
 -- Support functions
 -- -------------------
 
+extraVarsToGen :: (Ord v, GenSymbol id) => Rule (TermF id) v -> Rule (TermF id) v
 extraVarsToGen (l :-> r) = l :-> applySubst sigma r
      where
       sigma = fromListSubst (evars `zip` repeat genTerm)

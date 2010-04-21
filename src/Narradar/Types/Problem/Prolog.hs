@@ -42,7 +42,7 @@ type PrologProblem = Problem (Prolog StringId) (Prolog.Program StringId)
 data Prolog id = Prolog {goals_Ptype :: [Goal id]} deriving (Eq,Show,Ord)
 instance IsProblem (Prolog id) where
   data Problem (Prolog id) trs = PrologProblem {goals::[Goal id], program :: trs}
-  getProblemType = Prolog . goals
+  getFramework = Prolog . goals
   getR = program
 
 instance MkProblem (Prolog id) (Prolog.Program id) where mkProblem (Prolog gg) pgm = PrologProblem gg pgm

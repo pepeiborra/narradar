@@ -31,13 +31,13 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
-data Relative trs p = Relative {relativeTRS_PType::trs, baseProblemType::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+data Relative trs p = Relative {relativeTRS_PType::trs, baseFramework::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 --instance GetPairs p => GetPairs (Relative trs p) where getPairs = getPairs . baseProblem
 
 instance IsProblem p => IsProblem (Relative trs0 p) where
   data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs}
-  getProblemType (RelativeProblem r0 p) = Relative r0 (getProblemType p)
+  getFramework (RelativeProblem r0 p) = Relative r0 (getFramework p)
   getR (RelativeProblem _ p) = getR p
 
 instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
@@ -59,9 +59,11 @@ instance (Foldable t, HasId t, Ord v, Ord (Term t v), MkDPProblem p (NarradarTRS
         -- Assumes that mapR does ^^ not recompute the dependency graphs stored inside the underlying problem
 
 instance FrameworkExtension (Relative id) where
-  getBaseFramework = baseProblemType
-  getBaseProblem   = baseProblem
-  setBaseProblem p0 p = p{baseProblem=p0}
+  getBaseFramework  = baseFramework
+  getBaseProblem    = baseProblem
+  liftFramework f (Relative trs0 p) = Relative trs0 (f p)
+  liftProblem   f p = f (baseProblem p) >>= \p0' -> return p{baseProblem = p0'}
+  liftProcessorS = liftProcessorSdefault
 
 relative = Relative
 relativeProblem = RelativeProblem

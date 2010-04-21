@@ -86,7 +86,7 @@ rpoAF_DP allowCol omega p
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs'    = mapNarradarTRS convert (getR p)
       dps'    = mapNarradarTRS convert (getP p)
-      p'      = mkDPProblem (getProblemType p) trs' dps'
+      p'      = mkDPProblem (getFramework p) trs' dps'
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
 
@@ -140,7 +140,7 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
       dps' = mapNarradarTRS convert (getP p)
       typ' = InitialGoal (map convert goals)
                          (Just $ mapDGraph convert dgraph)
-                         (getProblemType baseProblem)
+                         (getFramework baseProblem)
       p'   = mkDPProblem typ' trs' dps'
 
   assertAll (omega p' : [ l >~ r | l:->r <- rules dps'])
@@ -198,7 +198,7 @@ rpoAF_NDP allowCol omega p
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
-      p'   = mkDPProblem (getProblemType p) trs' dps'
+      p'   = mkDPProblem (getFramework p) trs' dps'
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]

@@ -163,28 +163,29 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
+         ,Info info (NProblem IRewriting id)
          ) => Processor info RPOProc
                              (NProblem (InitialGoal (TermF id) IRewriting) id)
                              (NProblem (InitialGoal (TermF id) IRewriting) id)
    where
-    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    = liftProblem $ \p -> procAF p RPOSAF usableRules ((smtFFI.) . rpoAF_DP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) = liftProblem $ \p -> procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p RPOAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p RPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p LPOSAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) = liftProblem $ \p -> procAF p LPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p LPOAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p LPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p MPOAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p MPOAF usablerules ((smtSerial.). rpoAF_DP True)
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 
@@ -218,29 +219,30 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
+         ,Info info (NProblem INarrowingGen id)
          ) => Processor info RPOProc
-                             (NProblem (InitialGoal (TermF id) CNarrowingGen) id)
-                             (NProblem (InitialGoal (TermF id) CNarrowingGen) id)
+                             (NProblem (InitialGoal (TermF id) INarrowingGen) id)
+                             (NProblem (InitialGoal (TermF id) INarrowingGen) id)
    where
-    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    = liftProblem $ \p -> procAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) = liftProblem $ \p -> procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p RPOAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p RPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p LPOSAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) = liftProblem $ \p -> procAF p LPOSAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p LPOAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p LPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTFFI)    = liftProblem $ \p -> procAF p MPOAF usablerules ((smtFFI.)   . rpoAF_DP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p MPOAF usablerules ((smtSerial.). rpoAF_DP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
          ,Info info (RPOProof id)

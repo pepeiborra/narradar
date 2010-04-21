@@ -69,10 +69,10 @@ iUsableRulesMp ::
    MonadVariant v m) =>
   Problem typ trs -> [Data.Term.Term t v] -> m (Problem typ trs)
 
-iUsableRulesMp p tt = do { trs' <- iUsableRulesM (getProblemType p) (getR p) (getP p) tt
+iUsableRulesMp p tt = do { trs' <- iUsableRulesM (getFramework p) (getR p) (getP p) tt
                          ; return $ setR trs' p}
 
-iUsableRulesVarMp p = iUsableRulesVarM (getProblemType p) (getR p) (getP p)
+iUsableRulesVarMp p = iUsableRulesVarM (getFramework p) (getR p) (getP p)
 
 
 liftUsableRulesM    typ trs dps = iUsableRulesM (getBaseFramework typ) trs dps
@@ -154,6 +154,6 @@ neededRules :: ( p ~ Problem typ
                 ) =>
                 p trs -> [Term t v] -> p trs
 neededRules p tt = runIcap p $ do
-                     trs' <- neededRulesM (getProblemType p) (getR p) (getP p) tt
+                     trs' <- neededRulesM (getFramework p) (getR p) (getP p) tt
                      return $ setR trs' p
 

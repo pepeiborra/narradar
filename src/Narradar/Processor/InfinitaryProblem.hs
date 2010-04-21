@@ -55,7 +55,7 @@ instance (t   ~ TermF id
    where
      orProblems = do
        let heu    = mkHeu mk p
-           base_p = getProblemType (Infinitary.baseProblem p)
+           base_p = getFramework (Infinitary.baseProblem p)
        let p' = if usable then iUsableRules p (rhs <$> rules (getP p)) else p
        af' <-  Set.toList $ invariantEV heu p' (Infinitary.pi p')
        return $ singleP (InfinitaryToRewritingProof af') p

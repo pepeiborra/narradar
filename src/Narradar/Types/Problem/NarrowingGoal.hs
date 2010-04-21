@@ -34,7 +34,6 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Problem.Narrowing
 import Narradar.Types.Term
 import Narradar.Framework
 import Narradar.Framework.Ppr
@@ -50,7 +49,7 @@ data MkNarrowingGoal id p = forall heu . PolyHeuristic heu id =>
 
 instance (Ord id, IsProblem p) => IsProblem (MkNarrowingGoal id p)  where
   data Problem (MkNarrowingGoal id p) a = NarrowingGoalProblem {goal::Goal id, pi::AF_ id, baseProblem::Problem p a}
-  getProblemType (NarrowingGoalProblem g af p) = narrowingGoal' g af (getProblemType p)
+  getFramework (NarrowingGoalProblem g af p) = narrowingGoal' g af (getFramework p)
   getR   (NarrowingGoalProblem _ _ p) = getR p
 
 instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ SignatureId (Problem p trs)) =>
@@ -98,7 +97,10 @@ instance Traversable (Problem p) => Traversable (Problem (MkNarrowingGoal id p))
 instance FrameworkExtension (MkNarrowingGoal id) where
   getBaseFramework (NarrowingGoal _ _ _ p) = p
   getBaseProblem = baseProblem
-  setBaseProblem p0 p = p{baseProblem = p0}
+  liftProblem   f p = f (baseProblem p) >>= \p0' -> return p{baseProblem = p0'}
+  liftFramework f (NarrowingGoal g af heu p) = NarrowingGoal g af heu (f p)
+  liftProcessorS = liftProcessorSdefault
+
 
 -- Output
 

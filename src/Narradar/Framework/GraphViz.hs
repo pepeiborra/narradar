@@ -101,7 +101,7 @@ instance DotRep PrologProblem where
 class ProblemColor p where problemColor :: p -> Color
 instance ProblemColor typ where problemColor _ = ColorName "black"
 instance (IsDPProblem typ, ProblemColor typ) =>
-    ProblemColor (Problem typ trs) where problemColor = problemColor . getProblemType
+    ProblemColor (Problem typ trs) where problemColor = problemColor . getFramework
 instance ProblemColor (Problem (Prolog id) trs) where problemColor _ = ColorName "#F6D106"
 instance ProblemColor Rewriting where problemColor _ = ColorName "#EAAAFF"
 instance ProblemColor Narrowing where problemColor _ = ColorName "#4488C9"
