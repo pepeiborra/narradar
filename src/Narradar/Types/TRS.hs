@@ -7,6 +7,7 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.TRS where
@@ -89,10 +90,10 @@ data NarradarTRSF a where
                  } -> NarradarTRSF (Rule t v)
 
     DPTRS     :: (HasId t, Ord (Term t v)) =>
-                 { dpsA      :: Array Int (Rule t v)
-                 , rulesUsed :: Set (Rule t v)
-                 , depGraph  :: Graph
-                 , unifiers  :: Unifiers t v :!: Unifiers t v
+                 { dpsA      :: !(Array Int (Rule t v))
+                 , rulesUsed :: NarradarTRSF (Rule t v)
+                 , depGraph  :: !Graph
+                 , unifiers  :: !(Unifiers t v :!: Unifiers t v)
                  , sig       :: Signature (TermId t)
                  } -> NarradarTRSF (Rule t v)
 
@@ -251,14 +252,15 @@ dpTRS :: ( SignatureId trs ~ TermId t
          ) =>
          typ -> trs -> trs -> NarradarTRS t v
 
-dpTRS typ trs dps = dpTRS' dps_a (Set.fromList $ rules trs) unifs
+dpTRS typ trs dps = dpTRS' dps_a (tRS $ rules trs) unifs
     where
       dps'    = snub (rules dps)
       dps_a   = listArray (0, length dps' - 1) dps'
       unifs   = runIcap dps (computeDPUnifiers typ trs (tRS dps'))
 
+
 dpTRS' :: ( Foldable t, HasId t, Ord (Term t v)) =>
-         Array Int (Rule t v) -> Set (Rule t v) -> (Unifiers t v :!: Unifiers t v) -> NarradarTRS t v
+         Array Int (Rule t v) -> NarradarTRS t v -> (Unifiers t v :!: Unifiers t v) -> NarradarTRS t v
 dpTRS' dps rr unifiers = DPTRS dps rr (getIEDGfromUnifiers unifiers) unifiers (getSignature $ elems dps)
 
 
@@ -273,7 +275,7 @@ mapNarradarTRS f (PrologTRS rr sig) = error "mapNarradarTRS: PrologTRS - sorry, 
                                   -- prologTRS (Map.mapKeys f' $ Map.map (fmap f) rr)where f' id = let id' = f (term
 mapNarradarTRS f (DPTRS dps rr g (u1 :!: u2) _)
    = let dps' = fmap2 f dps
-         rr'  = Set.map (fmap f) rr
+         rr'  = mapNarradarTRS f rr
      in DPTRS dps' rr' g (fmap3 f u1 :!: fmap3 f u2) (getSignature $ A.elems dps')
 
 mapNarradarTRS' :: (Ord (Term t v), Ord (Term t' v), Foldable t', HasId t') =>
@@ -283,7 +285,7 @@ mapNarradarTRS' _ fr (PrologTRS rr sig) = error "mapNarradarTRS': PrologTRS - so
                                   -- prologTRS (Map.mapKeys f' $ Map.map (fmap f) rr)where f' id = let id' = f (term
 mapNarradarTRS' ft fr (DPTRS dps rr g (u1 :!: u2) _)
    = let dps' = fmap fr dps
-         rr'  = Set.map fr rr
+         rr'  = mapNarradarTRS' ft fr rr
      in DPTRS dps' rr' g (fmap3 ft u1 :!: fmap3 ft u2) (getSignature $ A.elems dps')
 
 filterNarradarTRS :: Foldable t => (Rule t v -> Bool) -> NarradarTRS t v -> NarradarTRS t v
