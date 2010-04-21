@@ -108,7 +108,12 @@ instance Eq (NarradarTRS t v) where
     TRS rr1 _       == TRS rr2 _       = rr1 == rr2
     PrologTRS rr1 _ == PrologTRS rr2 _ = rr1 ==  rr2
     DPTRS rr1 _ _ _ _ == DPTRS rr2 _ _ _ _ = rr1 == rr2
-    _               == _               = False
+    ListTRS rr1 _   == ListTRS rr2 _   = Set.fromList rr1 == Set.fromList rr2
+    ListTRS rr1 _   == TRS rr2 _       = Set.fromList rr1 == rr2
+    TRS rr1 _       == ListTRS rr2 _   = rr1 == Set.fromList rr2
+    rr1@DPTRS{dpsA} == rr2@TRS{rulesS} = Set.fromList (elems dpsA) == rulesS
+    rr1@TRS{rulesS} == rr2@DPTRS{dpsA} = rulesS == Set.fromList (elems dpsA)
+ -- The rest of cases should not occurr at runtime
 
 instance Ord (NarradarTRS t v) where
     compare (TRS rr1 _)       (TRS rr2 _)       = compare rr1 rr2
