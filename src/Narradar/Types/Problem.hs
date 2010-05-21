@@ -209,6 +209,7 @@ instance (MkDPProblem typ (NarradarTRS t v)
          ,IUsableRules t v typ (NarradarTRS t v)
          ,ICap t v (typ, NarradarTRS t v)
          ,AFId (Term t v) ~ AFId (NarradarTRS t v)
+         ,Pretty (t(Term t v)), Pretty v
          ) =>
     ApplyAF (Problem typ (NarradarTRS t v))
   where
@@ -253,7 +254,6 @@ expandDPair :: ( v ~ Var
                , Pretty (Term t v), Pretty typ
                ) =>
                Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
-
 expandDPair p@(getP -> DPTRS dps rr gr (unif :!: unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
  = runIcap (rules p ++ newdps) $ do
     let dps'     = dps1 ++ dps2 ++ newdps

@@ -577,12 +577,12 @@ mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , MkDPProblem typ (NarradarTRS t v)
             , Traversable (Problem typ), Pretty typ
             , HasId t, Unify t
-            , Pretty (t(Term t v))
+            , Pretty (Term t v)
             , Ord    (Term t v)
             , ICap t v (typ, NarradarTRS t v)
             , IUsableRules t v typ (NarradarTRS t v)
             ) => Problem typ (NarradarTRS t v) -> [CAGoal t] -> DGraph t v
-mkDGraph (getP -> dps) _ | pprTrace ("mkDGraph with pairs: "<> dps) False = undefined
+--mkDGraph (getP -> dps) _ | pprTrace ("mkDGraph with pairs: "<> dps) False = undefined
 mkDGraph p@(getP -> DPTRS _ _ gr _ _) gg = mkDGraph' (getFramework p) (getR p) (getP p) gg
 
 mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
@@ -655,24 +655,44 @@ insertDGraph p@InitialGoalProblem{..} newdps
   where
     p'     =  insertDPairs (setP (pairs dgraph) p) newdps
     dps'   = getP p'
-{-
+
 expandDGraph ::
-      ( Traversable (Problem typ), Pretty typ
-      , MkDPProblem typ (NarradarTRS t Var)
+      ( t ~ f id
+      , Unify t, HasId t, MapId f, DPSymbol id
+      , Ord (t(Term t Var)), Pretty (t(Term t Var))
+      , Traversable (Problem typ)
+      , IsDPProblem typ, Pretty typ
+      , MkDPProblem (InitialGoal t typ) (NarradarTRS t Var)
       , ICap t Var (typ, NarradarTRS t Var)
-      , IUsableRules t Var typ [Rule t Var] -- (NarradarTRS t Var)
       , IUsableRules t Var typ (NarradarTRS t Var)
+      , NeededRules t Var typ (NarradarTRS t Var)
       ) =>
-      Problem (InitialGoal t typ) (NarradarTRS t Var) -> Rule t Var -> [Rule t Var] -> DGraph t Var
--}
+       Problem (InitialGoal t typ) (NarradarTRS t Var)
+    -> Rule t Var
+    -> [Rule t Var]
+    -> Problem (InitialGoal t typ) (NarradarTRS t Var)
 expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} olddp newdps
    = case lookupNode olddp dg of
       Nothing -> p
       Just i  -> p{dgraph=expandDGraph' p i newdps}
 
+expandDGraph' ::
+      ( t ~ f id
+      , Unify t, HasId t, MapId f, DPSymbol id
+      , Ord (t(Term t Var)), Pretty (t(Term t Var))
+      , Traversable (Problem typ)
+      , IsDPProblem typ, Pretty typ
+      , MkDPProblem (InitialGoal t typ) (NarradarTRS t Var)
+      , ICap t Var (typ, NarradarTRS t Var)
+      , IUsableRules t Var typ (NarradarTRS t Var)
+      , NeededRules t Var typ (NarradarTRS t Var)
+      ) =>
+       Problem (InitialGoal t typ) (NarradarTRS t Var)
+    -> Int
+    -> [Rule t Var]
+    -> DGraph t Var
 expandDGraph' p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} i newdps
-   = let p' = expandDPair (setP pairs p) i newdps
-     in mkDGraph p' goals
+   = mkDGraph (expandDPair (setP pairs p) i newdps) goals
 
 instance Ord a => Suitable DGraphF a where
   data Constraints DGraphF a = Ord a => DGraphConstraints

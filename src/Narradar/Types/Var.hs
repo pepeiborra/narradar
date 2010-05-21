@@ -30,6 +30,6 @@ instance Pretty Var where
     pPrint (Var _ i)        = char 'v' <> int i
 
 instance Rename Var where
-    rename (Var name i) (Var _ i') = Var name i'
+    rename (Var name i) (Var _ i') = Var ((++ show i') `fmap` name) i'
 
 instance GetVars Var Var where getVars = Set.singleton

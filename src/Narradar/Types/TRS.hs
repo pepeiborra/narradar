@@ -142,6 +142,7 @@ instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
     pPrint trs@TRS{}       = vcat $ map pPrint $ rules trs
     pPrint trs@DPTRS{}     = vcat $ map pPrint $ rules trs
     pPrint trs@PrologTRS{} = vcat $ map pPrint $ rules trs
+    pPrint (ListTRS  rr _) = vcat $ map pPrint rr
 
 instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (NarradarTRS t v) where
     rnf (TRS rr sig) = rnf rr `seq` rnf sig `seq` ()
@@ -250,6 +251,7 @@ dpTRS :: ( SignatureId trs ~ TermId t
          , Ord (Term t v), HasId t, Unify t, Enum v
          , HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
          , IUsableRules t v typ trs, ICap t v (typ, trs)
+         , Pretty (Term t v), Pretty v
          ) =>
          typ -> NarradarTRS t v -> NarradarTRS t v -> NarradarTRS t v
 
@@ -337,6 +339,7 @@ computeDPUnifiers :: forall unif typ trs t v term m.
                      , HasRules t v trs, GetFresh t v trs
                      , IUsableRules t v typ trs
                      , ICap t v (typ, trs)
+                     , Pretty (Term t v), Pretty v
                      , MonadVariant v m) =>
                      typ -> trs -> trs -> m(unif :!: unif)
 computeDPUnifiers _ _ dps | trace "computeDPUnifiers" False = undefined
@@ -348,13 +351,24 @@ computeDPUnifiers typ trs dps = do
 
    return (unif :!: unifInv)
 
+
+computeDirectUnifiers :: forall unif typ trs t v term m.
+                     ( unif ~ Unifiers t v
+                     , term ~ Term t v
+                     , Ord v, Unify t
+                     , HasRules t v trs, GetFresh t v trs
+                     , ICap t v (typ, trs)
+                     , Pretty (Term t v), Pretty v
+                     , MonadVariant v m) =>
+                     (typ, trs) -> trs -> m unif
 computeDirectUnifiers p_f (rules -> the_dps) = do
    rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p_f) the_dps
    unif <- runListT $ do
-                (x, r')      <- liftL $ zip [0..] rhss'
+                (x, r',r)    <- liftL $ zip3 [0..] rhss' (map rhs the_dps)
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
                 let unifier = unify l r'
---                pprTrace (text "unify" <+> pPrint l <+> pPrint r' <+> equals <+> pPrint unifier) (return ())
+--                pprTrace (text "unify" <+> l <+> text "with" <+>
+--                          r' <+> parens (text "icap" <+> rules(snd p_f) <+> r) <+> equals <+> unifier) (return ())
                 return ((x,y), unifier)
    return $ array ( (0,0), (ldps, ldps) ) unif
  where
@@ -367,8 +381,10 @@ computeInverseUnifiers :: forall unif typ trs t v term m.
                      , HasRules t v trs, GetFresh t v trs
                      , IUsableRules t v typ trs
                      , ICap t v (typ, trs)
+                     , Pretty (Term t v), Pretty v
                      , MonadVariant v m) =>
                      (typ, trs) -> trs -> m unif
+computeInverseUnifiers _ _ | trace "computeInverseUnifiers" False = undefined
 computeInverseUnifiers (typ, trs) dps = do
 
    u_rr <- (listArray (0,ldps)) `liftM`
@@ -380,6 +396,8 @@ computeInverseUnifiers (typ, trs) dps = do
                 let p_inv = (map swapRule . rules) (u_rr ! x)
                 l' <- lift (getFresh l >>= icap p_inv)
                 let unifier = unify l' r
+--                pprTrace (text "unify" <+> l' <+> parens (text "icap" <+> p_inv <+> l)
+--                          <+> text "with" <+> r <+> equals <+> unifier) (return ())
                 return ((x,y), unifier)
    return $ array ((0,0), (ldps,ldps)) unif
  where
@@ -392,7 +410,7 @@ getIEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
                    ]
   ((m,_),(n,_)) = bounds unif
 
-getEDGfromUnifiers (unif :!: unifInv) = G.buildG (m,n) the_edges where
+getEDGfromUnifiers (unif :!: _) = G.buildG (m,n) the_edges where
   the_edges = [ xy | (xy, Just _) <- A.assocs unif
                    ]
   ((m,_),(n,_)) = bounds unif
