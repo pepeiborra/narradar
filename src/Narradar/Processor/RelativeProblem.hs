@@ -28,13 +28,14 @@ instance Pretty RelativeToRegularProof where
 
 instance ( MkProblem base trs
          , SignatureId trs ~ TermId t
-         , Ord (t(Term t v)), Ord v, Enum v, Rename v, HasId t, Match t
+         , Ord (t(Term t v)), Ord v, Enum v, Rename v
+         , HasId t, Unify t
          , Monoid trs, HasRules t v trs, HasSignature trs
          , Info info RelativeToRegularProof
          , HasMinimality base
          ) => Processor info RelativeToRegular (Problem (Relative trs base) trs) (Problem base trs) where
   apply RelativeToRegular p@RelativeProblem{..}
-    | isGeneralizedHierarchicalCombination (getR p) relativeTRS
+    | isGeneralizedRelaxedHierarchicalCombination (getR p) relativeTRS
     = let p' = setMinimality A (mapR (`mappend` relativeTRS) baseProblem)
       in singleP RelativeToRegularProof p p'
 
