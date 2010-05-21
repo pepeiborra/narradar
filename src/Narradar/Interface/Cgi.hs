@@ -144,11 +144,13 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
 withTimeout t m = do
   res  <- newEmptyMVar
   done <- newMVar ()
+  main_id <- myThreadId
 
-  worker_id <- forkIO $ (`CE.catch` \TimeoutException -> return ()) $ do
-             val <- m
-             takeMVar done
-             putMVar res (Just val)
+  worker_id <- forkIO $ (`CE.catch` \TimeoutException -> return ())
+                      $ (`CE.catch` \e@SomeException{} -> throwTo main_id e)
+                      $ do val <- m
+                           takeMVar done
+                           putMVar res (Just val)
 
   clocker_id <- forkIO $ do
              threadDelay (t * 1000000)
