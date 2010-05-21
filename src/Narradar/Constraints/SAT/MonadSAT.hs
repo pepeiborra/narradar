@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances, TypeSynonymInstances #-}
+{-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -16,7 +16,8 @@ module Narradar.Constraints.SAT.MonadSAT
     , Status(..), mkStatus
     , Circuit, ECircuit, NatCircuit, OneCircuit, RPOCircuit
     , RPOExtCircuit(..), ExistCircuit(..)
-    , castCircuit, Clause
+    , castCircuit, castRPOCircuit, Clause
+    , Tree, printTree, mapTreeTerms
     , Eval, evalB, evalN, BIEnv, EvalM
     , input, true, false, not, ite, eq, lt, gt, one
     , Shared, runShared, removeComplex
@@ -91,6 +92,7 @@ class Decode a b var | a b -> var where decode :: a -> EvalM var b
 
 instance Decode (Eval var) Bool var where decode = evalB
 instance Decode (Eval var) Int var  where decode = evalN
+--instance (Ord var, Show var, CastCircuit repr Eval) => Decode (repr var) Int var where decode = decode . (castCircuit :: repr var -> Eval var)
 instance Decode a b var => Decode [a] [b] var where decode = mapM decode
 instance (Decode a a' var, Decode b b' var ) => Decode (a, b) (a',b') var where
   decode (a, b) = do {va <- decode a; vb <- decode b; return (va,vb)}
