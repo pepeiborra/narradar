@@ -384,7 +384,7 @@ computeInverseUnifiers :: forall unif typ trs t v term m.
                      , Pretty (Term t v), Pretty v
                      , MonadVariant v m) =>
                      (typ, trs) -> trs -> m unif
-computeInverseUnifiers _ _ | trace "computeInverseUnifiers" False = undefined
+--computeInverseUnifiers _ _ | trace "computeInverseUnifiers" False = undefined
 computeInverseUnifiers (typ, trs) dps = do
 
    u_rr <- (listArray (0,ldps)) `liftM`
