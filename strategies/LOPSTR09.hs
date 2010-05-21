@@ -39,7 +39,7 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = ev >=> (inn .|. (dg >=> rpoPlus gt1 >=> final))
+  dispatch = ev >=> (inn .|. (dg >=> rpoPlus gt2 >=> final))
 
 instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProblem IRewriting id) where
   dispatch = ev >=> sc >=> dg >=> rpoPlus gt1 >=> final
@@ -78,7 +78,7 @@ instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialG
 
 instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
   dispatch = (inn >=> dispatch) .|.
-             (dg  >=> rpoPlus gt1 >=> final)
+             (dg  >=> rpoPlus gt2 >=> final)
 
 -- Relative
 instance (Dispatch (NProblem base id)
