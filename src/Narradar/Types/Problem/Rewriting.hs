@@ -201,7 +201,7 @@ instance (Ord v, Rename v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) whe
     rr <- {-getFresh-} return (rules trs)
     let go t = if any (unifies (Impure t) . lhs) rr
                 then return `liftM` freshVar else return (Impure t)
-        doVar v = return2 v
+        doVar v = return2 v -- Do not rename vars
     foldTermM doVar go t
 
 -- Usable Rules
