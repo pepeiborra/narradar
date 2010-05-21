@@ -485,9 +485,9 @@ rpoFail _ = RPOFail
 instance (Ord id, Pretty id) => Pretty (RPOProof id) where
     pPrint (RPOAFProof dps rr ss) = pPrint (RPOAFExtraProof dps rr ss [])
     pPrint (RPOAFExtraProof dps rr ss cc) =
-     if null cc then text "RPO reduction pair"
-        else (text "RPO reduction pair with the extra constraints" $$
-              nest 4 (vcat $ map (printTree 0) cc))
+     (if null cc then text "RPO reduction pair"
+        else text "RPO reduction pair with the extra constraints" $$
+             nest 4 (vcat $ map (printTree 0) cc))
      $$ text "The following pairs are strictly decreasing:" $$
         nest 4 (vcat (map pPrint dps)) $$
         text "The argument filtering used was:" $$

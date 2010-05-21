@@ -664,8 +664,8 @@ omegaIGgen p
   | isLeftLinear (getR p) = pprTrace ("omegaIGgen: partial = " <+> partial)
                             omegaIG p
   | (omegaConstraint,_) <- omegaIG p
-  = (omegaConstraint /\ iusable gen --> and extraConstraints
     ,map isTree extraConstraints)
+  = (omegaConstraint /\ (iusable gen --> and extraConstraints)
  where
    isTree = id :: Tree id v Var -> Tree id v Var
    Just gen = find isGenSymbol (toList $ getDefinedSymbols p)
