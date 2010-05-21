@@ -1,4 +1,4 @@
-#!/usr/bin/env runhaskell
+
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -7,33 +7,23 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 
-import Control.DeepSeq
+module ICLP08 where
+
 import Control.Monad
-import Control.Monad.Stream
-import Control.Parallel.Strategies
-import Data.Maybe
 import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
-import Narradar
+import Narradar hiding (heuristic)
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Processor.LOPSTR09
+import Narradar.Processor.NarrowingProblem
 import Narradar.Framework.GraphViz
 import Lattice
-import Narradar.Utils (pprTrace)
-
-instance IsMZero Stream where
-  isMZero = null . runStream
-
---import Narradar.Utils
-
-main = narradarMain (listToMaybe)
-
 
 -- Missing dispatcher cases
 instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
-    dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getProblemType p))
+    dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getFramework p))
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
@@ -51,14 +41,17 @@ instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProble
 
 -- Narrowing
 instance Dispatch (NProblem Narrowing Id) where
-  dispatch = dg >=> apply (NarrowingToRewritingICLP08 (simpleHeu innermost)) >=> dispatch
+--  dispatch = dg >=> apply NarrowingToRewritingICLP08_SCC{heuristic=simpleHeu innermost,usableRules=True} >=> dispatch
+  dispatch = dg >=> rpoPlusTransforms >=> final
 
 -- Narrowing Goal
+instance Dispatch (NProblem (InitialGoal (TermF Id) Narrowing) Id) where
+  dispatch = dispatch . mkDerivedDPProblem narrowing
 instance Dispatch (NProblem (NarrowingGoal Id) Id) where
   dispatch = dispatch . mkDerivedDPProblem narrowing
 
 
-dg = apply DependencyGraphSCC{useInverse=False}
+dg = apply DependencyGraphSCC{useInverse=True}
 sc = dg >=> try SubtermCriterion
 
 rpoPlusTransforms

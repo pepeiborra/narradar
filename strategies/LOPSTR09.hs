@@ -28,7 +28,7 @@ import Narradar.Utils (pprTrace)
 
 -- Missing dispatcher cases
 instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
-    dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getProblemType p))
+    dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getFramework p))
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
@@ -39,35 +39,46 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = sc >=> rpoPlusTransforms >=> final
+  dispatch = ev >=> (inn .|. (dg >=> rpoPlus gt1 >=> final))
 
 instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = sc >=> rpoPlusTransformsPar >=> final
+  dispatch = ev >=> sc >=> dg >=> rpoPlus gt1 >=> final
 
 -- Narrowing
 instance Dispatch (NProblem Narrowing Id) where
-  dispatch = dg >=> rpoPlusTransforms >=> final
+  dispatch = ev >=> dg >=> rpoPlus gt2 >=> final
 
 instance Dispatch (NProblem CNarrowing Id) where
-  dispatch = dg >=> rpoPlusTransformsPar >=> final
+  dispatch = ev >=> dg >=> rpoPlus gt2 >=> final
 
--- Narrowing Goal
+{--- Narrowing Goal
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
+-}
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
 
-instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
-  dispatch = dg >=> rpoPlusTransforms >=> final
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) =>
+    Dispatch (NProblem (InitialGoal (TermF (DPIdentifier id)) Narrowing) (DPIdentifier id)) where
+  dispatch = (dg) >=> apply NarrowingGoalToRelativeRewriting >=> dispatch
 
-instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) CNarrowingGen) (GId id)) where
-  dispatch = dg >=> rpoPlusTransformsPar >=> final
+instance Dispatch (NProblem (InitialGoal (TermF Id) IRewriting) Id) where
+  dispatch = ev >=> dg >=> rpoPlus gt1 >=> final
+
+instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
+  dispatch = ev >=> ( -- (inn >=> dispatch) .|.
+                      (dg >=> rpoPlus gt2 >=> final)
+                    )
+
+instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) INarrowingGen) (GId id)) where
+  dispatch = dg >=> rpoPlus gt2 >=> final
 
 instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = dg >=> rpoPlusTransforms >=> final
+  dispatch = (inn >=> dispatch) .|.
+             (dg  >=> rpoPlus gt1 >=> final)
 
 -- Relative
 instance (Dispatch (NProblem base id)
@@ -81,10 +92,11 @@ instance (Dispatch (NProblem base id)
 
 dg = apply DependencyGraphSCC{useInverse=True}
 sc = dg >=> try SubtermCriterion
+ev = apply ExtraVarsP
+inn = apply ToInnermost >=> dispatch
 
-
-rpoPlusTransforms
-   = repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
+rpoPlus transform
+   = repeatSolver 2 ((rpos .|. transform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTFFI)
     mpo  = apply (RPOProc MPOAF  Needed SMTFFI)
@@ -92,12 +104,12 @@ rpoPlusTransforms
     rpo  = apply (RPOProc RPOAF  Needed SMTFFI)
     rpos = apply (RPOProc RPOSAF Needed SMTFFI)
 
-
-rpoPlusTransformsPar = parallelize f where
- f = repeatSolver 5 ( (lpo.||. rpos .||. graphTransform) >=> dg)
+rpoPlusPar transform = parallelize f where
+ f = repeatSolver 5 ( (lpo.||. rpos .||. transform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTSerial)
     rpos = apply (RPOProc RPOSAF Needed SMTSerial)
 
 
-graphTransform = apply NarrowingP .||. apply FInstantiation .||. apply Instantiation
+gt1 = apply RewritingP .||. apply NarrowingP .||. apply FInstantiation .||. apply Instantiation
+gt2 = apply NarrowingP .||. apply FInstantiation .||. apply Instantiation
