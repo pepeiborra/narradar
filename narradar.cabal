@@ -80,8 +80,8 @@ Library
   extra_libraries: yices
 
   build-Depends:  base,
-                  failure,
-                  control-monad-failure,
+                  failure == 0.1.*,
+                  control-monad-failure == 0.7.*,
                   prettyclass,
                   array,
                   containers, 

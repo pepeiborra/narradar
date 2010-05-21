@@ -79,7 +79,7 @@ invert    :: (HasSignature sig) => sig -> AF_ (SignatureId sig) -> AF_ (Signatur
 restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
 splitCD   :: (HasSignature sig, id ~ SignatureId sig, Pretty id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
-combine :: (MonadFailure FailedToCombineAFs m, Ord id) => AF_ id -> AF_ id -> m (AF_ id)
+combine :: (Failure FailedToCombineAFs m, Ord id) => AF_ id -> AF_ id -> m (AF_ id)
 
 cut id i (AF m)  = case Map.lookup id m of
                      Nothing -> error ("AF.cut: trying to cut a symbol not present in the AF: " ++ show (pPrint id))
