@@ -131,7 +131,7 @@ rpoAF_IGDP :: (Ord id
               ,MonadSAT repr Var m
               ,RPOExtCircuit repr sid Narradar.Var
               ,HasSignature (NProblem (InitialGoal (TermF id) base) id)
-              ) => Bool -> (NProblem (InitialGoal (TermF sid) base) sid -> (repr Var, extraConstraints))
+              ) => Bool -> (NProblem (InitialGoal (TermF sid) base) sid -> (repr Var, EvalM Var extraConstraints))
                 -> NProblem (InitialGoal (TermF id) base) id
                 -> m (EvalM Var (([Int], extraConstraints), BIEnv Var, [sid]))
 
@@ -162,8 +162,9 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
 --  debug ("\nThe indexes are: " ++ show decreasing_dps) $
   return $ do
              decreasing <- decode decreasing_dps
+             ec <- extraConstraintsAdded
              return ([ r | (r,False) <- zip [(0::Int)..] decreasing]
-                    ,extraConstraintsAdded)
+                    ,ec)
 {-
     (weakly, strictly) <- do
        weakly   <- evalB (and $ omegaIG  p' :
@@ -622,7 +623,7 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
                     | f <- Set.toList dd ] ++
                  [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                 )
-           ,[])
+           ,return [])
 
    where
     ip = forDPProblem involvedPairs p
@@ -663,9 +664,14 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
 omegaIGgen p
   | isLeftLinear (getR p) = pprTrace ("omegaIGgen: partial = " <+> partial)
                             omegaIG p
-  | (omegaConstraint,_) <- omegaIG p
-    ,map isTree extraConstraints)
+  | (omegaConstraint,extra1) <- omegaIG p
   = (omegaConstraint /\ (iusable gen --> and extraConstraints)
+    ,do { e1 <- extra1;
+          b  <- decode (iusable gen :: Eval Var);
+          return $
+           if b then (e1 ++ map isTree extraConstraints)
+                else []
+        })
  where
    isTree = id :: Tree id v Var -> Tree id v Var
    Just gen = find isGenSymbol (toList $ getDefinedSymbols p)
