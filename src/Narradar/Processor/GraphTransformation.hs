@@ -9,12 +9,18 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
-module Narradar.Processor.GraphTransformation (NarrowingP(..), Instantiation(..), FInstantiation(..), GraphTransformationProof(..)) where
+module Narradar.Processor.GraphTransformation (
+    RewritingP(..),
+    NarrowingP(..),
+    Instantiation(..),
+    FInstantiation(..),
+    GraphTransformationProof(..)
+  ) where
 
 import Control.Applicative
 import Control.Monad.Identity (Identity(..))
 import Control.Monad.Logic
-import Data.Array.IArray hiding ( array )
+import Data.Array.IArray hiding ((!), array)
 import qualified Data.Array.IArray as A
 import qualified Data.Graph as Gr
 import Data.List (foldl1', isPrefixOf, nub)
@@ -23,21 +29,25 @@ import qualified Data.Set as Set
 import Data.Traversable (Traversable)
 import Text.XHtml (HTML)
 
-import Narradar.Types hiding ((!), narrowing)
+import Narradar.Types hiding (narrowing, rewriting)
 import Narradar.Types.TRS
+import Narradar.Constraints.Syntactic
 import Narradar.Framework
 import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
+import Data.Term.Rewriting
 import Data.Term.Narrowing
 
 
 data NarrowingP     = NarrowingP
 data Instantiation  = Instantiation
 data FInstantiation = FInstantiation
+data RewritingP     = RewritingP
 
 -- * Narrowing
+-- ------------
 
 instance ( t ~ f (DPIdentifier id)
          , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
@@ -120,6 +130,7 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
    applySearch tag = narrowing_innermostIG
 
 -- * Instantiation
+-- ---------------
 
 instance (trs ~ NarradarTRS t Var
          ,t ~ f(DPIdentifier id), MapId f
@@ -184,6 +195,7 @@ instance (trs ~ NarradarTRS t v
 
 
 -- * Forward Instantiation
+-- -----------------------
 
 instance (trs ~ NarradarTRS t Var
          ,t ~ f (DPIdentifier id), MapId f
@@ -245,6 +257,29 @@ instance (v ~ Var
                              | Just sigma <- snub [dpUnifyInv allPairs j i
                                                        | j <- safeAt "FInstantiation" gr i]]
 
+-- * Rewriting
+-- ------------
+
+instance ( t ~ f id, v ~ Var
+         , HasId t, Unify t
+         , Pretty (t(Term t v)), Ord (t(Term t v))
+         , Info info GraphTransformationProof
+         ) =>
+    Processor info RewritingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t)
+ where
+  applySearch RewritingP = rewritingI
+
+instance ( t ~ f id, v ~ Var
+         , HasId t, Unify t, MapId f
+         , DPSymbol id
+         , Pretty (t(Term t v)), Ord (t(Term t v))
+         , Info info GraphTransformationProof
+         ) =>
+    Processor info RewritingP (NarradarProblem (InitialGoal t IRewriting) t)
+                              (NarradarProblem (InitialGoal t IRewriting) t)
+ where
+   applySearch RewritingP = rewritingGoalI
+
 
 -- -------
 -- Proofs
@@ -263,6 +298,11 @@ data GraphTransformationProof where
                       Rule t v            -- ^ Old pair
                    -> [Rule t v]          -- ^ New pairs
                    -> GraphTransformationProof
+    RewritingProof :: Pretty (Rule t v) =>
+                      Rule t v            -- ^ Old pair
+                   -> Rule t v            -- ^ New pair
+                   -> GraphTransformationProof
+    RewritingFail :: GraphTransformationProof
 
 instance Pretty GraphTransformationProof where
   pPrint (NarrowingProof old new) =
@@ -277,6 +317,11 @@ instance Pretty GraphTransformationProof where
                                  text "FInstantiation Processor." $$
                                  text "Pair" <+> pPrint old <+> text "replaced by" $$ pPrint new
 
+  pPrint (RewritingProof old new) =
+                                 text "Rewriting Processor." $$
+                                 text "Pair" <+> pPrint old <+> text "replaced by" $$ pPrint new
+
+  pPrint RewritingFail = text "Failed to apply the Rewriting refinement processor"
 -- ----------------
 -- Implementation
 -- ----------------
@@ -538,6 +583,66 @@ maps' f xx = [ updateAt i xx | i <- [0..length xx - 1]] where
 
 -- maps and maps' are equivalent
 propMaps f xx = maps f xx == maps' f xx where _types = (xx :: [Bool], f :: Bool -> [Bool])
+
+
+-- rewriting
+
+rewriting p0
+    | [p] <- problems = p
+    | otherwise = dontKnow RewritingFail p0
+    where
+     redexes t = [ p | p <- positions t, isJust (rewrite1 (rules $ getR p0) t)]
+
+     problems = [ singleP (RewritingProof olddp (s:->t')) p0 (expandDPair p0 i [s:->t'])
+                | (i, olddp@(s :-> t)) <- zip [0..] (rules $ getP p0)
+                , [p] <- [redexes t]
+                , let urp = iUsableRules p0 [t!p]
+                , isNonOverlapping urp
+                , [t'] <- [rewrite1p (rules urp) t p]
+                ]
+rewritingI p0
+    | null problems = mzero
+    | otherwise     = problems
+    where
+     redexes t = [ p | p <- positions t, isJust (rewrite1 (rules $ getR p0) t)]
+
+     problems = [ singleP (RewritingProof olddp (s:->t')) p0 (expandDPair p0 i [s:->t'])
+                | (i, olddp@(s :-> t)) <- zip [0..] (rules $ getP p0)
+                , p <- redexes t
+                , let urp = iUsableRules p0 [t!p]
+                , isNonOverlapping urp
+                , [t'] <- [rewrite1p (rules urp) t p]
+                ]
+
+rewritingGoal p0
+    | [x] <- problem = x
+    | otherwise = dontKnow RewritingFail p0
+   where
+    problem = [ singleP (RewritingProof olddp newdp) p0 p'
+                | (i, olddp@(s :-> t)) <- zip [0..] (rules $ getP p0)
+                , [p] <- [redexes t]
+                , let urp = iUsableRules p0 [t!p]
+                , isNonOverlapping urp
+                , [t'] <- [rewrite1 (rules urp) t]
+                , let newdp = s:->t'
+                      p' = expandDGraph (expandDPair p0 i [newdp]) olddp [newdp]
+                ]
+    redexes t = [ p | p <- positions t, isJust (rewrite1 (rules $ getR p0) t)]
+
+rewritingGoalI p0
+    | null problems = mzero
+    | otherwise = problems
+   where
+    problems = [ singleP (RewritingProof olddp newdp) p0 p'
+               | (i, olddp@(s :-> t)) <- zip [0..] (rules $ getP p0)
+               , p <- redexes t
+               , let urp = iUsableRules p0 [t!p]
+               , isNonOverlapping urp
+               , [t'] <- [rewrite1p (rules urp) t p]
+               , let newdp = s:->t'
+                     p' = expandDGraph (expandDPair p0 i [newdp]) olddp [newdp]
+               ]
+    redexes t = [ p | p <- positions t, isJust (rewrite1 (rules $ getR p0) t)]
 
 -- ------------------------------
 -- Extracted from category-extras
