@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -11,7 +12,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-| Extension of Funsat.Circuit to generate RPO constraints as boolean circuits
 
 -}
@@ -616,251 +617,235 @@ instance (Ord tid, HasTrie tid, RPOExtCircuit (Shared tid tvar) tid tvar) =>
 -- | Explicit tree representation, which is a generic description of a circuit.
 -- This representation enables a conversion operation to any other type of
 -- circuit.  Trees evaluate from variable values at the leaves to the root.
-data Tree id var v
+
+data TreeF term (a :: *)
                = TTrue
                | TFalse
-               | TLeaf v
-               | TNot (Tree id var v)
-               | TAnd (Tree id var v) (Tree id var v)
-               | TOr  (Tree id var v) (Tree id var v)
-               | TXor (Tree id var v) (Tree id var v)
-               | TIff (Tree id var v) (Tree id var v)
-               | TOnlyIf (Tree id var v) (Tree id var v)
-               | TIte (Tree id var v) (Tree id var v) (Tree id var v)
-               | TEq  (Tree id var v) (Tree id var v)
-               | TLt  (Tree id var v) (Tree id var v)
-               | TOne [Tree id var v]
-               | TNat v
-               | TTermEq (Term (TermF id) var) (Term (TermF id) var)
-               | TTermGt (Term (TermF id) var) (Term (TermF id) var)
-                 deriving (Show, Eq, Ord)
+               | TNot a
+               | TAnd a a
+               | TOr  a a
+               | TXor a a
+               | TIff a a
+               | TOnlyIf a a
+               | TIte a a a
+               | TEq  a a
+               | TLt  a a
+               | TOne [a]
+               | TTermEq term term
+               | TTermGt term term
+    deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-foldTree :: (t -> v -> t) -> t -> Tree id var v -> t
-foldTree _ i TTrue        = i
-foldTree _ i TFalse       = i
-foldTree f i (TLeaf v)    = f i v
-foldTree f i (TAnd t1 t2) = foldTree f (foldTree f i t1) t2
-foldTree f i (TOr t1 t2)  = foldTree f (foldTree f i t1) t2
-foldTree f i (TNot t)     = foldTree f i t
-foldTree f i (TXor t1 t2) = foldTree f (foldTree f i t1) t2
-foldTree f i (TIff t1 t2) = foldTree f (foldTree f i t1) t2
-foldTree f i (TOnlyIf t1 t2) = foldTree f (foldTree f i t1) t2
-foldTree f i (TIte x t e) = foldTree f (foldTree f (foldTree f i x) t) e
-foldTree f i (TEq t1 t2)  = foldTree f (foldTree f i t1) t2
-foldTree f i (TLt t1 t2)  = foldTree f (foldTree f i t1) t2
-foldTree f i (TOne tt)    = foldl (foldTree f)  i tt
-foldTree f i (TNat x)     = f i x
-foldTree f i TTermEq{}    = i
-foldTree f i TTermGt{}    = i
+
+
+type Tree id var = Tree' (Term (TermF id) var)
+data Tree' term v = TNat v
+                  | TLeaf v
+                  | TFix {tfix :: TreeF term (Tree' term v)}
+  deriving (Eq, Ord, Show)
+
+tLeaf   = TLeaf
+tNat    = TNat
+tTrue   = TFix TTrue
+tFalse  = TFix TFalse
+tNot    = TFix . TNot
+tOne    = TFix . TOne
+tAnd    = (TFix.) . TAnd
+tOr     = (TFix.) . TOr
+tXor    = (TFix.) . TXor
+tIff    = (TFix.) . TIff
+tOnlyIf = (TFix.) . TOnlyIf
+tEq     = (TFix.) . TEq
+tLt     = (TFix.) . TLt
+tIte    = ((TFix.).) . TIte
+tTermGt = (TFix.) . TTermGt
+tTermEq = (TFix.) . TTermEq
+
+tOpen (TFix t) = Just t
+tOpen _ = Nothing
+
+tClose = TFix
+
+tId TTrue  = tTrue
+tId TFalse = tFalse
+tId (TNot n) = tNot n
+tId (TOne n) = tOne n
+tId (TAnd t1 t2) = tAnd t1 t2
+tId (TOr  t1 t2) = tOr t1 t2
+tId (TXor t1 t2) = tXor t1 t2
+tId (TIff t1 t2) = tIff t1 t2
+tId (TOnlyIf t1 t2) = tOnlyIf t1 t2
+tId (TEq t1 t2) = tEq t1 t2
+tId (TLt t1 t2) = tLt t1 t2
+tId (TIte c t e) = tIte c t e
+
+foldTree fnat  _ _ (TNat v)  = fnat v
+foldTree _ fleaf _ (TLeaf v) = fleaf v
+foldTree fn fl f (TFix t) = f (fmap (foldTree fn fl f) t)
 
 printTree :: (Pretty id, Pretty v, Pretty var) => Int -> Tree id var v -> Doc
-printTree _ TTrue        = text "true"
-printTree _ TFalse       = text "false"
-printTree p (TLeaf v)    = pPrint v
-printTree p (TNot t)     = pP p 9 $ text "!" <> pt 9 t
-printTree p (TAnd t1 t2) = pP p 5 $ text "AND" <+> (pt 5 t1 $$ pt 5 t2)
---printTree p (TAnd t1 t2) = pP p 5 $ pt 5 t1 <+> text "&" <+> pt 5 t2
-printTree p (TOr t1 t2) = pP p 5 $ text "OR " <+> (pt 5 t1 $$ pt 5 t2)
---printTree p (TOr  t1 t2) = pP p 5 $ pt 5 t1 <+> text "||" <+> pt 5 t2
-printTree p (TXor t1 t2) = pP p 5 $ pt 5 t1 <+> text "xor" <+> pt 5 t2
-printTree p (TIff t1 t2) = pP p 3 $ pt 3 t1 <+> text "<->" <+> pt 3 t2
-printTree p (TOnlyIf t1 t2) = pP p 3 $ pt 3 t1 <+> text "-->" <+> pt 3 t2
-printTree p (TIte c t e) = pP p 2 $ text "IFTE" <+> (pt 1 c $$ pt 1 t $$ pt 1 e)
-printTree p (TEq (TNat n1) (TNat n2)) = pP p 7 (pPrint n1 <+> text "==" <+> pPrint n2)
-printTree p (TLt (TNat n1) (TNat n2)) = pP p 7 (pPrint n1 <+> text "<" <+> pPrint n2)
-printTree p (TOne vv) = pP p 1 $ text "ONE" <+> (fsep $ punctuate comma $ map (pt 1) vv)
-printTree p (TTermGt t u) = pP p 6 $ pPrint t <+> text ">" <+> pPrint u
-printTree p (TTermEq t u) = pP p 6 $ pPrint t <+> text "=" <+> pPrint u
+printTree p t = foldTree fn fl f t p where
+  fl v _ = pPrint v
+  fn v _ = pPrint v
+  f TTrue  _ = text "true"
+  f TFalse _ = text "false"
+  f (TNot t)        p = pP p 9 $ text "!" <> t 9
+  f (TAnd t1 t2)    p = pP p 5 $ text "AND" <+> (t1 5 $$ t2 5)
+--   f (TAnd t1 t2) p = pP p 5 $ pt 5 t1 <+> text "&" <+> pt 5 t2
+  f (TOr t1 t2)     p = pP p 5 $ text "OR " <+> (t1 5 $$ t2 5)
+--   f (TOr  t1 t2) p = pP p 5 $ t1 5 <+> text "||" <+> pt 5 t2
+  f (TXor t1 t2)    p = pP p 5 $ t1 5 <+> text "xor" <+> t2 5
+  f (TIff t1 t2)    p = pP p 3 $ t1 3 <+> text "<->" <+> t2 3
+  f (TOnlyIf t1 t2) p = pP p 3 $ t1 3 <+> text "-->" <+> t2 3
+  f (TIte c t e)    p = pP p 2 $ text "IFTE" <+> (c 1 $$ t 1 $$ e 1)
+  f (TEq n1 n2)     p = pP p 7 (n1 1 <+> text "==" <+> n2 1)
+  f (TLt n1 n2)     p = pP p 7 (n1 1 <+> text "<"  <+> n2 1)
+  f (TOne vv)       p = pP p 1 $ text "ONE" <+> (fsep $ punctuate comma $ map ($ 1) vv)
+  f (TTermGt t u)   p = pP p 6 $ pPrint t <+> text ">" <+> pPrint u
+  f (TTermEq t u)   p = pP p 6 $ pPrint t <+> text "=" <+> pPrint u
 
-pt p = printTree p
 pP prec myPrec doc = if myPrec Prelude.> prec then doc else parens doc
 
 collectIdsTree :: Ord id => Tree id var v -> Set id
-collectIdsTree (TAnd t1 t2) = collectIdsTree t1 `mappend` collectIdsTree t2
-collectIdsTree (TOr t1 t2)  = collectIdsTree t1 `mappend` collectIdsTree t2
-collectIdsTree (TNot t1)    = collectIdsTree t1
-collectIdsTree (TXor t1 t2) = collectIdsTree t1 `mappend` collectIdsTree t2
-collectIdsTree (TIff t1 t2) = collectIdsTree t1 `mappend` collectIdsTree t2
-collectIdsTree (TOnlyIf t1 t2) = collectIdsTree t1 `mappend` collectIdsTree t2
-collectIdsTree (TIte t1 t2 t3) = collectIdsTree t1 `mappend` collectIdsTree t2 `mappend` collectIdsTree t3
-collectIdsTree (TTermGt t1 t2) = Set.fromList(collectIds t1) `mappend` Set.fromList(collectIds t2)
-collectIdsTree (TTermEq t1 t2) = Set.fromList(collectIds t1) `mappend` Set.fromList(collectIds t2)
-collectIdsTree _ = mempty
+collectIdsTree = foldTree (const mempty) (const mempty) f
+  where
+   f (TNot t1)       = t1
+   f (TAnd t1 t2)    = mappend t1 t2
+   f (TOr t1 t2)     = mappend t1 t2
+   f (TXor t1 t2)    = mappend t1 t2
+   f (TOnlyIf t1 t2) = mappend t1 t2
+   f (TIff t1 t2)    = mappend t1 t2
+   f (TIte t1 t2 t3) = t1 `mappend` t2 `mappend` t3
+   f (TTermGt t1 t2) = Set.fromList (collectIds t1) `mappend` Set.fromList (collectIds t2)
+   f (TTermEq t1 t2) = Set.fromList (collectIds t1) `mappend` Set.fromList (collectIds t2)
+   f TOne{} = mempty
+   f TTrue  = mempty
+   f TFalse = mempty
 
 -- | Performs obvious constant propagations.
 simplifyTree :: (Eq var, Eq v, Eq id) => Tree id var v -> Tree id var v
-simplifyTree l@(TLeaf _) = l
-simplifyTree TFalse      = TFalse
-simplifyTree TTrue       = TTrue
-simplifyTree (TNot t) =
-    let t' = simplifyTree t
-    in case t' of
-         TTrue  -> TFalse
-         TFalse -> TTrue
-         _      -> TNot t'
-simplifyTree (TAnd l r) =
-    let l' = simplifyTree l
-        r' = simplifyTree r
-    in case l' of
-         TFalse -> TFalse
-         TTrue  -> case r' of
-           TTrue  -> TTrue
-           TFalse -> TFalse
-           _      -> r'
-         _      -> case r' of
-           TTrue -> l'
-           TFalse -> TFalse
-           _ -> TAnd l' r'
-simplifyTree (TOr l r) =
-    let l' = simplifyTree l
-        r' = simplifyTree r
-    in case l' of
-         TFalse -> r'
-         TTrue  -> TTrue
-         _      -> case r' of
-           TTrue  -> TTrue
-           TFalse -> l'
-           _      -> TOr l' r'
-simplifyTree (TXor l r) =
-    let l' = simplifyTree l
-        r' = simplifyTree r
-    in case (l',r') of
-         (TFalse, _    ) -> r'
-         (TTrue, TFalse) -> TTrue
-         (TTrue, TTrue ) -> TFalse
-         (TTrue, _     ) -> TNot r'
-         (_    , TTrue ) -> TNot l'
-         (_    , TFalse) -> l'
-         _               -> TXor l' r'
-simplifyTree (TIff l r) =
-    let l' = simplifyTree l
-        r' = simplifyTree r
-    in case (l',r') of
-         (TFalse,TFalse) -> TTrue
-         (TFalse,TTrue)  -> TFalse
-         (TFalse,_)      -> TNot r'
-         (TTrue, _)      -> r'
-         (_,TFalse)      -> TNot l'
-         (_,TTrue)       -> l'
-         _               -> TIff l' r'
+simplifyTree = foldTree TNat TLeaf f where
+  f TFalse      = tFalse
+  f TTrue       = tTrue
 
-simplifyTree (l `TOnlyIf` r) =
-    let l' = simplifyTree l
-        r' = simplifyTree r
-    in case (l',r') of
-         (TFalse,_)  -> TTrue
-         (TTrue,_)   -> r'
-         (_, TTrue)  -> TTrue
-         (_, TFalse) -> TNot l'
-         _           -> l' `TOnlyIf` r'
-simplifyTree (TIte x t e) =
-    let x' = simplifyTree x
-        t' = simplifyTree t
-        e' = simplifyTree e
-    in case (x',t',e') of
-         (TTrue,_,_)  -> t'
-         (TFalse,_,_) -> e'
-         (_,TTrue,_)  -> TOr x' e'
-         (_,TFalse,_) -> TAnd (TNot x') e'
-         (_,_,TTrue)  -> TOr (TNot x') t'
-         (_,_,TFalse) -> TAnd x' t'
-         _      -> TIte x' t' e'
+  f (TNot (tOpen -> Just TTrue))  = tFalse
+  f (TNot (tOpen -> Just TFalse)) = tTrue
+  f it@(TNot t) = tClose it
 
-simplifyTree t@(TEq x y) = if x == y then TTrue  else t
-simplifyTree t@(TLt x y) = if x == y then TFalse else t
-simplifyTree t@TNat{}    = t
-simplifyTree (TOne [])   = TFalse
-simplifyTree t@TOne{}    = t
-simplifyTree (TTermEq s t) | s == t = TTrue
-simplifyTree t@TTermEq{} = t
-simplifyTree (TTermGt s t) | s == t = TFalse
-simplifyTree t@TTermGt{} = t
+  f (TAnd (tOpen -> Just TFalse) _) = tFalse
+  f (TAnd (tOpen -> Just TTrue) r)  = r
+  f (TAnd l (tOpen -> Just TTrue))  = l
+  f (TAnd _ (tOpen -> Just TFalse)) = tFalse
+  f it@TAnd{} = tClose it
+
+  f (TOr (tOpen -> Just TTrue) _) = tTrue
+  f (TOr (tOpen -> Just TFalse) r) = r
+  f (TOr _ (tOpen -> Just TTrue)) = tTrue
+  f (TOr l (tOpen -> Just TFalse)) = l
+  f it@TOr{} = tClose it
+
+  f (TXor (tOpen -> Just TTrue) (tOpen -> Just TTrue)) = tFalse
+  f (TXor (tOpen -> Just TFalse) r) = r
+  f (TXor l (tOpen -> Just TFalse)) = l
+  f (TXor (tOpen -> Just TTrue) r) = tNot r
+  f (TXor l (tOpen -> Just TTrue)) = tNot l
+  f it@TXor{} = tClose it
+
+  f (TIff (tOpen -> Just TFalse) (tOpen -> Just TFalse)) = tTrue
+  f (TIff (tOpen -> Just TFalse) r) = tNot r
+  f (TIff (tOpen -> Just TTrue)  r) = r
+  f (TIff l (tOpen -> Just TFalse)) = tNot l
+  f (TIff l (tOpen -> Just TTrue))  = l
+  f it@TIff{} = tClose it
+
+  f it@(l `TOnlyIf` r) =
+    case (tOpen l, tOpen r) of
+         (Just TFalse,_)  -> tTrue
+         (Just TTrue,_)   -> r
+         (_, Just TTrue)  -> tTrue
+         (_, Just TFalse) -> tNot l
+         _           -> tClose it
+  f it@(TIte x t e) =
+    case (tOpen x, tOpen t, tOpen e) of
+         (Just TTrue,_,_)  -> t
+         (Just TFalse,_,_) -> e
+         (_,Just TTrue,_)  -> tOr x e
+         (_,Just TFalse,_) -> tAnd (tNot x) e
+         (_,_,Just TTrue)  -> tOr (tNot x) t
+         (_,_,Just TFalse) -> tAnd x t
+         _      -> tClose it
+
+  f t@(TEq x y) = if x == y then tTrue  else tClose t
+  f t@(TLt x y) = if x == y then tFalse else tClose t
+  f (TOne [])   = tFalse
+  f t@TOne{}    = tClose t
+  f (TTermEq s t) | s == t = tTrue
+  f t@TTermEq{} = tClose t
+  f (TTermGt s t) | s == t = tFalse
+  f t@TTermGt{} = tClose t
 
 instance (ECircuit c, NatCircuit c, OneCircuit c) =>
   CastCircuit (Tree id var) c
-   where
-    castCircuit TTrue = true
-    castCircuit TFalse       = false
-    castCircuit (TLeaf l)    = input l
-    castCircuit (TAnd t1 t2) = and (castCircuit t1) (castCircuit t2)
-    castCircuit (TOr t1 t2)  = or (castCircuit t1) (castCircuit t2)
-    castCircuit (TXor t1 t2) = xor (castCircuit t1) (castCircuit t2)
-    castCircuit (TNot t)     = not (castCircuit t)
-    castCircuit (TIff t1 t2) = iff (castCircuit t1) (castCircuit t2)
-    castCircuit (TOnlyIf t1 t2) = onlyif (castCircuit t1) (castCircuit t2)
-    castCircuit (TIte x t e) = ite (castCircuit x) (castCircuit t) (castCircuit e)
-    castCircuit (TEq t1 t2)  = eq (castCircuit t1) (castCircuit t2)
-    castCircuit (TLt t1 t2)  = lt (castCircuit t1) (castCircuit t2)
-    castCircuit (TNat v)     = nat v
-    castCircuit (TOne tt)    = one (map castCircuit tt)
-    castCircuit c@(TTermEq t u) = error "cannot cast RPO constraints"
-    castCircuit c@(TTermGt t u) = error "cannot cast RPO constraints"
+ where
+  castCircuit = foldTree input nat f where
+    f TTrue        = true
+    f TFalse       = false
+    f (TAnd t1 t2) = and t1 t2
+    f (TOr t1 t2)  = or  t1 t2
+    f (TXor t1 t2) = xor t1 t2
+    f (TNot t)     = not t
+    f (TIff t1 t2) = iff t1 t2
+    f (TOnlyIf t1 t2) = onlyif t1 t2
+    f (TIte x t e) = ite x t e
+    f (TEq t1 t2)  = eq t1 t2
+    f (TLt t1 t2)  = lt t1 t2
+    f (TOne tt)    = one tt
+    f c@(TTermEq t u) = error "cannot cast RPO constraints"
+    f c@(TTermGt t u) = error "cannot cast RPO constraints"
 
 instance (ECircuit c, NatCircuit c, OneCircuit c, RPOCircuit c tid tvar) =>
   CastRPOCircuit (Tree tid tvar) c tid tvar
-   where
-    castRPOCircuit TTrue        = true
-    castRPOCircuit TFalse       = false
-    castRPOCircuit (TLeaf l)    = input l
-    castRPOCircuit (TAnd t1 t2) = and (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TOr t1 t2)  = or (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TXor t1 t2) = xor (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TNot t)     = not (castRPOCircuit t)
-    castRPOCircuit (TIff t1 t2) = iff (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TOnlyIf t1 t2) = onlyif (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TIte x t e) = ite (castRPOCircuit x) (castRPOCircuit t) (castRPOCircuit e)
-    castRPOCircuit (TEq t1 t2)  = eq (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TLt t1 t2)  = lt (castRPOCircuit t1) (castRPOCircuit t2)
-    castRPOCircuit (TNat v)     = nat v
-    castRPOCircuit (TOne tt)    = one (map castRPOCircuit tt)
-    castRPOCircuit c@(TTermEq t u) = termEq t u
-    castRPOCircuit c@(TTermGt t u) = termGt t u
-
-instance Functor (Tree id var) where fmap = fmapDefault
-instance Foldable (Tree id var) where foldMap = foldMapDefault
-instance Traversable (Tree id var) where
-  traverse f TTrue  = pure TTrue
-  traverse f TFalse = pure TFalse
-  traverse f (TLeaf v) = TLeaf <$> f v
-  traverse f (TNot t) = TNot <$> traverse f t
-  traverse f (TAnd t1 t2) = TAnd <$> traverse f t1 <*> traverse f t2
-  traverse f (TOr  t1 t2) = TOr  <$> traverse f t1 <*> traverse f t2
-  traverse f (TXor t1 t2) = TXor <$> traverse f t1 <*> traverse f t2
-  traverse f (TIff t1 t2) = TIff <$> traverse f t1 <*> traverse f t2
-  traverse f (TOnlyIf t1 t2) = TOnlyIf <$> traverse f t1 <*> traverse f t2
-  traverse f (TEq t1 t2)  = TEq <$> traverse f t1 <*> traverse f t2
-  traverse f (TLt t1 t2)  = TLt <$> traverse f t1 <*> traverse f t2
-  traverse f (TIte t1 t2 t3) = TIte <$> traverse f t1 <*> traverse f t2 <*> traverse f t3
-  traverse f (TOne tt)    = TOne <$> (traverse.traverse) f tt
-  traverse f (TNat v)     = TNat <$> f v
-  traverse f (TTermGt t u)= TTermGt <$> pure t <*> pure u
-  traverse f (TTermEq t u)= TTermEq <$> pure t <*> pure u
+ where
+  castRPOCircuit = foldTree input nat f where
+    f TTrue        = true
+    f TFalse       = false
+    f (TAnd t1 t2) = and t1 t2
+    f (TOr t1 t2)  = or  t1 t2
+    f (TXor t1 t2) = xor t1 t2
+    f (TNot t)     = not t
+    f (TIff t1 t2) = iff t1 t2
+    f (TOnlyIf t1 t2) = onlyif t1 t2
+    f (TIte x t e) = ite x t e
+    f (TEq t1 t2)  = eq t1 t2
+    f (TLt t1 t2)  = lt t1 t2
+    f (TOne tt)    = one tt
+    f c@(TTermEq t u) = termEq t u
+    f c@(TTermGt t u) = termGt t u
 
 instance Circuit (Tree id var) where
-    true  = TTrue
-    false = TFalse
-    input = TLeaf
-    and   = TAnd
-    or    = TOr
-    not   = TNot
+    true  = tTrue
+    false = tFalse
+    input = tLeaf
+    and   = tAnd
+    or    = tOr
+    not   = tNot
 
 instance ECircuit (Tree id var) where
-    xor   = TXor
-    iff   = TIff
-    onlyif = TOnlyIf
-    ite   = TIte
+    xor    = tXor
+    iff    = tIff
+    onlyif = tOnlyIf
+    ite    = tIte
 
 instance NatCircuit (Tree id var) where
-    eq    = TEq
-    lt    = TLt
+    eq    = tEq
+    lt    = tLt
     nat   = TNat
 
 instance OneCircuit (Tree id var) where
-    one   = TOne
+    one   = tOne
 
 instance RPOCircuit (Tree id var) id var where
-    termGt = TTermGt
-    termEq = TTermEq
+    termGt = tTermGt
+    termEq = tTermEq
 
 --    ------------------
 -- ** Circuit evaluator
@@ -1180,11 +1165,11 @@ instance OneCircuit Graph where
 instance Pretty id => RPOCircuit Graph id var where
     termGt t u = Graph $ do
                    n <- newNode
-                   let me = (n, NTermGt (show$pPrint t) (show$pPrint u))
+                   let me = (n, NTermGt (show$ pPrint t) (show$ pPrint u))
                    return (n, [me], [])
     termEq t u = Graph $ do
                    n <- newNode
-                   let me = (n, NTermEq (show$pPrint t) (show$pPrint u))
+                   let me = (n, NTermEq (show$ pPrint t) (show$ pPrint u))
                    return (n, [me], [])
 
 --binaryNode :: NodeType v -> Graph v -> Graph v -> Graph v
