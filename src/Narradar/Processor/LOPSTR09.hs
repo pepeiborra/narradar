@@ -75,7 +75,7 @@ instance (gid ~ DPIdentifier (GenId id)
                                   gid)
   where
     apply NarrowingGoalToRelativeRewriting prob@NarrowingGoalProblem{goal=Goal goal_f modes}
-      | isConstructorBased (getR prob)
+      | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
       = singleP NarrowingGoalToRelativeRewritingProof prob $
         procLOPSTR09 (getR prob) (getP prob) goal_f modes (getBaseProblemFramework prob)
       | otherwise = dontKnow prob NotConstructorBased
@@ -104,7 +104,7 @@ instance (gid ~ DPIdentifier (GenId id)
                                   gid)
   where
  apply NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{goals, dgraph}
-      | isConstructorBased (getR prob)
+      | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
           = mprod [singleP NarrowingGoalToRelativeRewritingProof prob p | p <- newProblems]
       | otherwise = dontKnow prob NotConstructorBased
   where

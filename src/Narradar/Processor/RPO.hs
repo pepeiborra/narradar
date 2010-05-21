@@ -16,7 +16,7 @@ import Control.Exception as CE (assert)
 import Control.Monad
 import Control.Parallel.Strategies
 import Data.Bifunctor
-import Data.Foldable (Foldable)
+import Data.Foldable as F (Foldable, toList)
 import Data.Traversable (Traversable)
 import Data.NarradarTrie (HasTrie)
 import Data.Typeable
@@ -37,13 +37,13 @@ import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO
 import Narradar.Constraints.SAT.Solve ( SAT, EvalM, BIEnv, runEvalM, decode, Var
                                       , smtSerial, smtFFI, satYices, YicesOpts(..))
-import Narradar.Constraints.SAT.MonadSAT(Decode)
+import Narradar.Constraints.SAT.MonadSAT( Decode,Tree,printTree, mapTreeTerms )
 import Narradar.Constraints.SAT.RPOAF ( SATSymbol
                                       , RPOSsymbol(..), RPOsymbol(..), LPOSsymbol, LPOsymbol, MPOsymbol
                                       , SymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
                                       , isUsable, theSymbolR, filtering
                                       , verifyRPOAF, isCorrect
-                                      , omegaUsable, omegaNeeded, omegaIG, omegaNone)
+                                      , omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone)
 --import Narradar.Constraints.SAT.RPO   (verifyRPO)
 --import qualified Narradar.Constraints.SAT.RPO as RPO
 import qualified Narradar.Constraints.SAT.RPOAF as RPOAF
@@ -196,25 +196,25 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
                              (NProblem (InitialGoal (TermF id) NarrowingGen) id)
                              (NProblem (InitialGoal (TermF id) NarrowingGen) id)
    where
-    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IGgen p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IGgen p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IGgen p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTFFI)    p = procAF_IGgen p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc RPOAF usablerules SMTSerial) p = procAF_IGgen p RPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IGgen p RPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTFFI)    p = procAF_IGgen p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOSAF usablerules SMTSerial) p = procAF_IGgen p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IGgen p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTFFI)    p = procAF_IGgen p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc LPOAF usablerules SMTSerial) p = procAF_IGgen p LPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IGgen p LPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
-    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTFFI)    p = procAF_IGgen p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP True)
+    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IGgen p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IGgen p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
          ,Pretty (TermN id)
@@ -357,10 +357,10 @@ procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
  omega = case usablerules of
             Needed -> omegaIG
             Usable -> omegaIG
-            None   -> omegaNone
+--            None   -> omegaNone
 
  f Nothing = dontKnow (rpoFail p) p
- f (Just (nondec_dps, bienv, symbols_raw))
+ f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
    = -- CE.assert isValidProof $
      singleP proof p (setP (restrictTRS dps nondec_dps) p)
   where
@@ -384,6 +384,29 @@ procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
     | isCorrect verification = True
     | otherwise = Debug.Trace.trace (show (proof $+$ Ppr.empty $+$ verification)) False
 -}
+
+
+procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
+ omega = case usablerules of
+            Needed -> omegaIGgen
+            Usable -> omegaIGgen
+--            None   -> omegaNone
+
+ f Nothing = dontKnow (rpoFail p) p
+ f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
+   = -- CE.assert isValidProof $
+     singleP proof p (setP (restrictTRS dps nondec_dps) p)
+  where
+   symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
+   proof         = RPOAFExtraProof decreasingDps usableRules symbols extraConstraints'
+   dps           = getP p
+   decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
+   usableRules   = [ r | r <- rules(getR p)
+                       , let Just f = rootSymbol (lhs r)
+                       , f `Set.member` usableSymbols]
+   usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]
+   extraConstraints' = mapTreeTerms (mapTermSymbols theSymbol) <$> extraConstraints
+   theSymbol = head . F.toList
 
 -- For Narrowing we need to add the constraint that one of the dps is ground in the rhs
 -- We do not just remove the strictly decreasing pairs,
@@ -439,6 +462,14 @@ data RPOProof id where
                 -> [RuleN id]       --  ^ Usable Rules
                 -> [RPOAF.SymbolRes id]
                 -> RPOProof id
+
+     RPOAFExtraProof
+                :: Pretty (RuleN id) =>
+                   [RuleN id]       --  ^ Strictly Decreasing dps
+                -> [RuleN id]       --  ^ Usable Rules
+                -> [RPOAF.SymbolRes id]
+                -> [Tree id Narradar.Var Var] -- ^ Extra constraints
+                -> RPOProof id
 {-
      RPOProof   :: Pretty (Rule t v) =>
                    [Rule t v]       --  ^ Strictly Decreasing dps
@@ -452,9 +483,12 @@ rpoFail :: Problem typ (NarradarTRS t Narradar.Var) -> RPOProof (TermId t)
 rpoFail _ = RPOFail
 
 instance (Ord id, Pretty id) => Pretty (RPOProof id) where
-    pPrint (RPOAFProof dps rr ss) =
-        text "RPO reduction pair" $$
-        text "The following pairs are strictly decreasing:" $$
+    pPrint (RPOAFProof dps rr ss) = pPrint (RPOAFExtraProof dps rr ss [])
+    pPrint (RPOAFExtraProof dps rr ss cc) =
+     if null cc then text "RPO reduction pair"
+        else (text "RPO reduction pair with the extra constraints" $$
+              nest 4 (vcat $ map (printTree 0) cc))
+     $$ text "The following pairs are strictly decreasing:" $$
         nest 4 (vcat (map pPrint dps)) $$
         text "The argument filtering used was:" $$
         nest 4 (pPrint the_af) $$

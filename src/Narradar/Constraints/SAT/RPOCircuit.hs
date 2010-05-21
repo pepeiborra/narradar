@@ -32,7 +32,7 @@ module Narradar.Constraints.SAT.RPOCircuit
    ,EvalM, Eval, EvalF(..), BEnv, BIEnv
    ,runEval, runEvalM, evalB, evalN
    ,Graph(..), shareGraph, shareGraph'
-   ,Tree(..), simplifyTree, printTree
+   ,Tree(..), simplifyTree, printTree, mapTreeTerms
    ,ECircuitProblem(..), RPOCircuitProblem(..)
    ,CNF(..)
    ,removeComplex, removeExist
@@ -681,6 +681,13 @@ tId (TIte c t e) = tIte c t e
 foldTree fnat  _ _ (TNat v)  = fnat v
 foldTree _ fleaf _ (TLeaf v) = fleaf v
 foldTree fn fl f (TFix t) = f (fmap (foldTree fn fl f) t)
+
+mapTreeTerms :: (Term (TermF id) var -> Term (TermF id') var') -> Tree id var v -> Tree id' var' v
+mapTreeTerms f = foldTree tNat tLeaf f'
+  where
+   f' (TTermGt t u) = tTermGt (f t) (f u)
+   f' (TTermEq t u) = tTermGt (f t) (f u)
+   f' t = tId t
 
 printTree :: (Pretty id, Pretty v, Pretty var) => Int -> Tree id var v -> Doc
 printTree p t = foldTree fn fl f t p where

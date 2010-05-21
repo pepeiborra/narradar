@@ -80,12 +80,24 @@ instance NFData a => NFData (GenId a) where
   rnf GoalId = ()
   rnf (AnId id) = rnf id
 
-class GenSymbol id where
-  goalSymbol :: id
-  genSymbol  :: id
 
-instance GenSymbol (GenId id) where genSymbol = GenId; goalSymbol = GoalId
-instance GenSymbol a => GenSymbol (DPIdentifier a) where genSymbol = IdFunction genSymbol; goalSymbol = IdFunction goalSymbol
+class GenSymbol id where
+  isGenSymbol  :: id -> Bool
+  isGoalSymbol :: id -> Bool
+  goalSymbol   :: id
+  genSymbol    :: id
+
+instance GenSymbol (GenId id) where
+   genSymbol = GenId; goalSymbol = GoalId
+   isGenSymbol  GenId  = True; isGenSymbol  _ = False
+   isGoalSymbol GoalId = True; isGoalSymbol _ = False
+
+instance GenSymbol a => GenSymbol (DPIdentifier a) where
+  genSymbol = IdFunction genSymbol; goalSymbol = IdFunction goalSymbol
+  isGenSymbol (IdFunction id) = isGenSymbol id
+  isGenSymbol (IdDP id) = isGenSymbol id
+  isGoalSymbol (IdFunction id) = isGoalSymbol id
+  isGoalSymbol (IdDP id) = isGoalSymbol id
 --instance GenSymbol StringId where genSymbol = StringId "gen" 0; goalSymbol
 
 -- --------------------------------------------------------------

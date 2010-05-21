@@ -17,7 +17,7 @@ module Narradar.Constraints.SAT.RPOAF (
   ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
   ,rpo, rpos, lpo, lpos, mpo
   ,verifyRPOAF, isCorrect
-  ,omegaUsable, omegaNeeded, omegaIG, omegaNone
+  ,omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone
   ) where
 
 import Control.Applicative
@@ -31,7 +31,7 @@ import qualified Control.RMonad as R
 import qualified Data.Array as A
 import Data.Bifunctor
 import Data.Foldable (Foldable, foldMap, toList)
-import Data.List ((\\), transpose, inits, tails, zip4)
+import Data.List ((\\), find, transpose, inits, tails, zip4)
 import Data.Maybe
 import Data.Monoid
 import Data.NarradarTrie (HasTrie)
@@ -42,6 +42,7 @@ import qualified Data.Set as Set
 import Data.Traversable (Traversable, traverse)
 import Narradar.Framework.Ppr as Ppr
 
+import Narradar.Constraints.Syntactic
 import Narradar.Constraints.SAT.MonadSAT
 import Narradar.Constraints.SAT.RPOAF.Symbols
 import Narradar.Framework
@@ -130,9 +131,9 @@ rpoAF_IGDP :: (Ord id
               ,MonadSAT repr Var m
               ,RPOExtCircuit repr sid Narradar.Var
               ,HasSignature (NProblem (InitialGoal (TermF id) base) id)
-              ) => Bool -> (NProblem (InitialGoal (TermF sid) base) sid -> repr Var)
+              ) => Bool -> (NProblem (InitialGoal (TermF sid) base) sid -> (repr Var, extraConstraints))
                 -> NProblem (InitialGoal (TermF id) base) id
-                -> m (EvalM Var ([Int], BIEnv Var, [sid]))
+                -> m (EvalM Var (([Int], extraConstraints), BIEnv Var, [sid]))
 
 rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
   = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
@@ -144,7 +145,8 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
                          (getFramework baseProblem)
       p'   = mkDPProblem typ' trs' dps'
 
-  assertAll (omega p' : [ l >~ r | l:->r <- rules dps'])
+  let (omegaConstraint, extraConstraintsAdded) = omega p'
+  assertAll ( omegaConstraint : [ l >~ r | l:->r <- rules dps'])
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
@@ -159,9 +161,9 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
 
 --  debug ("\nThe indexes are: " ++ show decreasing_dps) $
   return $ do
-
-    decreasing <- decode decreasing_dps
-    return [ r | (r,False) <- zip [(0::Int)..] decreasing]
+             decreasing <- decode decreasing_dps
+             return ([ r | (r,False) <- zip [(0::Int)..] decreasing]
+                    ,extraConstraintsAdded)
 {-
     (weakly, strictly) <- do
        weakly   <- evalB (and $ omegaIG  p' :
@@ -615,11 +617,12 @@ omegaNeeded p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
          rest      = trs \\ rls -- :: [Rule t Var]
 
 omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are: " <> ip $$ text "and dd=" <+> dd ) $
-            and ([go l r trs | l:->r <- ip] ++
+           (and ([go l r trs | l:->r <- ip] ++
                  [iusable f --> and [ l >~ r | l:->r <- rulesFor f trs]
                     | f <- Set.toList dd ] ++
                  [not(iusable f) | f <- Set.toList (getDefinedSymbols sig `Set.difference` dd)]
                 )
+           ,[])
 
    where
     ip = forDPProblem involvedPairs p
@@ -657,6 +660,25 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
          rls       = rulesFor id_t trs
          rest      = trs \\ rls
 
+omegaIGgen p
+  | isLeftLinear (getR p) = pprTrace ("omegaIGgen: partial = " <+> partial)
+                            omegaIG p
+  | (omegaConstraint,_) <- omegaIG p
+  = (omegaConstraint /\ iusable gen --> and extraConstraints
+    ,map isTree extraConstraints)
+ where
+   isTree = id :: Tree id v Var -> Tree id v Var
+   Just gen = find isGenSymbol (toList $ getDefinedSymbols p)
+   genTerm = term gen []
+   extraConstraints = [ genTerm > term f (replicate i genTerm) | (f,i) <- Map.toList partial]
+   partial = definedSymbols (getSignature p)
+             `Map.difference`
+             Map.fromList
+             [(f, arity ) | l :-> r <- rules (getR p)
+                          , Just f <- [rootSymbol l]
+                          , isLinear l && P.all isVar (properSubterms l)
+                          , let arity = length (properSubterms l)]
+
 rulesFor :: (HasId t, TermId t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
 
@@ -683,6 +705,8 @@ instance (Show a, GenSymbol a) => GenSymbol (RPOSsymbol Var a) where
                        , encodeUseMset= error "RPOAF.Symbol : goalSymbol"
                        , decodeSymbol = return (SymbolRes goalSymbol 0 False (Lex Nothing) (Right []))
                        }
+    isGenSymbol  = isGenSymbol  . theSymbol
+    isGoalSymbol = isGoalSymbol . theSymbol
 
 deriving instance (Show a, GenSymbol a) => GenSymbol (LPOsymbol  Var a)
 deriving instance (Show a, GenSymbol a) => GenSymbol (LPOSsymbol Var a)
