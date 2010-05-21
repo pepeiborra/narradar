@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Narradar.Constraints.Syntactic where
 
@@ -9,12 +10,31 @@ import Narradar.Types
 
 import qualified Data.Set as Set
 
+isLeftLinear :: (Ord v, Foldable t, Functor t, HasRules t v trs) => trs -> Bool
+isLeftLinear = null . nonLeftLinearRules
+isOrthogonal p = isLeftLinear p && null (criticalPairs p)
+
+isAlmostOrthogonal :: ( HasRules t v trs
+                      , Eq (Term t v)
+                      , Unify t
+                      , Rename v, Enum v, Ord v
+                      ) => trs -> Bool
+isAlmostOrthogonal p = isLeftLinear p && all isOverlay cps && and[ r1==r2 | (p,r1,r2) <- cps]
+    where cps = criticalPairs p
+
+
+isOverlayTRS p = (all isOverlay . criticalPairs) p
+
+isOverlay ([],r1,r2) = True
+isOverlay _ = False
+
+isNonOverlapping p = (null . criticalPairs) p
+
 nonLeftLinearRules :: (Ord v, Foldable t, Functor t, HasRules t v trs) => trs -> [Rule t v]
 nonLeftLinearRules trs = [ l:->r | l:->r <- rules trs, not (isLinear l)]
 
 isConstructorBased :: (HasRules t v trs, HasSignature trs, HasId t, Foldable t, SignatureId trs ~ TermId t) => trs -> Bool
 isConstructorBased trs = all (isConstructorRule trs) (rules trs)
-
 
 isConstructorRule sig = Set.null
                       . Set.intersection (getDefinedSymbols sig)

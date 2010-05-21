@@ -29,18 +29,14 @@ instance (HasRules t v trs, Ord v, Rename v, Enum v, Unify t
     Processor info ToInnermost (Problem Rewriting trs) (Problem IRewriting trs)
   where
    apply ToInnermost p
-      | isOrthogonal = singleP OrthogonalProof p p'
-      | isAlmostOrthogonal = singleP AlmostOrthogonalProof p p'
+      | isOrthogonal p = singleP OrthogonalProof p p'
+      | isAlmostOrthogonal p = singleP AlmostOrthogonalProof p p'
 --      | isOverlay && locallyConfluent = singleP OverlayProof p p'
       | otherwise = dontKnow ToInnermostFail p
 
     where
        p' = mkDerivedDPProblem (MkRewriting Innermost min) p
        cps = criticalPairs p
-       isOrthogonal = isLeftLinear && null cps
-       isLeftLinear = null (nonLeftLinearRules $ getR p)
-       isAlmostOrthogonal = isLeftLinear && isOverlay && and[ r1==r2 | (p,r1,r2) <- cps]
-       isOverlay = and[ p==[] | (p,r1,r2) <- cps]
        MkRewriting st0 min = getFramework p
 
 instance (Info info (Problem base trs)
