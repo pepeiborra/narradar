@@ -87,8 +87,8 @@ instance ( t ~ f (DPIdentifier id0), MapId f
         p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
                             , baseProblem = (getP -> dps@(DPTRS dd _ igr unif sig))}
    = do
-    let gr = if useInverse then igr else getEDGfromUnifiers unif
-        reachable = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
+    let gr            = if useInverse then igr else getEDGfromUnifiers unif
+        reachable     = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
         isReachable p =  fromMaybe False (flip Set.member reachablePairsG <$> lookupNode p dg)
 
         grForSccs   = buildG (bounds gr)
