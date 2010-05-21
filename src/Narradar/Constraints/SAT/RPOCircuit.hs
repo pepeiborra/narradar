@@ -298,24 +298,17 @@ termEq_ s t
     a --> b = onlyif a b
 
 
-class CastRPOCircuit c cOut tid tvar where
+class CastRPOCircuit c cOut tid tvar | c -> tid tvar where
   castRPOCircuit :: ( HasPrecedence v tid, HasFiltering v tid, HasStatus v tid
                     , Ord v, HasTrie v, Show v
                     , HasTrie tid, Ord tid
                     , HasTrie tvar, Ord tvar, Show tvar, Pretty tvar) =>
-                    c tid tvar v -> cOut v
+                    c v -> cOut v
 
-newtype WrapCircuit c id var v = WrapCircuit {wrappedCircuit :: c v}
-
-data NoId
-instance HasPrecedence v NoId
-instance HasStatus v NoId
-instance HasFiltering v NoId
-
-instance CastCircuit Circuit.Tree c => CastRPOCircuit (WrapCircuit Circuit.Tree) c id var where
-    castRPOCircuit = castCircuit . wrappedCircuit
-instance CastCircuit ECircuit.Tree c => CastRPOCircuit (WrapCircuit ECircuit.Tree) c id var where
-    castRPOCircuit = castCircuit . wrappedCircuit
+instance CastCircuit Circuit.Tree c => CastRPOCircuit Circuit.Tree c id var where
+    castRPOCircuit = castCircuit
+instance CastCircuit ECircuit.Tree c => CastRPOCircuit ECircuit.Tree c id var where
+    castRPOCircuit = castCircuit
 
 -- | A `Circuit' constructed using common-subexpression elimination.  This is a
 -- compact representation that facilitates converting to CNF.  See `runShared'.
@@ -378,10 +371,10 @@ instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastCircuit (FrozenShared
         go3 (a,b,c) = do {a' <- go a; b' <- go b; c' <- go c; return (a',b',c')}
         uncurry3 f (x, y, z) = f x y z
 
-instance (HasTrie id, Ord id, ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit Shared c id var where
+instance (HasTrie id, Ord id, ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit (Shared id var) c id var where
     castRPOCircuit = castCircuit
 
-instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit FrozenShared c id var where
+instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit (FrozenShared id var) c id var where
     castRPOCircuit = castCircuit
 
 data CCode    = CTrue   { circuitHash :: !CircuitHash }
@@ -804,7 +797,7 @@ instance (ECircuit c, NatCircuit c, OneCircuit c) =>
     castCircuit c@(TTermGt t u) = error "cannot cast RPO constraints"
 
 instance (ECircuit c, NatCircuit c, OneCircuit c, RPOCircuit c tid tvar) =>
-  CastRPOCircuit Tree c tid tvar
+  CastRPOCircuit (Tree tid tvar) c tid tvar
    where
     castRPOCircuit TTrue        = true
     castRPOCircuit TFalse       = false
