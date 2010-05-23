@@ -36,7 +36,7 @@ instance ( MkProblem base trs
          ) => Processor info RelativeToRegular (Problem (Relative trs base) trs) (Problem base trs) where
   apply RelativeToRegular p@RelativeProblem{..}
     | isGeneralizedRelaxedHierarchicalCombination (getR p) relativeTRS
-    = let p' = setMinimality A (mapR (`mappend` relativeTRS) baseProblem)
+    = let p' = setMinimality A baseProblem
       in singleP RelativeToRegularProof p p'
 
     | otherwise = dontKnow RelativeToRegularProofFail p

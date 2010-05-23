@@ -43,8 +43,8 @@ instance IsProblem p => IsProblem (Relative trs0 p) where
 instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
   getP (RelativeProblem _ p) = getP p
 
-instance MkProblem p trs => MkProblem (Relative trs p) trs where
-  mkProblem (Relative r0 p) rr = RelativeProblem r0 (mkProblem p rr)
+instance (Monoid trs, MkProblem p trs) => MkProblem (Relative trs p) trs where
+  mkProblem (Relative r0 p) rr = RelativeProblem r0 $ mkProblem p (rr `mappend` r0)
   mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
 
 --instance (Monoid trs, MkDPProblem p trs) => MkDPProblem (Relative trs p) trs where
@@ -52,11 +52,8 @@ instance (Foldable t, HasId t, Ord v, Ord (Term t v), MkDPProblem p (NarradarTRS
     MkDPProblem (Relative (NarradarTRS t v) p) (NarradarTRS t v)
  where
   mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
-  mkDPProblem (Relative trs0 p) rr dps
-     = let p0  = mkDPProblem p (rr `mappend` trs0) dps
-           p0' = mapR (filterNarradarTRS (`Set.notMember` Set.fromList (rules trs0))) p0
-       in  RelativeProblem trs0 p0'
-        -- Assumes that mapR does ^^ not recompute the dependency graphs stored inside the underlying problem
+  mkDPProblem (Relative trs0 p) rr dps = RelativeProblem trs0 $
+                                         mkDPProblem p (rr `mappend` trs0) dps
 
 instance FrameworkExtension (Relative id) where
   getBaseFramework  = baseFramework
@@ -85,24 +82,38 @@ instance Pretty p => Pretty (Relative trs p)
          pPrint (Relative _ p) = text "Relative termination of" <+> pPrint p
 
 
-instance (HasRules t v trs, Pretty (Term t v), Pretty (Problem base trs)) =>
+instance ( trs ~ NarradarTRS t v
+         , Ord v, Foldable t
+         , MkProblem base trs
+         , Ord (Term t v), Pretty (Term t v)
+         , Pretty (Problem base trs)) =>
     Pretty (Problem (Relative trs base) trs)
  where
-  pPrint RelativeProblem{..} =
-      pPrint baseProblem $$
+  pPrint RelativeProblem{..}
+    = pPrint p0' $$
       text "TRS':" <+> vcat [pPrint l <+> text "->=" <+> pPrint r
-                              | l :-> r <- rules relativeTRS]
+                               | l :-> r <- rules relativeTRS]
+   where
+      p0' = mapR (filterNarradarTRS (`Set.notMember` narradarTRStoSet relativeTRS)) baseProblem
 
-
-instance ( HasRules t v trs, Pretty (t(Term t v))
+instance ( IsTRS t v trs
+         , MkProblem base trs
+         , Pretty (t(Term t v))
+         , Ord (Term t v)
          , HasId t, Foldable t, Pretty (TermId t), Pretty v
          , PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (Relative trs base) trs) where
   pprTPDB RelativeProblem{..} =
-      pprTPDB baseProblem $$
+      pprTPDB p0' $$
       parens(text "RULES" $$
              nest 1 (vcat [ pprTermTPDB l <+> text "->=" <+> pprTermTPDB r
                             | l :-> r <- rules relativeTRS]))
+   where
+      p0' = mapR ( tRS . Set.toList
+                 . (`Set.difference` Set.fromList (rules relativeTRS))
+                 . Set.fromList . rules)
+                 baseProblem
+
 -- ICap
 
 instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>

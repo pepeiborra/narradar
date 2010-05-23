@@ -7,7 +7,7 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.TRS where
@@ -161,6 +161,10 @@ isNarradarTRS1 = id
 
 listTRS :: (HasId t, Foldable t, Ord (Term t v)) => [Rule t v] -> NarradarTRS t v
 listTRS rr = ListTRS rr (getSignature rr)
+
+narradarTRStoSet :: NarradarTRS t v -> Set (Rule t v)
+narradarTRStoSet TRS{..} = rulesS
+narradarTRStoSet (ListTRS rr _) = Set.fromList rr
 
 -- ------------------------------
 -- Data.Term framework instances
