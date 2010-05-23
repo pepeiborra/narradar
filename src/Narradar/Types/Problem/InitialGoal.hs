@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
@@ -98,7 +99,7 @@ instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) w
 instance ( t ~ f id, MapId f, DPSymbol id
          , MkDPProblem p (NarradarTRS t Var)
          , HasId t, Foldable t, Unify t
-         , Ord (Term t Var), Pretty (t(Term t Var))
+         , Ord (t(Term t Var)), Pretty (t(Term t Var))
          , Traversable (Problem p), Pretty p
          , ICap t Var (p, NarradarTRS t Var)
          , IUsableRules t Var p (NarradarTRS t Var)
@@ -140,11 +141,13 @@ instance (t ~ f id, MapId f, DPSymbol id
  This hack has to be replicated also for other type classes, e.g.
  InsertDPair
 
- An alternative hack would be to disable the use of cached unifiers
- for initial goal problems, in the dependency graph processors.
+ An alternative fix would be to disable the use of cached unifiers
+ for initial goal problems, in the dependency graph (and refinement)
+ processors, giving up performance.
 
- These are only patches around the problem. I'm afraid a real solution
- calls for an encoding of inheritance to model the framework of a DP problem.
+ These are only patches around the problem. I'm afraid a proper fix
+ calls for an encoding of inheritance to model the framework of a DP
+ problem, which I don't have time to look at right now.
 -}
 
 instance (t ~ f id, MapId f, Unify t, DPSymbol id, HasId t
@@ -265,15 +268,21 @@ instance (DPSymbol id, Pretty id, Ord id, GenSymbol id) =>
   mkDPProblem (InitialGoal goals _ _) _ _
     | not $ all isVar (properSubterms =<< concrete goals)
       = error "Initial goals must be of the form f(x,y,z..)"
-  mkDPProblem it@(InitialGoal goals g (NarrowingGen (MkRewriting s m))) rr dd
+  mkDPProblem typ@(InitialGoal goals g (NarrowingGen (MkRewriting s m))) rr dd
     = case dd of
-        DPTRS{rulesUsed} | rr == rulesUsed
+        DPTRS{rulesUsed} | rr' == rulesUsed
            -> initialGoalProblem goals g $
               NarrowingGenProblem $
-              RewritingProblem rr dd s m
-        otherwise -> initialGoalProblem goals g $
+              RewritingProblem rr' dd' s m
+        otherwise -> initialGoalProblem goals g' $
                      NarrowingGenProblem $
-                     RewritingProblem rr (dpTRS it rr dd) s m
+                     RewritingProblem rr' (dpTRS typ' rr' dd') s m
+    where
+      rr' = mapNarradarTRS' id extraVarsToGen rr
+      dd' = mapNarradarTRS' id extraVarsToGen dd
+      typ' = InitialGoal goals g' (NarrowingGen (MkRewriting s m))
+      g'  = mapDGraph' id extraVarsToGen <$> g
+
   mapP f p@(InitialGoalProblem goals g (getBaseProblem -> RewritingProblem rr pp s m))
     = InitialGoalProblem goals g' p'
    where
@@ -297,13 +306,17 @@ instance (DPSymbol id, Pretty id, Ord id, GenSymbol id) =>
       = error "Initial goals must be of the form f(x,y,z..)"
   mkDPProblem it@(InitialGoal goals g (NarrowingGen (MkRewriting s m))) rr dd
     = case dd of
-        DPTRS{rulesUsed} | rr == rulesUsed
+        DPTRS{rulesUsed} | rr' == rulesUsed
            -> initialGoalProblem goals g $
               NarrowingGenProblem $
-              RewritingProblem rr dd s m
+              RewritingProblem rr' dd' s m
         otherwise -> initialGoalProblem goals g $
                      NarrowingGenProblem $
-                     RewritingProblem rr (dpTRS it rr dd) s m
+                     RewritingProblem rr' (dpTRS it rr' dd') s m
+    where
+      rr' = mapNarradarTRS' id extraVarsToGen rr
+      dd' = mapNarradarTRS' id extraVarsToGen dd
+
   mapP f p@(InitialGoalProblem goals g (getBaseProblem -> RewritingProblem rr pp s m))
     = InitialGoalProblem goals g' p'
    where
@@ -571,6 +584,14 @@ instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (DGraph t
 mapDGraph :: (Ord(Term t v), Ord(Term t' v), Foldable t', HasId t') => (Term t v -> Term t' v) -> DGraph t v -> DGraph t' v
 mapDGraph f (DGraph p pm ip rp sccs sccsM sccsG)
     = (DGraph (mapNarradarTRS f p) (Map.mapKeys (fmap f) pm) ip rp sccs sccsM sccsG)
+
+mapDGraph' :: (Ord(Term t v), Ord(Term t' v), Foldable t', HasId t')
+           => (Term t v -> Term t' v)
+           -> (Rule t v -> Rule t' v)
+           -> DGraph t v -> DGraph t' v
+mapDGraph' ft fr (DGraph p pm ip rp sccs sccsM sccsG)
+    = (DGraph (mapNarradarTRS' ft fr p) (Map.mapKeys fr pm) ip rp sccs sccsM sccsG)
+
 
 mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , v ~ Var
