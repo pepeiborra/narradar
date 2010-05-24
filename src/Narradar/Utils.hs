@@ -75,7 +75,7 @@ debug _ = return ()
 pprTrace = trace . render . pPrint
 pprError = error . render . pPrint
 echo = hPutStrLn stderr
-
+echo' = hPutStr stderr
 -- ----------
 -- Type hints
 -- ----------

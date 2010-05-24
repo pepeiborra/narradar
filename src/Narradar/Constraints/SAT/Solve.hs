@@ -48,7 +48,7 @@ import Narradar.Constraints.SAT.YicesFFICircuit as FFI
         (YicesSource, YMaps(..), runYicesSource', emptyYMaps, computeBIEnv)
 import Narradar.Framework (TimeoutException(..))
 import Narradar.Framework.Ppr
-import Narradar.Utils( debug, readProcessWithExitCodeBS )
+import Narradar.Utils( debug, echo, echo', readProcessWithExitCodeBS )
 
 import qualified Bindings.Yices as Yices
 import qualified Control.Exception as CE
@@ -123,15 +123,15 @@ smtFFI (SMTY' my) = do
   (me, StY'{..}) <- runStateT my (StY' [V 1000 ..] (FFI.emptyYMaps ctx))
 --  let symbols = getAllSymbols $ mconcat
 --                [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
+  echo' "Calling Yices..."
 #ifdef DEBUG
-  debug "Calling Yices..."
 #endif
   (ti, bienv) <- timeItT(computeBIEnv stY')
 --  debug (unlines $ map show $ Set.toList symbols)
 --  debug (show . vcat . map (uncurry printGt.second fst) . Trie.toList . termGtMap $ stY)
 --  debug (show . vcat . map (uncurry printEq.second fst) . Trie.toList . termEqMap $ stY)
+  echo ("done (" ++ show ti ++ " seconds)")
 #ifdef DEBUG
-  debug ("done (" ++ show ti ++ " seconds)")
 --  removeFile "yices.log"
 #endif
   delContext ctx
