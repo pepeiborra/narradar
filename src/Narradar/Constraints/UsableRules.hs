@@ -27,7 +27,7 @@ import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Types.ArgumentFiltering as AF (AF_, ApplyAF(..))
 
-class (Rename v, Monoid trs) => IUsableRules t v typ trs | trs -> t where
+class (Rename v, Monoid trs) => IUsableRules t v typ trs where
     iUsableRulesM    :: MonadVariant v m => typ -> trs -> trs -> [Term t v] -> m trs
     iUsableRulesVarM :: MonadVariant v m => typ -> trs -> trs -> v -> m(Set (Rule t v))
 
