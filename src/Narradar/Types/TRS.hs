@@ -92,8 +92,8 @@ data NarradarTRSF a where
     DPTRS     :: (HasId t, Ord (Term t v)) =>
                  { dpsA      :: !(Array Int (Rule t v))
                  , rulesUsed :: NarradarTRSF (Rule t v)
-                 , depGraph  :: !Graph
-                 , unifiers  :: !(Unifiers t v :!: Unifiers t v)
+                 , depGraph  :: Graph
+                 , unifiers  :: (Unifiers t v :!: Unifiers t v)
                  , sig       :: Signature (TermId t)
                  } -> NarradarTRSF (Rule t v)
 
