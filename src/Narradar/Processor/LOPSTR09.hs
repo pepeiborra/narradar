@@ -121,10 +121,7 @@ instance (gid ~ DPIdentifier (GenId id)
                goal'    = Concrete $ term (IdDP GoalId) (return <$> toList goal_vars)
                goalRule = term (IdFunction GoalId) (return <$> toList goal_vars) :->
                           term (AnId <$> unmarkDPSymbol goal_f)
-                               (take (length modes) [ if var `Set.member` goal_vars
-                                                       then return var
-                                                       else genTerm
-                                                           | var <- vars])
+                               (take (length modes) $ map return vars)
                goalPairs = [ l :-> r | l :-> r <- getPairs baseFramework (goalRule:initialRules)
                                , rootSymbol l == Just (IdDP GoalId)]
                r' = mapNarradarTRS convert (getR prob) `mappend` tRS [goalRule]

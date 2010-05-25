@@ -63,7 +63,7 @@ type GId id = DPIdentifier (GenId id)
 
 instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) =>
     Dispatch (NProblem (InitialGoal (TermF (DPIdentifier id)) Narrowing) (DPIdentifier id)) where
-  dispatch = (dg) >=> apply NarrowingGoalToRelativeRewriting >=> dispatch
+  dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) IRewriting) Id) where
   dispatch = ev >=> dg >=> rpoPlus gt1 >=> final
