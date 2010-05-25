@@ -214,8 +214,8 @@ termGt_ s t
     infixr 8 ~~
     infixr 7 -->
 
-    s > t   = termGt_ s t
-    s ~~ t  = termEq_ s t
+    s > t   = termGt s t
+    s ~~ t  = termEq s t
     a --> b = onlyif a b
 
 termGe_ (Pure s) (Pure t) = if s == t then true else false
@@ -253,9 +253,9 @@ termGe_ s t
     infixr 8 /\, >, >~, ~~
     infixr 7 -->
 
-    s > t   = termGt_ s t
+    s > t   = termGt s t
     s >~ t  = termGe s t
-    s ~~ t  = termEq_ s t
+    s ~~ t  = termEq s t
     a /\  b = a `and` b
     a --> b = onlyif a b
 
@@ -294,8 +294,8 @@ termEq_ s t
     infixr 8 ~~
     infixr 7 -->
 
-    s > t   = termGt_ s t
-    s ~~ t  = termEq_ s t
+    s > t   = termGt s t
+    s ~~ t  = termEq s t
     a --> b = onlyif a b
 
 
