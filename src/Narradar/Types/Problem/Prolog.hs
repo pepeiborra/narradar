@@ -18,7 +18,7 @@ import Data.Term
 import Data.Traversable (Traversable)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Text.ParserCombinators.Parsec
+import Narradar.Utils.Parse
 import Text.PrettyPrint.HughesPJClass
 import Text.XHtml (HTML(..), theclass)
 import Prelude as P
@@ -69,7 +69,7 @@ instance Error ParseError
 
 prologParser = do
   txt    <- getInput
-  goals  <- eitherM $ mapM parseGoal $ catMaybes $ map f (lines txt)
+  goals  <- eitherM $ mapM parsePrologGoal $ catMaybes $ map f (lines txt)
   clauses<- Prolog.whiteSpace *> many Prolog.clause <* eof
   return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds (concat clauses)))
   where
@@ -87,3 +87,10 @@ prologParser = do
     upgradePred (Prolog.Pred id tt) = Prolog.Pred (ArityId (pack id) (length tt)) tt
     upgradePred p                   = bimap ((`ArityId` 0) . pack) P.id p
 
+
+
+
+parsePrologGoal :: String -> Either ParseError [Goal String]
+parsePrologGoal = parse (Prolog.whiteSpace >> many (goalP <* Prolog.whiteSpace)) "GOAL"
+ where
+   goalP  = Goal <$> Prolog.identifier <*> modesP <* dot
