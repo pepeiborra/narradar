@@ -24,6 +24,7 @@ module Narradar.Constraints.SAT.RPOCircuit
    ,RPOCircuit(..), termGt_, termGe_, termEq_
    ,RPOExtCircuit(..)
    ,ExistCircuit(..)
+   ,AssertCircuit(..), assertCircuits
    ,CastCircuit(..), CastRPOCircuit(..)
    ,HasPrecedence(..), precedence
    ,HasFiltering(..), listAF, inAF
@@ -152,6 +153,14 @@ class RPOCircuit repr tid tvar => RPOExtCircuit repr tid tvar where
                         ,Ord v, HasTrie v, Show v) =>
                         tid -> tid -> [Term (TermF tid) tvar] -> [Term (TermF tid) tvar] -> repr v
     exGe id_s id_t ss tt = exGt id_s id_t ss tt `or` exEq id_s id_t ss tt
+
+class AssertCircuit repr where
+  assertCircuit :: repr v  -- * Assertion side-effect
+                -> repr v  -- * expression
+                -> repr v  -- * expression
+
+assertCircuits [] e = e
+assertCircuits (a:aa) e = assertCircuit a $ assertCircuits aa e
 
 class HasPrecedence v a | a -> v where precedence_v  :: a -> v
 class HasFiltering  v a | a -> v where listAF_v      :: a -> v

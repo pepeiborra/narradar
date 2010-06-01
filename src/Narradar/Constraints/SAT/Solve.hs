@@ -18,11 +18,12 @@ module Narradar.Constraints.SAT.Solve
     , decode, Var
     ) where
 
-import Bindings.Yices ( mkContext, interrupt, setVerbosity, assertWeighted
+import Bindings.Yices ( Context, mkContext, interrupt, setVerbosity, assertWeighted
                       , setLogFile, delContext, isInconsistent)
 import Control.Applicative
 import Control.Arrow (first,second)
 import Control.Exception (evaluate, try, SomeException)
+import Control.Monad.RWS
 import Control.Monad.State
 import Data.Array.Unboxed
 import Data.List (unfoldr)
@@ -45,7 +46,7 @@ import Narradar.Constraints.SAT.RPOCircuit hiding (nat)
 import Narradar.Constraints.SAT.YicesCircuit as Serial
         (YicesSource, YMaps(..), emptyYMaps, runYices', generateDeclarations, solveDeclarations)
 import Narradar.Constraints.SAT.YicesFFICircuit as FFI
-        (YicesSource, YMaps(..), runYicesSource', emptyYMaps, computeBIEnv)
+        (YicesSource, YMaps(..), emptyYMaps, computeBIEnv, runYicesSource)
 import Narradar.Framework (TimeoutException(..))
 import Narradar.Framework.Ppr
 import Narradar.Utils( debug, echo, echo', readProcessWithExitCodeBS )
@@ -111,7 +112,8 @@ data StY' id = StY' { poolY' :: ![Var]
                     , stY'   :: !(FFI.YMaps id Var)
                     }
 
-newtype SMTY' id a = SMTY' {unSMTY' :: StateT (StY' id) IO a} deriving (Functor, Monad, MonadIO, MonadState (StY' id))
+newtype SMTY' id a = SMTY' {unSMTY' :: RWST Context () (StY' id) IO a}
+    deriving (Functor, Monad, MonadIO, MonadReader Context, MonadState (StY' id))
 
 smtFFI :: (HasTrie id, Ord id, Show id, Pretty id) => SMTY' id (EvalM Var a) -> IO (Maybe a)
 smtFFI (SMTY' my) = do
@@ -120,13 +122,13 @@ smtFFI (SMTY' my) = do
 --  setVerbosity 10
 --  setLogFile "yices.log"
 #endif
-  (me, StY'{..}) <- runStateT my (StY' [V 1000 ..] (FFI.emptyYMaps ctx))
+  (me, StY'{..}, _) <- runRWST my ctx (StY' [V 1000 ..] FFI.emptyYMaps)
 --  let symbols = getAllSymbols $ mconcat
 --                [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
   echo' "Calling Yices..."
 #ifdef DEBUG
 #endif
-  (ti, bienv) <- timeItT(computeBIEnv stY')
+  (ti, bienv) <- timeItT(computeBIEnv ctx stY')
 --  debug (unlines $ map show $ Set.toList symbols)
 --  debug (show . vcat . map (uncurry printGt.second fst) . Trie.toList . termGtMap $ stY)
 --  debug (show . vcat . map (uncurry printEq.second fst) . Trie.toList . termEqMap $ stY)
@@ -147,14 +149,16 @@ instance MonadSAT (FFI.YicesSource id) Var (SMTY' id) where
   natural = do {b <- boolean; return (Natural b)}
   assert [] = return ()
   assert a  = do
-      st <- gets stY'
-      (me, new_stY) <- liftIO $ runYicesSource' st $ orL a
-      liftIO $ Yices.assert (context st) me
+      st  <- gets stY'
+      ctx <- ask
+      (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
+      liftIO $ Yices.assert ctx me
       modify $ \st -> st{stY' = new_stY}
   assertW w a = do
-      st <- gets stY'
-      (me, new_stY) <- liftIO $ runYicesSource' st $ orL a
-      liftIO $ Yices.assertWeighted (context st) me w
+      st  <- gets stY'
+      ctx <- ask
+      (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
+      liftIO $ Yices.assertWeighted ctx me w
       modify $ \st -> st{stY' = new_stY}
 
 -- ------------------------------------------

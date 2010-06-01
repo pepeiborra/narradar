@@ -16,6 +16,7 @@ module Narradar.Constraints.SAT.MonadSAT
     , Status(..), mkStatus
     , Circuit, ECircuit, NatCircuit, OneCircuit, RPOCircuit
     , RPOExtCircuit(..), ExistCircuit(..)
+    , AssertCircuit(..), assertCircuits
     , castCircuit, castRPOCircuit, Clause
     , Tree, printTree, mapTreeTerms
     , Eval, evalB, evalN, BIEnv, EvalM

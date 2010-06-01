@@ -252,7 +252,7 @@ runRPOAF allowCol sig f = do
 -- Symbols set extensions
 -- ----------------------
 
-instance ( RPOCircuit repr (RPOSsymbol v a) tvar, ExistCircuit repr, OneCircuit repr, ECircuit repr
+instance ( RPOCircuit repr (RPOSsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar, Ord a, Pretty a) =>
     RPOExtCircuit repr (RPOSsymbol v a) tvar where
      exEq s t ss tt =
@@ -263,49 +263,49 @@ instance ( RPOCircuit repr (RPOSsymbol v a) tvar, ExistCircuit repr, OneCircuit 
      exGt s t ss tt =
        and [useMul s, useMul t, mulgt s t ss tt]
        \/
-       and [not$ useMul s, not$ useMul t, lexpgt_exist s t ss tt]
+       and [not$ useMul s, not$ useMul t, lexpgt_existA s t ss tt]
 
      exGe s t ss tt =
        and [useMul s, useMul t, mulgt s t ss tt \/ muleq s t ss tt]
        \/
-       and [not$ useMul s, not$ useMul t, lexpgt_exist s t ss tt \/ lexpeq s t ss tt]
+       and [not$ useMul s, not$ useMul t, lexpgt_existA s t ss tt \/ lexpeq s t ss tt]
 {-
      exGe s t ss tt =
        and [useMul s, useMul t, mulge s t ss tt]
        \/
        and [not$ useMul s, not$ useMul t, lexpge_exist s t ss tt]
 -}
-instance (RPOCircuit repr (LPOSsymbol v a) tvar, OneCircuit repr, ECircuit repr, ExistCircuit repr, Ord a, Pretty a
+instance (RPOCircuit repr (LPOSsymbol v a) tvar, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr, Ord a, Pretty a
          ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
   RPOExtCircuit repr (LPOSsymbol v a) tvar where
   exEq s t = lexpeq s t
-  exGt s t = lexpgt_exist s t
+  exGt s t = lexpgt_existA s t
 --  exGe = lexpge_exist
 
-instance (RPOCircuit repr (LPOsymbol v a) tvar, OneCircuit repr, ECircuit repr, ExistCircuit repr, Ord a
-         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+instance (RPOCircuit repr (LPOsymbol v a) tvar, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr, AssertCircuit repr
+         ,Ord a, Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
   RPOExtCircuit repr (LPOsymbol v a) tvar where
-  exEq s t = lexeq_exist s t
-  exGt s t = lexgt_exist s t
+  exEq s t = lexeq_existA s t
+  exGt s t = lexgt_existA s t
 
-instance (RPOCircuit repr (MPOsymbol v a) tvar, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
+instance (RPOCircuit repr (MPOsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
          ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
   RPOExtCircuit repr (MPOsymbol v a) tvar where
   exEq s t = muleq s t
   exGt s t = mulgt s t
 
-instance (RPOCircuit repr (RPOsymbol v a) tvar, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
+instance (RPOCircuit repr (RPOsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
          ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
   RPOExtCircuit repr (RPOsymbol v a) tvar where
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]
       \/
-      and [not$ useMul s, not$ useMul t, lexeq_exist s t ss tt]
+      and [not$ useMul s, not$ useMul t, lexeq_existA s t ss tt]
 
   exGt s t ss tt =
       and [useMul s, useMul t, mulgt s t ss tt]
       \/
-      and [not$ useMul s, not$ useMul t, lexgt_exist s t ss tt]
+      and [not$ useMul s, not$ useMul t, lexgt_existA s t ss tt]
 
 -- -------------------------
 -- Narrowing related stuff
@@ -385,6 +385,38 @@ lexgt_exist id_f id_g ff gg = (`runCont` id) $ do
                          (f>g \/ (f~~g /\ m!!1!!1))
                          (m!!0!!1))
                     (m!!1!!0)
+lexgt_existA _    _    [] _  = false
+lexgt_existA id_f _    ff [] = or . map input . filtering_vv $ id_f
+lexgt_existA id_f id_g ff gg = (`runCont` id) $ do
+-- We build a matrix M of dim n_f x n_g containing all
+-- the comparisons between tails of ff and gg
+-- That is, M[0,0] = lexgt ff gg
+--          M[1,0] = lexgt (drop 1 ff) gg
+--          M[0,1] = lexgt ff (drop 1 gg)
+--          ...
+-- Actually, the matrix containts additional elements
+--          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
+--          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
+-- The proposition is true iff M[0,0] is true
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
+                      | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
+                      , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
+                                        `zip` tails (zip filters_g gg))]
+
+  return $ assertCircuits assertions (m!!0!!0)
+ where
+   filters_f = map input (filtering_vv id_f)
+   filters_g = map input (filtering_vv id_g)
+
+   constraint _ []     _      = false
+   constraint _ ff      []    = or [ af_f | (af_f,_) <- ff]
+   constraint m ((af_f,f):ff) ((af_g,g):gg)
+             =  ite af_f
+                    (ite af_g
+                         (f>g \/ (f~~g /\ m!!1!!1))
+                         (m!!0!!1))
+                    (m!!1!!0)
 
 lexeq_exist _    _    [] [] = true
 lexeq_exist id_f _    _  [] = not . or . map input . filtering_vv $ id_f
@@ -397,6 +429,31 @@ lexeq_exist id_f id_g ff gg = (`runCont` id) $ do
                                         `zip` tails (zip filters_g gg)]
 
   return ( m!!0!!0 /\ and assertions)
+ where
+   filters_f = map input (filtering_vv id_f)
+   filters_g = map input (filtering_vv id_g)
+
+   constraint _ []     []     = true
+   constraint _ ff      []    = not $ or [ af_f | (af_f,_) <- ff]
+   constraint _ []      gg    = not $ or [ af_g | (af_g,_) <- gg]
+   constraint m ((af_f,f):ff) ((af_g,g):gg)
+             =  ite af_f
+                    (ite af_g
+                         (f~~g /\ m!!1!!1)
+                         (m!!0!!1))
+                    (m!!1!!0)
+
+lexeq_existA _    _    [] [] = true
+lexeq_existA id_f _    _  [] = not . or . map input . filtering_vv $ id_f
+lexeq_existA _    id_g [] _  = not . or . map input . filtering_vv $ id_g
+lexeq_existA id_f id_g ff gg = (`runCont` id) $ do
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
+                      | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
+                      , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
+                                        `zip` tails (zip filters_g gg)]
+
+  return ( assertCircuits assertions (m!!0!!0) )
  where
    filters_f = map input (filtering_vv id_f)
    filters_g = map input (filtering_vv id_g)
@@ -465,7 +522,29 @@ lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
                             | (g_jk, t_j) <- zip g_k tt]
                 | (f_ik, s_i) <- zip f_k ss]
 
-lexpge_exist id_f id_g ss tt = (`runCont` id) $ do
+lexpgt_existA id_f id_g [] _  = false
+lexpgt_existA id_f id_g ss tt = (`runCont` id) $ do
+  let k = min (length ss) (length tt) + 1
+  vf_k <- replicateM k (Cont exists)
+  let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
+                    [the_tail]
+      the_tail = if length ss P.> length tt
+                   then or (transpose enc_f !! length tt)
+                   else false
+
+  let assertions = zipWith (<-->) vf_k constraints
+  return (assertCircuits assertions $ head vf_k)
+     where
+       Just enc_f = lexPerm id_f
+       Just enc_g = lexPerm id_g
+
+       expgt_k f_k g_k next
+         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
+                                      (s_i ~~ t_j /\ next))
+                            | (g_jk, t_j) <- zip g_k tt]
+                | (f_ik, s_i) <- zip f_k ss]
+
+lexpge_existA id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
   vf_k <- replicateM k (Cont exists)
   let constraints = zipWith3 expge_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
@@ -475,7 +554,7 @@ lexpge_exist id_f id_g ss tt = (`runCont` id) $ do
                    else eqArity
 
   let assertions = zipWith (<-->) vf_k constraints
-  return (head vf_k /\ and assertions)
+  return (assertCircuits assertions $ head vf_k)
      where
        Just enc_f = lexPerm id_f
        Just enc_g = lexPerm id_g
