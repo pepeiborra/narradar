@@ -2,6 +2,6 @@
 
 import Data.Maybe (listToMaybe)
 import SGST07
-import Narradar.Interface.Cli
+import Narradar.Interface.Cli ()
 
 main = narradarMain listToMaybe
