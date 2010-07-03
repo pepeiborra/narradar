@@ -382,17 +382,17 @@ instance R.RFunctor Signature where
         withConstraintsOf sig $ \SigConstraints -> withResConstraints $ \SigConstraints ->
               Sig (Map.mapKeys f c) (Map.mapKeys f d)
 
+data instance Constraints Signature id = Ord id => SigConstraints
 instance Ord id => Suitable Signature id where
-   data Constraints Signature id = Ord id => SigConstraints
-   constraints _ = SigConstraints
+   constraints = SigConstraints
 
 -- --------------------------
 -- RMonad instance for WriterT
 -- --------------------------
 
+data instance Constraints (WriterT s m) a = WriterTConstraints
 instance (Monoid s) => Suitable (WriterT s m) a where
-   data Constraints (WriterT s m) a = WriterTConstraints
-   constraints _ = WriterTConstraints
+   constraints = WriterTConstraints
 
 instance (Monad m, Monoid s) => R.RFunctor (WriterT s m) where
    fmap = fmap
@@ -403,9 +403,9 @@ instance (Monoid s, Monad m) => R.RMonad (WriterT s m) where
    fail = fail
 
 #ifndef TRANSFORMERS
+data instance Constraints (Writer s) a = WriterConstraints
 instance (Monoid s) => Suitable (Writer s) a where
-   data Constraints (Writer s) a = WriterConstraints
-   constraints _ = WriterConstraints
+   constraints = WriterConstraints
 
 instance (Monoid s) => R.RFunctor (Writer s) where
    fmap = fmap

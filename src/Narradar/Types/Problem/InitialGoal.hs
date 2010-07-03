@@ -63,6 +63,7 @@ data InitialGoal t p = InitialGoal
 data CAGoalF c a = Concrete c
                  | Abstract a
   deriving (Eq, Ord, Show)
+
 type CAGoal t = CAGoalF (Term t Var) (Term t Mode)
 
 instance (Eq p, Eq (Term t Var), Eq (Term t Mode)) => Eq (InitialGoal t p) where
@@ -715,9 +716,9 @@ expandDGraph' ::
 expandDGraph' p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} i newdps
    = mkDGraph (expandDPair (setP pairs p) i newdps) goals
 
+data instance Constraints DGraphF a = Ord a => DGraphConstraints
 instance Ord a => Suitable DGraphF a where
-  data Constraints DGraphF a = Ord a => DGraphConstraints
-  constraints _ = DGraphConstraints
+  constraints = DGraphConstraints
 
 lookupNode p dg = Map.lookup p (pairsMap dg)
 
