@@ -62,7 +62,7 @@ Library
      build-depends: mtl
   buildable: True
 --  cpp-options: -DGHCI
-  ghc-options: 
+  ghc-options:  -O2
   ghc-prof-options: -auto-all
   hs-source-dirs: src
   extensions:   FlexibleContexts,
