@@ -46,7 +46,7 @@ import Lattice
 import Language.Prolog.SharingAnalysis (SharingAssignment)
 
 #ifdef HOOD
-import Debug.Observe
+import Debug.Hood.Observe
 #endif
 
 extendToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`

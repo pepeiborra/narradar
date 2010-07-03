@@ -48,7 +48,7 @@ import Narradar.Framework.Ppr as Ppr
 import Narradar.Utils
 
 #ifdef HOOD
-import Debug.Observe
+import Debug.Hood.Observe
 #endif
 
 isGround :: (Functor t, Foldable t) => Term t v -> Bool
@@ -151,6 +151,13 @@ instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (Narradar
 
 instance (NFData a, NFData b) => NFData (a :!: b) where
     rnf (a :!: b) = rnf a `seq` rnf b `seq` ()
+
+#ifdef HOOD
+instance (Observable (t(Term t v)), Observable v ) => Observable (NarradarTRS t v) where
+  observer (TRS rr sig) = send "TRS" (return (`TRS` sig) << rr)
+  observer (DPTRS dpsA ru dg unif sig)
+     = send "TRS" (return (\dpsA -> DPTRS dpsA ru dg unif sig) << dpsA)
+#endif
 
 isNarradarTRS :: NarradarTRS t v -> NarradarTRS t v
 isNarradarTRS = id

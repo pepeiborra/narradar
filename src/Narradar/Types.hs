@@ -86,7 +86,7 @@ import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.Parser as Prolog hiding (term)
 
 #ifdef HOOD
-import Debug.Observe
+import           Debug.Hood.Observe
 #endif
 
 import Prelude as P hiding (sum, pi, mapM)

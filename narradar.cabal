@@ -53,7 +53,9 @@ Library
      -- ghc-options: -fhpc
   if flag(hood)
      cpp-options: -DHOOD
-     build-depends: GHood
+     build-depends: hood
+  else
+     build-depends: hood-off
   if flag(transformers)
      build-depends: transformers, monads-fd
   else

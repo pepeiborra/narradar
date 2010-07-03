@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE CPP #-}
 
 
 module Narradar.Types.DPIdentifiers
@@ -28,6 +29,9 @@ import Prelude
 import Narradar.Types.Term
 import Narradar.Framework.Ppr
 
+#ifdef HOOD
+import Debug.Hood.Observe
+#endif
 
 type Id = DPIdentifier StringId
 type DP a = RuleN (DPIdentifier a)
@@ -73,6 +77,11 @@ instance HasTrie a => HasTrie (DPIdentifier a) where
   insert (IdDP dp) v (DPIdentifierTrie dpt ft) = DPIdentifierTrie (Trie.insert dp v dpt) ft
   toList (DPIdentifierTrie ft dpt) = map (first IdDP) (Trie.toList dpt) ++
                                      map (first IdFunction)   (Trie.toList ft)
+#ifdef HOOD
+instance Observable id => Observable (DPIdentifier id) where
+  observer (IdFunction a) = send "IdFunction" (return IdFunction << a)
+  observer (IdDP a)       = send "IdDP"       (return IdDP << a)
+#endif
 -- ------------
 -- DP Symbols
 -- ------------

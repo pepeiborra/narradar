@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternGuards, ViewPatterns, NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -34,9 +33,6 @@ import Narradar.Types.Problem.NarrowingGoal
 import Narradar.Utils
 import Lattice
 
-#ifdef HOOD
-import Debug.Observe
-#endif
 
 data NarrowingToRewritingICLP08 heu = NarrowingToRewritingICLP08 (MkHeu heu)
                                     | NarrowingToRewritingICLP08_SCC (MkHeu heu)
@@ -154,11 +150,7 @@ findGroundAF' heu pi_groundInfo af0 p (_:->r)
   | otherwise = mkGround r R.>>= invariantEV heu p
             where
               mkGround t = cutWith heu (af0 `mappend` pi_c) t varsp -- TODO Fix: cut one at a time
-                  where varsp = [noteV v | v <- vars (annotateWithPos t)] \\\
+                  where varsp = [noteV v | v <- vars (annotateWithPos t)] \\
                                 [note v | v <- subterms (AF.apply pi_d $ annotateWithPos t)]
 
               (pi_c,pi_d) = AF.splitCD p pi_groundInfo
-
-#ifdef HOOD
-instance Observable Id   where observer = observeBase
-#endif

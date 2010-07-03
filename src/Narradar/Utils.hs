@@ -60,6 +60,10 @@ import Prelude hiding (mapM)
 -- Debugging
 -- ---------
 
+#ifdef HOOD
+import           Debug.Hood.Observe                   hiding (O)
+#endif
+
 #ifdef DEBUG
 import qualified Debug.Trace
 trace = Debug.Trace.trace
@@ -427,3 +431,19 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
 instance NFData BS.ByteString where rnf = rnf . show
 instance NFData LBS.ByteString where rnf = rnf . show
 
+-- ---------------
+-- Hood instances
+-- ---------------
+#ifdef HOOD
+
+instance (Observable k, Observable v) => Observable (Map k v) where
+  observer x p = Map.fromDistinctAscList (observer (Map.toList x) p)
+instance (Observable a) => Observable (Set a) where
+  observer x p = Set.fromDistinctAscList (observer (Set.toList x) p)
+
+instance (Observable (f(Free f a)), Observable a) => Observable (Free f a) where
+  observer (Pure v) = send "Pure" (return Pure << v)
+  observer (Impure t) = send "Impure" (return Impure << t)
+
+instance Observable BS.ByteString where observer = observeBase
+#endif

@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP #-}
 
 module Narradar.Types.Term
                      (TermF(..), ArityId(..), HasArity(..), StringId
@@ -34,6 +35,9 @@ import qualified Data.Map as Map
 
 import Narradar.Framework.Ppr
 import Narradar.Types.Var
+#ifdef HOOD
+import           Debug.Hood.Observe
+#endif
 
 -- ---------------------
 -- Basic Identifiers
@@ -46,6 +50,11 @@ instance Pretty a => Pretty (ArityId a) where pPrint ArityId{..} = pPrint the_id
 
 class    HasArity id where getIdArity :: id -> Int
 instance HasArity (ArityId a) where getIdArity = the_arity
+
+#ifdef HOOD
+instance Observable a => Observable (ArityId a) where
+  observer (ArityId f a) = send "ArityId" (return ArityId << f << a)
+#endif
 
 -- -------
 -- Terms
@@ -236,3 +245,15 @@ instance NFData id => NFData (ArityId id) where
 
 instance (NFData k, NFData a) => NFData (SubstitutionF k a) where
   rnf = rnf . unSubst
+
+
+-- -----------------
+-- Observe instances
+-- -----------------
+#ifdef HOOD
+instance (Observable a, Observable id) => Observable (TermF id a) where
+  observer (Term _ id a) = send "Term" (return Term << id << a)
+
+instance Observable a => Observable (RuleF a) where
+  observer (l :-> r) = send "(:->)" (return (:->) << l << r)
+#endif
