@@ -95,7 +95,7 @@ import Language.Prolog.Representation (representTerm, representProgram,
                                        cons, nil, psucc, zero, tup, eq, is,
                                        NotAny, PrologTerm, any, notvar, compound, mkT,
                                        isNotvar, isAny)
-import Language.Prolog.Transformations (QueryAnswer(..))
+import           Language.Prolog.Transformations      (QueryAnswer(..))
 
 import Prelude hiding (and,or,any,notElem,pi)
 import qualified Prelude as P
@@ -408,10 +408,16 @@ instance SkTransformAF (Labelled StringId) LRP where
                                          else Labelling l (FunctorId (mkT t)))
   skTransformGoal = bimap (fmap (InId . mkT)) id
 
-prepareProgram :: Program id -> Program'' (Expr (PF' id)) (TermN (Expr (PF' id)))
-prepareProgram = (`evalState` mempty) . (`evalStateT` (toEnum <$> [0..]))
+prepareProgram :: Show id => Program id -> Program'' (Expr (PF' id)) (TermN (Expr (PF' id)))
+prepareProgram =   (`evalState` mempty) . (`evalStateT` (toEnum <$> [0..]))
                  . representProgram toVar term (Pure <$> freshVar)
+                 . fmap (concatClause . fmap removeNegations)
     where
+         concatClause ([h] :- b) = h :- concat b
+         removeNegations (Not g) = [g]
+         removeNegations (Ift c g)    = g : fromMaybe (error ("prepareProgram: " ++ show c)) (Prolog.termToGoal c)
+         removeNegations (Ifte c t e) = t : e : fromMaybe (error ("prepareProgram: " ++ show c)) (Prolog.termToGoal c)
+         removeNegations g           = [g]
          toVar (VName id)  = do
            env <- lift get
            case Map.lookup id env of
