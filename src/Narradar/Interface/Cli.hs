@@ -88,20 +88,22 @@ narradarMain run = catchTimeout $ do
   a_problem <- eitherM $ narradarParse problemFile input
 
   let proof    = dispatchAProblem a_problem
-  sol <- evaluate $ run (runProof proof)
+  sol <- maybe (fmap Just) withTimeout timeout $
+         evaluate $ run (runProof proof)
   let diagrams = isJust pdfFile
 
-  case sol of
+  case join sol of
     Just sol -> do putStrLn "YES"
                    when diagrams $ printDiagram sol
                    when (verbose>0) $ print $ pPrint sol
 
     Nothing  -> do
              putStrLn "MAYBE"
-             when (verbose > 0) $ print $ pprProofFailures proof
-             when diagrams $ printDiagram (sliceProof proof)
+             let proof' = sliceProof proof
+             when (verbose > 1) $ print $ pprProofFailures proof'
+--             when (verbose > 1 && diagrams) $ printDiagram proof'
   where
-    catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE")
+    catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
 
 
 withTimeout t m = do
@@ -158,9 +160,8 @@ prologMain run = catchTimeout $ do
 
     Nothing  -> do
              putStrLn "MAYBE"
-             when (diagrams && verbose > 0) $ do
-                  print $ pPrint proof
-                  printDiagram (sliceProof proof)
+             when (verbose > 1) $ print $ pprProofFailures proof
+             when (diagrams && verbose > 0) $ printDiagram (sliceProof proof)
   where
     catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE")
 -- ------------------------------
@@ -183,9 +184,10 @@ data Options =  Options { problemFile :: FilePath
                         , pdfFile     :: Maybe FilePath
                         , input       :: String
                         , verbose     :: Int
+                        , timeout     :: Maybe Int
                         }
 
-defOpts = Options{ problemFile = "", pdfFile = Nothing, input = "", verbose = 0}
+defOpts = Options{ problemFile = "", pdfFile = Nothing, input = "", verbose = 0, timeout = Nothing}
 
 --opts :: [OptDescr (Flags f id -> Flags f id)]
 opts = [ Option ""  ["pdf"] (OptArg setPdfPath "PATH") "Produce a pdf proof file (implied by -v2)"
@@ -214,14 +216,17 @@ runTests mb_threads _ = do
 #endif
 
 setTimeout arg opts = do
-  scheduleAlarm (read arg)
+  let t = read arg
+{-
+  scheduleAlarm t
   t_id <- myThreadId
   installHandler sigALRM (Catch $ do
                             throwTo t_id TimeoutException
                             debug "timeout"
                           )
                          Nothing
-  P.return opts
+-}
+  P.return opts{timeout= Just t}
 
 setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1}
 
