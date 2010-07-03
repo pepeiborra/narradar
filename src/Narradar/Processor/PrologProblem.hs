@@ -19,77 +19,77 @@ module Narradar.Processor.PrologProblem (
  ,inferType
   ) where
 
-import Control.Applicative
-import Control.Arrow (first, second, (***))
-import Control.Exception (assert)
-import Control.Monad.Free.Zip (zipFree)
-import Control.Monad.Identity (Identity(..))
-import Control.Monad.List   (ListT(..))
-import Control.Monad.Reader (MonadReader(..), Reader(..))
-import Control.Monad.RWS (RWST, execRWST)
-import Control.Monad.State
-import Control.Monad.Writer (MonadWriter(..), Writer(..), WriterT(..), Any(..))
-import Control.Monad.Supply
-import qualified Control.RMonad as R
-import Control.RMonad.AsMonad
-import Data.AlaCarte as Al hiding (Note)
-import Data.AlaCarte.Ppr hiding (Note)
-import Data.Bifunctor
-import Data.ByteString.Char8 (ByteString, pack, unpack)
-import Data.Char (isSpace)
-import Data.List as List hiding (any,notElem)
-import Data.Maybe
-import Data.Monoid      (Monoid(..))
-import Data.Foldable    (Foldable(foldMap,foldr), toList, notElem)
-import Data.Traversable (Traversable(traverse), foldMapDefault, fmapDefault)
-import qualified Data.Foldable    as F
-import qualified Data.Traversable as T
-import Data.Map (Map)
-import Data.Set (Set)
-import Data.UniqueList (UniqueList)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import qualified Data.UniqueList as UList
-import Language.Haskell.TH (runIO)
-import Text.ParserCombinators.Parsec (parse)
-import System.IO.Unsafe
-import GHC.Exts (the)
+import           Control.Applicative
+import           Control.Arrow                        (first, second, (***))
+import           Control.Exception                    (assert)
+import           Control.Monad.Free.Zip               (zipFree)
+import           Control.Monad.Identity               (Identity(..))
+import           Control.Monad.List                   (ListT(..))
+import           Control.Monad.Reader                 (MonadReader(..), Reader(..))
+import           Control.Monad.RWS                    (RWST, execRWST)
+import           Control.Monad.State
+import           Control.Monad.Writer                 (MonadWriter(..), Writer(..), WriterT(..), Any(..))
+import           Control.Monad.Supply
+import qualified Control.RMonad                       as R
+import           Control.RMonad.AsMonad
+import           Data.AlaCarte                        as Al hiding (Note)
+import           Data.AlaCarte.Ppr                    hiding (Note)
+import           Data.Bifunctor
+import           Data.ByteString.Char8                (ByteString, pack, unpack)
+import           Data.Char                            (isSpace)
+import           Data.List                            as List hiding (any,notElem)
+import           Data.Maybe
+import           Data.Monoid                          (Monoid(..))
+import           Data.Foldable                        (Foldable(foldMap,foldr), toList, notElem)
+import           Data.Traversable                     (Traversable(traverse), foldMapDefault, fmapDefault)
+import qualified Data.Foldable                        as F
+import qualified Data.Traversable                     as T
+import           Data.Map                             (Map)
+import           Data.Set                             (Set)
+import           Data.UniqueList                      (UniqueList)
+import qualified Data.Map                             as Map
+import qualified Data.Set                             as Set
+import qualified Data.UniqueList                      as UList
+import           Language.Haskell.TH                  (runIO)
+import           Text.ParserCombinators.Parsec        (parse)
+import           System.IO.Unsafe
+import           GHC.Exts                             (the)
 
-import Data.Term hiding (find)
-import Data.Term.Rules
+import           Data.Term                            hiding (find)
+import           Data.Term.Rules
 import Data.Term.Var as Prolog (Var(VName, VAuto))
-import qualified Language.Prolog.Syntax as Prolog
+import qualified Language.Prolog.Syntax               as Prolog
 
 
-import Narradar.Framework
-import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types.ArgumentFiltering (AF_, MkHeu, mkHeu, ApplyAF(..), PolyHeuristic, Heuristic(..), simpleHeu, innermost)
-import Narradar.Types.Goal
-import Narradar.Types.DPIdentifiers
-import Narradar.Types.PrologIdentifiers
-import Narradar.Types.Labellings
-import Narradar.Types.TRS
-import Narradar.Types.Term as Narradar
-import Narradar.Types.Var  as Narradar
-import Narradar.Types.Problem
-import Narradar.Types.Problem.Prolog
-import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Problem.Infinitary
-import Narradar.Types.Problem.NarrowingGoal
-import Narradar.Framework
-import Narradar.Framework.Ppr as Ppr
-import Narradar.Utils
+import           Narradar.Framework
+import qualified Narradar.Types.ArgumentFiltering     as AF
+import           Narradar.Types.ArgumentFiltering     (AF_, MkHeu, mkHeu, ApplyAF(..), PolyHeuristic, Heuristic(..), simpleHeu, innermost)
+import           Narradar.Types.Goal
+import           Narradar.Types.DPIdentifiers
+import           Narradar.Types.PrologIdentifiers
+import           Narradar.Types.Labellings
+import           Narradar.Types.TRS
+import           Narradar.Types.Term                  as Narradar
+import           Narradar.Types.Var                   as Narradar
+import           Narradar.Types.Problem
+import           Narradar.Types.Problem.Prolog
+import           Narradar.Types.Problem.Rewriting
+import           Narradar.Types.Problem.Infinitary
+import           Narradar.Types.Problem.NarrowingGoal
+import           Narradar.Framework
+import           Narradar.Framework.Ppr               as Ppr
+import           Narradar.Utils
 
 
-import Language.Prolog.Syntax hiding (Goal, TermF, Term, term)
-import qualified Language.Prolog.Syntax as Prolog
+import           Language.Prolog.Syntax               hiding (Goal, TermF, Term, term)
+import qualified Language.Prolog.Syntax               as Prolog
 import qualified Language.Prolog.Parser as Prolog (program)
-import Language.Prolog.Signature
-import Language.Prolog.SharingAnalysis (infer)
+import           Language.Prolog.Signature
+import           Language.Prolog.SharingAnalysis      (infer)
 -- import Language.Prolog.PreInterpretation (computeSuccessPatterns, ComputeSuccessPatternsOpts(..),
 --                                           computeSuccessPatternsOpts, DatalogTerm, Abstract,
 --                                           abstractCompileGoal)
-import qualified Language.Prolog.Representation as Prolog
+import qualified Language.Prolog.Representation       as Prolog
 import Language.Prolog.Representation (representTerm, representProgram,
                                        Term0, term0, T(..), PrologT, PrologP, V, NotVar, Compound(..),
                                        cons, nil, psucc, zero, tup, eq, is,
@@ -97,8 +97,8 @@ import Language.Prolog.Representation (representTerm, representProgram,
                                        isNotvar, isAny)
 import           Language.Prolog.Transformations      (QueryAnswer(..))
 
-import Prelude hiding (and,or,any,notElem,pi)
-import qualified Prelude as P
+import           Prelude                              hiding (and,or,any,notElem,pi)
+import qualified Prelude                              as P
 
 
 -- ---------------------------

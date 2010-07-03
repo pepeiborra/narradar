@@ -20,51 +20,49 @@ module Narradar.Constraints.SAT.Solve
 
 import Bindings.Yices ( Context, mkContext, interrupt, setVerbosity, assertWeighted
                       , setLogFile, delContext, isInconsistent)
-import Control.Applicative
-import Control.Arrow (first,second)
-import Control.Exception (evaluate, try, SomeException)
-import Control.Monad.RWS
-import Control.Monad.State
-import Data.Array.Unboxed
-import Data.List (unfoldr)
-import Data.Monoid
-import Data.Term.Rules (getAllSymbols)
-import Funsat.Circuit (BEnv, and,or,not)
-import Funsat.Types (Clause,Solution(..))
-import Math.SMT.Yices.Syntax
-import System.Directory
-import System.FilePath
-import System.IO
-import System.IO.Unsafe
-import System.Process
-import System.TimeIt
-import Text.Printf
-
-import Narradar.Constraints.SAT.MonadSAT hiding (and,or)
-import Narradar.Constraints.SAT.RPOCircuit hiding (nat)
-import Narradar.Constraints.SAT.YicesCircuit as Serial
-        (YicesSource, YMaps(..), emptyYMaps, runYices', generateDeclarations, solveDeclarations)
-import Narradar.Constraints.SAT.YicesFFICircuit as FFI
-        (YicesSource, YMaps(..), emptyYMaps, computeBIEnv, runYicesSource)
-import Narradar.Framework (TimeoutException(..))
-import Narradar.Framework.Ppr
-import Narradar.Utils( debug, echo, echo', readProcessWithExitCodeBS )
-
-import qualified Bindings.Yices as Yices
-import qualified Control.Exception as CE
-import qualified Funsat.Solver as Funsat
-import qualified Funsat.Types as Funsat
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as LBS
-import qualified Data.NarradarTrie as Trie
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import qualified Narradar.Types as Narradar
-import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
-
-import Prelude hiding (and, not, or, any, all, lex, (>))
-import qualified Prelude as P
+import           Control.Applicative
+import           Control.Arrow                            (first,second)
+import           Control.Exception                        (evaluate, try, SomeException)
+import           Control.Monad.RWS
+import           Control.Monad.State
+import           Data.Array.Unboxed
+import           Data.List                                (unfoldr)
+import           Data.Monoid
 import           Data.Hashable
+import           Data.Term.Rules                          (getAllSymbols)
+import           Funsat.Circuit                           (BEnv, and,or,not)
+import           Funsat.Types                             (Clause,Solution(..))
+import           Math.SMT.Yices.Syntax
+import           System.Directory
+import           System.FilePath
+import           System.IO
+import           System.IO.Unsafe
+import           System.Process
+import           System.TimeIt
+import           Text.Printf
+
+import           Narradar.Constraints.SAT.MonadSAT        hiding (and,or)
+import           Narradar.Constraints.SAT.RPOCircuit      hiding (nat)
+import           Narradar.Constraints.SAT.YicesCircuit    as Serial (YicesSource, YMaps(..), emptyYMaps, runYices', generateDeclarations, solveDeclarations)
+import           Narradar.Constraints.SAT.YicesFFICircuit as FFI    (YicesSource, YMaps(..), emptyYMaps, computeBIEnv, runYicesSource)
+import           Narradar.Framework                       (TimeoutException(..))
+import           Narradar.Framework.Ppr
+import           Narradar.Utils                           ( debug, echo, echo', readProcessWithExitCodeBS )
+
+import qualified Bindings.Yices                           as Yices
+import qualified Control.Exception                        as CE
+import qualified Funsat.Solver                            as Funsat
+import qualified Funsat.Types                             as Funsat
+import qualified Data.ByteString.Char8                    as BS
+import qualified Data.ByteString.Lazy.Char8               as LBS
+import qualified Data.HashMap                             as HashMap
+import qualified Data.Map                                 as Map
+import qualified Data.Set                                 as Set
+import qualified Narradar.Types                           as Narradar
+import qualified Narradar.Constraints.SAT.RPOCircuit      as RPOCircuit
+
+import           Prelude                                  hiding (and, not, or, any, all, lex, (>))
+import qualified Prelude                                  as P
 
 -- ----------------------------
 -- SMT MonadSAT implementation

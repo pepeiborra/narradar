@@ -12,39 +12,39 @@
 
 module Narradar.Types.Problem.NarrowingGen where
 
-import Control.Applicative
-import Control.Arrow (first)
-import Control.DeepSeq
-import Control.Exception (assert)
-import Control.Monad.Free
-import Data.Char
-import Data.Foldable (Foldable(..), toList)
-import Data.List (nub)
-import Data.Traversable as T (Traversable(..), mapM)
-import Data.Maybe
-import Data.Monoid
-import Data.Typeable
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Text.XHtml (theclass)
-
-import Data.Term
-import Data.Term.Rules
-
-import MuTerm.Framework.Problem
-import MuTerm.Framework.Proof
-
-import Narradar.Types.DPIdentifiers
-import Narradar.Types.Problem
-import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Term
-import Narradar.Types.TRS
-import Narradar.Framework
-import Narradar.Framework.Ppr
-import Narradar.Utils
-
-import Prelude hiding (pi)
+import           Control.Applicative
+import           Control.Arrow                    (first)
+import           Control.DeepSeq
+import           Control.Exception                (assert)
+import           Control.Monad.Free
+import           Data.Char
+import           Data.Foldable                    (Foldable(..), toList)
+import           Data.List                        (nub)
 import           Data.Hashable
+import           Data.Traversable                 as T (Traversable(..), mapM)
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Typeable
+import           Data.Set                         (Set)
+import qualified Data.Set                         as Set
+import           Text.XHtml                       (theclass)
+
+import           Data.Term
+import           Data.Term.Rules
+
+import           MuTerm.Framework.Problem
+import           MuTerm.Framework.Proof
+
+import           Narradar.Types.DPIdentifiers
+import           Narradar.Types.Problem
+import           Narradar.Types.Problem.Rewriting
+import           Narradar.Types.Term
+import           Narradar.Types.TRS
+import           Narradar.Framework
+import           Narradar.Framework.Ppr
+import           Narradar.Utils
+
+import           Prelude                          hiding (pi)
 
 -- -----------------------
 -- Terms with Gen and Goal

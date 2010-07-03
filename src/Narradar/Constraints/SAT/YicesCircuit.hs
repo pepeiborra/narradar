@@ -17,44 +17,40 @@ module Narradar.Constraints.SAT.YicesCircuit
    ,generateDeclarations, solveDeclarations
    ) where
 
-import Control.Applicative
-import Control.Arrow (first, second)
+import           Control.Applicative
+import           Control.Arrow                       (first, second)
 import Control.Exception as CE (assert)
-import Control.Monad.Reader
-import Control.Monad.State.Strict hiding ((>=>), forM_)
-import Data.Foldable (Foldable, foldMap)
-import Data.List( nub, foldl', sortBy, (\\))
-import Data.Map( Map )
-import Data.Maybe( fromJust )
-import Data.Monoid
-import Data.Set( Set )
-import Data.Traversable (Traversable, traverse)
-import Math.SMT.Yices.Parser
-import Math.SMT.Yices.Syntax
-import Math.SMT.Yices.Pipe
-import Narradar.Types.Term
-import Narradar.Utils (debug, on, withTempFile, readProcessWithExitCodeBS)
-import Text.PrettyPrint.HughesPJClass
-import System.IO
+import           Control.Monad.Reader
+import           Control.Monad.State.Strict          hiding ((>=>), forM_)
+import           Data.Foldable                       (Foldable, foldMap)
+import           Data.List                           ( nub, foldl', sortBy, (\\))
+import           Data.Map                            ( Map )
+import           Data.Maybe                          ( fromJust )
 import           Data.Hashable
+import           Data.Monoid
+import           Data.Set                            ( Set )
+import           Data.Traversable                    (Traversable, traverse)
+import           Math.SMT.Yices.Parser
+import           Math.SMT.Yices.Syntax
+import           Math.SMT.Yices.Pipe
+import           Narradar.Types.Term
+import           Narradar.Utils                      (debug, on, withTempFile, readProcessWithExitCodeBS)
+import           Text.PrettyPrint.HughesPJClass
+import           System.IO
 import Prelude hiding( not, and, or, (>) )
 
-import qualified Data.Set as Set
-import qualified Data.Map as Map
-import qualified Funsat.Circuit  as Circuit
-import qualified Funsat.ECircuit as ECircuit
 import qualified Data.HashMap                        as HashMap
+import qualified Data.Set                            as Set
+import qualified Data.Map                            as Map
+import qualified Funsat.Circuit                      as Circuit
+import qualified Funsat.ECircuit                     as ECircuit
 import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
-import qualified Narradar.Types as Narradar
-import qualified Prelude as Prelude
+import qualified Narradar.Types                      as Narradar
+import qualified Prelude                             as Prelude
 
-import Funsat.ECircuit ( Circuit(..)
-                       , ECircuit(..)
-                       , NatCircuit(..)
-                       , ExistCircuit(..)
-                       , BIEnv)
+import           Funsat.ECircuit                     (Circuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
-import Narradar.Constraints.SAT.RPOCircuit ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), oneExist, termGt_, termGe_, termEq_)
+import           Narradar.Constraints.SAT.RPOCircuit (RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), oneExist, termGt_, termGe_, termEq_)
 
 deriving instance Eq  ExpY
 deriving instance Ord ExpY

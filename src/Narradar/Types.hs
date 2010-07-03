@@ -32,64 +32,64 @@ module Narradar.Types ( module Narradar.Framework
                       , AF_, simpleHeu, bestHeu, innermost
                       ) where
 
-import Control.Applicative hiding (Alternative(..), many, optional)
-import Control.Monad.Error (Error(..))
-import Control.Monad (liftM, MonadPlus(..), (>=>))
-import Data.Bifunctor
-import Data.ByteString.Char8 (ByteString, unpack)
-import Data.Graph (Graph, Vertex)
-import Data.List (find, groupBy, maximumBy, sort, partition)
-import Data.Foldable (Foldable(..))
-import Data.Maybe
-import Data.Monoid
-import Data.Set (Set)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import Data.Traversable as T
-import Lattice (Lattice)
-import Text.ParserCombinators.Parsec
-import qualified TRSParser as TRS
-import qualified TRSTypes  as TRS
-import TRSTypes hiding (Id, Rule, Term, TermF, Narrowing, Other, SimpleRuleF(..))
-import Prelude as P hiding (mapM, pi, sum)
-
-
-import MuTerm.Framework.DotRep
-import MuTerm.Framework.Strategy
-import MuTerm.Framework.Output
-
-import Narradar.Constraints.Unify
-import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
-import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types.DPIdentifiers         hiding (ArityId(..), StringId)
-import Narradar.Types.PrologIdentifiers
-import Narradar.Types.Labellings
-import Narradar.Types.Goal
-import Narradar.Types.Problem
-import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Problem.Narrowing     hiding (baseProblem)
-import Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, baseFramework)
-import Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
-import Narradar.Types.Problem.Prolog        hiding (goals)
-import Narradar.Types.Problem.Relative      hiding (baseProblem, baseFramework)
-import Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseFramework, goals)
-import Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseFramework, pi_PType, heuristic)
-import Narradar.Types.TRS
-import Narradar.Types.Term
-import Narradar.Types.Var
-import Narradar.Utils
-import Narradar.Framework
-import Narradar.Framework.Ppr as Ppr
-
-import qualified Language.Prolog.Syntax as Prolog hiding (ident)
-import qualified Language.Prolog.Parser as Prolog hiding (term)
+import           Control.Applicative                  hiding (Alternative(..), many, optional)
+import           Control.Monad.Error                  (Error(..))
+import           Control.Monad                        (liftM, MonadPlus(..), (>=>))
+import           Data.Bifunctor
+import           Data.ByteString.Char8                (ByteString, unpack)
+import           Data.Graph                           (Graph, Vertex)
+import           Data.List                            (find, groupBy, maximumBy, sort, partition)
+import           Data.Foldable                        (Foldable(..))
 import           Data.Hashable
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Set                             (Set)
+import qualified Data.Map                             as Map
+import qualified Data.Set                             as Set
+import           Data.Traversable                     as T
+import           Lattice                              (Lattice)
+import           Text.ParserCombinators.Parsec
+import qualified TRSParser                            as TRS
+import qualified TRSTypes                             as TRS
+import           TRSTypes                             hiding (Id, Rule, Term, TermF, Narrowing, Other, SimpleRuleF(..))
+import           Prelude                              as P hiding (mapM, pi, sum)
+
+
+import           MuTerm.Framework.DotRep
+import           MuTerm.Framework.Strategy
+import           MuTerm.Framework.Output
+
+import           Narradar.Constraints.Unify
+import           Narradar.Types.ArgumentFiltering     (AF_, simpleHeu, bestHeu, innermost)
+import qualified Narradar.Types.ArgumentFiltering     as AF
+import           Narradar.Types.DPIdentifiers         hiding (ArityId(..), StringId)
+import           Narradar.Types.PrologIdentifiers
+import           Narradar.Types.Labellings
+import           Narradar.Types.Goal
+import           Narradar.Types.Problem
+import           Narradar.Types.Problem.Rewriting
+import           Narradar.Types.Problem.Narrowing     hiding (baseProblem)
+import           Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, baseFramework)
+import           Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
+import           Narradar.Types.Problem.Prolog        hiding (goals)
+import           Narradar.Types.Problem.Relative      hiding (baseProblem, baseFramework)
+import           Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseFramework, goals)
+import           Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseFramework, pi_PType, heuristic)
+import           Narradar.Types.TRS
+import           Narradar.Types.Term
+import           Narradar.Types.Var
+import           Narradar.Utils
+import           Narradar.Framework
+import           Narradar.Framework.Ppr               as Ppr
+
+import qualified Language.Prolog.Syntax               as Prolog hiding (ident)
+import qualified Language.Prolog.Parser               as Prolog hiding (term)
 
 #ifdef HOOD
 import           Debug.Hood.Observe
 #endif
 
-import Prelude as P hiding (sum, pi, mapM)
+import           Prelude                              as P hiding (sum, pi, mapM)
 
 data Output = OutputXml ByteString | OutputHtml ByteString | OutputTxt ByteString deriving Show
 

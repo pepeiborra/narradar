@@ -15,25 +15,26 @@ module Narradar.Types.Term
                      ,module Data.Term, module Data.Term.Rules, MonadFree(..))
     where
 
-import Control.Arrow (first)
-import Control.DeepSeq
-import Control.Monad.Free
-import Data.Char
-import Data.Bifunctor
-import Data.ByteString.Char8 as BS (ByteString, pack, unpack)
-import Data.Foldable as F (Foldable(..),sum,msum)
-import qualified Data.Set as Set
-import Data.Traversable
-import Data.Term hiding (unify, unifies, applySubst, find)
-import qualified Data.Term.Simple as Simple
-import Data.Term.Rules hiding (unifies', matches')
-import Data.Typeable
-
-import qualified Data.Map as Map
-
-import Narradar.Framework.Ppr
-import Narradar.Types.Var
+import           Control.Arrow          (first)
+import           Control.DeepSeq
+import           Control.Monad.Free
+import           Data.Char
+import           Data.Bifunctor
+import           Data.ByteString.Char8 as BS (ByteString, pack, unpack)
+import           Data.Foldable as F (Foldable(..),sum,msum)
 import           Data.Hashable
+import qualified Data.Set               as Set
+import           Data.Traversable
+import           Data.Term              hiding (unify, unifies, applySubst, find)
+import qualified Data.Term.Simple       as Simple
+import           Data.Term.Rules        hiding (unifies', matches')
+import           Data.Typeable
+
+import qualified Data.Map               as Map
+
+import           Narradar.Framework.Ppr
+import           Narradar.Types.Var
+
 #ifdef HOOD
 import           Debug.Hood.Observe
 #endif

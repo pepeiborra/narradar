@@ -15,32 +15,32 @@
 
 module Narradar.Constraints.SAT.RPOAF.Symbols where
 
-import Control.Applicative
-import qualified Control.Exception as CE
-import Control.Monad
-import Control.DeepSeq
-import Control.Monad.Identity
-import Control.Monad.List
-import qualified Control.RMonad as R
-import qualified Data.Array as A
-import Data.Foldable (Foldable, foldMap, toList)
-import Data.List ((\\), transpose, inits, zip4)
-import Data.Maybe
-import Data.Monoid
-import Data.Typeable
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import Data.Traversable (Traversable)
-import Narradar.Framework.Ppr as Ppr
-
-import Narradar.Constraints.SAT.MonadSAT
-import qualified Narradar.Types as Narradar
-import Narradar.Types hiding (symbol, fresh, constant, Var)
-import Narradar.Utils (fmap2)
-
-import qualified Prelude as P
-import Prelude hiding (catch, lex, not, and, or, any, all, quot, (>))
+import           Control.Applicative
+import qualified Control.Exception                 as CE
+import           Control.Monad
+import           Control.DeepSeq
+import           Control.Monad.Identity
+import           Control.Monad.List
+import qualified Control.RMonad                    as R
+import qualified Data.Array                        as A
+import           Data.Foldable                     (Foldable, foldMap, toList)
+import           Data.List                         ((\\), transpose, inits, zip4)
+import           Data.Maybe
+import           Data.Monoid
 import           Data.Hashable
+import           Data.Typeable
+import qualified Data.Map                          as Map
+import qualified Data.Set                          as Set
+import           Data.Traversable                  (Traversable)
+import           Narradar.Framework.Ppr            as Ppr
+
+import           Narradar.Constraints.SAT.MonadSAT
+import qualified Narradar.Types                    as Narradar
+import           Narradar.Types                    hiding (symbol, fresh, constant, Var)
+import           Narradar.Utils                    (fmap2)
+
+import qualified Prelude                           as P
+import           Prelude                           hiding (catch, lex, not, and, or, any, all, quot, (>))
 
 -- ------------------------------------
 -- Symbol classes for AF + Usable rules

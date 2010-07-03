@@ -27,24 +27,22 @@ module Narradar.Constraints.SAT.MonadSAT
     , HasStatus(..), useMul, lexPerm
     ) where
 
-import Control.Arrow (first,second)
-import Data.NarradarTrie (HasTrie, (:->:))
-import Data.List (foldl')
-import Funsat.Circuit (BEnv)
-import Funsat.Types (Clause,Solution(..))
-import Prelude hiding (and, not, or, any, all, lex, (>))
-
---import Narradar.Types ((:->))
-import Narradar.Utils
-import Narradar.Framework.Ppr as Ppr
-import Narradar.Constraints.RPO (Status(..), mkStatus)
-import Narradar.Constraints.SAT.RPOCircuit hiding (and,or, nat)
-
-import qualified Funsat.ECircuit as ECircuit
-import qualified Funsat.Types as Funsat
+import           Control.Arrow                       (first,second)
 import           Data.Hashable
+import           Data.List                           (foldl')
+import           Funsat.Circuit                      (BEnv)
+import           Funsat.Types                        (Clause,Solution(..))
+import           Prelude                             hiding (and, not, or, any, all, lex, (>))
+
+import           Narradar.Utils
+import           Narradar.Framework.Ppr              as Ppr
+import           Narradar.Constraints.RPO            (Status(..), mkStatus)
+import           Narradar.Constraints.SAT.RPOCircuit hiding (and,or, nat)
+
+import qualified Funsat.ECircuit                     as ECircuit
+import qualified Funsat.Types                        as Funsat
 import qualified Narradar.Constraints.SAT.RPOCircuit as Funsat
-import qualified Prelude as P
+import qualified Prelude                             as P
 
 -- --------
 -- MonadSAT

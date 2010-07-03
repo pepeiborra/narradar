@@ -11,19 +11,19 @@
 
 module Narradar.Types.PrologIdentifiers where
 
-import Control.Applicative
-import Control.Arrow (first)
-import Control.DeepSeq
-import Data.AlaCarte (Expr)
-import Data.Foldable(Foldable(..), toList)
-import Data.Traversable as T (Traversable(..), mapM)
-import Data.Maybe
-import Data.Monoid
-import Data.Typeable
-
-import Narradar.Types.DPIdentifiers
-import Narradar.Framework.Ppr
+import           Control.Applicative
+import           Control.Arrow                (first)
+import           Control.DeepSeq
+import           Data.AlaCarte                (Expr)
+import           Data.Foldable(Foldable       (..), toList)
 import           Data.Hashable
+import           Data.Traversable        as T (Traversable(..), mapM)
+import           Data.Maybe
+import           Data.Monoid
+import           Data.Typeable
+
+import           Narradar.Types.DPIdentifiers
+import           Narradar.Framework.Ppr
 
 -- -------------------
 -- Prolog Identifiers
