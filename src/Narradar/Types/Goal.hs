@@ -43,8 +43,12 @@ parseGoal = parse (TRSParser.whiteSpace >> many (goalP <* TRSParser.whiteSpace))
 mkGoalAF (Goal f mm) = AF.singleton f [i | (G,i) <- zip mm [1..]]
 instance Pretty Mode where pPrint G = text "b"; pPrint V = text "f"
 
-instance (Pretty id, Pretty a) => Pretty (GoalF id a) where pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ modes)
-instance Pretty a => Pretty (GoalF String a) where pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ modes)
+instance (Pretty id, Pretty a) => Pretty (GoalF id a) where
+    pPrint (Goal id [])    = pPrint id
+    pPrint (Goal id modes) = pPrint id <> parens(sep$ punctuate comma $ modes)
+instance Pretty a => Pretty (GoalF String a) where
+    pPrint (Goal id [])    = text id
+    pPrint (Goal id modes) = text id <> parens(sep$ punctuate comma $ modes)
 
 
 pPrintGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
