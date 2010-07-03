@@ -70,8 +70,8 @@ instance Error ParseError
 prologParser = do
   txt    <- getInput
   goals  <- eitherM $ mapM parsePrologGoal $ catMaybes $ map f (lines txt)
-  clauses<- Prolog.whiteSpace *> many Prolog.clause <* eof
-  return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds (concat clauses)))
+  clauses<- liftM catRights Prolog.program
+  return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds clauses))
   where
     f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
     f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
