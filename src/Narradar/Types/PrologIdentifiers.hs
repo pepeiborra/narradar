@@ -18,19 +18,25 @@ import Data.AlaCarte (Expr)
 import Data.Foldable(Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Maybe
-import Data.NarradarTrie (HasTrie, (:->:) )
-import qualified Data.NarradarTrie as Trie
 import Data.Monoid
 import Data.Typeable
 
 import Narradar.Types.DPIdentifiers
 import Narradar.Framework.Ppr
+import           Data.Hashable
 
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
 data PrologId a = InId a | OutId a | UId Int | FunctorId a
                   deriving (Eq,Ord,Typeable, Functor, Foldable, Traversable)
+
+
+instance Hashable a => Hashable (PrologId a) where
+  hash (InId a)  = 1 `combine` hash a
+  hash (OutId a) = 2 `combine` hash a
+  hash (UId i)   = 3 `combine` i
+  hash (FunctorId a) = 4 `combine` hash a
 
 class Ord (WithoutPrologId id) => RemovePrologId id where
   type WithoutPrologId id :: *
@@ -113,22 +119,3 @@ instance NFData a => NFData (PrologId a) where
   rnf (OutId a) = rnf a
   rnf (UId   i) = rnf i
   rnf (FunctorId f) = rnf f
-
-instance HasTrie a => HasTrie (PrologId a) where
-  data PrologId a :->: x = PrologIdTrie (a :->: x)
-                                        (a :->: x)
-                                        (Int :->: x)
-                                        (a :->: x)
-  empty = PrologIdTrie Trie.empty Trie.empty Trie.empty Trie.empty
-  lookup (InId  k) (PrologIdTrie i o u f) = Trie.lookup k i
-  lookup (OutId k) (PrologIdTrie i o u f) = Trie.lookup k o
-  lookup (UId   k) (PrologIdTrie i o u f) = Trie.lookup k u
-  lookup (FunctorId k) (PrologIdTrie i o u f) = Trie.lookup k f
-  insert (InId  k) v (PrologIdTrie i o u f) = PrologIdTrie (Trie.insert k v i) o u f
-  insert (OutId k) v (PrologIdTrie i o u f) = PrologIdTrie i (Trie.insert k v o) u f
-  insert (UId   k) v (PrologIdTrie i o u f) = PrologIdTrie i o (Trie.insert k v u) f
-  insert (FunctorId k) v (PrologIdTrie i o u f) = PrologIdTrie i o u (Trie.insert k v f)
-  toList (PrologIdTrie i o u f) = map (first InId)      (Trie.toList i) ++
-                                  map (first OutId)     (Trie.toList o) ++
-                                  map (first UId)       (Trie.toList u) ++
-                                  map (first FunctorId) (Trie.toList f)

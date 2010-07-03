@@ -1,7 +1,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE CPP #-}
 
 module Narradar.Types.Var where
 
+import Data.Hashable
 import Data.Term (Rename(..))
 import Data.Term.Rules
 import Data.Set as Set
@@ -18,6 +20,8 @@ instance Ord Var where compare (Var _ i) (Var _ j) = compare i j
 instance Enum Var where
     fromEnum (Var _ i) = i
     toEnum = Var Nothing
+
+instance Hashable Var where hash (Var _ i) = i
 
 var :: Monad m => Int -> m Var
 var  = return . Var Nothing

@@ -34,7 +34,7 @@ import Data.Foldable (Foldable, foldMap, toList)
 import Data.List ((\\), find, transpose, inits, tails, zip4)
 import Data.Maybe
 import Data.Monoid
-import Data.NarradarTrie (HasTrie)
+import Data.Hashable
 import Data.Traversable (traverse)
 import Data.Typeable
 import qualified Data.Map as Map
@@ -126,7 +126,7 @@ rpoAF_IGDP :: (Ord id
               ,HasPrecedence Var sid
               ,HasStatus Var sid
               ,HasFiltering Var sid
-              ,HasTrie sid
+              ,Hashable sid
               ,Decode sid (SymbolRes id) Var
               ,MonadSAT repr Var m
               ,RPOExtCircuit repr sid Narradar.Var
@@ -253,7 +253,7 @@ runRPOAF allowCol sig f = do
 -- ----------------------
 
 instance ( RPOCircuit repr (RPOSsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
-         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar, Ord a, Pretty a) =>
+         ,Ord tvar, Pretty tvar, Show tvar, Hashable tvar, Ord a, Pretty a) =>
     RPOExtCircuit repr (RPOSsymbol v a) tvar where
      exEq s t ss tt =
        and [useMul s, useMul t, muleq s t ss tt]
@@ -276,26 +276,26 @@ instance ( RPOCircuit repr (RPOSsymbol v a) tvar, AssertCircuit repr, ExistCircu
        and [not$ useMul s, not$ useMul t, lexpge_exist s t ss tt]
 -}
 instance (RPOCircuit repr (LPOSsymbol v a) tvar, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr, Ord a, Pretty a
-         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+         ,Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (LPOSsymbol v a) tvar where
   exEq s t = lexpeq s t
   exGt s t = lexpgt_existA s t
 --  exGe = lexpge_exist
 
-instance (RPOCircuit repr (LPOsymbol v a) tvar, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr, AssertCircuit repr
-         ,Ord a, Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+instance (RPOCircuit repr (LPOsymbol v a) tvar, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
+         ,Ord a, Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (LPOsymbol v a) tvar where
   exEq s t = lexeq_existA s t
   exGt s t = lexgt_existA s t
 
 instance (RPOCircuit repr (MPOsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
-         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+         ,Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (MPOsymbol v a) tvar where
   exEq s t = muleq s t
   exGt s t = mulgt s t
 
 instance (RPOCircuit repr (RPOsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
-         ,Ord tvar, Pretty tvar, Show tvar, HasTrie tvar) =>
+         ,Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (RPOsymbol v a) tvar where
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]

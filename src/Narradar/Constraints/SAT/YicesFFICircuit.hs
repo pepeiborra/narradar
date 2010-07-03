@@ -39,7 +39,8 @@ import Data.List( nub, foldl', sortBy, (\\))
 import Data.Bimap( Bimap )
 import Data.Map( Map )
 import Data.Maybe( fromJust, catMaybes )
-import Data.NarradarTrie (HasTrie, (:->:) )
+import Data.Hashable
+--import Data.NarradarTrie (HasTrie, (:->:) )
 import Data.Monoid
 import Data.Set( Set )
 import Data.Traversable (Traversable, traverse)
@@ -59,12 +60,13 @@ import qualified Control.Exception as CE (assert, throw, catch, evaluate)
 import qualified Data.Bimap as Bimap
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.NarradarTrie as Trie
+--import qualified Data.NarradarTrie as Trie
 import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
 import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
 import qualified Narradar.Types.Var as Narradar
 import qualified Prelude as Prelude
+import qualified Data.HashMap as Trie
 
 import Funsat.ECircuit ( Circuit(..)
                        , ECircuit(..)
@@ -77,6 +79,8 @@ import Narradar.Constraints.SAT.RPOCircuit ( RPOCircuit(..)
                                            , AssertCircuit(..)
                                            , OneCircuit(..)
                                            , oneExist)
+
+type k :->: v = Trie.HashMap k v
 
 newtype YicesSource id var = YicesSource { unYicesSource :: RWST Context () (YMaps id var) IO Expr}
 
@@ -217,7 +221,7 @@ instance AssertCircuit (YicesSource id) where
       liftIO $ Yices.assert ctx ass
       unYicesSource c
 
-instance (HasTrie id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id Narradar.Var) =>
+instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id Narradar.Var) =>
     RPOCircuit (YicesSource id) id Narradar.Var where
  termGt s t = YicesSource $ do
       env <- gets termGtMap

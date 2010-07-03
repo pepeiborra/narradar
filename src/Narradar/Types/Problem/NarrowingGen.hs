@@ -20,8 +20,6 @@ import Control.Monad.Free
 import Data.Char
 import Data.Foldable (Foldable(..), toList)
 import Data.List (nub)
-import Data.NarradarTrie (HasTrie, (:->:))
-import qualified Data.NarradarTrie as Trie
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Maybe
 import Data.Monoid
@@ -46,6 +44,7 @@ import Narradar.Framework.Ppr
 import Narradar.Utils
 
 import Prelude hiding (pi)
+import           Data.Hashable
 
 -- -----------------------
 -- Terms with Gen and Goal
@@ -63,17 +62,10 @@ instance Pretty (GenId String) where
   pPrint GoalId = text "GOAL"
   pPrint (AnId id) = text id
 
-instance HasTrie a => HasTrie (GenId a) where
-  data GenId a :->: x = GenIdTrie (a :->: x) (Maybe x) (Maybe x)
-  empty = GenIdTrie Trie.empty Nothing Nothing
-  lookup (AnId id) (GenIdTrie t _ _) = Trie.lookup id t
-  lookup GenId  (GenIdTrie  _ g _) = g
-  lookup GoalId (GenIdTrie _ _ g) = g
-  insert (AnId id) v (GenIdTrie gt ge go) = GenIdTrie (Trie.insert id v gt) ge go
-  insert GenId  v (GenIdTrie gt ge go) = GenIdTrie gt (Just v) go
-  insert GoalId v (GenIdTrie gt ge go) = GenIdTrie gt ge (Just v)
-  toList (GenIdTrie gt ge go) = catMaybes [fmap ((,) GenId) ge,fmap ((,) GoalId) go] ++
-                                map (first AnId) (Trie.toList gt)
+instance Hashable a => Hashable (GenId a) where
+  hash GenId  = 1
+  hash GoalId = 2
+  hash (AnId id) = combine 3 (hash id)
 
 instance NFData a => NFData (GenId a) where
   rnf GenId = ()

@@ -27,11 +27,9 @@ import Data.Foldable (Foldable, foldMap, toList)
 import Data.List ((\\), transpose, inits, zip4)
 import Data.Maybe
 import Data.Monoid
-import Data.NarradarTrie (HasTrie, (:->:))
 import Data.Typeable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.NarradarTrie as Trie
 import Data.Traversable (Traversable)
 import Narradar.Framework.Ppr as Ppr
 
@@ -42,6 +40,7 @@ import Narradar.Utils (fmap2)
 
 import qualified Prelude as P
 import Prelude hiding (catch, lex, not, and, or, any, all, quot, (>))
+import           Data.Hashable
 
 -- ------------------------------------
 -- Symbol classes for AF + Usable rules
@@ -100,6 +99,8 @@ instance Functor (RPOSsymbol v) where
                                decodeSymbol = fmap2 f decodeSymbol, ..}
 instance Foldable (RPOSsymbol v) where foldMap f Symbol{..} = f theSymbol
 
+instance Hashable a => Hashable (RPOSsymbol v a) where hash = hash . theSymbol
+
 instance DPSymbol a => DPSymbol (RPOSsymbol v a) where
    markDPSymbol   = fmap markDPSymbol
    unmarkDPSymbol = fmap unmarkDPSymbol
@@ -119,13 +120,6 @@ instance HasFiltering v (RPOSsymbol v a) where
     filtering_vv = encodeAFpos
 
 instance Decode (RPOSsymbol v a) (SymbolRes a) v where decode = decodeSymbol
-
-instance HasTrie a => HasTrie (RPOSsymbol v a) where
-  newtype RPOSsymbol v a :->: x = RPOSsymbolTrie (a :->: (RPOSsymbol v a, x))
-  empty = RPOSsymbolTrie Trie.empty
-  lookup k (RPOSsymbolTrie m)   = fmap snd $ Trie.lookup (theSymbol k) m
-  insert k v (RPOSsymbolTrie m) = RPOSsymbolTrie $ Trie.insert (theSymbol k) (k,v) m
-  toList (RPOSsymbolTrie m)     = map snd $ Trie.toList m
 
 
 type SymbolFactory s = forall id symb m repr . (Show id, Pretty id, DPSymbol id, MonadSAT repr Var m ) => (id, Int, Bool) -> m (s Var id)
@@ -175,7 +169,7 @@ rpos (x, ar, defined) = do
              , encodeUseMset= mset
              , decodeSymbol = mkSymbolDecoder x n_b usable_b list_b pos_bb perm_bb mset}
 
-mkSymbolDecoder :: (Decode v Bool v, Ord v, HasTrie v, Show v, Show id
+mkSymbolDecoder :: (Decode v Bool v, Ord v, Hashable v, Show v, Show id
                    )=> id -> Natural v -> v -> v -> [v] -> [[v]] -> v -> EvalM v (SymbolRes id)
 mkSymbolDecoder id n_b usable_b list_b pos_bb perm_bb mset = do
                  n          <- decode n_b
@@ -202,21 +196,11 @@ mkSymbolDecoder id n_b usable_b list_b pos_bb perm_bb mset = do
 -- LPO with status
 
 newtype LPOSsymbol v a = LPOS{unLPOS::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity
+    deriving (Eq, Ord, Show, Hashable, HasArity
              ,HasPrecedence v, HasStatus v, HasFiltering v
              ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (LPOSsymbol v a) (SymbolRes a) v where decode = decode . unLPOS
-
-instance HasTrie a => HasTrie (LPOSsymbol v a) where
-  newtype LPOSsymbol v a :->: x = LPOSsymbolTrie (a :->: (LPOSsymbol v a, x))
-  empty = LPOSsymbolTrie Trie.empty
-  lookup = lookupLPOS
-  insert k v (LPOSsymbolTrie m) = LPOSsymbolTrie $ Trie.insert (theSymbol $ unLPOS k) (k,v) m
-  toList (LPOSsymbolTrie m)     = map snd $ Trie.toList m
-
-{-# INLINE lookupLPOS #-}
-lookupLPOS k (LPOSsymbolTrie m) = fmap snd $ Trie.lookup (theSymbol $ unLPOS k) m
 
 --lpo :: SymbolFactory LPOsymbol
 lpos x = do
@@ -230,18 +214,11 @@ instance Pretty a => Pretty (LPOSsymbol v a) where
 -- LPO
 
 newtype LPOsymbol v a = LPO{unLPO::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity
+    deriving (Eq, Ord, Show, HasArity, Hashable
              ,HasPrecedence v, HasFiltering v
              ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (LPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unLPO
-
-instance HasTrie a => HasTrie (LPOsymbol v a) where
-  newtype LPOsymbol v a :->: x = LPOsymbolTrie (a :->: (LPOsymbol v a, x))
-  empty = LPOsymbolTrie Trie.empty
-  lookup k (LPOsymbolTrie m)   = fmap snd $ Trie.lookup (theSymbol $ unLPO k) m
-  insert k v (LPOsymbolTrie m) = LPOsymbolTrie $ Trie.insert (theSymbol $ unLPO k) (k,v) m
-  toList (LPOsymbolTrie m)     = map snd $ Trie.toList m
 
 removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
 removePerm symbolRes = symbolRes
@@ -260,7 +237,7 @@ instance (Ord v, Show v) => HasStatus v (LPOsymbol v a) where
 
 -- MPO
 newtype MPOsymbol v a = MPO{unMPO::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity
+    deriving (Eq, Ord, Show, HasArity, Hashable
              ,HasPrecedence v, HasStatus v, HasFiltering v
              ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
@@ -268,13 +245,6 @@ instance Decode (MPOsymbol v a) (SymbolRes a) v where decode = decode . unMPO
 
 instance Pretty a => Pretty (MPOsymbol v a) where
     pPrint = pPrint . unMPO
-
-instance HasTrie a => HasTrie (MPOsymbol v a) where
-  newtype MPOsymbol v a :->: x = MPOsymbolTrie (a :->: (MPOsymbol v a, x))
-  empty = MPOsymbolTrie Trie.empty
-  lookup k (MPOsymbolTrie m)   = fmap snd $ Trie.lookup (theSymbol $ unMPO k) m
-  insert k v (MPOsymbolTrie m) = MPOsymbolTrie $ Trie.insert (theSymbol $ unMPO k) (k,v) m
-  toList (MPOsymbolTrie m)     = map snd $ Trie.toList m
 
 --mpo :: SymbolFactory MPOsymbol
 mpo x = do
@@ -284,20 +254,13 @@ mpo x = do
 
 -- RPO
 newtype RPOsymbol v a = RPO{unRPO::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity
+    deriving (Eq, Ord, Show, HasArity, Hashable
              ,HasPrecedence v, HasStatus v, HasFiltering v
              ,UsableSymbol v, DPSymbol, Functor, Foldable)
 
 instance Decode (RPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unRPO
 
 instance Pretty a => Pretty (RPOsymbol v a) where pPrint = pPrint . unRPO
-
-instance HasTrie a => HasTrie (RPOsymbol v a) where
-  newtype RPOsymbol v a :->: x = RPOsymbolTrie (a :->: (RPOsymbol v a, x))
-  empty = RPOsymbolTrie Trie.empty
-  lookup k (RPOsymbolTrie m)   = fmap snd $ Trie.lookup (theSymbol $ unRPO k) m
-  insert k v (RPOsymbolTrie m) = RPOsymbolTrie $ Trie.insert (theSymbol $ unRPO k) (k,v) m
-  toList (RPOsymbolTrie m)     = map snd $ Trie.toList m
 
 --rpo :: SymbolFactory RPOsymbol
 rpo x = do

@@ -6,12 +6,13 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE CPP #-}
 
-module LOPSTR09 where
+
+--module LOPSTR09 where
 
 import Control.DeepSeq
 import Control.Monad
-import Control.Monad.Stream
 import Control.Parallel.Strategies
 import Data.Maybe
 import qualified Language.Prolog.Syntax as Prolog
@@ -24,6 +25,15 @@ import Narradar.Processor.LOPSTR09
 import Narradar.Framework.GraphViz
 import Lattice
 import Narradar.Utils (pprTrace)
+
+#ifndef WEB
+import Narradar.Interface.Cli
+main = narradarMain listToMaybe
+#else
+import Narradar.Interface.Cgi
+main = narradarCgi listToMaybe
+#endif
+
 
 
 -- Missing dispatcher cases
@@ -41,7 +51,7 @@ instance Dispatch PrologProblem where
 instance () => Dispatch (NProblem Rewriting Id) where
   dispatch = ev >=> (inn .|. (dg >=> rpoPlus gt2 >=> final))
 
-instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProblem IRewriting id) where
+instance (id ~ DPIdentifier a, Pretty id, Hashable a, Ord a) => Dispatch (NProblem IRewriting id) where
   dispatch = ev >=> sc >=> dg >=> rpoPlus gt1 >=> final
 
 -- Narrowing
@@ -52,18 +62,19 @@ instance Dispatch (NProblem CNarrowing Id) where
   dispatch = ev >=> dg >=> rpoPlus gt2 >=> final
 
 {--- Narrowing Goal
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (NarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (CNarrowingGoal (DPIdentifier id)) (DPIdentifier id)) where
   dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
 -}
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
 
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, HasTrie id) =>
+instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, Hashable id) =>
     Dispatch (NProblem (InitialGoal (TermF (DPIdentifier id)) Narrowing) (DPIdentifier id)) where
-  dispatch = apply NarrowingGoalToRelativeRewriting >=> dispatch
+  dispatch = (return .|. dg) >=>
+             apply NarrowingGoalToRelativeRewriting >=> dispatch
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) IRewriting) Id) where
   dispatch = ev >=> dg >=> rpoPlus gt1 >=> final
@@ -73,16 +84,16 @@ instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
                       (dg >=> rpoPlus gt2 >=> final)
                     )
 
-instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) INarrowingGen) (GId id)) where
+instance (Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) INarrowingGen) (GId id)) where
   dispatch = dg >=> rpoPlus gt2 >=> final
 
-instance (Pretty (GenId id), Ord id, HasTrie id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
+instance (Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
   dispatch = (inn >=> dispatch) .|.
              (dg  >=> rpoPlus gt2 >=> final)
 
 -- Relative
 instance (Dispatch (NProblem base id)
-         ,Pretty id, Ord id, HasTrie id
+         ,Pretty id, Ord id, Hashable id
          ,Pretty (TermN id)
          ,Pretty base, IsDPProblem base, MkProblem base (NTRS id), HasMinimality base
          ,PprTPDB (NProblem base id), ProblemColor (NProblem base id)
@@ -96,7 +107,7 @@ ev = apply ExtraVarsP
 inn = apply ToInnermost >=> dispatch
 
 rpoPlus transform
-   = repeatSolver 2 ((rpos .|. transform) >=> dg)
+   = repeatSolver 10 ((lpo .|. rpos .|. transform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTFFI)
     mpo  = apply (RPOProc MPOAF  Needed SMTFFI)

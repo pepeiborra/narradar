@@ -28,7 +28,6 @@ import Control.Monad.State
 import Data.Array.Unboxed
 import Data.List (unfoldr)
 import Data.Monoid
-import Data.NarradarTrie (HasTrie, (:->:))
 import Data.Term.Rules (getAllSymbols)
 import Funsat.Circuit (BEnv, and,or,not)
 import Funsat.Types (Clause,Solution(..))
@@ -65,13 +64,13 @@ import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
 
 import Prelude hiding (and, not, or, any, all, lex, (>))
 import qualified Prelude as P
+import           Data.Hashable
 
 -- ----------------------------
 -- SMT MonadSAT implementation
 -- ----------------------------
 
 -- *** serialized
-
 
 data StY id = StY { poolY :: [Var]
                   , cmdY  :: [CmdY]
@@ -80,14 +79,14 @@ data StY id = StY { poolY :: [Var]
 
 newtype SMTY id a = SMTY {unSMTY :: State (StY id) a} deriving (Functor, Monad, MonadState (StY id))
 
-smtSerial :: (HasTrie id, Ord id, Show id, Pretty id) => SMTY id (EvalM Var a) -> IO (Maybe a)
+smtSerial :: (Hashable id, Ord id, Show id, Pretty id) => SMTY id (EvalM Var a) -> IO (Maybe a)
 smtSerial (SMTY my) = do
   let (me, StY{..}) = runState my (StY [V 1000 ..] [] Serial.emptyYMaps)
---  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
+--  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
   bienv <- solveDeclarations Nothing (generateDeclarations stY ++ cmdY)
 --  debug (unlines $ map show $ Set.toList symbols)
---  debug (show . vcat . map (uncurry printGt.second fst) . Trie.toList . termGtMap $ stY)
---  debug (show . vcat . map (uncurry printEq.second fst) . Trie.toList . termEqMap $ stY)
+--  debug (show . vcat . map (uncurry printGt.second fst) . HashMap.toList . termGtMap $ stY)
+--  debug (show . vcat . map (uncurry printEq.second fst) . HashMap.toList . termEqMap $ stY)
   return ( (`runEvalM` me) <$> bienv )
  where
   printEq (t,u) v = v <> colon <+> t <+> text "=" <+> u
@@ -115,7 +114,7 @@ data StY' id = StY' { poolY' :: ![Var]
 newtype SMTY' id a = SMTY' {unSMTY' :: RWST Context () (StY' id) IO a}
     deriving (Functor, Monad, MonadIO, MonadReader Context, MonadState (StY' id))
 
-smtFFI :: (HasTrie id, Ord id, Show id, Pretty id) => SMTY' id (EvalM Var a) -> IO (Maybe a)
+smtFFI :: (Hashable id, Ord id, Show id, Pretty id) => SMTY' id (EvalM Var a) -> IO (Maybe a)
 smtFFI (SMTY' my) = do
   ctx <- mkContext
 #ifdef DEBUG
@@ -124,14 +123,14 @@ smtFFI (SMTY' my) = do
 #endif
   (me, StY'{..}, _) <- runRWST my ctx (StY' [V 1000 ..] FFI.emptyYMaps)
 --  let symbols = getAllSymbols $ mconcat
---                [ Set.fromList [t, u] | ((t,u),_) <- Trie.toList (termGtMap stY) ++ Trie.toList (termEqMap stY)]
+--                [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
   echo' "Calling Yices..."
 #ifdef DEBUG
 #endif
   (ti, bienv) <- timeItT(computeBIEnv ctx stY')
 --  debug (unlines $ map show $ Set.toList symbols)
---  debug (show . vcat . map (uncurry printGt.second fst) . Trie.toList . termGtMap $ stY)
---  debug (show . vcat . map (uncurry printEq.second fst) . Trie.toList . termEqMap $ stY)
+--  debug (show . vcat . map (uncurry printGt.second fst) . HashMap.toList . termGtMap $ stY)
+--  debug (show . vcat . map (uncurry printEq.second fst) . HashMap.toList . termEqMap $ stY)
   echo ("done (" ++ show ti ++ " seconds)")
 #ifdef DEBUG
 --  removeFile "yices.log"
@@ -170,7 +169,7 @@ data St tid tvar v = St { pool     :: [v]
 
 newtype SAT tid tvar v a = SAT {unSAT :: State (St tid tvar v) a} deriving (Functor, Monad, MonadState (St tid tvar v))
 
-instance (Ord v, HasTrie v, Show v) => MonadSAT (Shared tid tvar) v (SAT tid tvar v) where
+instance (Ord v, Hashable v, Show v) => MonadSAT (Shared tid tvar) v (SAT tid tvar v) where
   boolean = do {st <- get; put st{pool=tail (pool st)}; return (head $ pool st)}
   natural = do {b <- boolean; return (Natural b)}
   assert   [] = return ()
@@ -185,7 +184,7 @@ st0 = St [minBound..] true []
 data YicesOpts = YicesOpts {maxWeight :: Int, timeout :: Maybe Int}
 defaultYicesOpts = YicesOpts 0 Nothing
 
-satYices :: (HasTrie id, Ord id, Show id) => YicesOpts -> SAT id Narradar.Var Var (EvalM Var a) -> IO (Maybe a)
+satYices :: (Hashable id, Ord id, Show id) => YicesOpts -> SAT id Narradar.Var Var (EvalM Var a) -> IO (Maybe a)
 satYices = satYices' [toEnum 1 ..]
 satYices' pool0 yo (SAT m) = do
   let (val, St _ circuit weighted) = runState m (St pool0 true [])
@@ -201,7 +200,7 @@ satYicesSimp' pool0 yo (SAT m) = do
   mb_sol <- solveYices yo (eproblemCnf circuitProb) weighted val
   return $ do
     sol <- mb_sol
-    let bienv = reconstructNatsFromBits (Trie.toList natbits) $ projectECircuitSolution sol circuitProb
+    let bienv = reconstructNatsFromBits (HashMap.toList natbits) $ projectECircuitSolution sol circuitProb
     return $ runEvalM bienv val
 
 solveYices YicesOpts{..} cnf weighted val = do
@@ -236,21 +235,21 @@ solveYices YicesOpts{..} cnf weighted val = do
 
 -- *** Funsat solver by simplification to vanilla Circuits
 
-solveFun :: ( HasTrie id, Ord id, Bounded v
-            , Enum v, Show v, Ord v
-            , HasTrie v, HasTrie tv, Show tv) =>
+solveFun :: ( Hashable id, Ord id, Bounded v
+            , Enum v, Show v, Ord v, Hashable v
+            , Ord tv, Hashable tv, Show tv) =>
             SAT id tv v (EvalM v a) -> Maybe a
 solveFun = fmap (uncurry $ flip runEvalM) . runFun
 
-solveFunDirect :: ( HasTrie id, Ord id, Show id
-                  , Bounded v, Enum v, Ord v, Show v
-                  , HasTrie v, HasTrie tv, Show tv) =>
+solveFunDirect :: ( Hashable id, Ord id, Show id
+                  , Bounded v, Enum v, Hashable v, Ord v, Show v
+                  , Hashable tv, Ord tv, Show tv) =>
                   SAT id tv v (EvalM v a) -> Maybe a
 solveFunDirect = fmap (uncurry $ flip runEvalM) . runFunDirect
 
-runFunDirect :: (HasTrie id, Ord id, Show id
+runFunDirect :: (Hashable id, Ord id, Show id
                 ,Bounded v, Enum v, Ord v, Show v
-                ,HasTrie v, HasTrie tv, Show tv) =>
+                ,Hashable v, Hashable tv, Ord tv, Show tv) =>
                 SAT id tv v a -> Maybe (a, BIEnv v)
 runFunDirect (SAT m) = let
     (val, St _ circuit _weighted) = runState m st0
@@ -263,7 +262,7 @@ runFunDirect (SAT m) = let
        Sat{}   -> Just (val, projectRPOCircuitSolution sol circuitProb)
        Unsat{} -> Nothing
 
-runFun :: (HasTrie id, Ord id, Bounded v, Enum v, Ord v, HasTrie v, HasTrie tvar, Show v) =>
+runFun :: (Hashable id, Ord id, Bounded v, Enum v, Ord v, Hashable v, Hashable tvar, Ord tvar, Show v) =>
           SAT id tvar v a -> Maybe (a, BIEnv v)
 runFun (SAT m) = let
     (val, St pool circuit _weighted) = runState m st0
@@ -273,5 +272,5 @@ runFun (SAT m) = let
     (sol,_,_)   = Funsat.solve1 (eproblemCnf circuitProb)
 
   in case sol of
-       Sat{}   -> Just (val, reconstructNatsFromBits (Trie.toList natbits) $ projectECircuitSolution sol circuitProb)
+       Sat{}   -> Just (val, reconstructNatsFromBits (HashMap.toList natbits) $ projectECircuitSolution sol circuitProb)
        Unsat{} -> Nothing

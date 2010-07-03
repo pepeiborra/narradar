@@ -93,7 +93,6 @@ Library
                   GraphSCC, 
                   bimap,
                   bytestring-trie,
-                  triefamily,
                   xhtml, 
                   timeit,
                   filepath, 
@@ -118,7 +117,8 @@ Library
                   term >= 0.1.20100228,
                   TRSParser >= 0.4, 
                   prolog >= 0.1.20100131,
-                  prolog-tools >= 0.1.20100228
+                  prolog-tools >= 0.1.20100228,
+                  hashmap
 
   if flag(aprove)
     build-depends:network, 
@@ -190,7 +190,7 @@ Library
      Narradar.Utils,
      Narradar.Utils.Html,
      Narradar.Utils.Parse,
-     Data.NarradarTrie,
+--     Data.NarradarTrie,
      Control.Monad.Supply,
      Lattice
   other-modules:

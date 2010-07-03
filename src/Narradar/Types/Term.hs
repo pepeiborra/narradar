@@ -22,8 +22,6 @@ import Data.Char
 import Data.Bifunctor
 import Data.ByteString.Char8 as BS (ByteString, pack, unpack)
 import Data.Foldable as F (Foldable(..),sum,msum)
-import Data.NarradarTrie (HasTrie, (:->:))
-import qualified Data.NarradarTrie as Trie
 import qualified Data.Set as Set
 import Data.Traversable
 import Data.Term hiding (unify, unifies, applySubst, find)
@@ -35,6 +33,7 @@ import qualified Data.Map as Map
 
 import Narradar.Framework.Ppr
 import Narradar.Types.Var
+import           Data.Hashable
 #ifdef HOOD
 import           Debug.Hood.Observe
 #endif
@@ -169,60 +168,16 @@ instance Pretty a => Pretty (TermF String a) where
     pPrint (Term n [x,y]) | not (any isAlpha n) = pPrint x <+> text n <+> pPrint y
     pPrint (Term n tt) = text n <> parens (hcat$ punctuate comma $ map pPrint tt)
 -}
--- -------------------
--- Trie instances
--- -------------------
+-- -------
+-- Hashing
+-- -------
+instance (Hashable id, Hashable a) => Hashable (TermF id a) where
+  hash (Term id tt) = Prelude.foldr combine (hash id) (map hash tt)
 
-instance (HasTrie a, HasTrie (f (Free f a))) => HasTrie (Free f a) where
-  data Free f a :->: x = FreeTrie !(a :->: x) !(f (Free f a) :->: x)
-  empty = FreeTrie Trie.empty Trie.empty
-  lookup = lookupFree
-  insert (Pure k) v (FreeTrie pt it) = FreeTrie (Trie.insert k v pt) it
-  insert (Impure k) v (FreeTrie pt it) = FreeTrie pt (Trie.insert k v it)
-  toList (FreeTrie pt it) = map (first Pure)   (Trie.toList pt) ++
-                            map (first Impure) (Trie.toList it)
+instance (Functor f, Hashable a, Hashable (f Int)) => Hashable (Free f a) where
+  hash = foldFree hash hash
 
-{-# INLINE lookupFree #-}
-lookupFree (Pure k) (FreeTrie pt it) = Trie.lookup k pt
-lookupFree (Impure k) (FreeTrie pt it) = Trie.lookup k it
-
-instance (HasTrie id, HasTrie a) => HasTrie (TermF id a) where
-  newtype TermF id a :->: x = TermTrie ((id, [a]) :->: x)
-  empty = TermTrie Trie.empty
-  lookup  = lookupTermF
-  insert (Term id tt) v (TermTrie m) = TermTrie $ Trie.insert (id,tt) v m
-  toList (TermTrie m) = map (first (uncurry Term)) (Trie.toList m)
-
-{-# INLINE lookupTermF #-}
-lookupTermF (Term id tt) (TermTrie m) = Trie.lookup (id,tt) m
-{-
-instance HasTrie id => HasTrie (TermN id) where
-  data TermN id :->: x = TermNTrie !(Var :->: x) !( (id,[TermN id]) :->: x)
-  empty = TermNTrie Trie.empty Trie.empty
-  lookup (Impure(Term id tt)) (TermNTrie vt mt) = Trie.lookup (id,tt) mt
-  lookup (Pure v) (TermNTrie vt _) = Trie.lookup v vt
-  insert (Impure(Term id tt)) v (TermNTrie vt mt) = TermNTrie vt $ Trie.insert (id,tt) v mt
-  insert (Pure v) x (TermNTrie vt mt) = TermNTrie (Trie.insert v x vt) mt
-  toList (TermNTrie vt mt) = map (first (uncurry term)) (Trie.toList mt) ++
-                             map (first return) (Trie.toList vt)
--}
-instance HasTrie a => HasTrie (ArityId a) where
-  newtype ArityId a :->: x = ArityIdTrie ((a,Int) :->: x)
-  empty = ArityIdTrie Trie.empty
-  lookup = lookupArityId
-  insert (ArityId a i) v (ArityIdTrie m) = ArityIdTrie $ Trie.insert (a,i) v m
-  toList (ArityIdTrie m) = map (first (uncurry ArityId)) (Trie.toList m)
-
-{-# INLINE lookupArityId #-}
-lookupArityId (ArityId a i) (ArityIdTrie m) = Trie.lookup (a,i) m
-
-instance HasTrie Var where
-  newtype Var :->: x = VarTrie (Int :->: (Maybe String, x))
-  empty = VarTrie Trie.empty
-  lookup (Var s i) (VarTrie m) = fmap snd $ Trie.lookup i m
-  insert (Var s i) v (VarTrie m) = VarTrie $ Trie.insert i (s,v) m
-  toList (VarTrie m) = [(Var s i, v) | (i, (s,v)) <- Trie.toList m]
-
+instance Hashable a => Hashable (ArityId a) where hash (ArityId id a)  = combine a (hash id)
 
 -- ----------------
 -- NFData instances

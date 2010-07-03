@@ -20,8 +20,7 @@ import Control.Applicative
 import Control.Arrow (first)
 import Control.DeepSeq
 import Data.Foldable (Foldable(..))
-import Data.NarradarTrie (HasTrie, (:->:))
-import qualified Data.NarradarTrie as Trie
+import Data.Hashable
 import Data.Traversable (Traversable(..))
 import Data.Typeable
 import Prelude
@@ -68,15 +67,10 @@ instance NFData a => NFData (DPIdentifier a) where
     rnf (IdDP f)       = rnf f
     rnf AnyIdentifier  = ()
 
-instance HasTrie a => HasTrie (DPIdentifier a) where
-  data DPIdentifier a :->: x = DPIdentifierTrie (a :->: x) (a :->: x)
-  empty = DPIdentifierTrie Trie.empty Trie.empty
-  lookup (IdFunction f) (DPIdentifierTrie dpt ft) = Trie.lookup f ft
-  lookup (IdDP dp) (DPIdentifierTrie dpt ft) = Trie.lookup dp dpt
-  insert (IdFunction f) v (DPIdentifierTrie dpt ft) = DPIdentifierTrie dpt (Trie.insert f v ft)
-  insert (IdDP dp) v (DPIdentifierTrie dpt ft) = DPIdentifierTrie (Trie.insert dp v dpt) ft
-  toList (DPIdentifierTrie ft dpt) = map (first IdDP) (Trie.toList dpt) ++
-                                     map (first IdFunction)   (Trie.toList ft)
+instance Hashable a => Hashable (DPIdentifier a) where
+    hash (IdFunction f) = hash f
+    hash (IdDP f) = combine 1 (hash f)
+
 #ifdef HOOD
 instance Observable id => Observable (DPIdentifier id) where
   observer (IdFunction a) = send "IdFunction" (return IdFunction << a)

@@ -69,13 +69,12 @@ import Control.Monad.Reader
 import Control.Monad.RWS
 import Control.Monad.State.Strict hiding ((>=>), forM_)
 import Data.Bimap( Bimap )
-import Data.BiTrie( (:<->:) )
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Foldable (Foldable, foldMap)
 import Data.List( nub, foldl', sortBy, (\\))
 import Data.Map( Map )
 import Data.Maybe( fromJust )
-import Data.NarradarTrie (HasTrie, (:->:) )
+import Data.Hashable
 import Data.Monoid
 import Data.Set( Set )
 import Data.Traversable (Traversable, traverse, fmapDefault, foldMapDefault)
@@ -100,7 +99,7 @@ import System.Directory (getTemporaryDirectory)
 import System.FilePath
 import System.IO
 
-import qualified Data.BiTrie as BiTrie
+
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Graph.Inductive.Graph as Graph
 import qualified Data.Graph.Inductive.Graph as G
@@ -108,10 +107,13 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Traversable as T
 import qualified Data.Bimap as Bimap
-import qualified Data.NarradarTrie as Trie
 import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
 import qualified Prelude as Prelude
+import qualified Data.HashMap as HashMap
+
+type k :->:  v = HashMap.HashMap k v
+type k :<->: v = Bimap.Bimap k v
 
 class Circuit repr => OneCircuit repr where
     -- | @one bb = length (filter id bb) == 1@
@@ -143,14 +145,14 @@ oneDefault (v:vv) = (v `and` none vv) `or` (not v `and` oneDefault vv)
 
 class NatCircuit repr => RPOCircuit repr tid tvar | repr -> tid tvar where
     termGt, termGe, termEq :: (HasPrecedence v tid, HasFiltering v tid, HasStatus v tid
-                              ,Ord v, Show v, HasTrie v
-                              ,Eq tvar, Pretty tvar, Show tvar, HasTrie tvar, Ord tvar) =>
+                              ,Ord v, Show v, Hashable v
+                              ,Eq tvar, Pretty tvar, Show tvar, Hashable tvar, Ord tvar) =>
                               Term (TermF tid) tvar -> Term (TermF tid) tvar -> repr v
     termGe s t = termGt s t `or` termEq s t
 
 class RPOCircuit repr tid tvar => RPOExtCircuit repr tid tvar where
     exGt, exGe, exEq :: (HasPrecedence v tid, HasFiltering v tid, HasStatus v tid
-                        ,Ord v, HasTrie v, Show v) =>
+                        ,Ord v, Hashable v, Show v) =>
                         tid -> tid -> [Term (TermF tid) tvar] -> [Term (TermF tid) tvar] -> repr v
     exGe id_s id_t ss tt = exGt id_s id_t ss tt `or` exEq id_s id_t ss tt
 
@@ -168,22 +170,22 @@ class HasFiltering  v a | a -> v where listAF_v      :: a -> v
 class HasStatus v id | id -> v   where useMul_v      :: id -> v
                                        lexPerm_vv    :: id -> Maybe [[v]]
 
-precedence :: (NatCircuit repr, HasPrecedence v id, Ord v, HasTrie v, Show v) => id -> repr v
+precedence :: (NatCircuit repr, HasPrecedence v id, Ord v, Hashable v, Show v) => id -> repr v
 precedence = nat . precedence_v
-listAF :: (Circuit repr, HasFiltering v id, Ord v, HasTrie v, Show v) => id -> repr v
+listAF :: (Circuit repr, HasFiltering v id, Ord v, Hashable v, Show v) => id -> repr v
 listAF     = input . listAF_v
 {-# INLINE inAF #-}
-inAF   :: (Circuit repr, HasFiltering v id, Ord v, HasTrie v, Show v) => Int -> id -> repr v
+inAF   :: (Circuit repr, HasFiltering v id, Ord v, Hashable v, Show v) => Int -> id -> repr v
 inAF i     = input . (!! pred i) . filtering_vv
-useMul :: (Circuit repr, HasStatus v id, Ord v, HasTrie v, Show v) => id -> repr v
+useMul :: (Circuit repr, HasStatus v id, Ord v, Hashable v, Show v) => id -> repr v
 useMul     = input . useMul_v
-lexPerm :: (Circuit repr, HasStatus v id, Ord v, HasTrie v, Show v) => id -> Maybe [[repr v]]
+lexPerm :: (Circuit repr, HasStatus v id, Ord v, Hashable v, Show v) => id -> Maybe [[repr v]]
 lexPerm    = (fmap.fmap.fmap) input . lexPerm_vv
 
 termGt_, termEq_, termGe_ ::
-        (HasTrie id, Ord id, HasStatus var id, HasPrecedence var id, HasFiltering var id
-        ,Ord var, HasTrie var, Show var
-        ,Eq tvar, Ord tvar, HasTrie tvar, Show tvar, Pretty tvar 
+        (Hashable id, Ord id, HasStatus var id, HasPrecedence var id, HasFiltering var id
+        ,Ord var, Hashable var, Show var
+        ,Eq tvar, Ord tvar, Hashable tvar, Show tvar, Pretty tvar 
         ,ECircuit repr, RPOExtCircuit repr id tvar) =>
         Term (TermF id) tvar -> Term (TermF id) tvar -> repr var
 
@@ -310,9 +312,9 @@ termEq_ s t
 
 class CastRPOCircuit c cOut tid tvar | c -> tid tvar where
   castRPOCircuit :: ( HasPrecedence v tid, HasFiltering v tid, HasStatus v tid
-                    , Ord v, HasTrie v, Show v
-                    , HasTrie tid, Ord tid
-                    , HasTrie tvar, Ord tvar, Show tvar, Pretty tvar) =>
+                    , Ord v, Hashable v, Show v
+                    , Hashable tid, Ord tid
+                    , Hashable tvar, Ord tvar, Show tvar, Pretty tvar) =>
                     c v -> cOut v
 
 instance CastCircuit Circuit.Tree c => CastRPOCircuit Circuit.Tree c id var where
@@ -330,20 +332,20 @@ data FrozenShared tid tvar var = FrozenShared !CCode !(CMaps tid tvar var) deriv
 frozenShared code maps = FrozenShared code maps
 
 
-instance (HasTrie id, Show id, HasTrie tvar, Show tvar, HasTrie var, Show var) => Show (FrozenShared id tvar var) where
+instance (Hashable id, Show id, Hashable tvar, Show tvar, Hashable var, Show var) => Show (FrozenShared id tvar var) where
   showsPrec p (FrozenShared c maps) = ("FrozenShared " ++) . showsPrec p c . showsPrec p maps{hashCount=[]}
 
 
 -- | Reify a sharing circuit.
-runShared :: (HasTrie id, Ord id, HasTrie tvar) => Shared id tvar var -> FrozenShared id tvar var
+runShared :: (Hashable id, Ord id, Hashable tvar, Ord tvar) => Shared id tvar var -> FrozenShared id tvar var
 runShared = runShared' emptyCMaps
 
-runShared' :: (HasTrie id, Ord id, HasTrie tvar) => CMaps id tvar var -> Shared id tvar var -> FrozenShared id tvar var
+runShared' :: (Hashable id, Ord id, Hashable tvar, Ord tvar) => CMaps id tvar var -> Shared id tvar var -> FrozenShared id tvar var
 runShared' maps = uncurry frozenShared . (`runState` emptyCMaps) . unShared
 
-getChildren :: (Ord v, HasTrie v) => CCode -> CircuitHash :<->: v -> v
+getChildren :: (Ord v, Hashable v) => CCode -> CircuitHash :<->: v -> v
 getChildren code codeMap =
-    case BiTrie.lookup (circuitHash code) codeMap of
+    case Bimap.lookup (circuitHash code) codeMap of
       Nothing -> findError
       Just c  -> c
   where findError = error $ "getChildren: unknown code: " ++ show code
@@ -355,7 +357,7 @@ getChildren' code codeMap =
       Just c  -> c
   where findError = error $ "getChildren: unknown code: " ++ show code
 
-instance (HasTrie id, Ord id, HasTrie tvar, ECircuit c, NatCircuit c, ExistCircuit c) => CastCircuit (Shared id tvar) c where
+instance (Hashable id, Ord id, Hashable tvar, Ord tvar, ECircuit c, NatCircuit c, ExistCircuit c) => CastCircuit (Shared id tvar) c where
     castCircuit = castCircuit . runShared
 
 instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastCircuit (FrozenShared id tvar) c where
@@ -381,7 +383,7 @@ instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastCircuit (FrozenShared
         go3 (a,b,c) = do {a' <- go a; b' <- go b; c' <- go c; return (a',b',c')}
         uncurry3 f (x, y, z) = f x y z
 
-instance (HasTrie id, Ord id, ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit (Shared id var) c id var where
+instance (Hashable id, Ord id, ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit (Shared id var) c id var where
     castRPOCircuit = castCircuit
 
 instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastRPOCircuit (FrozenShared id var) c id var where
@@ -404,12 +406,7 @@ data CCode    = CTrue   { circuitHash :: !CircuitHash }
               | CExist  { circuitHash :: !CircuitHash }
              deriving (Eq, Ord, Show, Read)
 
-instance HasTrie CCode where
-  newtype CCode :->: x = CCodeTrie (CircuitHash :->: (CCode, x))
-  empty = CCodeTrie Trie.empty
-  lookup cc (CCodeTrie t) = fmap snd $ Trie.lookup (circuitHash cc) t
-  insert cc v (CCodeTrie t) = CCodeTrie (Trie.insert (circuitHash cc) (cc,v) t)
-  toList (CCodeTrie t) = map snd $ Trie.toList t
+instance Hashable CCode where hash = circuitHash
 
 -- | Maps used to implement the common-subexpression sharing implementation of
 -- the `Circuit' class.  See `Shared'.
@@ -428,7 +425,7 @@ data CMaps tid tvar v = CMaps
     , onlyifMap :: !(CircuitHash :<->: (CCode, CCode))
     , iffMap    :: !(CircuitHash :<->: (CCode, CCode))
     , iteMap    :: !(CircuitHash :<->: (CCode, CCode, CCode))
-    , natMap    :: !(Bimap CircuitHash v)
+    , natMap    :: !(CircuitHash :<->: v)
     , eqMap     :: !(CircuitHash :<->: (CCode, CCode))
     , ltMap     :: !(CircuitHash :<->: (CCode, CCode))
     , oneMap    :: !(CircuitHash :<->: [CCode])
@@ -437,27 +434,27 @@ data CMaps tid tvar v = CMaps
     , termEqMap :: !((Term (TermF tid) tvar, Term (TermF tid) tvar) :->: CCode)
     }
 
-deriving instance (HasTrie id, Show id, HasTrie var, Show var, HasTrie tvar, Show tvar) => Show (CMaps id tvar var)
-deriving instance (Eq id, HasTrie id, Eq var, HasTrie var, Eq tvar, HasTrie tvar) => Eq (CMaps id tvar var)
+deriving instance (Hashable id, Show id, Hashable var, Show var, Hashable tvar, Show tvar) => Show (CMaps id tvar var)
+deriving instance (Eq id, Hashable id, Eq var, Hashable var, Eq tvar, Hashable tvar) => Eq (CMaps id tvar var)
 
 
 -- | A `CMaps' with an initial `hashCount' of 2.
-emptyCMaps :: (HasTrie id, Ord id, HasTrie tvar) => CMaps id tvar var
+emptyCMaps :: (Hashable id, Ord id, Ord tvar, Hashable tvar) => CMaps id tvar var
 emptyCMaps = CMaps
     { hashCount = [2 ..]
     , varMap    = Bimap.empty
     , freshSet  = Set.empty
-    , andMap    = mempty
-    , orMap     = mempty
-    , notMap    = mempty
-    , xorMap    = mempty
-    , onlyifMap = mempty
-    , iffMap    = mempty
-    , iteMap    = mempty
+    , andMap    = Bimap.empty
+    , orMap     = Bimap.empty
+    , notMap    = Bimap.empty
+    , xorMap    = Bimap.empty
+    , onlyifMap = Bimap.empty
+    , iffMap    = Bimap.empty
+    , iteMap    = Bimap.empty
     , natMap    = Bimap.empty
-    , eqMap     = mempty
-    , ltMap     = mempty
-    , oneMap    = mempty
+    , eqMap     = Bimap.empty
+    , ltMap     = Bimap.empty
+    , oneMap    = Bimap.empty
     , termGtMap = mempty
     , termGeMap = mempty
     , termEqMap = mempty
@@ -466,7 +463,7 @@ emptyCMaps = CMaps
 -- prj: "projects relevant map out of state"
 -- upd: "stores new map back in state"
 {-# INLINE recordC #-}
-recordC :: (Ord a, HasTrie a) =>
+recordC :: (Ord a, Hashable a) =>
            (CircuitHash -> b)
         -> (CMaps id tvar var -> Int :<->: a)            -- ^ prj
         -> (CMaps id tvar var -> Int :<->: a -> CMaps id tvar var) -- ^ upd
@@ -477,11 +474,11 @@ recordC cons prj upd x = do
   s <- get
   c:cs <- gets hashCount
   maybe (do let s' = upd (s{ hashCount = cs })
-                         (BiTrie.insert c x (prj s))
+                         (Bimap.insert c x (prj s))
             put s'
             -- trace "updating map" (return ())
             return (cons c))
-        (return . cons) $ BiTrie.lookupR x (prj s)
+        (return . cons) $ Bimap.lookupR x (prj s)
 
 {-# INLINE recordC' #-}
 recordC' :: Ord a =>
@@ -559,7 +556,7 @@ trueS  = return $ CTrue trueHash
 
 notS CTrue{}  = falseS
 notS CFalse{} = trueS
-notS (CNot i) = do {s <- get; return $ fromJust $ BiTrie.lookup i (notMap s) }
+notS (CNot i) = do {s <- get; return $ fromJust $ Bimap.lookup i (notMap s) }
 notS h        = recordC CNot notMap (\s e' -> s{ notMap = e' }) h
 
 iffS CTrue{} c  = return c
@@ -596,31 +593,31 @@ instance NatCircuit (Shared id tvar) where
 
     nat = Shared . recordC' CNat natMap (\s e -> s{ natMap = e })
 
-instance (Ord tid, HasTrie tid, RPOExtCircuit (Shared tid tvar) tid tvar) =>
+instance (Ord tid, Hashable tid, RPOExtCircuit (Shared tid tvar) tid tvar) =>
     RPOCircuit (Shared tid tvar) tid tvar where
  termGt s t = Shared $ do
       env <- get
-      case Trie.lookup (s,t) (termGtMap env) of
+      case HashMap.lookup (s,t) (termGtMap env) of
          Just v  -> return v
          Nothing -> do
            me <- unShared $ termGt_ s t
-           modify $ \env -> env{termGtMap = Trie.insert (s,t) me (termGtMap env)}
+           modify $ \env -> env{termGtMap = HashMap.insert (s,t) me (termGtMap env)}
            return me
  termEq s t = Shared $ do
       env <- get
-      case (Trie.lookup (s,t) (termEqMap env)) of
+      case (HashMap.lookup (s,t) (termEqMap env)) of
          Just v  -> return v
          Nothing -> do
            me <- unShared $ termEq_ s t
-           modify $ \env -> env{termEqMap = Trie.insert (s,t) me (termEqMap env)}
+           modify $ \env -> env{termEqMap = HashMap.insert (s,t) me (termEqMap env)}
            return me
  termGe s t = Shared $ do
       env <- get
-      case (Trie.lookup (s,t) (termGeMap env)) of
+      case (HashMap.lookup (s,t) (termGeMap env)) of
          Just v  -> return v
          Nothing -> do
            me <- unShared $ termGe_ s t
-           modify $ \env -> env{termGeMap = Trie.insert (s,t) me (termGeMap env)}
+           modify $ \env -> env{termGeMap = HashMap.insert (s,t) me (termGeMap env)}
            return me
 
 -- | Explicit tree representation, which is a generic description of a circuit.
@@ -906,7 +903,7 @@ eval  c = do {env <- ask; return (runEval env c)}
 
 evalRPO :: forall id v var.
            (Eq id, Ord id, HasPrecedence v id, HasStatus v id, HasFiltering v id
-           ,Ord v, HasTrie v, Show v
+           ,Ord v, Hashable v, Show v
            ,Eq var
            ) => RPOEval v (Term (TermF id) var)
 evalRPO = RPO{..} where
@@ -1231,7 +1228,7 @@ dotGraph g = graphToDot g defaultNodeAnnotate defaultEdgeAnnotate
 -- | Given a frozen shared circuit, construct a `G.DynGraph' that exactly
 -- represents it.  Useful for debugging constraints generated as `Shared'
 -- circuits.
-shareGraph :: (G.DynGraph gr, Eq v, HasTrie v, Show v, Eq id, Pretty id, HasTrie id, Eq tvar, HasTrie tvar) =>
+shareGraph :: (G.DynGraph gr, Eq v, Hashable v, Show v, Eq id, Pretty id, Hashable id, Eq tvar, Hashable tvar) =>
               FrozenShared id tvar v -> gr (FrozenShared id tvar v) (FrozenShared id tvar v)
 shareGraph (FrozenShared output cmaps) =
     (`runReader` cmaps) $ do
@@ -1275,12 +1272,12 @@ shareGraph (FrozenShared output cmaps) =
     extract code f = do
         maps <- ask
         let lookupError = error $ "shareGraph: unknown code: " ++ show code
-        case BiTrie.lookup code (f maps) of
+        case Bimap.lookup code (f maps) of
           Nothing -> lookupError
           Just x  -> return x
 
 
-shareGraph' :: (G.DynGraph gr, Ord v, HasTrie v, Show v, Pretty id, Ord id) =>
+shareGraph' :: (G.DynGraph gr, Ord v, Hashable v, Show v, Pretty id, Ord id) =>
               FrozenShared id tvar v -> gr String String
 shareGraph' (FrozenShared output cmaps) =
     (`runReader` cmaps) $ do
@@ -1350,17 +1347,17 @@ shareGraph' (FrozenShared output cmaps) =
     extract code f = do
         maps <- ask
         let lookupError = error $ "shareGraph: unknown code: " ++ show code
-        case BiTrie.lookup code (f maps) of
+        case Bimap.lookup code (f maps) of
           Nothing -> lookupError
           Just x  -> return x
 
-removeExist :: (HasTrie id, Ord id, Ord v, HasTrie v, Show v, ECircuit c, NatCircuit c, OneCircuit c) => FrozenShared id tvar v -> c v
+removeExist :: (Hashable id, Ord id, Ord v, Hashable v, Show v, ECircuit c, NatCircuit c, OneCircuit c) => FrozenShared id tvar v -> c v
 removeExist (FrozenShared code maps) = go code
   where
   -- dumb (for playing): remove existentials by replacing them with their assigned value (if any)
   existAssigs = Map.fromList $
-                [ (f, val)| (f@CExist{}, val) <- BiTrie.elems(iffMap maps)] ++
-                [ (f, val)| (val, f@CExist{}) <- BiTrie.elems(iffMap maps)]
+                [ (f, val)| (f@CExist{}, val) <- Bimap.elems(iffMap maps)] ++
+                [ (f, val)| (val, f@CExist{}) <- Bimap.elems(iffMap maps)]
 
   go (CTrue{})  = true
   go (CFalse{}) = false
@@ -1385,7 +1382,7 @@ removeExist (FrozenShared code maps) = go code
   onTup f (x, y) = (f x, f y)
 
 -- | Returns an equivalent circuit with no iff, xor, onlyif, ite, nat, eq and lt nodes.
-removeComplex :: (HasTrie id, Ord id, HasTrie tvar, Ord v, HasTrie v, Show v, Circuit c) => [v] -> FrozenShared id tvar v -> (c v, v :->: [v])
+removeComplex :: (Hashable id, Ord id, Ord tvar, Hashable tvar, Ord v, Hashable v, Show v, Circuit c) => [v] -> FrozenShared id tvar v -> (c v, v :->: [v])
 removeComplex freshVars c = assert disjoint $ (go code, bitnats)
   where
   -- casting removes the one constraints
@@ -1393,14 +1390,14 @@ removeComplex freshVars c = assert disjoint $ (go code, bitnats)
 
   -- encoding nats as binary numbers
   bitwidth = fst . head . dropWhile ( (< Bimap.size (natMap maps)) . snd) . zip [1..] . iterate (*2) $ 2
-  bitnats  = Trie.fromList (Bimap.elems (natMap maps) `zip` chunks bitwidth freshVars)
-  disjoint = all (`notElem` Bimap.elems (varMap maps))  (concat $ Trie.elems bitnats)
-  lookupBits c = fromJust $ Trie.lookup (getChildren' c (natMap maps)) bitnats
+  bitnats  = HashMap.fromList (Bimap.elems (natMap maps) `zip` chunks bitwidth freshVars)
+  disjoint = all (`notElem` Bimap.elems (varMap maps))  (concat $ HashMap.elems bitnats)
+  lookupBits c = fromJust $ HashMap.lookup (getChildren' c (natMap maps)) bitnats
 
   -- dumb (for playing): remove existentials by replacing them with their assigned value (if any)
   existAssigs = Map.fromList $
-                [ (f, val)| (f@CExist{}, val) <- BiTrie.elems(iffMap maps)] ++
-                [ (f, val)| (val, f@CExist{}) <- BiTrie.elems(iffMap maps)]
+                [ (f, val)| (f@CExist{}, val) <- Bimap.elems(iffMap maps)] ++
+                [ (f, val)| (val, f@CExist{}) <- Bimap.elems(iffMap maps)]
 
   go (CTrue{})  = true
   go (CFalse{}) = false
@@ -1482,7 +1479,7 @@ data CNFState = CNFS{ toCnfVars :: !([Var])
 emptyCNFState :: CNFState
 emptyCNFState = CNFS{ toCnfVars = [V 1 ..]
                     , numCnfClauses = 0
-                    , toCnfMap = mempty
+                    , toCnfMap = Bimap.empty
                     , toBitMap = mempty}
 
 -- retrieve and create (if necessary) a cnf variable for the given ccode.
@@ -1490,8 +1487,8 @@ emptyCNFState = CNFS{ toCnfVars = [V 1 ..]
 findVar ccode = do
     m <- gets toCnfMap
     v:vs <- gets toCnfVars
-    case BiTrie.lookupR ccode m of
-      Nothing -> do modify $ \s -> s{ toCnfMap = BiTrie.insert v ccode m
+    case Bimap.lookupR ccode m of
+      Nothing -> do modify $ \s -> s{ toCnfMap = Bimap.insert v ccode m
                                     , toCnfVars = vs }
                     return . lit $ v
       Just v'  -> return . lit $ v'
@@ -1499,8 +1496,8 @@ findVar ccode = do
 findVar' ccode kfound knot = do
     m <- gets toCnfMap
     v:vs <- gets toCnfVars
-    case BiTrie.lookupR ccode m of
-      Nothing -> do modify $ \s -> s{ toCnfMap = BiTrie.insert v ccode m
+    case Bimap.lookupR ccode m of
+      Nothing -> do modify $ \s -> s{ toCnfMap = Bimap.insert v ccode m
                                     , toCnfVars = vs }
                     knot $ lit v
       Just v'  -> kfound $ lit v'
@@ -1508,9 +1505,9 @@ findVar' ccode kfound knot = do
 
 recordVar ccode comp = do
     m <- gets toCnfMap
-    case BiTrie.lookupR ccode m of
+    case Bimap.lookupR ccode m of
       Nothing -> do l <- comp
-                    modify $ \s -> s{ toCnfMap = BiTrie.insert (var l) ccode (toCnfMap s) }
+                    modify $ \s -> s{ toCnfMap = Bimap.insert (var l) ccode (toCnfMap s) }
                     return l
       Just v  -> return (lit v)
 
@@ -1525,18 +1522,18 @@ data RPOCircuitProblem id tvar v = RPOCircuitProblem
     , rpoProblemBitMap  :: !(Var :->: (CCode,Int)) }
 
 -- Optimal CNF conversion
-toCNF' :: (HasTrie id, Ord id, HasTrie tvar, Ord v, HasTrie v, Show v) => [v] -> FrozenShared id tvar v -> (ECircuitProblem v, v :->: [v])
+toCNF' :: (Hashable id, Ord id, Hashable tvar, Ord tvar, Ord v, Hashable v, Show v) => [v] -> FrozenShared id tvar v -> (ECircuitProblem v, v :->: [v])
 toCNF' freshv = first(ECircuit.toCNF . ECircuit.runShared) . removeComplex freshv
 
 -- Fast CNF conversion
-toCNF :: (HasTrie id, Ord id, Ord v, HasTrie v, Show v, HasTrie tvar, Show tvar, Show id) =>
+toCNF :: (Hashable id, Ord id, Ord v, Hashable v, Show v, Hashable tvar, Show tvar, Show id) =>
          FrozenShared id tvar v -> RPOCircuitProblem id tvar v
 toCNF c@(FrozenShared !sharedCircuit !circuitMaps) =
     let (m,cnf) = (\x -> execRWS x circuitMaps emptyCNFState) $ do
                      l <- toCNF' sharedCircuit
                      writeClauses [[l]]
 
-        bitMap = Trie.fromList [ (v, (c,i)) | (c,vv) <- Trie.toList (toBitMap m), (v,i) <- zip vv [0..]]
+        bitMap = HashMap.fromList [ (v, (c,i)) | (c,vv) <- HashMap.toList (toBitMap m), (v,i) <- zip vv [0..]]
 
     in RPOCircuitProblem
        { rpoProblemCnf = CNF { numVars    = pred $ unVar $ head (toCnfVars m)
@@ -1715,16 +1712,16 @@ toCNF c@(FrozenShared !sharedCircuit !circuitMaps) =
 
     extract code f = do
         m <- asks f
-        case BiTrie.lookup code m of
+        case Bimap.lookup code m of
           Nothing -> error $ "toCNFRpo: unknown code: " ++ show code
           Just x  -> return x
 
     findNat c@CNat{} = do
         bm <- gets toBitMap
-        case Trie.lookup c bm of
+        case HashMap.lookup c bm of
           Nothing -> do
               bits <- replicateM bitWidth fresh
-              modify $ \s -> s{ toBitMap  = Trie.insert c (map var bits) bm }
+              modify $ \s -> s{ toBitMap  = HashMap.insert c (map var bits) bm }
               return bits
           Just vv -> return (map lit vv)
 
@@ -1765,8 +1762,8 @@ projectRPOCircuitSolution sol prbl = case sol of
                           Nothing -> mn
                           Just n  -> Map.insertWith (++) n [(i, litSign l)] mn
 
-    litHash l = case BiTrie.lookup (var l) codeMap of
-                  Nothing -> case Trie.lookup (var l) bitsMap of
+    litHash l = case Bimap.lookup (var l) codeMap of
+                  Nothing -> case HashMap.lookup (var l) bitsMap of
                                Just (code,bit) -> Bit (circuitHash code, bit)
                                Nothing    -> Auxiliar
                   Just code -> Var (circuitHash code)
@@ -1777,16 +1774,17 @@ data ProjectionCase = Var CircuitHash | Bit (CircuitHash, Int) | Auxiliar
 
 
 -- ------------------------
--- HasTrie instances
+-- Hashable instances
 -- ------------------------
-
-instance HasTrie Var where
+{-
+instance Hashable Var where
   newtype Var :->: x = VarTrie (Int :->: x)
-  empty = VarTrie Trie.empty
-  lookup (V i) (VarTrie t) = Trie.lookup i t
-  insert (V i) v (VarTrie t) = VarTrie (Trie.insert i v t)
-  toList (VarTrie t) = map (first V) (Trie.toList t)
-
+  empty = VarTrie HashMap.empty
+  lookup (V i) (VarTrie t) = HashMap.lookup i t
+  insert (V i) v (VarTrie t) = VarTrie (HashMap.insert i v t)
+  toList (VarTrie t) = map (first V) (HashMap.toList t)
+-}
+instance Hashable Var where hash (V i) = i
 -- -------
 -- Errors
 -- -------

@@ -42,7 +42,7 @@ import Narradar.Constraints.SAT.RPOCircuit hiding (and,or, nat)
 
 import qualified Funsat.ECircuit as ECircuit
 import qualified Funsat.Types as Funsat
-import qualified Data.NarradarTrie as Trie
+import           Data.Hashable
 import qualified Narradar.Constraints.SAT.RPOCircuit as Funsat
 import qualified Prelude as P
 
@@ -50,7 +50,7 @@ import qualified Prelude as P
 -- MonadSAT
 -- --------
 
-class (Monad m, Functor m, ECircuit repr, OneCircuit repr, HasTrie v, Ord v, Show v) =>
+class (Monad m, Functor m, ECircuit repr, OneCircuit repr, Hashable v, Ord v, Show v) =>
  MonadSAT repr v m | m -> repr v where
   boolean :: m v
   natural :: m (Natural v)
@@ -66,12 +66,7 @@ instance Read Var where
   readsPrec p ('v':rest) = [(V i, rest) | (i,rest) <- readsPrec 0 rest]
   readsPrec _ _ = []
 instance Bounded Var where minBound = V 0; maxBound = V maxBound
-instance HasTrie Var where
-  newtype Var :->: x = VarTrie (Int :->: x)
-  empty = VarTrie Trie.empty
-  lookup (V i) (VarTrie t) = Trie.lookup i t
-  insert (V i) v (VarTrie t) = VarTrie (Trie.insert i v t)
-  toList (VarTrie t) = map (first V) (Trie.toList t)
+instance Hashable Var where hash (V i) = i
 
 newtype Natural v = Natural {encodeNatural::v} deriving (Eq,Ord,Show)
 
@@ -79,7 +74,7 @@ lit (V i) = Funsat.L i
 
 instance Pretty Var where pPrint (V i) = text "v" <> i
 
-nat :: (Ord v, HasTrie v, Show v) => NatCircuit repr => Natural v -> repr v
+nat :: (Ord v, Hashable v, Show v) => NatCircuit repr => Natural v -> repr v
 nat (Natural n) = ECircuit.nat n
 
 type Weight = Int
@@ -101,9 +96,9 @@ instance (Decode a a' var, Decode b b' var ) => Decode (a, b) (a',b') var where
 --instance Decode var Bool var where decode = evalB . input
 instance Decode Var Bool Var where decode = evalB . input
 instance Decode Var Int Var  where decode = evalN . input
-instance (Ord v, HasTrie v, Show v) => Decode (Natural v) Int v where decode = evalN . nat
+instance (Ord v, Hashable v, Show v) => Decode (Natural v) Int v where decode = evalN . nat
 
-evalDecode :: (Ord var, HasTrie var, Show var, Decode (Eval var) b var) => Eval var -> EvalM var b
+evalDecode :: (Ord var, Hashable var, Show var, Decode (Eval var) b var) => Eval var -> EvalM var b
 evalDecode x = decode x
 
 -- ------------

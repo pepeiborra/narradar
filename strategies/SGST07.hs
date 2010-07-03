@@ -5,8 +5,11 @@
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE CPP #-}
 
-module SGST07 where
+
+--module SGST07 where
+
 import Control.DeepSeq
 import Control.Monad
 import Control.Monad.Stream
@@ -23,6 +26,11 @@ import Narradar.Processor.InfinitaryProblem
 import Narradar.Framework.GraphViz
 import Lattice
 import Narradar.Utils (pprTrace)
+
+
+import Narradar.Interface.Cli
+main = narradarMain listToMaybe
+
 
 -- Missing dispatcher cases
 instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
@@ -42,11 +50,11 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance (Pretty (DPIdentifier id), Ord id, HasTrie id) => Dispatch (NProblem Rewriting (DPIdentifier id)) where
-  dispatch = ev >=> ((inn >=> dispatch) .|. (sc >=> dg >=> rpoPlusTransforms >=> final))
+  dispatch = ev >=> (inn .|. (dg >=> rpoPlusTransforms >=> final))
 --  dispatch = mkDispatcher (depGraph >=> apply (RPOProc LPOAF (Yices 60)) >=> depGraph)
 
 instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProblem IRewriting id) where
-  dispatch = ev >=> sc >=> dg >=> rpoPlusTransforms >=> final
+  dispatch = ev >=> rpoPlusTransforms >=> final
 
 {-
 -- Narrowing Goal
@@ -71,17 +79,17 @@ instance (id  ~ DPIdentifier a, Ord a, HasTrie a, Lattice (AF_ id), Pretty id) =
 
 -- ----------------------------
 
-sc = return -- dg >=> try SubtermCriterion
-inn = apply ToInnermost -- >=> dispatch) .|. return
-dg = apply DependencyGraphSCC{useInverse=True}
-ev = apply ExtraVarsP
+sc  = apply SubtermCriterion
+inn = apply ToInnermost >=> dispatch
+dg  = apply DependencyGraphSCC{useInverse=True}
+ev  = apply ExtraVarsP
 
 rpoPlusTransforms
-   = repeatSolver 35 ( ( rpo .|. graphTransform) >=> dg)
+   = repeatSolver 10 ( (sc .|. lpo .|. rpos .|. graphTransform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTFFI)
     lpos = apply (RPOProc LPOSAF Needed SMTFFI)
-    rpo  = apply (RPOProc RPOSAF Needed SMTFFI)
+    rpos = apply (RPOProc RPOSAF Needed SMTFFI)
 
 
 rpoPlusTransformsPar = parallelize f where

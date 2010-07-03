@@ -18,7 +18,7 @@ import Control.Parallel.Strategies
 import Data.Bifunctor
 import Data.Foldable as F (Foldable, toList)
 import Data.Traversable (Traversable)
-import Data.NarradarTrie (HasTrie)
+import Data.Hashable
 import Data.Typeable
 import Data.List ((\\), groupBy, sortBy, inits)
 import Data.Maybe (fromJust)
@@ -58,7 +58,7 @@ import qualified Debug.Trace
 --       i -> Proof info mp o
 --rpo = apply (RPOProc RPOSAF SMTSerial)
 
-runSAT :: (HasTrie id, Ord id, Show id) => SATSolver -> SAT id Narradar.Var Var (EvalM Var a) -> IO (Maybe a)
+runSAT :: (Hashable id, Ord id, Show id) => SATSolver -> SAT id Narradar.Var Var (EvalM Var a) -> IO (Maybe a)
 runSAT Yices = satYices YicesOpts{maxWeight = 20, timeout = Nothing}
 -- runS FunSat = solveFun
 -- runS FunSatDirect = solveFunDirect
@@ -78,7 +78,7 @@ data Solver    = SMTFFI | SMTSerial -- | SAT SATSolver
 data SATSolver = Yices | Minisat | Funsat
 
 
-instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
+instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
                              (NProblem Rewriting id)
@@ -106,7 +106,7 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF p MPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
 
-instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
+instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
                              (NProblem IRewriting id)
@@ -133,7 +133,7 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF p MPOAF usablerules ((runSAT s .). rpoAF_DP True)
 
 
-instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
+instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
@@ -160,7 +160,7 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
 --    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
+instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ,Info info (NProblem IRewriting id)
@@ -189,7 +189,7 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
 
-instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
+instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
@@ -216,7 +216,7 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
 --    apply (RPOProc MPOAF usablerules SMTSerial) p = procAF_IGgen p MPOAF usablerules ((smtSerial.). rpoAF_IGDP True)
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IGgen p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
+instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ,Info info (NProblem INarrowingGen id)
@@ -244,7 +244,7 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, HasTrie id, GenSymbol id
 --    apply (RPOProc MPOAF usablerules SMTSerial) = liftProblem $ \p -> procAF p MPOAF usablerules ((smtSerial.). rpoAF_DP True)
 --    apply (RPOProc MPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF p MPOAF usablerules ((runSAT s .). rpoAF_IGDP True)
 
-instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
+instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
                              (NProblem Narrowing id)
@@ -272,7 +272,7 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p MPOAF usablerules ((runSAT s .). rpoAF_NDP True)
 
 
-instance (Ord id, Pretty id, DPSymbol id, Show id, HasTrie id
+instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
          ) => Processor info RPOProc
                         (NProblem CNarrowing id)
@@ -310,7 +310,7 @@ procAF :: (Monad m
           ,sid   ~ satsymbol Var id
           ,Info info (NProblem typ id)
           ,Info info (RPOProof id)
-          ,Pretty id, Ord id, HasTrie id
+          ,Pretty id, Ord id, Hashable id
           ,Traversable  (Problem typ)
           ,MkDPProblem typ (NTRS id)
           ,Decode sid (SymbolRes id) Var

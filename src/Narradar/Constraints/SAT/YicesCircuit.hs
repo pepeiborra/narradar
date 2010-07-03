@@ -26,7 +26,6 @@ import Data.Foldable (Foldable, foldMap)
 import Data.List( nub, foldl', sortBy, (\\))
 import Data.Map( Map )
 import Data.Maybe( fromJust )
-import Data.NarradarTrie (HasTrie, (:->:) )
 import Data.Monoid
 import Data.Set( Set )
 import Data.Traversable (Traversable, traverse)
@@ -37,13 +36,14 @@ import Narradar.Types.Term
 import Narradar.Utils (debug, on, withTempFile, readProcessWithExitCodeBS)
 import Text.PrettyPrint.HughesPJClass
 import System.IO
+import           Data.Hashable
 import Prelude hiding( not, and, or, (>) )
 
 import qualified Data.Set as Set
 import qualified Data.Map as Map
-import qualified Data.NarradarTrie as Trie
 import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
+import qualified Data.HashMap                        as HashMap
 import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
 import qualified Narradar.Types as Narradar
 import qualified Prelude as Prelude
@@ -61,19 +61,15 @@ deriving instance Ord ExpY
 deriving instance Eq  TypY
 deriving instance Ord TypY
 
+type k :->: v = HashMap.HashMap k v
+
 newtype YicesSource id var = YicesSource { unYicesSource :: State (YMaps id var) ExpY}
 
 newtype YVar = YV Int deriving (Enum, Eq, Ord)
 
 instance Show YVar where show (YV i) = 'y' : 'v' : show i
 instance Pretty YVar where pPrint = text . show
-
-instance HasTrie YVar where
-  newtype YVar :->: x = YVarTrie (Int :->: x)
-  empty = YVarTrie Trie.empty
-  lookup (YV i) (YVarTrie t) = Trie.lookup i t
-  insert (YV i) v (YVarTrie t) = YVarTrie (Trie.insert i v t)
-  toList (YVarTrie t) = map (first YV) (Trie.toList t)
+instance Hashable YVar where hash (YV i) = i
 
 data YMaps id var = YMaps
     { internal  :: !([YVar])
@@ -86,20 +82,20 @@ data YMaps id var = YMaps
 
 emptyYMaps = YMaps [YV 2..] mempty mempty mempty mempty
 
-solveYices :: (HasTrie id, Read var, Ord var, Show var) => YicesSource id var -> IO (Maybe (BIEnv var))
+solveYices :: (Hashable id, Ord id, Read var, Ord var, Show var) => YicesSource id var -> IO (Maybe (BIEnv var))
 solveYices = solveDeclarations Nothing . runYices
 
-runYices :: (HasTrie id, Ord var, Show var) => YicesSource id var -> [CmdY]
+runYices :: (Hashable id, Ord id, Ord var, Show var) => YicesSource id var -> [CmdY]
 runYices y = let (me,stY) = runYices' emptyYMaps y
              in generateDeclarations stY ++ [ASSERT me]
 
 runYices' stY (YicesSource y) = runState y stY
 
-generateDeclarations :: (HasTrie id, Ord var, Show var) => YMaps id var -> [CmdY]
+generateDeclarations :: (Hashable id, Ord var, Show var) => YMaps id var -> [CmdY]
 generateDeclarations YMaps{..} =
    [DEFINE (show v, typ) Nothing | (v,typ) <- Set.toList variables] ++
    [DEFINE (show v, VarT "bool")  (Just c)
-        | (v, c) <- sortBy (compare `on` fst) (Trie.elems termEqMap ++ Trie.elems termGtMap)]
+        | (v, c) <- sortBy (compare `on` fst) (HashMap.elems termEqMap ++ HashMap.elems termGtMap)]
 
 solveDeclarations :: (Ord v, Read v) => Maybe Int -> [CmdY] -> IO (Maybe (BIEnv v))
 solveDeclarations mb_timeout cmds = do
@@ -194,34 +190,34 @@ instance ExistCircuit (YicesSource id) where
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "bool")] exp
 
-instance (HasTrie id, Ord id,  RPOExtCircuit (YicesSource id) id Narradar.Var) =>
+instance (Hashable id, Ord id,  RPOExtCircuit (YicesSource id) id Narradar.Var) =>
    RPOCircuit (YicesSource id) id Narradar.Var where
  termGt s t = YicesSource $ do
       env <- get
-      case Trie.lookup (s,t) (termGtMap env) of
+      case HashMap.lookup (s,t) (termGtMap env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termGt_ s t
            meVar        <- freshV
-           modify $ \env -> env{termGtMap = Trie.insert (s,t) (meVar, meConstraint) (termGtMap env)}
+           modify $ \env -> env{termGtMap = HashMap.insert (s,t) (meVar, meConstraint) (termGtMap env)}
            return (VarE (show meVar))
  termEq s t = YicesSource $ do
       env <- get
-      case Trie.lookup (s,t) (termEqMap env) of
+      case HashMap.lookup (s,t) (termEqMap env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termEq_ s t
            meVar        <- freshV
-           modify $ \env -> env{termEqMap = Trie.insert (s,t) (meVar, meConstraint) (termEqMap env)}
+           modify $ \env -> env{termEqMap = HashMap.insert (s,t) (meVar, meConstraint) (termEqMap env)}
            return (VarE (show meVar))
  termGe s t = YicesSource $ do
       env <- get
-      case Trie.lookup (s,t) (termGeMap env) of
+      case HashMap.lookup (s,t) (termGeMap env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termGe_ s t
            meVar        <- freshV
-           modify $ \env -> env{termGeMap = Trie.insert (s,t) (meVar, meConstraint) (termGeMap env)}
+           modify $ \env -> env{termGeMap = HashMap.insert (s,t) (meVar, meConstraint) (termGeMap env)}
            return (VarE (show meVar))
 
 

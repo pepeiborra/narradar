@@ -8,54 +8,60 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Narradar.Utils where
 
-import Control.DeepSeq
-import Control.Applicative
-import Control.Concurrent
-import Control.Exception (bracket)
-import Control.Monad  (liftM2, ap, when, MonadPlus, msum)
-import Control.Monad.Identity(Identity(..))
-import Control.Failure
-import Control.Monad.List (lift, ListT(..))
-import Control.Monad.State (State,StateT, MonadState(..), evalStateT)
-import qualified Control.Monad.State.Strict as Strict
-import Control.Monad.Writer (Writer, WriterT, MonadWriter(..))
-import qualified Control.RMonad as R
+import           Control.DeepSeq
+import           Control.Applicative
+import           Control.Concurrent
+import           Control.Exception                    (bracket)
+import           Control.Monad                        (liftM2, ap, when, MonadPlus, msum)
+import           Control.Monad.Identity(Identity(..))
+import           Control.Monad.Free                   (Free(..))
+import           Control.Failure
+import           Control.Monad.List                   (lift, ListT(..))
+import           Control.Monad.State                  (State,StateT, MonadState(..), evalStateT)
+import qualified Control.Monad.State.Strict           as Strict
+import           Control.Monad.Writer                 (Writer, WriterT, MonadWriter(..))
+import qualified Control.RMonad                       as R
 --import qualified "monad-param" Control.Monad.Parameterized as P
-import Data.Array as A
-import Data.Array.Base (unsafeAt)
-import qualified Data.Foldable as F
-import Data.Foldable (toList, foldMap, Foldable)
-import qualified Data.Graph  as G
-import qualified Data.HashTable as HT
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy as LBS
-import Data.Int
-import Data.List (group, sort, nubBy)
-import Data.List.Split (chunk)
-import Data.Maybe
-import Data.Set (Set)
-import Data.String
-import Data.Term (Term)
-import Data.Monoid
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import Data.Sequence ((|>), singleton, viewl, viewr, ViewL(..), ViewR(..))
-import qualified Data.Sequence as Seq
-import Data.Strict (Pair(..), (:!:))
-import Data.Suitable
-import Data.Traversable
-import System.IO
-import System.Directory
-import System.Process
+import           Data.AlaCarte
+import           Data.Array                           as A
+import           Data.Array.Base                      (unsafeAt)
+import qualified Data.Foldable                        as F
+import           Data.Foldable                        (toList, foldMap, Foldable)
+import qualified Data.Graph                           as G
+import qualified Data.HashTable                       as HT
+import qualified Data.ByteString                      as BS
+import qualified Data.ByteString.Lazy                 as LBS
+import           Data.Int
+import           Data.List                            (group, sort, nubBy)
+import           Data.List.Split                      (chunk)
+import           Data.Hashable
+import           Data.Maybe
+import           Data.Map                             (Map)
+import           Data.Set                             (Set)
+import           Data.String
+import           Data.Term                            (Term)
+import           Data.Monoid
+import qualified Data.Map                             as Map
+import qualified Data.Set                             as Set
+import           Data.Sequence                        ((|>), singleton, viewl, viewr, ViewL(..), ViewR(..))
+import qualified Data.Sequence                        as Seq
+import           Data.Strict                          (Pair(..), (:!:))
+import           Data.Suitable
+import           Data.Traversable
+import           Language.Prolog.Representation       as Prolog
+import           System.IO
+import           System.Directory
+import           System.Process
 
-import Data.Term.Rules as Term
-import Narradar.Framework.Ppr
+import           Data.Term.Rules                      as Term
+import           Narradar.Framework.Ppr
 --import TRS.Utils hiding (size, parens, brackets, trace)
 
-import Prelude hiding (mapM)
+import           Prelude                              hiding (mapM)
 
 -- Debugging
 -- ---------
@@ -357,6 +363,38 @@ readProcessWithExitCodeBS exec args input = do
         return (code, out, err)
   where
    ignore _ = return ()
+
+-- --------------------------------------------
+-- Hashable instances for Prolog representation
+-- --------------------------------------------
+
+instance Hashable id => Hashable (T id a) where
+  hash (T id) = hash id
+
+instance Hashable id => Hashable (K id a) where
+  hash (K id) = hash id
+
+instance Hashable PrologP_ where
+  hash Is = 1
+  hash Eq = 2
+  hash Cut = 3
+  hash Ifte = 4
+  hash Not = 5
+
+instance Hashable PrologT_ where
+  hash Zero = 1
+  hash Succ = 2
+  hash Tup  = 3
+  hash Cons = 4
+  hash Nil  = 5
+  hash (String s) = 6 `combine` hash s
+
+instance (Hashable (f a), Hashable (g a)) => Hashable ((f:+:g) a) where
+  hash (Inl f) = hash f
+  hash (Inr g) = hash g
+
+instance (Functor f, Hashable (f Int)) => Hashable (Expr f) where
+  hash = foldExpr hash
 
 -- ---------------------------------------
 -- Missing Applicative instances

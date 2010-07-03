@@ -28,7 +28,7 @@ module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Types.Term
                       , module Narradar.Types.Var
                       , module Ppr
-                      , HasTrie, Lattice
+                      , Hashable, Lattice
                       , AF_, simpleHeu, bestHeu, innermost
                       ) where
 
@@ -46,7 +46,6 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Traversable as T
-import Data.NarradarTrie (HasTrie)
 import Lattice (Lattice)
 import Text.ParserCombinators.Parsec
 import qualified TRSParser as TRS
@@ -84,6 +83,7 @@ import Narradar.Framework.Ppr as Ppr
 
 import qualified Language.Prolog.Syntax as Prolog hiding (ident)
 import qualified Language.Prolog.Parser as Prolog hiding (term)
+import           Data.Hashable
 
 #ifdef HOOD
 import           Debug.Hood.Observe
