@@ -10,7 +10,7 @@
 import Control.Monad
 import Data.Maybe
 import Narradar
-import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
+import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, failHeu, outermost)
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
@@ -18,6 +18,8 @@ import Narradar.Processor.RPO
 import Narradar.Processor.FLOPS08
 import Narradar.Processor.LOPSTR09
 import Lattice
+
+import Debug.Hood.Observe
 
 import Narradar.Interface.Cli
 main = narradarMain listToMaybe
@@ -41,10 +43,12 @@ instance (Pretty (DPIdentifier a), Ord a, HasTrie a) => Dispatch (NProblem IRewr
   dispatch = sc >=> rpoPlusTransforms >=> final
 
 -- Narrowing Goal
-instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id, HasTrie a) =>
+
+instance (id  ~ DPIdentifier a, Ord a, Observable a, Lattice (AF_ id), Pretty id, HasTrie a) =>
            Dispatch (NProblem (InitialGoal (TermF (DPIdentifier a)) Narrowing) (DPIdentifier a)) where
-  dispatch = apply (ComputeSafeAF bestHeu) >=> dg  >=>
-             apply (NarrowingGoalToRewriting bestHeu) >=>
+  dispatch = apply InferAF >=>
+             dg  >=>
+             apply (NarrowingGoalToRewriting (simpleHeu outermost)) >=>
              dispatch
 
 dg  = apply DependencyGraphSCC{useInverse=True}

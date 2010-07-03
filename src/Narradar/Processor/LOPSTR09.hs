@@ -37,11 +37,6 @@ import Narradar.Processor.PrologProblem hiding (SKTransformProof)
 import qualified Narradar.Types as Narradar
 import qualified Narradar.Types.ArgumentFiltering as AF
 
-instance Pretty SKTransformProof where
-  pPrint SKTransformProof
-      = text "Transformed into an initial goal narrowing problem" $$
-        text "(Schneider-Kamp transformation)"
-
 -- ------------------------------------------------------------
 -- | This is the processor described at the LOPSTR'09 paper
 -- ------------------------------------------------------------
@@ -200,9 +195,9 @@ procLOPSTR09 rr pp goal_f modes baseFramework
        convert  = mapTermSymbols (fmap AnId)
 
 
--- --------------------------------------------------------------------------------
--- | Transforms a Prolog termination problem into a Narrowing termination problem
--- --------------------------------------------------------------------------------
+-- ------------------------------------------------------
+-- | Transforms a Prolog problem into a Narrowing problem
+-- ------------------------------------------------------
 
 data SKTransform = SKTransform
 instance Info info SKTransformProof =>
@@ -218,8 +213,15 @@ instance Info info SKTransformProof =>
          , let Goal id mm = skTransformGoal goal
          , let the_goal = term (IdDP id) (map return mm)
      ]
+
+
 data SKTransformProof = SKTransformProof
   deriving (Eq, Show)
+
+instance Pretty SKTransformProof where
+  pPrint SKTransformProof
+      = text "Transformed into an initial goal narrowing problem" $$
+        text "(Schneider-Kamp transformation)"
 
 data SKTransformInf heu = SKTransformInf (MkHeu heu)
 instance (Info info SKTransformProof
@@ -237,42 +239,3 @@ instance (Info info SKTransformProof
     where
        sk_p = prologTRS'' rr (getSignature rr)
        rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
-
--- -------------------------------------------------------------------------
--- Transforms a narrowing problem into a rewriting problem (FLOPS'08 Vidal)
--- -------------------------------------------------------------------------
-data NarrowingGoalToRewriting heu = NarrowingGoalToRewriting (MkHeu heu)
-instance (t   ~ TermF id
-         ,v   ~ Var
-         ,trs ~ NTRS id
-         ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
-         ,ICap t v (typ, trs), IUsableRules t v typ trs
-         ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
-         ,ApplyAF (NProblem typ id)
-         ,Info info (NarrowingGoalToRewritingProof id)
-         ) =>
-    Processor info (NarrowingGoalToRewriting heu)
-              (NProblem (MkNarrowingGoal id typ) id)
-              (NProblem typ id)
-  where
-  applySearch (NarrowingGoalToRewriting mk) p
-    | null orProblems = [dontKnow (NarrowingGoalToRewritingFail :: NarrowingGoalToRewritingProof id) p]
-    | otherwise = orProblems
-   where
-     orProblems = do
-       let heu = mkHeu mk p
-           base_p = getFramework (getBaseProblem p)
-       af' <- Set.toList $ invariantEV heu p (NarrowingGoal.pi p)
-       let p' = mkDerivedDPProblem base_p p
-       return $ singleP (NarrowingGoalToRewritingProof af') p (AF.apply af' p')
-
-data NarrowingGoalToRewritingProof id where
-    NarrowingGoalToRewritingProof :: AF_ id -> NarrowingGoalToRewritingProof id
-    NarrowingGoalToRewritingFail  :: NarrowingGoalToRewritingProof id
-instance Pretty id => Pretty (NarrowingGoalToRewritingProof id) where
-   pPrint NarrowingGoalToRewritingFail = text "Failed to find a safe argument filtering"
-   pPrint (NarrowingGoalToRewritingProof af) = text "Termination of the following rewriting DP problem implies" <+>
-                                               text "termination of the original problem [FLOPS08]." $$
-                                               text "The argument filtering used is:" $$
-                                               pPrint af

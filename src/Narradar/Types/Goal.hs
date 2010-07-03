@@ -20,12 +20,14 @@ import Narradar.Types.Term
 
 data GoalF id a = Goal {goalId::id, goalArgs::[a]} deriving (Eq, Ord, Show)
 type Goal id = GoalF id Mode
-data Mode = G | V deriving (Eq, Bounded, Show)
+data Mode = G | V deriving (Eq, Ord, Bounded, Show)
 
 goal :: id -> [Mode] -> Goal id
 goal = Goal
 
-deriving instance Ord Mode
+termToGoal :: Term (TermF id)  Mode -> Goal id
+termToGoal (Impure (Term id mm)) = Goal id [m | Pure m <- mm]
+
 instance NFData Mode where rnf G = (); rnf V = ()
 
 --instance Functor GoalF where fmap f (Goal id mm) = Goal id (f mm)

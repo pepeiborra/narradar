@@ -16,15 +16,16 @@ import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Processor.RPO
 import Narradar.Processor.FLOPS08
-import Narradar.Processor.LOPSTR09 (SKTransform(..))
+import Narradar.Processor.LOPSTR09
 import Lattice
 
+import Narradar.Interface.Cli
 main = narradarMain listToMaybe
 
 
 -- Missing dispatcher cases
 instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
-    dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getProblemType p))
+    dispatch p = error ("missing dispatcher for problem of type " ++ show (pPrint $ getFramework p))
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
@@ -34,7 +35,7 @@ instance Dispatch PrologProblem where
 
 -- Rewriting
 instance (Pretty (DPIdentifier a), Ord a, HasTrie a) => Dispatch (NProblem Rewriting (DPIdentifier a)) where
-  dispatch = sc >=> rpoPlusTransforms >=> final
+  dispatch = ev >=> (inn .|. (dg >=> rpoPlusTransforms >=> final))
 
 instance (Pretty (DPIdentifier a), Ord a, HasTrie a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
   dispatch = sc >=> rpoPlusTransforms >=> final
@@ -42,20 +43,22 @@ instance (Pretty (DPIdentifier a), Ord a, HasTrie a) => Dispatch (NProblem IRewr
 -- Narrowing Goal
 
 instance (id  ~ DPIdentifier a, Ord a, Lattice (AF_ id), Pretty id, HasTrie a) =>
-           Dispatch (NProblem (NarrowingGoal (DPIdentifier a)) (DPIdentifier a)) where
+           Dispatch (NProblem (InitialGoal (TermF (DPIdentifier a)) Narrowing) (DPIdentifier a)) where
   dispatch = apply (ComputeSafeAF (simpleHeu innermost)) >=>
-             depGraph  >=>
+             dg  >=>
              apply (NarrowingGoalToRewriting bestHeu) >=>
              dispatch
 
-
-sc = depGraph >=> try(apply SubtermCriterion)
+dg  = apply DependencyGraphSCC{useInverse=True}
+sc  = apply SubtermCriterion
+ev  = apply ExtraVarsP
+inn = apply ToInnermost >=> dispatch
 
 rpoPlusTransforms
-   = depGraph >=>
-     repeatSolver 5 ( (lpo .|. rpos .|. graphTransform) >=> depGraph)
+   = repeatSolver 5 ( (sc .|. lpo .|. rpos .|. graphTransform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF SMTFFI)
-    rpos = apply (RPOProc RPOSAF SMTFFI)
+    lpo  = apply (RPOProc LPOAF  Needed SMTFFI)
+    lpos = apply (RPOProc LPOSAF Needed SMTFFI)
+    rpos = apply (RPOProc RPOSAF Needed SMTFFI)
 
 graphTransform = apply NarrowingP .|. apply FInstantiation .|. apply Instantiation

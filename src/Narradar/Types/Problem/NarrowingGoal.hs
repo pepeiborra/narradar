@@ -49,7 +49,7 @@ data MkNarrowingGoal id p = forall heu . PolyHeuristic heu id =>
 
 instance (Ord id, IsProblem p) => IsProblem (MkNarrowingGoal id p)  where
   data Problem (MkNarrowingGoal id p) a = NarrowingGoalProblem {goal::Goal id, pi::AF_ id, baseProblem::Problem p a}
-  getFramework (NarrowingGoalProblem g af p) = narrowingGoal' g af (getFramework p)
+  getFramework (NarrowingGoalProblem g af p) = NarrowingGoal g af bestHeu (getFramework p)
   getR   (NarrowingGoalProblem _ _ p) = getR p
 
 instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ SignatureId (Problem p trs)) =>
@@ -67,9 +67,9 @@ instance (id ~ SignatureId (Problem p trs), HasSignature trs, Ord id, MkDPProble
   mkDPProblem (NarrowingGoal g af _ base) rr dp = NarrowingGoalProblem g (af `mappend` AF.init p) p
     where p = mkDPProblem base rr dp
 
-narrowingGoal  g = NarrowingGoal g (mkGoalAF g) bestHeu rewriting
+narrowingGoal  g = narrowingGoal' g (mkGoalAF g)
 cnarrowingGoal g = NarrowingGoal g (mkGoalAF g) bestHeu irewriting
-narrowingGoal' g af p = NarrowingGoal g af bestHeu p
+narrowingGoal' g af = NarrowingGoal g af bestHeu rewriting
 
 mkDerivedNarrowingGoalProblem g mkH p = do
   let heu = mkHeu mkH p
