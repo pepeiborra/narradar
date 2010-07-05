@@ -10,8 +10,6 @@
 
 module Narradar.Types.Problem.Rewriting
          ( MkRewriting(..), Problem(..), Rewriting, IRewriting, rewriting, irewriting
---         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
---         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
          ) where
 
 import Control.Applicative
