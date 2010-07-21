@@ -19,7 +19,7 @@ source-repository head
 
 Flag base4
    default: True
-Flag lopstr-cli
+Flag cli
    description: build the LOPSTR09 command line interface
    default: False
 Flag cgi
@@ -197,16 +197,15 @@ Library
      Data.UniqueList,
      Paths_narradar
 
-Executable LOPSTR09
-  if flag(lopstr-cli)
+Executable NARRADAR
+  if flag(cli)
     buildable: True
   else
     buildable: False
   hs-source-dirs:  strategies
-  main-is:         LOPSTR09-new.hs
+  main-is:         LOPSTR09.hs
   ghc-options:     -threaded
-  hs-source-dirs:  src
-  build-depends:   
+  build-depends:   base, narradar, muterm-framework, prolog
   cpp-options:     -DTHREADED
 
 

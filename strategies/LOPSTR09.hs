@@ -11,9 +11,7 @@
 
 --module LOPSTR09 where
 
-import Control.DeepSeq
 import Control.Monad
-import Control.Parallel.Strategies
 import Data.Maybe
 import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
