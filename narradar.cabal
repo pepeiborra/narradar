@@ -207,7 +207,6 @@ Executable LOPSTR09
   ghc-options:     -threaded
   hs-source-dirs:  src
   build-depends:   
-  c-sources:       c_bits/rts.c
   cpp-options:     -DTHREADED
 
 
