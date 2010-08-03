@@ -99,9 +99,9 @@ narradarMain run = catchTimeout $ do
 
     Nothing  -> do
              putStrLn "MAYBE"
-             let proof' = sliceProof proof
+             let proof' = unsafeSliceProof proof
              when (verbose > 1) $ print $ pprProofFailures proof'
---             when (verbose > 1 && diagrams) $ printDiagram proof'
+             when (verbose > 1 && diagrams) (printDiagram proof') `const` proof
   where
     catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
 

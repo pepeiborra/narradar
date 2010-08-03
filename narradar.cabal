@@ -113,7 +113,7 @@ Library
                   bindings-yices,
                   alacarte >= 0.4, 
                   funsat >= 0.6.2,
-                  muterm-framework >= 1.3.1,
+                  muterm-framework >= 1.3.2,
                   term == 0.1.20100603,
                   TRSParser >= 0.4, 
                   prolog >= 0.1.20100131,
