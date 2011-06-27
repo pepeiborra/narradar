@@ -20,8 +20,8 @@ source-repository head
 Flag base4
    default: True
 Flag cli
-   description: build the LOPSTR09 command line interface
-   default: False
+   description: build the command line interface using the default strategy
+   default: True
 Flag cgi
    description: include the Cgi driver
    default: False

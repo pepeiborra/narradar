@@ -14,7 +14,7 @@ Installation
 
 There is a hackage repository available to facilitate the installation of Narradar:
 
-http://safe-tools.dsic.upv.es/~pepe/haskell
+http://safe-tools.dsic.upv.es/~pepe/haskell-new
 
 The hackage repository contains updated versions of all the dependencies.
 
