@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.8
-version:             0.2.20100705
+version:             0.2.20110628
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
