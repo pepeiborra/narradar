@@ -203,8 +203,8 @@ Executable NARRADAR
     buildable: False
   hs-source-dirs:  strategies
   main-is:         LOPSTR09.hs
-  ghc-options:     -threaded
-  build-depends:   base, narradar, muterm-framework, prolog
+  ghc-options:     -threaded -package narradar
+  build-depends:   base, muterm-framework, prolog
   cpp-options:     -DTHREADED
 
 
