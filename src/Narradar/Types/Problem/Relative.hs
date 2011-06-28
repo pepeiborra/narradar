@@ -100,7 +100,7 @@ instance ( IsTRS t v trs
          , MkProblem base trs
          , Pretty (t(Term t v))
          , Ord (Term t v)
-         , HasId t, Foldable t, Pretty (TermId t), Pretty v
+         , HasId t, Functor t, Foldable t, Pretty (TermId t), Pretty v
          , PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (Relative trs base) trs) where
   pprTPDB RelativeProblem{..} =

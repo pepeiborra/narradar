@@ -229,7 +229,7 @@ instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTR
   apply af (DPTRS a rr g uu _) = tRS (AF.apply af <$$> toList a) -- cannot recreate the graph without knowledge of the problem type
   apply af (ListTRS rr _)      = let rr' = AF.apply af <$$> rr in ListTRS rr' (getSignature rr')
 
-instance (Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
+instance (Functor t, Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
   extraVars (TRS rr _) = extraVars rr
   extraVars (PrologTRS rr _) = extraVars rr
   extraVars (DPTRS a _ _ _ _) = extraVars (A.elems a)

@@ -166,7 +166,7 @@ instance HTMLClass IRewriting where htmlClass (MkRewriting Innermost _) = thecla
 
 
 instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t
+         ,HasId t, Pretty (TermId t), Functor t, Foldable t
          ) => PprTPDB (Problem (MkRewriting st) trs) where
   pprTPDB prob@(RewritingProblem r p st m) = vcat
      [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))

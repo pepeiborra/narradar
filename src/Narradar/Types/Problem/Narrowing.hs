@@ -93,13 +93,13 @@ instance Pretty INarrowing where
   pPrint (MkNarrowing (MkRewriting Innermost A)) = text "Narrowing (innermost strategy, no minimality)"
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
+         ,HasId t, Pretty (TermId t), Functor t, Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem Narrowing trs) where
   pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY NARROWING)"
 
 
 instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t, MkDPProblem Rewriting trs
+         ,HasId t, Pretty (TermId t), Functor t, Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem CNarrowing trs) where
   pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY CNARROWING)"
 

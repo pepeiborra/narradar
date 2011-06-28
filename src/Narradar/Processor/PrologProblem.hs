@@ -350,7 +350,7 @@ skTransform = runSk . skTransformWithM id
 skTransformWith  mkIndex = runSk . skTransformWithM mkIndex
 
 skTransformWithM :: forall m ix id v.
-                   (Ord v, Ord ix, Eq id, MonadSupply Int m) =>
+                   (Ord v, Ord ix, Eq id, MonadSupply Int m, Functor m) =>
                    (Clause'' id (Term (TermF id) v) -> ix)
                 -> [Clause'' id (Term (TermF id) v)]
                 -> m (Map ix (ClauseRules (Rule (TermF (PrologId id)) v)))

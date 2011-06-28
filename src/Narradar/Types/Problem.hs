@@ -75,7 +75,7 @@ mkNewProblem typ trs = mkDPProblem typ  (tRS rr') (tRS $ getPairs typ rr') where
 -- ---------------------------
 class GetPairs typ where
   getPairs :: ( HasRules t v trs, HasSignature trs, t ~ f (DPIdentifier id), Ord id
-              , Foldable t, MapId f, HasId t
+              , Functor t, Foldable t, MapId f, HasId t
               , SignatureId trs ~ TermId t)
                => typ -> trs -> [Rule t v]
 

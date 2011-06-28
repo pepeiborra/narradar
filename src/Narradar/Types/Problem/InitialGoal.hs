@@ -78,7 +78,7 @@ instance (Show p, Show (Term t Var), Show (Term t Mode)) => Show (InitialGoal t 
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
-mapInitialGoal :: (Functor t, Foldable t', HasId t', Ord (Term t Var), Ord(Term t' Var)) =>
+mapInitialGoal :: (Functor t, Functor t', Foldable t', HasId t', Ord (Term t Var), Ord(Term t' Var)) =>
                   (forall a. t a -> t' a) -> InitialGoal t p -> InitialGoal t' p
 mapInitialGoal f (InitialGoal goals dg p) = InitialGoal goals' dg' p
       where
