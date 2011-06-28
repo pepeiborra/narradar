@@ -102,6 +102,7 @@ Library
                   control-monad-free >= 0.4.1, 
                   logict, 
                   rmonad, 
+                  suitable,
                   split,
 --                  parse-dimacs,
                   yices > 0.0.0.4,
@@ -114,7 +115,8 @@ Library
                   TRSParser >= 0.4, 
                   prolog >= 0.1.20100131,
                   prolog-tools >= 0.1.20100228,
-                  hashmap
+                  hashmap,
+                  hashable
 
   if flag(aprove)
     build-depends:network, 
