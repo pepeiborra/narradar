@@ -39,7 +39,6 @@ import Narradar
 import Narradar.Framework
 import Narradar.Framework.GraphViz (dotProof', DotProof(..))
 import Narradar.Utils
-import MuTerm.Framework.DotRep (DotInfo)
 import MuTerm.Framework.Output
 
 #ifdef TESTING
@@ -69,7 +68,7 @@ narradarMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
   let echoV str = when (verbose>1) $ hPutStrLn stderr str
   tmp <- getTemporaryDirectory
-  let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
+  let printDiagram :: Proof PrettyDotF mp a -> IO ()
       printDiagram proof
        | isNothing pdfFile = return ()
        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
@@ -131,7 +130,7 @@ prologMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
   let echoV str = when (verbose>1) $ hPutStrLn stderr str
   tmp <- getTemporaryDirectory
-  let printDiagram :: Proof (PrettyInfo, DotInfo) mp a -> IO ()
+  let printDiagram :: Proof PrettyDotF mp a -> IO ()
       printDiagram proof
        | isNothing pdfFile = return ()
        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do

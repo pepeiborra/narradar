@@ -41,7 +41,6 @@ import Narradar hiding ((!))
 import Narradar.Framework
 import Narradar.Framework.GraphViz (dotProof', DotProof(..))
 import Narradar.Utils
-import MuTerm.Framework.DotRep (DotInfo)
 import MuTerm.Framework.Output
 
 web_pdf_folder   = "/~pepe/logs"
@@ -93,7 +92,7 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
 
        let proof   = dispatchAProblem a_problem
        sol <- liftIO $ liftM Control.Monad.join $ withTimeout timeout $
-              evaluate (run (runProof proof) :: Maybe(Proof (PrettyInfo, DotInfo) mp ()))
+              evaluate (run (runProof proof) :: Maybe(Proof PrettyDotF mp ()))
 
        let dotsol = case sol of
                        Just sol -> dotProof' DotProof{showFailedPaths = False} sol

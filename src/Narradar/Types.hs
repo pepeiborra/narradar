@@ -5,6 +5,9 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Narradar.Types ( module Narradar.Framework
@@ -44,6 +47,7 @@ import           Data.Hashable
 import           Data.Maybe
 import           Data.Monoid
 import           Data.Set                             (Set)
+import           Data.Suitable
 import qualified Data.Map                             as Map
 import qualified Data.Set                             as Set
 import           Data.Traversable                     as T
@@ -121,8 +125,22 @@ bestError = maximumBy (compare `on` errorPos)
 -- Parsing and dispatching TPDB TRSs
 -- ---------------------------------
 
+newtype PrettyDotF a = PrettyDotF a deriving (Functor, Pretty, DotRep)
+instance Applicative PrettyDotF where
+  pure = PrettyDotF
+  PrettyDotF f <*> PrettyDotF a = PrettyDotF (f a)
+
+data instance Constraints PrettyDotF a = (Pretty a, DotRep a) => PrettyDotConstraint
+instance (Pretty a, DotRep a) => Suitable PrettyDotF a where constraints = PrettyDotConstraint
+
+instance Pretty (SomeInfo PrettyDotF) where
+  pPrint (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> pPrint p
+instance DotRep (SomeInfo PrettyDotF) where
+  dot (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dot p
+  dotSimple (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dotSimple p
+
 class Dispatch thing where
-    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyInfo, DotInfo) m Final
+    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyDotF) m Final
 
 mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
 mkDispatcher f =  f >=> final
@@ -160,7 +178,7 @@ dispatchAProblem :: (Traversable m, MonadPlus m
                     ,Dispatch (Problem (InitialGoal t Narrowing) trs)
                     ,Dispatch (Problem (InitialGoal t INarrowing) trs)
                     ,Dispatch PrologProblem
-                    ) => AProblem t trs -> Proof  (PrettyInfo, DotInfo) m Final
+                    ) => AProblem t trs -> Proof PrettyDotF m Final
 
 dispatchAProblem (ARewritingProblem p)         = dispatch p
 dispatchAProblem (AIRewritingProblem p)        = dispatch p
