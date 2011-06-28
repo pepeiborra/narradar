@@ -166,7 +166,8 @@ prologMain run = catchTimeout $ do
 -- ------------------------------
 -- Command Line Options handling
 -- ------------------------------
-usage = "Narradar - Automated Narrowing Termination Proofs"
+usage = "Narradar - Automated Narrowing Termination Proofs\n" ++
+        "USAGE: narradar OPTIONS [FILENAME]"
 
 getOptions = do
   args <- getArgs
