@@ -92,7 +92,7 @@ Library
                   timeit,
                   filepath, 
                   graphviz == 2999.1.0.2, 
-		  polyparse == 1.4,
+                  polyparse == 1.4,
                   deepseq,
                   strict, 
                   fgl,
