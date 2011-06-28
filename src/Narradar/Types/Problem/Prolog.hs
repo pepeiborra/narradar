@@ -12,6 +12,7 @@ import Control.Applicative hiding (many)
 import Control.Monad.Error
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString, pack)
+import Data.Char (isSpace)
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Maybe (catMaybes)
 import Data.Term
@@ -73,9 +74,13 @@ prologParser = do
   clauses<- liftM catRights Prolog.program
   return (prologProblem (upgradeGoal <$> concat goals) (upgradeIds clauses))
   where
-    f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just goal
-    f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just goal
+    f ('%'    :'q':'u':'e':'r':'y':':':goal) = Just (addLastDot goal)
+    f ('%':' ':'q':'u':'e':'r':'y':':':goal) = Just (addLastDot goal)
     f _ = Nothing
+
+    addLastDot str = case dropWhile isSpace (reverse str) of
+                       it@('.':_) -> reverse it
+                       it -> reverse ('.' : it)
 
     upgradeIds :: Prolog.Program String -> Prolog.Program (ArityId ByteString)
     upgradeIds = fmap2 (upgradePred . fmap (foldTerm return upgradeTerm))
@@ -91,6 +96,6 @@ prologParser = do
 
 
 parsePrologGoal :: String -> Either ParseError [Goal String]
-parsePrologGoal = parse (Prolog.whiteSpace >> many (goalP <* Prolog.whiteSpace)) "GOAL"
+parsePrologGoal = parse (Prolog.whiteSpace >> many (goalP <* Prolog.whiteSpace)) "(when parsing the query)"
  where
    goalP  = Goal <$> Prolog.identifier <*> modesP <* dot
