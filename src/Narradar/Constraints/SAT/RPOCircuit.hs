@@ -123,8 +123,8 @@ class Circuit repr => OneCircuit repr where
 oneExist :: (Ord v, Show v, ECircuit repr, ExistCircuit repr) => [repr v] -> repr v
 oneExist [] = false
 oneExist vv = (`runCont` id) $ do
-          ones  <- replicateM (length vv) (Cont exists)
-          zeros <- replicateM (length vv) (Cont exists)
+          ones  <- replicateM (length vv) (cont exists)
+          zeros <- replicateM (length vv) (cont exists)
           let encoding = andL
                   [ (one_i  `iff` ite b_i zero_i1 one_i1) `and`
                     ( zero_i `iff` (not b_i `and` zero_i1))
@@ -365,7 +365,7 @@ instance (ECircuit c, NatCircuit c, ExistCircuit c) => CastCircuit (FrozenShared
       where
         go (CTrue{})     = return true
         go (CFalse{})    = return false
-        go (CExist c)    = Cont exists
+        go (CExist c)    = cont exists
         go c@(CVar{})    = return $ input $ getChildren' c (varMap maps)
         go c@(CAnd{})    = liftM(uncurry and)     . go2 $ getChildren c (andMap maps)
         go c@(COr{})     = liftM(uncurry or)      . go2 $ getChildren c (orMap maps)

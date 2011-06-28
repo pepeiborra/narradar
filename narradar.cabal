@@ -31,8 +31,6 @@ Flag tests
    default: False
 Flag hood
    default: False
-Flag transformers
-   default: False
 Flag aprove
    description: include the Aprove processor in the build
    default: False
@@ -56,10 +54,6 @@ Library
      build-depends: hood
   else
      build-depends: hood-off
-  if flag(transformers)
-     build-depends: transformers, monads-fd
-  else
-     build-depends: mtl
   buildable: True
 --  cpp-options: -DGHCI
   ghc-options:  -O2
@@ -82,6 +76,7 @@ Library
   extra_libraries: yices
 
   build-Depends:  base,
+                  mtl >= 2.0.1.0,
                   failure == 0.1.*,
                   control-monad-failure == 0.7.*,
                   prettyclass,
@@ -114,8 +109,8 @@ Library
                   alacarte >= 0.4, 
                   funsat >= 0.6.2,
                   muterm-framework >= 1.3.2,
-                  term >= 0.1.20100603,
                   muterm-framework-charts,
+                  term >= 0.1.2011,
                   TRSParser >= 0.4, 
                   prolog >= 0.1.20100131,
                   prolog-tools >= 0.1.20100228,

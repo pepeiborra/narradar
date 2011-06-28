@@ -366,7 +366,7 @@ lexgt_exist id_f id_g ff gg = (`runCont` id) $ do
 --          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
 --          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
 -- The proposition is true iff M[0,0] is true
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
                       , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
@@ -398,7 +398,7 @@ lexgt_existA id_f id_g ff gg = (`runCont` id) $ do
 --          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
 --          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
 -- The proposition is true iff M[0,0] is true
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
                       , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
@@ -422,7 +422,7 @@ lexeq_exist _    _    [] [] = true
 lexeq_exist id_f _    _  [] = not . or . map input . filtering_vv $ id_f
 lexeq_exist _    id_g [] _  = not . or . map input . filtering_vv $ id_g
 lexeq_exist id_f id_g ff gg = (`runCont` id) $ do
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
                       , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
@@ -447,7 +447,7 @@ lexeq_existA _    _    [] [] = true
 lexeq_existA id_f _    _  [] = not . or . map input . filtering_vv $ id_f
 lexeq_existA _    id_g [] _  = not . or . map input . filtering_vv $ id_g
 lexeq_existA id_f id_g ff gg = (`runCont` id) $ do
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (Cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
                       , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
@@ -503,7 +503,7 @@ lexpgt id_f id_g ss tt = expgt_k (transpose $ enc_f) (transpose $ enc_g)
 lexpgt_exist id_f id_g [] _  = false
 lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (Cont exists)
+  vf_k <- replicateM k (cont exists)
   let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
                     [the_tail]
       the_tail = if length ss P.> length tt
@@ -525,7 +525,7 @@ lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
 lexpgt_existA id_f id_g [] _  = false
 lexpgt_existA id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (Cont exists)
+  vf_k <- replicateM k (cont exists)
   let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
                     [the_tail]
       the_tail = if length ss P.> length tt
@@ -546,7 +546,7 @@ lexpgt_existA id_f id_g ss tt = (`runCont` id) $ do
 
 lexpge_existA id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (Cont exists)
+  vf_k <- replicateM k (cont exists)
   let constraints = zipWith3 expge_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
                     [the_tail]
       the_tail = if length ss P.> length tt
@@ -595,8 +595,8 @@ muleq id_f id_g ff gg =
 mulgen id_f id_g ff gg k = (`runCont` id) $ do
     let (i,j)    = (length ff, length gg)
 
-    epsilons  <- replicateM i (Cont exists)
-    gammasM_t <- replicateM i $ replicateM j (Cont exists)
+    epsilons  <- replicateM i (cont exists)
+    gammasM_t <- replicateM i $ replicateM j (cont exists)
     let gammasM = transpose gammasM_t
 
         oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms =

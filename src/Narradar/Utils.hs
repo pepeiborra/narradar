@@ -396,17 +396,6 @@ instance (Hashable (f a), Hashable (g a)) => Hashable ((f:+:g) a) where
 instance (Functor f, Hashable (f Int)) => Hashable (Expr f) where
   hash = foldExpr hash
 
--- ---------------------------------------
--- Missing Applicative instances
--- ---------------------------------------
-instance Monad m => Applicative (StateT s m) where pure = return; (<*>) = ap
-instance Monad m => Applicative (Strict.StateT s m) where pure = return; (<*>) = ap
-instance Applicative (State s) where pure = return; (<*>) = ap
-instance Applicative (Strict.State s) where pure = return; (<*>) = ap
-
-instance (Monoid s, Monad m) => Applicative (WriterT s m) where pure = return; (<*>) = ap
---instance Applicative (Writer s) where pure = return; (<*>) = ap
-
 -- -----------------------------------
 -- Missing useful monadic instances
 -- -----------------------------------
@@ -426,35 +415,6 @@ data instance Constraints Signature id = Ord id => SigConstraints
 instance Ord id => Suitable Signature id where
    constraints = SigConstraints
 
--- --------------------------
--- RMonad instance for WriterT
--- --------------------------
-
-data instance Constraints (WriterT s m) a = WriterTConstraints
-instance (Monoid s) => Suitable (WriterT s m) a where
-   constraints = WriterTConstraints
-
-instance (Monad m, Monoid s) => R.RFunctor (WriterT s m) where
-   fmap = fmap
-
-instance (Monoid s, Monad m) => R.RMonad (WriterT s m) where
-   return = return
-   (>>=) = (>>=)
-   fail = fail
-
-#ifndef TRANSFORMERS
-data instance Constraints (Writer s) a = WriterConstraints
-instance (Monoid s) => Suitable (Writer s) a where
-   constraints = WriterConstraints
-
-instance (Monoid s) => R.RFunctor (Writer s) where
-   fmap = fmap
-
-instance (Monoid s) => R.RMonad (Writer s) where
-   return = return
-   (>>=) = (>>=)
-   fail = fail
-#endif
 -- -----------------------------
 -- Missing (:!:) Monoid instance
 -- -----------------------------
