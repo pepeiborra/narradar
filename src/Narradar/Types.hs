@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE GADTs, TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveFunctor #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs, TypeFamilies #-}
 
 module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Constraints.Unify
@@ -75,7 +77,7 @@ import           Narradar.Types.Problem.Rewriting
 import           Narradar.Types.Problem.Narrowing     hiding (baseProblem)
 import           Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, baseFramework)
 import           Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
-import           Narradar.Types.Problem.Prolog        hiding (goals)
+import           Narradar.Types.Problem.Prolog
 import           Narradar.Types.Problem.Relative      hiding (baseProblem, baseFramework)
 import           Narradar.Types.Problem.InitialGoal   hiding (baseProblem, baseFramework, goals)
 import           Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, baseFramework, pi_PType, heuristic)
@@ -124,7 +126,6 @@ bestError = maximumBy (compare `on` errorPos)
 -- ---------------------------------
 -- Parsing and dispatching TPDB TRSs
 -- ---------------------------------
-
 newtype PrettyDotF a = PrettyDotF a deriving (Functor, Pretty, DotRep)
 instance Applicative PrettyDotF where
   pure = PrettyDotF

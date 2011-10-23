@@ -113,9 +113,10 @@ instance Show (Strategy st) where
   show Innermost = "Innermost"
 
 instance Ord (Strategy st) where
-  compare Standard Innermost = GT
-  compare Innermost Standard = LT
-  compare x y = EQ
+  compare Standard Standard = EQ
+  compare Innermost Innermost = EQ
+  compare Innermost _ = LT
+
 
 isInnermost :: Strategy st -> Bool
 isInnermost Innermost = True

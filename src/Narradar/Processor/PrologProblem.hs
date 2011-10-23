@@ -10,6 +10,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TransformListComp #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.Processor.PrologProblem (
@@ -34,7 +35,7 @@ import qualified Control.RMonad                       as R
 import           Control.RMonad.AsMonad
 import           Data.AlaCarte                        as Al hiding (Note)
 import           Data.AlaCarte.Ppr                    hiding (Note)
-import           Data.Bifunctor
+import           Data.Bifunctor                       (bimap)
 import           Data.ByteString.Char8                (ByteString, pack, unpack)
 import           Data.Char                            (isSpace)
 import           Data.List                            as List hiding (any,notElem)
@@ -270,7 +271,7 @@ instance (Ord k, Traversable t, GetFresh t v thing) => GetFresh t v (Map k thing
 --instance (Traversable t, GetFresh t v thing1, GetFresh t v thing2) => GetFresh t v (thing1, thing2) where
 --    getFreshM (t1,t2) = do {t1' <- getFreshM t1; t2'<- getFreshM t2; return (t1',t2')}
 
-instance (Pretty (Term (TermF id) v)) => Pretty (ClauseRules (Rule (TermF id) v)) where pPrint = vcat . map pPrint . rules
+instance (Pretty id, Pretty v) => Pretty (ClauseRules (Rule (TermF id) v)) where pPrint = vcat . map pPrint . rules
 
 
 type PrologRules id v = Map (Prolog.Clause'' (WithoutPrologId id) (Term (TermF (WithoutPrologId id)) v))
@@ -370,7 +371,7 @@ skTransformWithM mkIndex clauses = do
              gg' = mapTermSymbols FunctorId <$$> gg
          modify (getVars tt' `mappend`)
          rhs_0  <- mkRhs (head gg')
-         mid_r  <- forM (gg' `zip` tail gg') $ \(c,sc) -> (:->) <$> mkLhs c <*> mkRhs sc
+         mid_r  <- forM (gg' `zip` tail gg') $ \(c,sc) -> liftM2 (:->) (mkLhs c) (mkRhs sc)
          lhs_n  <- mkLhs (last gg')
          let r_0 = term (InId id) tt' :-> rhs_0
              r_n = lhs_n :-> term (OutId id) tt'
@@ -378,13 +379,13 @@ skTransformWithM mkIndex clauses = do
 
        mkRhs (Pred id tt) = mkRhs' id tt
        mkRhs' id tt = do
-         vv  <- toList <$> get
+         vv  <- toList `liftM` get
          i   <- next
          return (term (UId i) (term (InId id) tt : map Pure vv))
 
        mkLhs (Pred id tt) = mkLhs' id tt
        mkLhs' id tt = do
-         vv  <- toList <$> get
+         vv  <- toList `liftM` get
          modify(getVars tt `mappend`)
          i   <- current
          return (term (UId i) (term (OutId id) tt : map Pure vv))
@@ -1123,8 +1124,9 @@ prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0
 
 --newtype PrologM id v a = PrologM {unPrologM:: StateT (PrologMState id v) (StateT [v]  (AsMonad Set)) a}
 newtype PrologM id v a = PrologM {unPrologM:: RWST String [String] (PrologMState id v) (StateT [v] Identity) a}
-  deriving (Functor, Monad, MonadVariant v, MonadWriter [String])
+  deriving (Functor, Monad, MonadWriter [String])
 
+deriving instance Rename v => MonadVariant v (PrologM id v)
 --evalPrologM (PrologM m) st0 = m `evalRWST` st0 `evalStateT` ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0))
 execPrologM (PrologM m) st0 = trace ("running PrologM with max depth " ++ show (prologM_maxdepth st0)) $
                               m `execWST` st0 `evalStateT` ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0))

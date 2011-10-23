@@ -230,8 +230,8 @@ instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTR
   apply af (ListTRS rr _)      = let rr' = AF.apply af <$$> rr in ListTRS rr' (getSignature rr')
 
 instance (Functor t, Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
-  extraVars (TRS rr _) = extraVars rr
-  extraVars (PrologTRS rr _) = extraVars rr
+  extraVars (TRS rr _)        = extraVars rr
+  extraVars (PrologTRS rr _)  = extraVars rr
   extraVars (DPTRS a _ _ _ _) = extraVars (A.elems a)
 
 instance (ICap t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap t v (typ, [Rule t v]) where
@@ -322,7 +322,10 @@ restrictTRS (DPTRS dps rr gr (unif :!: unifInv) _) indexes
    nindexes   = length indexes -1
    dps'       = extractIxx dps indexes `asTypeOf` dps
    gr'        = A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
+
+   extractIxx :: Array Int a -> [Int] -> Array Int a
    extractIxx arr nodes = A.listArray (0, length nodes - 1) [safeAt "restrictTRS" arr n | n <- nodes]
+
    unif' = (reindexArray unif :!: reindexArray unifInv)
    reindexArray arr =
            A.array ( (0,0), (nindexes, nindexes) )
@@ -378,8 +381,8 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
                 (x, r',r)    <- liftL $ zip3 [0..] rhss' (map rhs the_dps)
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
                 let unifier = unify l r'
---                pprTrace (text "unify" <+> l <+> text "with" <+>
---                          r' <+> parens (text "icap" <+> rules(snd p_f) <+> r) <+> equals <+> unifier) (return ())
+                pprTrace (text "unify" <+> l <+> text "with" <+>
+                          r' <+> parens (text "icap" <+> rules(snd p_f) <+> r) <+> equals <+> unifier) (return ())
                 return ((x,y), unifier)
    return $ array ( (0,0), (ldps, ldps) ) unif
  where

@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
@@ -30,6 +31,8 @@ import Control.Monad.Reader
 import qualified Control.RMonad as R
 import qualified Data.Array as A
 import Data.Bifunctor
+import Data.Bifoldable
+import Data.Bitraversable
 import Data.Foldable (Foldable, foldMap, toList)
 import Data.List ((\\), find, transpose, inits, tails, zip4)
 import Data.Maybe
@@ -74,6 +77,20 @@ instance SATSymbol MPOsymbol  where mkSATSymbol = mpo
 
 -- | RPO + AF
 
+rpoAF :: (id ~ SignatureId trs
+         ,Ord id, Show id
+         ,HasSignature trs
+         ,HasRules (TermF id) v' trs
+         ,Ord v', Show v', Pretty v', Hashable v'
+         ,SATSymbol sid
+         ,HasStatus v (sid v id)
+         ,HasFiltering v (sid v id)
+         ,HasPrecedence v (sid v id)
+         ,RPOCircuit repr (sid v id) v'
+         ,Decode v Bool v
+         ,MonadReader r mr
+         ,MonadSAT repr v m) =>
+         Bool -> trs -> m( mr ((), r, [sid v id]))
 rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
   let symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
   let problem = and [ l > r | l:->r <- symb_rules]
@@ -82,6 +99,25 @@ rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
 
 
 -- | Returns the indexes of non decreasing pairs and the symbols used
+rpoAF_DP ::
+         (trs  ~ NarradarTRS (TermF id) v'
+         ,trs' ~ NarradarTRS (TermF (sid v id)) v'
+         ,id   ~ SignatureId trs
+         ,Ord id, Show id
+         ,Ord v', Show v', Pretty v', Hashable v'
+         ,MkDPProblem typ trs'
+         ,SATSymbol sid
+         ,Ord (sid v id)
+         ,HasStatus v (sid v id)
+         ,HasFiltering v (sid v id)
+         ,HasPrecedence v (sid v id)
+         ,RPOCircuit repr (sid v id) v'
+         ,UsableSymbol v (sid v id)
+         ,Decode v Bool v
+         ,MonadSAT repr v m) =>
+         Bool -> (Problem typ trs' -> repr v) -> Problem typ trs
+         -> m (EvalM v ([Int], BIEnv v, [sid v id]))
+
 rpoAF_DP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
@@ -109,35 +145,34 @@ rpoAF_DP allowCol omega p
     let the_non_decreasing_pairs = [ r | (r,False) <- zip [(0::Int)..] decreasing]
     return the_non_decreasing_pairs
 
-
-rpoAF_IGDP :: (Ord id
-              ,Traversable (Problem base), Pretty base
-              ,MkDPProblem (InitialGoal (TermF sid) base) (NTRS sid)
-              ,NUsableRules base sid
-              ,NCap base sid
---              ,NeededRules (TermF sid) Narradar.Var base (NTRS sid)
-              ,HasMinimality base
-              ,DPSymbol id, Pretty id
-              ,SATSymbol satSymbol
-              ,sid ~ satSymbol Var id
-              ,Ord sid, Pretty sid, Show id
-              ,UsableSymbol Var sid
-              ,DPSymbol sid
-              ,HasPrecedence Var sid
-              ,HasStatus Var sid
-              ,HasFiltering Var sid
-              ,Hashable sid
-              ,Decode sid (SymbolRes id) Var
-              ,MonadSAT repr Var m
-              ,RPOExtCircuit repr sid Narradar.Var
-              ,HasSignature (NProblem (InitialGoal (TermF id) base) id)
-              ) => Bool -> (NProblem (InitialGoal (TermF sid) base) sid -> (repr Var, EvalM Var extraConstraints))
-                -> NProblem (InitialGoal (TermF id) base) id
-                -> m (EvalM Var (([Int], extraConstraints), BIEnv Var, [sid]))
+rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid satSymbol repr m v' base extraConstraints.
+         (initialgoal  ~ InitialGoal (TermF id) base
+         ,initialgoal' ~ InitialGoal (TermF sid) base
+         ,problem  ~ NProblem initialgoal id
+         ,problem' ~ NProblem initialgoal' sid
+         ,sid  ~ satSymbol Var id
+         ,Ord sid, Pretty sid, DPSymbol sid, Hashable sid
+         ,Ord id, Show id, DPSymbol id, Pretty id
+         ,Traversable (Problem base), Pretty base
+         ,MkDPProblem initialgoal' (NTRS sid)
+         ,IsDPProblem base
+         ,SATSymbol satSymbol
+         ,HasStatus Var sid
+         ,HasFiltering Var sid
+         ,HasPrecedence Var sid
+         ,RPOExtCircuit repr sid Narradar.Var
+         ,UsableSymbol Var sid
+         ,Decode sid (SymbolRes id) Var
+         ,MonadSAT repr Var m) =>
+            Bool
+         -> (problem' -> (repr Var, EvalM Var extraConstraints))
+         -> problem
+         -> m (EvalM Var ( ([Int], extraConstraints), BIEnv Var, [sid]))
 
 rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
   = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
-  let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
+  let convert :: forall v. Term (TermF id) v -> Term (TermF sid) v
+      convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = mapNarradarTRS convert (getR p)
       dps' = mapNarradarTRS convert (getP p)
       typ' = InitialGoal (map (bimap convert convert) goals)
@@ -196,6 +231,25 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
  where isTheRightKind :: InitialGoal (f id) base -> InitialGoal (f id) base
        isTheRightKind = id
 
+
+rpoAF_NDP :: 
+         (problem  ~ NProblem typ  id
+         ,problem' ~ NProblem typ  sid
+         ,sid  ~ satSymbol Var id
+         ,Ord id, Show id
+         ,Ord sid
+         ,MkDPProblem typ (NTRS sid)
+         ,SATSymbol satSymbol
+         ,HasStatus Var sid
+         ,HasFiltering Var sid
+         ,HasPrecedence Var sid
+         ,RPOCircuit repr sid Narradar.Var
+         ,UsableSymbol Var sid
+         ,MonadSAT repr Var m) =>
+            Bool
+         -> (problem' -> repr Var)
+         -> problem
+         -> m (EvalM Var ( ([Int], [Int]), BIEnv Var, [sid]))
 rpoAF_NDP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
@@ -207,11 +261,15 @@ rpoAF_NDP allowCol omega p
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
 
-  let af_ground_rhs_dps = map afGroundRHS (rules dps')
-      variable_cond     = and $ map variableCondition (rules dps')
+  let af_ground_rhs_dps :: forall repr. Circuit repr => [repr Var]
+      af_ground_rhs_dps = map afGroundRHS (rules dps')
+--      variable_cond     = and $ map variableCondition (rules dps')
 
   assert (map input decreasing_dps)
   assert af_ground_rhs_dps
+-- FIXME reenable the variable condition
+--  assert variable_cond
+
   assertAll (omega  p' :
              [ l >~ r | l:->r <- rules dps'])
 
@@ -229,13 +287,13 @@ rpoAF_NDP allowCol omega p
 
 
 runRPOAF allowCol sig f = do
-  let ids  = getArities sig
+  let ids  = arities sig
       bits = calcBitWidth $ Map.size ids
 
   symbols <- mapM mkSATSymbol
                   [ (f, ar, def)
                     | (f,ar) <-  Map.toList ids
-                    , let def = Set.member f (getDefinedSymbols sig)]
+                    , let def = Map.member f (definedSymbols sig)]
   if allowCol
     then assertAll [not(listAF s) --> one [inAF i s | i <- [1..a]]
                     | (s,a) <- zip symbols (Map.elems ids)]
@@ -740,6 +798,22 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
          rls       = rulesFor id_t trs
          rest      = trs \\ rls
 
+omegaIGgen :: forall problem initialgoal id base repr v.
+              (problem ~ NProblem initialgoal id
+              ,initialgoal ~ InitialGoal (TermF id) base
+              ,Traversable (Problem base), MkDPProblem base (NTRS id), HasMinimality base
+              ,NCap base id
+              ,NUsableRules base id
+              ,NNeededRules base id
+              ,Pretty base
+              ,Ord id, Pretty id, Show id, Hashable id, DPSymbol id, GenSymbol id
+              ,HasStatus Var id
+              ,HasFiltering Var id
+              ,HasPrecedence Var id
+              ,UsableSymbol Var id
+              ,RPOCircuit repr id Narradar.Var
+              ,ECircuit repr
+              ) => problem  -> (repr Var, EvalM Var [Tree id Narradar.Var Var])
 omegaIGgen p
   | isLeftLinear (getR p) = pprTrace ("omegaIGgen: partial = " <+> partial)
                             omegaIG p
@@ -752,9 +826,11 @@ omegaIGgen p
                 else []
         })
  where
-   isTree = id :: Tree id v Var -> Tree id v Var
+   isTree = id :: forall id v v'. Tree id v v' -> Tree id v v'
    Just gen = find isGenSymbol (toList $ getDefinedSymbols p)
+   genTerm :: Term (TermF id) Narradar.Var
    genTerm = term gen []
+   extraConstraints :: forall repr. RPOCircuit repr id Narradar.Var => [repr Var]
    extraConstraints = [ genTerm > term f (replicate i genTerm) | (f,i) <- Map.toList partial]
    partial = definedSymbols (getSignature p)
              `Map.difference`

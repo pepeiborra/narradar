@@ -164,7 +164,7 @@ instance (IsDPProblem p, Pretty p, Pretty trs) => Pretty (Problem p trs) where
             text "TRS:" <+> pPrint (getR p) $$
             text "DPS:" <+> pPrint (getP p)
 
-instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Pretty (Term t v)
+instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Pretty v, Pretty (t(Term t v))
          ) => HTML (Problem typ trs) where
     toHtml p
      | null $ rules (getP p) =

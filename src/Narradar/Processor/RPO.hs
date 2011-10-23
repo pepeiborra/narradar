@@ -386,17 +386,17 @@ procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
 -}
 
 
-procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
- omega = case usablerules of
-            Needed -> omegaIGgen
-            Usable -> omegaIGgen
+procAF_IGgen p e usablerules run
+  = case usablerules of
+            Needed -> (f . unsafePerformIO . run omegaIGgen) p
+            Usable -> (f . unsafePerformIO . run omegaIGgen) p
 --            None   -> omegaNone
-
- f Nothing = dontKnow (rpoFail p) p
- f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
+ where
+  f Nothing = dontKnow (rpoFail p) p
+  f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
    = -- CE.assert isValidProof $
-     singleP proof p (setP (restrictTRS dps nondec_dps) p)
-  where
+     singleP proof p (setP (restrictTRS dps nondec_dps) p) where
+
    symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
    proof         = RPOAFExtraProof decreasingDps usableRules symbols extraConstraints'
    dps           = getP p
@@ -412,12 +412,12 @@ procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
 -- We do not just remove the strictly decreasing pairs,
 -- Instead we create two problems, one without the decreasing pairs and one
 -- without the ground right hand sides
-procNAF p e usablerules run = (f . unsafePerformIO . run omega) p where
- omega = case usablerules of
-            Needed -> omegaNeeded
-            Usable -> omegaUsable
-            None   -> omegaNone
-
+procNAF p e usablerules run =
+ case usablerules of
+            Needed -> (f . unsafePerformIO . run omegaNeeded) p
+            Usable -> (f . unsafePerformIO . run omegaUsable) p
+            None   -> (f . unsafePerformIO . run omegaNone) p
+   where
  f Nothing = dontKnow (rpoFail p) p
  f (Just ((non_dec_dps, non_rhsground_dps), bienv, symbols_raw)) =
     let proof = RPOAFProof decreasingDps usableRules symbols

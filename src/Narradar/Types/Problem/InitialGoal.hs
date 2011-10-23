@@ -7,6 +7,7 @@
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
+{- LANGUAGE NoMonoLocalBinds -}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE Rank2Types #-}
 
@@ -62,7 +63,7 @@ data InitialGoal t p = InitialGoal
 
 data CAGoalF c a = Concrete c
                  | Abstract a
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Functor)
 
 type CAGoal t = CAGoalF (Term t Var) (Term t Mode)
 
@@ -78,12 +79,13 @@ instance (Show p, Show (Term t Var), Show (Term t Mode)) => Show (InitialGoal t 
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
-mapInitialGoal :: (Functor t, Functor t', Foldable t', HasId t', Ord (Term t Var), Ord(Term t' Var)) =>
+mapInitialGoal :: forall t t' p . (Functor t, Functor t', Foldable t', HasId t', Ord (Term t Var), Ord(Term t' Var)) =>
                   (forall a. t a -> t' a) -> InitialGoal t p -> InitialGoal t' p
 mapInitialGoal f (InitialGoal goals dg p) = InitialGoal goals' dg' p
       where
         goals' = map (bimap f' f') goals
         dg'    = mapDGraph f' <$> dg
+        f'    :: forall a. Term t a -> Term t' a
         f'     = foldTerm return (Impure . f)
 
 instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
@@ -355,8 +357,6 @@ initialGoalProblem :: ( t ~ f id, MapId f, DPSymbol id
 
 initialGoalProblem gg Nothing p = InitialGoalProblem gg (mkDGraph p gg) p
 initialGoalProblem gg (Just dg) p = InitialGoalProblem gg dg p
-
-updateInitialGoalProblem p p0 = p{baseProblem = p0}
 
 concrete gg = [g | Concrete g <- gg]
 abstract gg = [g | Abstract g <- gg]
@@ -670,7 +670,9 @@ mkDGraph' typ trs pairs@(DPTRS dpsA _ fullgraph _ _) goals = runIcap (rules trs 
   -- There must be at least one initial pair, right ?
    return the_dgraph
 
-  where liftL = ListT . return
+  where
+    liftL :: Monad m => [a] -> ListT m a
+    liftL = ListT . return
 
 insertDGraph p@InitialGoalProblem{..} newdps
     = mkDGraph' (getFramework p') (getR p') dps' goals

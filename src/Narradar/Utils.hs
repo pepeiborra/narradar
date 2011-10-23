@@ -16,7 +16,7 @@ import           Control.DeepSeq
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Exception                    (bracket)
-import           Control.Monad                        (liftM2, ap, when, MonadPlus, msum)
+import           Control.Monad                        (liftM, liftM2, ap, when, MonadPlus, msum)
 import           Control.Monad.Identity(Identity(..))
 import           Control.Monad.Free                   (Free(..))
 import           Control.Failure
@@ -233,6 +233,7 @@ selectSafe msg ii xx
   | otherwise = map (safeIx (!!) xx) ii
   where
     len = length xx
+    safeIx :: (container a -> Int -> a) -> container a -> Int -> a
     safeIx (!!) xx i
         | i > len - 1 = error ("select(" ++ msg ++ "): index too large")
         | i < 0       = error ("select(" ++ msg ++ "): negative index")
@@ -362,6 +363,7 @@ readProcessWithExitCodeBS exec args input = do
           return (code, out, err)
         return (code, out, err)
   where
+   ignore :: Monad m => a -> m ()
    ignore _ = return ()
 
 -- --------------------------------------------

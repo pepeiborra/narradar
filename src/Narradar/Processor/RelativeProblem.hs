@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances, FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Narradar.Processor.RelativeProblem where
 
 import Data.Monoid
@@ -34,9 +34,9 @@ instance ( MkProblem base trs
          , Info info RelativeToRegularProof
          , HasMinimality base
          ) => Processor info RelativeToRegular (Problem (Relative trs base) trs) (Problem base trs) where
-  apply RelativeToRegular p@RelativeProblem{..}
+  apply RelativeToRegular p@RelativeProblem{relativeTRS}
     | isGeneralizedRelaxedHierarchicalCombination (getR p) relativeTRS
-    = let p' = setMinimality A baseProblem
+    = let p' = setMinimality A (getBaseProblem p)
       in singleP RelativeToRegularProof p p'
 
     | otherwise = dontKnow RelativeToRegularProofFail p

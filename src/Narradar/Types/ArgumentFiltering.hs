@@ -18,7 +18,7 @@ import Control.Applicative
 import Control.Arrow (first,second)
 import Control.Monad.Fix (fix)
 import Control.Failure
-import Data.Bifunctor
+import Data.Bifunctor (bimap)
 import Data.List (partition, find, inits, unfoldr, sortBy)
 import Data.Map (Map)
 import Data.Maybe
@@ -259,15 +259,15 @@ isSoundAF     af trs = null (extraVars $ apply af trs)
 -- -----------
 -- * Heuristics
 -- -----------
+type HeuFunction id t v = (Foldable t, HasId t) => AF_ id -> Term t v -> Position -> Set (id, Int)
+
 -- | The type of heuristics
 data Heuristic (id :: *) where
-      Heuristic :: (forall t v. (Foldable t, HasId t, TermId t ~ id) =>
-                    AF_ id -> Term t v -> Position -> Set (id, Int))
-                -> Bool
-                -> Heuristic id
+      Heuristic :: (forall t v. id ~ TermId t => HeuFunction id t v) -> Bool -> Heuristic id
 
-runHeu :: (Foldable t, HasId t, TermId t ~ id) => Heuristic id -> AF_ id -> Term t v -> Position -> Set (id,Int)
+runHeu :: (TermId t ~ id) => Heuristic id -> HeuFunction id t v
 runHeu (Heuristic f _) = f
+
 isSafeOnDPs :: Heuristic id -> Bool
 isSafeOnDPs (Heuristic _ b) = b
 
@@ -301,21 +301,23 @@ bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
 innermost, outermost :: forall id . Ord id => Heuristic id
 
 innermost = Heuristic f True where
+   f :: HeuFunction (TermId t) t v
    f _ _ [] = mempty
    f _ t pos | Just root <- getId (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
 outermost = Heuristic f False where
-  f _ _ [] = mempty
-  f _ t pos | Just root <- getId t = Set.singleton (root, head pos)
+   f :: HeuFunction (TermId t) t v
+   f _ _ [] = mempty
+   f _ t pos | Just root <- getId t = Set.singleton (root, head pos)
 
 
 predHeuAll strat pred = f where
-  f _  _ []  = mempty
-  f af t pos = Set.fromList $ fst $ partition (pred af) (strat af t pos)
+   f _  _ []  = mempty
+   f af t pos = Set.fromList $ fst $ partition (pred af) (strat af t pos)
 
 predHeuOne strat pred = f where
-  f _  _ []  = mempty
-  f af t pos = maybe mempty Set.singleton $ find (pred af) (strat af t pos)
+   f _  _ []  = mempty
+   f af t pos = maybe mempty Set.singleton $ find (pred af) (strat af t pos)
 
 allInner _  _ []  = mempty
 allInner _ t pos =  [(root, last sub_p)
@@ -367,16 +369,19 @@ typeHeu2 assig = MkHeu $ \_ -> TypeHeu2 assig'
 
 data TypeHeu2 id = TypeHeu2 (SharingAssignment String)
 
-instance PolyHeuristic TypeHeu2 String
-   where runPolyHeu (TypeHeu2 assig) = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
-             where f (p,i)  = Set.notMember (p,i) reflexivePositions
-                   reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
+instance PolyHeuristic TypeHeu2 String where
+  runPolyHeu (TypeHeu2 assig) = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
+    where
+      f (p,i)  = Set.notMember (p,i) reflexivePositions
+      reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
 
 
-instance (Ord id, Pretty id) => PolyHeuristic TypeHeu2 id
-   where runPolyHeu (TypeHeu2 assig) = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
-             where f (show.pPrint -> p,i)  = Set.notMember (p,i) reflexivePositions
-                   reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
+instance (Ord id, Pretty id) => PolyHeuristic TypeHeu2 id where
+  runPolyHeu (TypeHeu2 assig) = Heuristic (predHeuOne allInner (const f) `or` runHeu innermost) True
+     where
+      f :: (id, Int) -> Bool
+      f (show.pPrint -> p,i) = Set.notMember (p,i) reflexivePositions
+      reflexivePositions = Set.fromList [ (f,i) | c <- assig, (f,i) <- F.toList c, i /= 0, (f,0) `Set.member` c]
 
 -- Predicates
 -- ----------

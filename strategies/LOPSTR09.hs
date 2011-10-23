@@ -1,5 +1,5 @@
 
-{-# LANGUAGE TypeFamilies #-}
+
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -49,7 +49,7 @@ instance Dispatch PrologProblem where
 instance () => Dispatch (NProblem Rewriting Id) where
   dispatch = ev >=> (inn .|. (dg >=> rpoPlus gt2 >=> final))
 
-instance (id ~ DPIdentifier a, Pretty id, Hashable a, Ord a) => Dispatch (NProblem IRewriting id) where
+instance (Pretty (DPIdentifier a), Hashable a, Ord a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
   dispatch = ev >=> sc >=> dg >=> rpoPlus gt1 >=> final
 
 -- Narrowing

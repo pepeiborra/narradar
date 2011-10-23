@@ -39,6 +39,7 @@ import Narradar
 import Narradar.Framework
 import Narradar.Framework.GraphViz (dotProof', DotProof(..))
 import Narradar.Utils
+import Narradar.Types (PrettyDotF)
 import MuTerm.Framework.Output
 
 #ifdef TESTING

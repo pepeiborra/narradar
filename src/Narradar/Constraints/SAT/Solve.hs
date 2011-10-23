@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{- LANGUAGE NoMonoLocalBinds #-}
 
 module Narradar.Constraints.SAT.Solve
     ( BIEnv, EvalM, runEvalM

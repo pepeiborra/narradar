@@ -98,7 +98,7 @@ instance (gid ~ DPIdentifier (GenId id)
                                                                     (MkNarrowingGen base)))
                                   gid)
   where
- apply NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{goals, dgraph}
+ apply NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{..}
       | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
           = mprod [singleP NarrowingGoalToRelativeRewritingProof prob p | p <- newProblems]
       | otherwise = dontKnow prob NotConstructorBased

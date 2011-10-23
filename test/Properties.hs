@@ -1605,7 +1605,7 @@ instance Arbitrary (SAT' Id LPOsymbol Var (RuleN LDPId))
       rhs <- sized sizedTerm
       let rule  = lhs :-> rhs
           symbs = toList $ getAllSymbols rule
-      return $ traverse (mapTermSymbolsM (mkSATSymbol' lpo)) rule
+      return $ traverse (mapTermSymbolsA (mkSATSymbol' lpo)) rule
 
 instance Arbitrary (SAT' Id MPOsymbol Var (RuleN (MPOsymbol Var DPId)))
   where
@@ -1614,7 +1614,7 @@ instance Arbitrary (SAT' Id MPOsymbol Var (RuleN (MPOsymbol Var DPId)))
       rhs <- sized sizedTerm
       let rule  = lhs :-> rhs
           symbs = toList $ getAllSymbols rule
-      return $ traverse (mapTermSymbolsM (mkSATSymbol' mpo)) rule
+      return $ traverse (mapTermSymbolsA (mkSATSymbol' mpo)) rule
 
 instance Arbitrary (SAT' Id LPOSsymbol Var (RuleN (LPOSsymbol Var DPId)))
   where
@@ -1623,7 +1623,7 @@ instance Arbitrary (SAT' Id LPOSsymbol Var (RuleN (LPOSsymbol Var DPId)))
       rhs <- sized sizedTerm
       let rule  = lhs :-> rhs
           symbs = toList $ getAllSymbols rule
-      return $ traverse (mapTermSymbolsM (mkSATSymbol' lpos)) rule
+      return $ traverse (mapTermSymbolsA (mkSATSymbol' lpos)) rule
 
 
 type SAT' id lpoid v = StateT (Map id (lpoid v (DPIdentifier id))  )
@@ -1631,15 +1631,20 @@ type SAT' id lpoid v = StateT (Map id (lpoid v (DPIdentifier id))  )
 
 runSAT' = (`runState` st0{pool=[V 1000..]}) . unSAT . (`evalStateT` Map.empty)
 
---mkSATSymbol' :: Id -> SAT' Id Var LDPId
-mkSATSymbol' mk s = do
-  dict <- get
-  case Map.lookup s dict of
-    Just sat -> return sat
-    _        -> do
-      s' <- lift $ mkSATSymbol mk s
-      modify (Map.insert s s')
-      return s'
+-- --mkSATSymbol' :: Id -> SAT' Id Var LDPId
+-- mkSATSymbol' mk s = do
+--   dict <- get
+--   case Map.lookup s dict of
+--     Just sat -> return sat
+--     _        -> do
+--       s' <- lift $ mkSATSymbol mk s
+--       modify (Map.insert s s')
+--       return s'
+
+mkSATSymbol' mk s = f <$> get where
+  f dict = case Map.lookup s dict of
+             Just sat -> pure sat
+             _        -> mkSATSymbol mk s <$ modify (Map.insert s s')
 
 -- --------
 -- Helpers

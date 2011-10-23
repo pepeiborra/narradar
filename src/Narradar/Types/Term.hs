@@ -15,6 +15,7 @@ module Narradar.Types.Term
                      ,module Data.Term, module Data.Term.Rules, MonadFree(..))
     where
 
+import           Control.Applicative
 import           Control.Arrow          (first)
 import           Control.DeepSeq
 import           Control.Monad.Free
@@ -111,7 +112,7 @@ instance Ord id =>  HasId (TermF id) where
     type TermId (TermF id) = id
     getId (Term id _) = Just id
 
-instance MapId TermF where mapIdM f (Term id tt) = (`Term` tt) `liftM` f id
+instance MapId TermF where mapIdM f (Term id tt) = (`Term` tt) <$> f id
 
 -- -----
 -- Size

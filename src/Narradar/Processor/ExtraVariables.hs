@@ -4,13 +4,12 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 module Narradar.Processor.ExtraVariables where
 
+import Control.Applicative
 import Data.Foldable (Foldable)
 
 import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Types
---import Narradar.Types.ArgumentFiltering (bestHeu, mkHeu)
-import Narradar.Types.Problem.Relative
 
 data ExtraVarsP  = ExtraVarsP
 --data ExtraVarsAF tag =  ExtraVarsAF (MkHeu tag)
@@ -44,7 +43,7 @@ instance ( Processor info ExtraVarsP (Problem base trs) (Problem base' trs)
          ) =>
           Processor info ExtraVarsP (Problem (InitialGoal t base) trs) (Problem (InitialGoal t base') trs)
   where
-    apply ExtraVarsP p@InitialGoalProblem{..} = updateInitialGoalProblem p `fmap` apply ExtraVarsP baseProblem
+    apply ExtraVarsP p = (`setBaseProblem` p) <$> apply ExtraVarsP (getBaseProblem p)
 
 
 instance ( Processor info ExtraVarsP (Problem base trs) (Problem base' trs)
@@ -54,7 +53,7 @@ instance ( Processor info ExtraVarsP (Problem base trs) (Problem base' trs)
          ) =>
           Processor info ExtraVarsP (Problem (Relative trs base) trs) (Problem (Relative trs base') trs)
   where
-    apply ExtraVarsP p@RelativeProblem{..} = (\p0' -> p{baseProblem=p0'}) `fmap` apply ExtraVarsP baseProblem
+    apply ExtraVarsP p = (`setBaseProblem` p) <$> apply ExtraVarsP (getBaseProblem p)
 
 
 -- In this case we don't need to do anything since Narrowing can terminate with extra variables
