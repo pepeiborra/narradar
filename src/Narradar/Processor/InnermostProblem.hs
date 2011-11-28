@@ -1,5 +1,7 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances #-}
 module Narradar.Processor.InnermostProblem where
 
@@ -10,7 +12,11 @@ import Narradar.Framework.Ppr
 import Narradar.Types
 import Narradar.Constraints.Syntactic
 
-data ToInnermost = ToInnermost
+import qualified Data.Term.Family as Family
+
+data ToInnermost (info :: * -> *) = ToInnermost
+type instance InfoConstraint (ToInnermost info) = info
+
 data ToInnermostProof = AlmostOrthogonalProof
                       | OrthogonalProof
                       | ToInnermostFail
@@ -22,12 +28,18 @@ instance Pretty ToInnermostProof where
    pPrint AlmostOrthogonalProof = text "R is almost orthogonal, therefore innermost termination implies termination"
    pPrint ToInnermostFail = text "Innermost termination does not imply termination for this system"
 
-instance (HasRules t v trs, Ord v, Rename v, Enum v, Unify t
+instance (HasRules trs
+         ,Family.Rule trs ~ Rule t v
+         ,v ~ Family.Var trs
+         ,Ord v, Rename v, Enum v, Unify t
          ,Eq (t(Term t v))
          ,MkDPProblem IRewriting trs
-         ,Info info ToInnermostProof) =>
-    Processor info ToInnermost (Problem Rewriting trs) (Problem IRewriting trs)
+         ,Info info ToInnermostProof
+         ) =>
+    Processor (ToInnermost info) (Problem Rewriting trs)
   where
+   type Typ (ToInnermost info) (Problem Rewriting trs) = IRewriting
+   type Trs (ToInnermost info) (Problem Rewriting trs) = trs
    apply ToInnermost p
       | isOrthogonal p = singleP OrthogonalProof p p'
       | isAlmostOrthogonal p = singleP AlmostOrthogonalProof p p'
@@ -39,10 +51,13 @@ instance (HasRules t v trs, Ord v, Rename v, Enum v, Unify t
        cps = criticalPairs p
        MkRewriting st0 min = getFramework p
 
-instance (Info info (Problem base trs)
-         ,FrameworkExtension ext
-         ,Info info (Problem base' trs)
-         ,Processor info ToInnermost (Problem base trs) (Problem base' trs)) =>
-   Processor info ToInnermost (Problem (ext base) trs) (Problem (ext base') trs)
-  where
-    apply = liftProcessor
+-- instance (Info info (Problem base trs)
+--          ,FrameworkExtension ext
+--          ,Info info (Res (ToInnermost info) (Problem base trs))
+--          ,Processor (ToInnermost info) (Problem base trs)
+--          ) =>
+--    Processor (ToInnermost info) (Problem (ext base) trs)
+--   where
+--     type Typ (ToInnermost info) (Problem (ext base) trs) = ext (Typ (ToInnermost info) (Problem base trs))
+--     type Trs (ToInnermost info) (Problem (ext base) trs) = trs
+--     apply = liftProcessor

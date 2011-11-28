@@ -4,6 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Narradar.Framework (
@@ -17,10 +18,14 @@ module Narradar.Framework (
 import Control.Exception (Exception)
 import Control.Monad.Free
 import Control.Monad.Identity
-import Data.Foldable (toList)
-import Data.Term (foldTerm, getId)
+import Data.Foldable (toList, Foldable, foldMap)
 import Data.Traversable (Traversable)
 import Data.Typeable
+
+import Data.Term (foldTerm, getId)
+import qualified Data.Term as Family
+import Data.Rule.Family as Family
+import Data.Term.Variables
 
 import MuTerm.Framework.DotRep
 import MuTerm.Framework.Problem
@@ -30,6 +35,13 @@ import MuTerm.Framework.Strategy
 
 import Narradar.Framework.Ppr
 import Narradar.Utils ((<$$>))
+
+type instance Family.Id    (Problem typ trs) = Family.Id trs
+type instance Family.TermF (Problem typ trs) = Family.TermF trs
+type instance Family.Var   (Problem typ trs) = Family.Var trs
+type instance Family.Rule  (Problem typ trs) = Family.Rule trs
+
+instance (GetVars trs, Foldable (Problem typ)) => GetVars (Problem typ trs) where getVars = foldMap getVars
 
 -- ----------------------
 -- Framework extensions
@@ -41,15 +53,21 @@ class FrameworkExtension ext where
     liftProblem   :: (Monad m) => (Problem base trs -> m(Problem base' trs)) ->
                                  Problem (ext base) trs -> m(Problem (ext base') trs)
     liftFramework :: (base -> base') -> ext base -> ext base'
-    liftProcessor    :: ( Processor info tag (Problem base trs) (Problem base' trs)
-                        , Info info (Problem base trs), Info info (Problem base' trs)
+    liftProcessor    :: ( Processor tag (Problem base trs)
+                        , Trs tag (Problem base trs) ~ trs
+                        , base' ~ Typ tag (Problem base trs)
+                        , Info (InfoConstraint tag) (Problem base trs)
+                        , Info (InfoConstraint tag) (Problem base' trs)
                         , MonadPlus m, Traversable m
                         ) =>
-                        tag -> Problem (ext base) trs -> Proof info m (Problem (ext base') trs)
-    liftProcessorS :: ( Processor info tag (Problem base trs) (Problem base' trs)
-                       , Info info (Problem base trs), Info info (Problem base' trs)
-                       , MonadPlus m, Traversable m
-                     ) => tag -> Problem (ext base) trs -> [Proof info m (Problem (ext base') trs)]
+                        tag -> Problem (ext base) trs -> Proof (InfoConstraint tag) m (Problem (ext base') trs)
+    liftProcessorS :: ( Processor tag (Problem base trs)
+                      , Trs tag (Problem base trs) ~ trs
+                      , base' ~ Typ tag (Problem base trs)
+                      , Info (InfoConstraint tag) (Problem base trs)
+                      , Info (InfoConstraint tag) (Problem base' trs)
+                      , MonadPlus m, Traversable m
+                     ) => tag -> Problem (ext base) trs -> [Proof (InfoConstraint tag) m (Problem (ext base') trs)]
 
     liftProcessor  = liftProblem . apply
     liftProcessorS = liftProcessorSdefault

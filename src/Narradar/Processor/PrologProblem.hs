@@ -29,6 +29,7 @@ import           Control.Monad.List                   (ListT(..))
 import           Control.Monad.Reader                 (MonadReader(..), Reader(..))
 import           Control.Monad.RWS                    (RWST, execRWST)
 import           Control.Monad.State
+import           Control.Monad.Variant
 import           Control.Monad.Writer                 (MonadWriter(..), Writer(..), WriterT(..), Any(..))
 import           Control.Monad.Supply
 import qualified Control.RMonad                       as R
@@ -56,7 +57,8 @@ import           Text.ParserCombinators.Parsec        (parse)
 import           System.IO.Unsafe
 import           GHC.Exts                             (the)
 
-import           Data.Term                            hiding (find)
+import           Data.Term                            hiding (find, Id, Var, TermF)
+import qualified Data.Term.Family                     as Family
 import           Data.Term.Rules
 import Data.Term.Var as Prolog (Var(VName, VAuto))
 import qualified Language.Prolog.Syntax               as Prolog
@@ -107,40 +109,46 @@ import qualified Prelude                              as P
 -- ---------------------------
 
 -- | This is the vanilla S-K transformation
-data SKTransformNarrowing = SKTransformNarrowing
+data SKTransformNarrowing (info :: * -> *) = SKTransformNarrowing
        deriving (Eq, Show,Ord)
+type instance InfoConstraint (SKTransformNarrowing info) = info
 
 -- | This is the vanilla S-K transformation
 data SKTransformInfinitary heu = SKTransformInfinitary (MkHeu heu)
 
 instance (Info info SKTransformProof
          ) =>
-         Processor info SKTransformNarrowing
-                   PrologProblem {- ==> -} (NProblem (CNarrowingGoal DRP) DRP)
+         Processor (SKTransformNarrowing info) PrologProblem
  where
+  type Typ (SKTransformNarrowing info) PrologProblem = CNarrowingGoal DRP
+  type Trs (SKTransformNarrowing info) PrologProblem = NTRS DRP
+
   apply SKTransformNarrowing p0@PrologProblem{..} =
    andP SKTransformNarrowingProof p0
-     [ mkNewProblem (cnarrowingGoal (bimap IdDP id $ skTransformGoal goal)) sk_p
-         | let sk_p          = prologTRS'' rr (getSignature rr)
-               rr            = skTransformWith id (prepareProgram $ addMissingPredicates program)
-         , goal            <- goals
+     [ mkNewProblem (cnarrowingGoal ngoal) sk_p :: NProblem (CNarrowingGoal DRP) DRP
+         | let sk_p  = prologTRS'' rr (getSignature rr) :: NarradarTRS (TermF RP) Narradar.Var
+               rr    = skTransformWith id (prepareProgram $ addMissingPredicates program) :: PrologRules RP Narradar.Var
+         , goal     <- goals
+         , let ngoal = bimap IdDP id $ skTransformGoal goal :: Goal DRP
+
      ]
 
-instance (Info info SKTransformProof
-         ,PolyHeuristic heu DRP
-         ) =>
-         Processor info (SKTransformInfinitary heu)
-                   PrologProblem {- ==> -} (NProblem (Infinitary DRP Rewriting) DRP)
- where
-  apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
-   andP SKTransformInfinitaryProof p0 =<< sequence
-     [  msum (map return probs)
-         | goal    <- goals
-         , let probs = mkDerivedInfinitaryProblem (bimap IdDP id $ skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
-     ]
-    where
-       sk_p = prologTRS'' rr (getSignature rr)
-       rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
+-- instance (Info info SKTransformProof
+--          ,PolyHeuristic heu DRP
+--          ) =>
+--          Processor info (SKTransformInfinitary heu)
+--                    PrologProblem {- ==> -} (NProblem (Infinitary DRP Rewriting) DRP)
+--  where
+--   apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
+--    andP SKTransformInfinitaryProof p0 =<< sequence
+--      [  msum (map return probs)
+--          | goal    <- goals
+--          , let probs = mkDerivedInfinitaryProblem (bimap IdDP id $ skTransformGoal goal) heu (mkNewProblem rewriting sk_p)
+--      ]
+--     where
+--        sk_p = prologTRS'' rr (getSignature rr)
+--        rr   = skTransformWith id (prepareProgram $ addMissingPredicates program)
+
 {-
 instance (Info info SKTransformProof
          ,PolyHeuristic heu DRP
@@ -200,6 +208,11 @@ instance Traversable ClauseRules where
   traverse f (FactRule a) = FactRule <$> f a
   traverse f (ClauseRules a bb cc) = ClauseRules <$> f a <*> traverse f bb <*> traverse f cc
 
+type instance Family.Id    (ClauseRules a) = Family.Id a
+type instance Family.Rule  (ClauseRules a) = Family.Rule a
+type instance Family.Var   (ClauseRules a) = Family.Var a
+type instance Family.TermF (ClauseRules a) = Family.TermF a
+
 outRules (FactRule r) = [r]
 outRules rr = outRules' rr
 
@@ -254,20 +267,18 @@ updateAnswers uis f ccrr =
                            -> [l' :-> r | l' <- f l]
                   _        -> [l  :-> r]
 
-instance HasRules f v (ClauseRules (Rule f v)) where rules = toList
+instance HasRules (ClauseRules (Rule f v)) where rules = toList
 
 instance (Foldable f, HasId f) => HasSignature (ClauseRules (Rule f v))
  where
-    type SignatureId (ClauseRules (Rule f v)) = TermId f
     getSignature = getSignature . rules
 
 instance (Foldable f, HasId f) => HasSignature [ClauseRules (Rule f v)]
   where
-    type SignatureId  [ClauseRules (Rule f v)] = TermId f
     getSignature = getSignature . foldMap rules
 
-instance (Traversable t, GetFresh t v thing) => GetFresh t v (ClauseRules thing)  where getFreshM = getFreshMdefault
-instance (Ord k, Traversable t, GetFresh t v thing) => GetFresh t v (Map k thing) where getFreshM = getFreshMdefault
+instance (Traversable (Family.TermF thing), GetFresh thing) => GetFresh (ClauseRules thing)  where getFreshM = getFreshMdefault
+instance (Ord k, Traversable (Family.TermF thing), GetFresh thing) => GetFresh (Map k thing) where getFreshM = getFreshMdefault
 --instance (Traversable t, GetFresh t v thing1, GetFresh t v thing2) => GetFresh t v (thing1, thing2) where
 --    getFreshM (t1,t2) = do {t1' <- getFreshM t1; t2'<- getFreshM t2; return (t1',t2')}
 
@@ -394,7 +405,7 @@ runSk = runSupply
 
 
 class (Ord id, Ord id') => SkTransformAF id id' | id -> id' where
-    skTransformAF :: (HasSignature sig, SignatureId sig ~ id) => sig -> AF_ id -> AF_ id'
+    skTransformAF :: (HasSignature sig, Family.Id sig ~ id) => sig -> AF_ id -> AF_ id'
     skTransformGoal :: Goal id -> Goal id'
 
 instance SkTransformAF StringId RP where
@@ -410,7 +421,7 @@ instance SkTransformAF (Labelled StringId) LRP where
   skTransformGoal = bimap (fmap (InId . mkT)) id
 
 prepareProgram :: Show id => Program id -> Program'' (Expr (PF' id)) (TermN (Expr (PF' id)))
-prepareProgram =   (`evalState` mempty) . (`evalStateT` (toEnum <$> [0..]))
+prepareProgram =   (`evalState` mempty) . (runVariantT' (toEnum <$> [0..]))
                  . representProgram toVar term (Pure <$> freshVar)
                  . fmap (concatClause . fmap removeNegations)
     where
@@ -1104,6 +1115,10 @@ prologM_rr st = Map.filterWithKey (\k _ -> k `Set.member` kk) (prologM_db st)
 newtype Max a = Max {getMax::a} deriving (Eq,Ord,Bounded,Read,Show,Enum)
 instance Monoid (Max Int) where mempty = Max 0; mappend (Max i) (Max j) = Max(max i j)
 
+prologMState :: ( id ~ Labelled (PrologId a)
+                , Ord a
+                , Enum v, Ord v, Rename v
+                ) => PrologRules' id v -> AF_ id -> PrologMState id v
 prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0)) af0 sig0 db (max_depth+1) max_u s_vars
   where
     kk0    = filter (\(Pred p _ :-_,_) -> (InId <$> p) `Set.member` AF.domain af)
@@ -1123,13 +1138,15 @@ prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0
                               Just i <- [getUId id]])
 
 --newtype PrologM id v a = PrologM {unPrologM:: StateT (PrologMState id v) (StateT [v]  (AsMonad Set)) a}
-newtype PrologM id v a = PrologM {unPrologM:: RWST String [String] (PrologMState id v) (StateT [v] Identity) a}
+newtype PrologM id v a = PrologM {unPrologM:: RWST String [String] (PrologMState id v) (MVariantT v Identity) a}
   deriving (Functor, Monad, MonadWriter [String])
 
-deriving instance Rename v => MonadVariant v (PrologM id v)
+type instance VarM (PrologM id v) = v
+
+deriving instance (Enum v, Rename v) => MonadVariant (PrologM id v)
 --evalPrologM (PrologM m) st0 = m `evalRWST` st0 `evalStateT` ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0))
 execPrologM (PrologM m) st0 = trace ("running PrologM with max depth " ++ show (prologM_maxdepth st0)) $
-                              m `execWST` st0 `evalStateT` ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0))
+                              runVariantT' ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0)) (m `execWST` st0)
      where execWST m = execRWST m ""
 
 getSt = PrologM get
@@ -1181,7 +1198,7 @@ normalizeK (c,tt) = do
 
 mapRR f      = do {rr <- getRR; return (Map.map f rr)}
 
-applyAF :: (AF.ApplyAF t, Ord id, AFId t ~ id) => t -> PrologM id v t
+applyAF :: (AF.ApplyAF t, Ord id, Family.Id t ~ id) => t -> PrologM id v t
 applyAF t    = do {af <- getTheAF; return (AF.apply af t)}
 
 cutAF f i    = modifyAF (AF.cut f i)

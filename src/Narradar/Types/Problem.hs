@@ -51,6 +51,8 @@ import Narradar.Constraints.Unify
 import Narradar.Constraints.UsableRules
 import Narradar.Types.Var
 
+import qualified Data.Term as Family
+import qualified Data.Rule.Family as Family
 import Data.Term.Rules
 
 -- -------------------------
@@ -59,26 +61,42 @@ import Data.Term.Rules
 type NarradarProblem typ t = Problem typ (NarradarTRS t Var)
 type NProblem typ id = NarradarProblem typ (TermF id)
 
+-- DODGY !
+type instance Family.Id1 (f id) = id
+
 mkNewProblem ::
-    ( HasRules (TermF id) Var trs
-    , Ord id, Pretty (DPIdentifier id), Pretty typ, GetPairs typ
-    , Traversable (Problem typ)
+    ( HasRules trs
+    , Family.Rule trs ~ Rule (TermF id) Var
+    , Ord id
+    , GetPairs typ
     , MkDPProblem typ (NTRS (DPIdentifier id))
-    , NCap typ (DPIdentifier id)
-    , NUsableRules typ (DPIdentifier id)
     ) => typ -> trs -> NProblem typ (DPIdentifier id)
-mkNewProblem typ trs = mkDPProblem typ  (tRS rr') (tRS $ getPairs typ rr') where
-   rr' = mapTermSymbols IdFunction <$$> rules trs
+mkNewProblem typ trs = mkDPProblem typ  (tRS rr') (tRS pairs) where
+--   rr' :: [Rule (TermF (DPIdentifier id)) Var]
+   rr'   = mapTermSymbols IdFunction <$$> rules trs
+   pairs = getPairs typ rr'
 
 -- ---------------------------
 -- Computing Dependency Pairs
 -- ---------------------------
 class GetPairs typ where
-  getPairs :: ( HasRules t v trs, HasSignature trs, t ~ f (DPIdentifier id), Ord id
+  getPairs :: ( HasRules trs, HasSignature trs
+              , Rule t v ~ Family.Rule trs
+              , t ~ f (DPIdentifier id)
+              , Family.Id trs ~ DPIdentifier id
+              , Ord id
               , Functor t, Foldable t, MapId f, HasId t
-              , SignatureId trs ~ TermId t)
-               => typ -> trs -> [Rule t v]
+              ) => typ -> trs -> [Rule t v]
 
+getPairsDefault ::
+    ( HasRules trs, HasSignature trs
+    , Rule (f id) v ~ Family.Rule trs
+    , id ~ Family.Id trs
+    , MapId f, HasId (f id)
+    , Foldable (f id), Functor (f id)
+    , DPSymbol id
+    ) =>
+    typ -> trs -> [Rule (f id) v]
 getPairsDefault typ trs =
     [ markDP l :-> markDP rp | l :-> r <- rules trs, rp <- collect (isRootDefined trs) r]
 
@@ -90,22 +108,23 @@ instance (FrameworkExtension ext, GetPairs base) => GetPairs (ext base) where
 -- Computing the estimated Dependency Graph
 -- ----------------------------------------
 
-getEDG :: (Ord v, Enum v
+getEDG :: (Ord v, Enum v, Rename v
           ,HasId t, Unify t
           ,Ord (Term t v)
           ,Pretty (Term t v), Pretty typ, Pretty v
           ,MkDPProblem typ (NarradarTRS t v)
           ,Traversable (Problem typ)
-          ,ICap t v (typ, NarradarTRS t v)
-          ,IUsableRules t v typ (NarradarTRS t v)
+          ,ICap (typ, NarradarTRS t v)
+          ,IUsableRules typ (NarradarTRS t v)
           ) => Problem typ (NarradarTRS t v) -> G.Graph
 getEDG p@(getP -> DPTRS _ _ gr _ _) = gr
 getEDG p = filterSEDG p $ getdirectEDG p
 
 getdirectEDG :: (Traversable (Problem typ)
-                ,IsDPProblem typ, Enum v, Ord v, Unify t
-                ,ICap t v (typ, NarradarTRS t v)
-                ,Pretty v, Pretty (Term t v), Pretty typ
+                ,Enum v, Ord v, Pretty v, Rename v
+                ,IsDPProblem typ, Unify t
+                ,ICap (typ, NarradarTRS t v)
+                ,Pretty (Term t v), Pretty typ
                 ) => Problem typ (NarradarTRS t v) -> G.Graph
 getdirectEDG p@(getP -> DPTRS dps _ _ (unif :!: _) _) =
     assert (isValidUnif p) $
@@ -121,13 +140,13 @@ getDirectEDG p = G.buildG (0, length dps - 1) edges where
                 return (x,y)
   liftL = ListT . return
 
-filterSEDG :: (Ord v, Enum v
+filterSEDG :: (Ord v, Enum v, Rename v
               ,HasId t, Unify t
               ,Ord (Term t v)
               ,MkDPProblem typ (NarradarTRS t v)
               ,Traversable (Problem typ)
-              ,ICap t v (typ, NarradarTRS t v)
-              ,IUsableRules t v typ (NarradarTRS t v)
+              ,ICap (typ, NarradarTRS t v)
+              ,IUsableRules typ (NarradarTRS t v)
               ) => Problem typ (NarradarTRS t v) -> G.Graph -> G.Graph
 filterSEDG p gr | isCollapsing (getP p) = gr
 filterSEDG (getP -> dptrs@DPTRS{}) gr =
@@ -164,7 +183,14 @@ instance (IsDPProblem p, Pretty p, Pretty trs) => Pretty (Problem p trs) where
             text "TRS:" <+> pPrint (getR p) $$
             text "DPS:" <+> pPrint (getP p)
 
-instance (IsDPProblem typ, HTML typ, HTMLClass typ, HasRules t v trs, Pretty v, Pretty (t(Term t v))
+instance ( IsDPProblem typ
+         , HTML typ
+         , HTMLClass typ
+         , HasRules trs
+         , Rule t v ~ Family.Rule trs
+         , v ~ Family.Var trs
+         , Pretty v
+         , Pretty (t(Term t v))
          ) => HTML (Problem typ trs) where
     toHtml p
      | null $ rules (getP p) =
@@ -199,21 +225,21 @@ class HTMLClass a where htmlClass :: a -> HtmlAttr
 -- Narradar instances
 -- -------------------
 
-instance (Ord v, ExtraVars v trs, IsDPProblem p) =>  ExtraVars v (Problem p trs) where
+instance (v ~ Family.Var trs, Ord v, ExtraVars trs, IsDPProblem p
+         ) =>  ExtraVars (Problem p trs) where
   extraVars p = extraVars (getP p) `mappend` extraVars (getR p)
 
 instance (MkDPProblem typ (NarradarTRS t v)
          ,Unify t
          ,ApplyAF (Term t v)
-         ,Enum v, Ord v
-         ,IUsableRules t v typ (NarradarTRS t v)
-         ,ICap t v (typ, NarradarTRS t v)
-         ,AFId (Term t v) ~ AFId (NarradarTRS t v)
+         ,Enum v, Ord v, Rename v
+         ,IUsableRules typ (NarradarTRS t v)
+         ,ICap (typ, NarradarTRS t v)
+--         ,AFId (Term t v) ~ AFId (NarradarTRS t v)
          ,Pretty (t(Term t v)), Pretty v
          ) =>
     ApplyAF (Problem typ (NarradarTRS t v))
   where
-    type AFId (Problem typ (NarradarTRS t v)) = AFId (Term t v)
     apply af p@(getP -> dps@DPTRS{})= mkDPProblem typ trs' dps'
      where
        typ  = getFramework p
@@ -230,16 +256,12 @@ instance (ApplyAF trs, IsDPProblem p) => ApplyAF (Problem p trs) where
 
 getSignatureProblem p = getSignature (getR p) `mappend` getSignature (getP p)
 
-instance (Ord v, IsDPProblem typ, HasRules t v trs, Foldable (Problem typ)) => HasRules t v (Problem typ trs) where
-    rules = foldMap rules
+instance (v ~ Family.Var trs, Ord v, IsDPProblem typ, HasRules trs, Foldable (Problem typ)
+         ) => HasRules (Problem typ trs) where rules = foldMap rules
+instance (v ~ Family.Var trs, Ord v, GetFresh trs, Traversable (Problem typ)
+         ) => GetFresh (Problem typ trs) where getFreshM = getFreshMdefault
 
-instance (Ord v, GetFresh t v trs, Traversable (Problem typ)) => GetFresh t v (Problem typ trs) where getFreshM = getFreshMdefault
-
-instance (Ord v, GetVars v trs, Traversable (Problem typ)) => GetVars v (Problem typ trs) where getVars = foldMap getVars
-
-instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) where
-  type SignatureId (Problem typ trs) = SignatureId trs
-  getSignature p = getSignature (getR p) `mappend` getSignature (getP p)
+instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) where getSignature p = getSignature (getR p) `mappend` getSignature (getP p)
 
 -- ------------------------------------
 -- Dealing with the pairs in a problem
@@ -249,8 +271,8 @@ expandDPair :: ( v ~ Var
                , HasId t, Unify t, Ord (Term t v)
                , Traversable (Problem typ)
                , MkDPProblem typ (NarradarTRS t v)
-               , ICap t v (typ, NarradarTRS t v)
-               , IUsableRules t v typ (NarradarTRS t v)
+               , ICap (typ, NarradarTRS t v)
+               , IUsableRules typ (NarradarTRS t v)
                , Pretty (Term t v), Pretty typ
                ) =>
                Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
@@ -337,14 +359,16 @@ insertDPairs' framework p@(DPTRS dps rr _ (unif :!: unifInv) sig) newPairs
 -- -------------
 -- Sanity Checks
 -- -------------
-isValidUnif :: ( p   ~ Problem typ
-               , Ord v, Enum v, Unify t
+isValidUnif :: forall typ p t  v .
+               ( p   ~ Problem typ
+               , Ord v, Enum v, Rename v, Pretty v
+               , Unify t
                , Traversable p, IsDPProblem typ, Pretty typ
-               , ICap t v (typ, NarradarTRS t v)
-               , Pretty v, Pretty (Term t v)
+               , ICap (typ, NarradarTRS t v)
+               , Pretty (Term t v)
                ) => p (NarradarTRS t v) -> Bool
 isValidUnif p@(getP -> DPTRS dps _ _ (unif :!: _) _)
-  | valid = True
+  | valid = True -- const True (pPrint (undefined :: Term t v))
   | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
                           text "Problem type:" <+> pPrint (getFramework p) $$
                           text "DPS:"      <+> pPrint (elems dps) $$
@@ -361,7 +385,7 @@ isValidUnif p@(getP -> DPTRS dps _ _ (unif :!: _) _)
             (x, _ :-> r) <- liftL $ A.assocs dps
             (y, l :-> _) <- liftL $ A.assocs dps
             r' <- getFresh r >>= icap p
---            pprTrace (text "unify" <+> pPrint l <+> pPrint r') (return ())
+            pprTrace (text "unify" <+> pPrint l <+> pPrint r') (return ())
             return ((x,y),unifies l r')
 
   valid = and $ zipWith (\subst unifies -> if unifies then isJust subst else isNothing subst) (elems unif) (elems validUnif)

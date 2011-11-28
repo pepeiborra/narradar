@@ -6,6 +6,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
@@ -40,93 +41,121 @@ import Narradar.Utils
 import Data.Term.Rewriting
 import Data.Term.Narrowing
 
+import qualified Data.Term.Family as Family
 
-data NarrowingP     = NarrowingP
-data Instantiation  = Instantiation
-data FInstantiation = FInstantiation
-data RewritingP     = RewritingP
+data NarrowingP     (info :: * -> *) = NarrowingP
+data Instantiation  (info :: * -> *) = Instantiation
+data FInstantiation (info :: * -> *) = FInstantiation
+data RewritingP     (info :: * -> *) = RewritingP
+
+type instance InfoConstraint (NarrowingP info) = info
+type instance InfoConstraint (RewritingP info) = info
+type instance InfoConstraint (Instantiation info) = info
+type instance InfoConstraint (FInstantiation info) = info
 
 -- * Narrowing
 -- ------------
 
 instance ( t ~ f (DPIdentifier id)
-         , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
-         , IUsableRules t Var Rewriting (NarradarTRS t Var)
+         , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier id
+         , IUsableRules Rewriting (NarradarTRS t Var)
          , Info info GraphTransformationProof
          ) =>
-    Processor info NarrowingP (NarradarProblem Rewriting t) (NarradarProblem Rewriting t) where
+  Processor (NarrowingP info) (NarradarProblem Rewriting t) where
+  type Typ (NarrowingP info) (NarradarProblem Rewriting t) = Rewriting
+  type Trs (NarrowingP info) (NarradarProblem Rewriting t) = NarradarTRS t Var
   applySearch NarrowingP = narrowing
 
 instance ( t ~ f (DPIdentifier id)
-         , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
-         , IUsableRules t Var IRewriting (NarradarTRS t Var)
+         , Ord (Term t Var), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier id
+         , IUsableRules IRewriting (NarradarTRS t Var)
          , Info info GraphTransformationProof
          ) =>
-    Processor info NarrowingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t) where
+  Processor (NarrowingP info) (NarradarProblem IRewriting t) where
+  type Typ (NarrowingP info) (NarradarProblem IRewriting t) = IRewriting
+  type Trs (NarrowingP info) (NarradarProblem IRewriting t) = NarradarTRS t Var
   applySearch NarrowingP = narrowing_innermost
 
 -- Liftings
 
-instance (Processor info NarrowingP (Problem b trs) (Problem b trs)
+instance (Processor (NarrowingP info) (Problem b trs)
          ,Info info (Problem b trs)
+         ,Problem b trs ~ Res (NarrowingP info) (Problem b trs)
          ) =>
-    Processor info NarrowingP (Problem (MkNarrowing b) trs) (Problem (MkNarrowing b) trs) where
+  Processor (NarrowingP info) (Problem (MkNarrowing b) trs) where
+  type Typ (NarrowingP info) (Problem (MkNarrowing b) trs) = MkNarrowing b
+  type Trs (NarrowingP info) (Problem (MkNarrowing b) trs) = trs
   applySearch = liftProcessorS
 
-instance (Processor info NarrowingP (Problem b trs) (Problem b trs)
+instance (Processor (NarrowingP info) (Problem b trs)
          ,Info info (Problem b trs)
+         ,Problem b trs ~ Res (NarrowingP info) (Problem b trs)
          ) =>
-    Processor info NarrowingP (Problem (MkNarrowingGen b) trs) (Problem (MkNarrowingGen b) trs) where
+  Processor (NarrowingP info) (Problem (MkNarrowingGen b) trs) where
+  type Typ (NarrowingP info) (Problem (MkNarrowingGen b) trs) = MkNarrowingGen b
+  type Trs (NarrowingP info) (Problem (MkNarrowingGen b) trs) = trs
   applySearch = liftProcessorS
 
 -- Not so straightforward liftings
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
-         )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Rewriting) t) (NarradarProblem (InitialGoal t Rewriting) t)
+         )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t Rewriting) t)
   where
+   type Typ (NarrowingP info) (NarradarProblem (InitialGoal t Rewriting) t) = InitialGoal t Rewriting
+   type Trs (NarrowingP info) (NarradarProblem (InitialGoal t Rewriting) t) = NarradarTRS t Var
    applySearch tag = narrowingIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
-         )=> Processor info NarrowingP (NarradarProblem (InitialGoal t IRewriting) t) (NarradarProblem (InitialGoal t IRewriting) t)
+         )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t IRewriting) t)
   where
+   type Typ (NarrowingP info) (NarradarProblem (InitialGoal t IRewriting) t) = InitialGoal t IRewriting
+   type Trs (NarrowingP info) (NarradarProblem (InitialGoal t IRewriting) t) = NarradarTRS t Var
    applySearch tag = narrowing_innermostIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
          , MkDPProblem (InitialGoal t Narrowing) (NarradarTRS t Var)
          , Info info GraphTransformationProof
-         )=> Processor info NarrowingP (NarradarProblem (InitialGoal t Narrowing) t) (NarradarProblem (InitialGoal t Narrowing) t)
+         )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t Narrowing) t)
   where
+   type Typ (NarrowingP info) (NarradarProblem (InitialGoal t Narrowing) t) = InitialGoal t Narrowing
+   type Trs (NarrowingP info) (NarradarProblem (InitialGoal t Narrowing) t) = NarradarTRS t Var
    applySearch tag = narrowingIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier id
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
          , Info info GraphTransformationProof
          , MkDPProblem (InitialGoal t CNarrowing) (NarradarTRS t Var)
-         )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowing) t) (NarradarProblem (InitialGoal t CNarrowing) t)
+         )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowing) t)
   where
+   type Typ (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowing) t) = InitialGoal t CNarrowing
+   type Trs (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowing) t) = NarradarTRS t Var
    applySearch tag = narrowing_innermostIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier (GenId id)
          , t ~ f (DPIdentifier (GenId id)), MapId f
          , MkDPProblem NarrowingGen (NarradarTRS t Var)
          , MkDPProblem (InitialGoal t NarrowingGen) (NarradarTRS t Var)
          , Info info GraphTransformationProof
-         )=> Processor info NarrowingP (NarradarProblem (InitialGoal t NarrowingGen) t) (NarradarProblem (InitialGoal t NarrowingGen) t)
+         )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t NarrowingGen) t)
   where
+   type Typ (NarrowingP info) (NarradarProblem (InitialGoal t NarrowingGen) t) = InitialGoal t NarrowingGen
+   type Trs (NarrowingP info) (NarradarProblem (InitialGoal t NarrowingGen) t) = NarradarTRS t Var
    applySearch tag = narrowingIG
 
-instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId t ~ DPIdentifier (GenId id)
+instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, Family.Id1 t ~ DPIdentifier (GenId id)
          , t ~ f (DPIdentifier (GenId id)), MapId f
          , MkDPProblem CNarrowingGen (NarradarTRS t Var)
          , MkDPProblem (InitialGoal t CNarrowingGen) (NarradarTRS t Var)
          , Info info GraphTransformationProof
-         )=> Processor info NarrowingP (NarradarProblem (InitialGoal t CNarrowingGen) t) (NarradarProblem (InitialGoal t CNarrowingGen) t)
+         )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowingGen) t)
   where
+   type Typ (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowingGen) t) = InitialGoal t CNarrowingGen
+   type Trs (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowingGen) t) = NarradarTRS t Var
    applySearch tag = narrowing_innermostIG
 
 -- * Instantiation
@@ -134,38 +163,44 @@ instance ( Ord (t(Term t Var)), Pretty (t(Term t Var)), Unify t, HasId t, TermId
 
 instance (trs ~ NarradarTRS t Var
          ,t ~ f(DPIdentifier id), MapId f
-         ,DPIdentifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ Family.Id1 t, HasId t
          ,Unify t, Pretty (t(Term t Var)), Ord (Term t Var)
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
-         ,ICap t Var (MkRewriting st, NarradarTRS t Var)
-         ,IUsableRules t Var (MkRewriting st) (NarradarTRS t Var)
+         ,ICap (MkRewriting st, NarradarTRS t Var)
+         ,IUsableRules (MkRewriting st) (NarradarTRS t Var)
          ) =>
-    Processor info Instantiation (NarradarProblem (MkRewriting st) t) (NarradarProblem (MkRewriting st) t) where
+    Processor (Instantiation info) (NarradarProblem (MkRewriting st) t) where
+  type Typ (Instantiation info) (NarradarProblem (MkRewriting st) t) = MkRewriting st
+  type Trs (Instantiation info) (NarradarProblem (MkRewriting st) t) = NarradarTRS t Var
   applySearch Instantiation = instantiation
 
 instance (Info info (NarradarProblem b t)
-         ,Processor info Instantiation (NarradarProblem b t) (NarradarProblem b t)
+         ,Processor (Instantiation info) (NarradarProblem b t)
+         ,NarradarProblem b t ~ Res (Instantiation info) (NarradarProblem b t)
          ) =>
-    Processor info Instantiation (NarradarProblem (MkNarrowing b) t) (NarradarProblem (MkNarrowing b) t) where
+    Processor (Instantiation info) (NarradarProblem (MkNarrowing b) t) where
+  type Typ (Instantiation info) (NarradarProblem (MkNarrowing b) t) = MkNarrowing b
+  type Trs (Instantiation info) (NarradarProblem (MkNarrowing b) t) = NarradarTRS t Var
   applySearch = liftProcessorS
 
 instance (trs ~ NarradarTRS t v
          ,v   ~ Var
          ,t   ~ f id
-         ,id  ~ TermId t, HasId t, MapId f, DPSymbol id
+         ,id  ~ Family.Id1 t, HasId t, MapId f, DPSymbol id
          ,Unify t, Pretty (t(Term t Var)), Pretty typ, Ord (t(Term t Var))
          ,MkDPProblem typ trs
          ,MkDPProblem (InitialGoal t typ) trs
          ,Traversable (Problem typ)
-         ,IUsableRules t v typ (NarradarTRS t v)
-         ,NeededRules  t v typ (NarradarTRS t v)
-         ,ICap t v (typ, trs)
+         ,IUsableRules typ (NarradarTRS t v)
+         ,NeededRules  typ (NarradarTRS t v)
+         ,ICap (typ, trs)
          ,Info info GraphTransformationProof
          ) =>
-    Processor info Instantiation (NarradarProblem (InitialGoal (f id) typ) (f id))
-                                 (NarradarProblem (InitialGoal (f id) typ) (f id))
+    Processor (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id))
  where
+  type Typ (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id)) = InitialGoal (f id) typ
+  type Trs (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id)) = NarradarTRS (f id) Var
   applySearch Instantiation p@InitialGoalProblem{..}
    | null currentPairs      = [return p]
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
@@ -199,39 +234,46 @@ instance (trs ~ NarradarTRS t v
 
 instance (trs ~ NarradarTRS t Var
          ,t ~ f (DPIdentifier id), MapId f
-         ,DPIdentifier id ~ TermId t, HasId t
+         ,DPIdentifier id ~ Family.Id1 t, HasId t
          ,Unify t, Pretty (Term t Var), Ord (Term t Var)
-         ,Info info GraphTransformationProof, Pretty (MkRewriting st)
+         ,Info info GraphTransformationProof
+         ,Pretty (MkRewriting st)
          ,MkDPProblem (MkRewriting st) (NarradarTRS t Var)
          ,MkDPProblem (InitialGoal t (MkRewriting st)) trs
-         ,ICap t Var (MkRewriting st, NarradarTRS t Var)
-         ,IUsableRules t Var (MkRewriting st) (NarradarTRS t Var)
+         ,ICap (MkRewriting st, NarradarTRS t Var)
+         ,IUsableRules (MkRewriting st) (NarradarTRS t Var)
          ) =>
-    Processor info FInstantiation (NarradarProblem (MkRewriting st) t) (NarradarProblem (MkRewriting st) t) where
+    Processor (FInstantiation info) (NarradarProblem (MkRewriting st) t) where
+  type Typ (FInstantiation info) (NarradarProblem (MkRewriting st) t) = MkRewriting st
+  type Trs (FInstantiation info) (NarradarProblem (MkRewriting st) t) = NarradarTRS t Var
   applySearch FInstantiation = finstantiation
 
 instance (Info info (NarradarProblem b t)
-         ,Processor info FInstantiation (NarradarProblem b t) (NarradarProblem b t)
+         ,Processor (FInstantiation info) (NarradarProblem b t)
+         ,NarradarProblem b t ~ Res (FInstantiation info) (NarradarProblem b t)
          ) =>
-    Processor info FInstantiation (NarradarProblem (MkNarrowing b) t) (NarradarProblem (MkNarrowing b) t) where
-  applySearch = liftProcessorS
+ Processor (FInstantiation info) (NarradarProblem (MkNarrowing b) t) where
+ type Typ (FInstantiation info) (NarradarProblem (MkNarrowing b) t) = MkNarrowing b
+ type Trs (FInstantiation info) (NarradarProblem (MkNarrowing b) t) = NarradarTRS t Var
+ applySearch = liftProcessorS
 
 instance (v ~ Var
          ,t ~ f (DPIdentifier id), MapId f
-         ,TermId t ~ DPIdentifier id, HasId t, Unify t
+         ,Family.Id1 t ~ DPIdentifier id, HasId t, Unify t
          ,Pretty typ
          ,MkDPProblem  typ (NarradarTRS t Var)
          ,MkDPProblem (InitialGoal t typ) (NarradarTRS t Var)
          ,Traversable (Problem typ)
          ,Pretty (t(Term t v)), Ord(t(Term t v))
-         ,IUsableRules t v typ (NarradarTRS t v)
-         ,NeededRules  t v typ (NarradarTRS t v)
-         ,ICap t v (typ, (NarradarTRS t Var))
+         ,IUsableRules typ (NarradarTRS t v)
+         ,NeededRules  typ (NarradarTRS t v)
+         ,ICap (typ, (NarradarTRS t Var))
          ,Info info GraphTransformationProof
          ) =>
-    Processor info FInstantiation (NarradarProblem (InitialGoal t typ) t)
-                                  (NarradarProblem (InitialGoal t typ) t)
+    Processor (FInstantiation info) (NarradarProblem (InitialGoal t typ) t)
  where
+ type Typ (FInstantiation info) (NarradarProblem (InitialGoal t typ) t) = InitialGoal t typ
+ type Trs (FInstantiation info) (NarradarProblem (InitialGoal t typ) t) = NarradarTRS t Var
  applySearch FInstantiation p@InitialGoalProblem{..}
   | null currentPairs      = [return p]
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
@@ -265,8 +307,10 @@ instance ( t ~ f id, v ~ Var
          , Pretty (t(Term t v)), Ord (t(Term t v))
          , Info info GraphTransformationProof
          ) =>
-    Processor info RewritingP (NarradarProblem IRewriting t) (NarradarProblem IRewriting t)
+    Processor (RewritingP info) (NarradarProblem IRewriting t)
  where
+  type Typ (RewritingP info) (NarradarProblem IRewriting t) = IRewriting
+  type Trs (RewritingP info) (NarradarProblem IRewriting t) = NarradarTRS t Var
   applySearch RewritingP = rewritingI
 
 instance ( t ~ f id, v ~ Var
@@ -275,10 +319,11 @@ instance ( t ~ f id, v ~ Var
          , Pretty (t(Term t v)), Ord (t(Term t v))
          , Info info GraphTransformationProof
          ) =>
-    Processor info RewritingP (NarradarProblem (InitialGoal t IRewriting) t)
-                              (NarradarProblem (InitialGoal t IRewriting) t)
+    Processor (RewritingP info) (NarradarProblem (InitialGoal t IRewriting) t)
  where
-   applySearch RewritingP = rewritingGoalI
+  type Typ (RewritingP info) (NarradarProblem (InitialGoal t IRewriting) t) = InitialGoal t IRewriting
+  type Trs (RewritingP info) (NarradarProblem (InitialGoal t IRewriting) t) = NarradarTRS t Var
+  applySearch RewritingP = rewritingGoalI
 
 
 -- -------
@@ -331,10 +376,10 @@ narrowing, narrowing_innermost
           :: (p  ~ Problem typ trs
              ,trs ~ NarradarTRS t v
              ,v ~ Var
-             ,TermId t  ~ DPIdentifier id, HasId t, Unify t
-             ,Enum v, GetVars v v, Ord (Term t v)
+             ,Family.Id1 t  ~ DPIdentifier id, HasId t, Unify t
+             ,Enum v, GetVars v, Ord (Term t v)
              ,MkDPProblem typ trs, Traversable (Problem typ)
-             ,IUsableRules t v typ trs, ICap t v (typ,trs)
+             ,IUsableRules typ trs, ICap (typ,trs)
              ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info p
              ,Info info GraphTransformationProof
@@ -408,14 +453,14 @@ narrowingIG, narrowing_innermostIG
           :: (trs ~ NarradarTRS t v
              ,t ~ f (DPIdentifier id), MapId f
              ,v ~ Var
-             ,TermId t  ~ DPIdentifier id, HasId t, Unify t
-             ,Enum v, GetVars v v, Ord (t(Term t v))
+             ,Family.Id1 t  ~ DPIdentifier id, HasId t, Unify t
+             ,Enum v, GetVars v, Ord (t(Term t v))
              ,MkDPProblem (InitialGoal t typ) trs
              ,MkDPProblem typ trs
              ,Traversable (Problem typ)
-             ,IUsableRules t v typ (NarradarTRS t v)
-             ,NeededRules  t v typ (NarradarTRS t v)
-             ,ICap t v (typ,trs)
+             ,IUsableRules typ (NarradarTRS t v)
+             ,NeededRules  typ (NarradarTRS t v)
+             ,ICap (typ,trs)
              ,Pretty (t(Term t v)), Pretty v, Pretty typ
              ,Info info (Problem (InitialGoal t typ) trs)
              ,Info info GraphTransformationProof
@@ -514,11 +559,11 @@ instantiation, finstantiation
              ,trs ~ NarradarTRS t v
              ,v ~ Var
              ,t ~ f (DPIdentifier id)
-             ,TermId t ~ DPIdentifier id, HasId t, Unify t
-             ,Enum v, GetVars v v
+             ,Family.Id1 t ~ DPIdentifier id, HasId t, Unify t
+             ,Enum v, GetVars v
              ,MkDPProblem typ trs, Traversable (Problem typ)
              ,Pretty ((Term t v)), Ord(Term t v), Pretty v, Pretty typ
-             ,IUsableRules t v typ (NarradarTRS t v), ICap t v (typ, trs)
+             ,IUsableRules typ (NarradarTRS t v), ICap (typ, trs)
              ,Info info GraphTransformationProof
              ,Monad mp
              ) =>

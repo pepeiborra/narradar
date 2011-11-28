@@ -26,9 +26,13 @@ import           Data.Foldable as F (Foldable(..),sum,msum)
 import           Data.Hashable
 import qualified Data.Set               as Set
 import           Data.Traversable
-import           Data.Term              hiding (unify, unifies, applySubst, find)
+import           Data.Term              hiding (unify, unifies, applySubst, find, Id, TermF, Var)
 import qualified Data.Term.Simple       as Simple
 import           Data.Term.Rules        hiding (unifies', matches')
+import qualified Data.Id.Family         as Family
+import qualified Data.Term.Family       as Family
+import qualified Data.Rule.Family       as Family
+import qualified Data.Var.Family        as Family
 import           Data.Typeable
 
 import qualified Data.Map               as Map
@@ -65,6 +69,10 @@ data TermF id f = Term id [f] deriving (Eq,Ord,Show)
 type TermN id = Term (TermF id) Var
 type RuleN id = RuleF(TermN id)
 
+type instance Family.Id1 (TermF id) = id
+type instance Family.Id (Term   f v) = Family.Id1 f
+type instance Family.TermF (TermF id f) = TermF id
+
 term :: id -> [Term (TermF id) a] -> Term (TermF id) a
 term f = Impure . Term f
 
@@ -85,10 +93,10 @@ fromSimple' :: Simple.TermF id a -> TermF (ArityId id) a
 fromSimple' (Simple.Term id tt) = Term (ArityId id (length tt)) tt
 
 -- | Extra Variables are variables which occur in the right side of a rule but not in the left side
-class    ExtraVars v thing | thing -> v where extraVars :: thing -> [v]
-instance (Ord v, Functor t, Foldable t, HasRules t v trs) => ExtraVars v trs where
+class ExtraVars thing where extraVars :: thing -> [Family.Var thing]
+instance (Ord (Family.Var trs), Functor (TermF trs), Foldable (TermF trs), HasRules trs, ExtraVars(Family.Rule trs), Family.Var trs ~ Family.Var (Family.Rule trs)) => ExtraVars trs where
     extraVars = concatMap extraVars . rules
-instance (Ord v, Functor t, Foldable t) => ExtraVars v (Rule t v) where
+instance (Ord (Family.Var (Rule t v)), Functor t, Foldable t) => ExtraVars (Rule t v) where
     extraVars (l:->r) = Set.toList (Set.fromList(vars r) `Set.difference` Set.fromList(vars l))
 
 
@@ -108,8 +116,7 @@ instance Eq id => Unify (TermF id) where
    zipTermM_ f (Term f1 tt1) (Term f2 tt2) | f1 == f2 = zipWithM_ f tt1 tt2
                                            | otherwise = fail "structure mismatch"
 
-instance Ord id =>  HasId (TermF id) where
-    type TermId (TermF id) = id
+instance Ord id => HasId (TermF id) where
     getId (Term id _) = Just id
 
 instance MapId TermF where mapIdM f (Term id tt) = (`Term` tt) <$> f id

@@ -9,12 +9,14 @@ import Data.Maybe (catMaybes, maybeToList)
 import Narradar.Types
 
 import qualified Data.Set as Set
+import qualified Data.Term.Family as Family
 
-isLeftLinear :: (Ord v, Foldable t, Functor t, HasRules t v trs) => trs -> Bool
+isLeftLinear :: (Ord v, Foldable t, Functor t, HasRules trs, Rule t v ~ Family.Rule trs) => trs -> Bool
 isLeftLinear = null . nonLeftLinearRules
 isOrthogonal p = isLeftLinear p && null (criticalPairs p)
 
-isAlmostOrthogonal :: ( HasRules t v trs
+isAlmostOrthogonal :: ( HasRules trs
+                      , Rule t v ~ Family.Rule trs
                       , Eq (Term t v)
                       , Unify t
                       , Rename v, Enum v, Ord v
@@ -30,17 +32,17 @@ isOverlay _ = False
 
 isNonOverlapping p = (null . criticalPairs) p
 
-nonLeftLinearRules :: (Ord v, Foldable t, Functor t, HasRules t v trs) => trs -> [Rule t v]
+nonLeftLinearRules :: (Ord v, Foldable t, Functor t, HasRules trs, Rule t v ~ Family.Rule trs) => trs -> [Rule t v]
 nonLeftLinearRules trs = [ l:->r | l:->r <- rules trs, not (isLinear l)]
 
-isConstructorBased :: (HasRules t v trs, HasSignature trs, HasId t, Foldable t, SignatureId trs ~ TermId t) => trs -> Bool
+isConstructorBased :: (HasRules trs, Rule t v ~ Family.Rule trs, HasSignature trs, HasId t, Foldable t, Family.Id trs ~ Id1 t) => trs -> Bool
 isConstructorBased trs = all (isConstructorRule trs) (rules trs)
 
 isConstructorRule sig = Set.null
                       . Set.intersection (getDefinedSymbols sig)
                       . Set.fromList . catMaybes . map rootSymbol . properSubterms . lhs
 
-criticalPairs :: (HasRules t v trs, Enum v, Ord v, Rename v, Unify t) =>
+criticalPairs :: (HasRules trs, Rule t v ~ Family.Rule trs, Enum v, Ord v, Rename v, Unify t) =>
                  trs -> [(Position, Term t v, Term t v)]
 criticalPairs trs
    | null (rules trs) = []

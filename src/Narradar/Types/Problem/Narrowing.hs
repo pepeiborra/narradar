@@ -19,6 +19,7 @@ import qualified Data.Set as Set
 import Text.XHtml (HTML(..), theclass)
 
 import Data.Term
+import qualified Data.Term.Family as Family
 import Data.Term.Rules
 
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
@@ -92,14 +93,23 @@ instance Pretty INarrowing where
   pPrint (MkNarrowing (MkRewriting Innermost M)) = text "Narrowing (innermost strategy)"
   pPrint (MkNarrowing (MkRewriting Innermost A)) = text "Narrowing (innermost strategy, no minimality)"
 
-instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Functor t, Foldable t, MkDPProblem Rewriting trs
+instance (Monoid trs, HasRules trs, GetVars trs
+         ,Pretty v, Pretty (t(Term t v)), Pretty (Id1 t)
+         ,Ord v
+         ,t ~ Family.TermF trs
+         ,v ~ Family.Var trs
+         ,Rule t v ~ Family.Rule trs
+         ,HasId t, Functor t, Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem Narrowing trs) where
   pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY NARROWING)"
 
 
-instance (Monoid trs, HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Functor t, Foldable t, MkDPProblem Rewriting trs
+instance (Monoid trs, HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
+         ,Ord v
+         ,t ~ Family.TermF trs
+         ,v ~ Family.Var trs
+         ,Rule t v ~ Family.Rule trs
+         ,HasId t, Pretty (Id1 t), Functor t, Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem CNarrowing trs) where
   pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY CNARROWING)"
 
@@ -115,11 +125,11 @@ instance FrameworkExtension MkNarrowing where
 
 -- ICap
 
-instance ICap t v (st, NarradarTRS t v) => ICap t v (MkNarrowing st, NarradarTRS t v) where icap = liftIcap
+instance ICap (st, NarradarTRS t v) => ICap (MkNarrowing st, NarradarTRS t v) where icap = liftIcap
 
 -- Usable Rules
 
-instance (IUsableRules t v base trs) => IUsableRules t v (MkNarrowing base) trs where
+instance (IUsableRules base trs) => IUsableRules (MkNarrowing base) trs where
    iUsableRulesM    = liftUsableRulesM
    iUsableRulesVarM = liftUsableRulesVarM
 

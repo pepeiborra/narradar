@@ -8,13 +8,16 @@ import Data.Traversable (Traversable)
 import qualified Data.Set as Set
 import Narradar.Types
 
+import qualified Data.Term.Family as Family
+
 isHierarchicalCombination :: HasSignature trs => trs -> trs -> Bool
 isHierarchicalCombination ex base =
   Set.null(getDefinedSymbols base `Set.intersection` getDefinedSymbols ex) &&
   Set.null(getConstructorSymbols base `Set.intersection` getDefinedSymbols ex)
 
-isRelaxedHierarchicalCombination :: (HasSignature trs, HasRules t v trs
-                                    ,TermId t ~ SignatureId trs
+isRelaxedHierarchicalCombination :: (HasSignature trs, HasRules trs
+                                    ,Id1 t ~ Family.Id trs
+                                    ,Rule t v ~ Family.Rule trs
                                     ,HasId t, Unify t
                                     ,Ord v
                                     ) => trs -> trs -> Bool
@@ -30,9 +33,10 @@ isRelaxedHierarchicalCombination ex base =
    rr = rules base
    isRHNF t = not $ any (unifies t) (map lhs rr)
 
-isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules t v trs, Ord (Term t v)
+isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules trs, Ord (Term t v)
+                                        , Rule t v ~ Family.Rule trs
                                         , HasId t, Match t, Traversable t, Enum v, Ord v, Rename v
-                                        , TermId t ~ SignatureId trs
+                                        , Id1 t ~ Family.Id trs
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =
   isHierarchicalCombination ex' base' &&
@@ -49,8 +53,10 @@ isGeneralizedHierarchicalCombination ex base =
                                  , id `Set.member` ids]
 
 isGeneralizedRelaxedHierarchicalCombination
-  :: ( HasSignature trs, TermId t ~ SignatureId trs
-     , HasRules t v trs
+  :: ( HasSignature trs
+     , HasRules trs
+     , Rule t v ~ Family.Rule trs
+     , Family.Id trs ~ Family.Id1 t
      , Ord (Term t v)
      , HasId t, Unify t, Traversable t
      , Enum v, Ord v, Rename v

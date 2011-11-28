@@ -42,7 +42,7 @@ instance NFData Status where rnf Mul = (); rnf (Lex mi) = rnf mi
 
 data RPO m a = RPO {(>), (>~), (~~) :: a -> a -> m Bool}
 
-symbolRPO :: (id ~ TermId t, HasId t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
+symbolRPO :: (id ~ Id1 t, HasId t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
              ,Monad m) => RPO m (Term t v)
 symbolRPO = RPO{..} where
 
@@ -144,7 +144,7 @@ symbolRPO = RPO{..} where
   sel = selectSafe "Narradar.Constraints.RPO"
 
 
-symbolRPOAF :: (id ~ TermId t, HasId t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
+symbolRPOAF :: (id ~ Id1 t, HasId t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
              ,Monad m) => RPO m (Term t v)
 symbolRPOAF = RPO{..} where
 

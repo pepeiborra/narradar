@@ -22,6 +22,7 @@ import qualified Data.Map as Map
 import Text.XHtml (theclass)
 
 import Data.Term
+import qualified Data.Term.Family as Family
 import Data.Term.Rules
 
 import MuTerm.Framework.Problem
@@ -50,7 +51,7 @@ instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
   getFramework (InfinitaryProblem af p) = infinitary' af (getFramework p)
   getR   (InfinitaryProblem _ p) = getR p
 
-instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ SignatureId (Problem p trs)) =>
+instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.Id (Problem p trs)) =>
     MkProblem (Infinitary id p) trs where
   mkProblem (Infinitary af _ base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
   mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
@@ -58,7 +59,7 @@ instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Signatu
 instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
   getP   (InfinitaryProblem _  p) = getP p
 
-instance (id ~ SignatureId (Problem p trs), HasSignature trs, Ord id, MkDPProblem p trs) =>
+instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
     MkDPProblem (Infinitary id p) trs where
   mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
   mkDPProblem (Infinitary af _ base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
@@ -70,7 +71,7 @@ infinitary' g p = Infinitary g bestHeu p
 mkDerivedInfinitaryProblem g mkH p = do
   let heu = mkHeu mkH p
       af  = mkGoalAF g `mappend` AF.init p
-  af' <-  Set.toList $ invariantEV heu p af
+  af' <-  Set.toList $ invariantEV heu (rules p) af
   let p' = InfinitaryProblem af' p --  $ (iUsableRules p (rhs <$> rules (getP p)))
   return p'
 
@@ -116,18 +117,25 @@ pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.i
 
 -- Icap
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-    ICap t v (Infinitary id p, trs)
+instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
+    ICap (Infinitary id p, trs)
   where
     icap (Infinitary{..},trs) = icap (baseFramework,trs)
 
 -- Usable Rules
 
-instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
-         ,ApplyAF (Term t v), ApplyAF trs
-         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id, Ord (t(Term t v))
-         ,IUsableRules t v p trs, ICap t v (p,trs)) =>
-   IUsableRules t v (Infinitary id p) trs
+instance (v ~ Family.Var trs
+         ,id ~ Family.Id trs
+         ,id ~ Family.Id1 t
+         ,t ~ Family.TermF trs
+         ,Rule t v ~ Family.Rule trs
+         ,Enum v, Ord v
+         ,Ord id
+         ,Unify t, Ord (Term t v)
+         ,IsTRS trs, GetVars trs, ApplyAF trs
+         ,ApplyAF (Term t v)
+         ,IUsableRules p trs, ICap (p,trs)) =>
+   IUsableRules (Infinitary id p) trs
  where
    iUsableRulesM Infinitary{..} trs dps tt = do
       pi_tt <- getFresh (AF.apply pi_PType tt)

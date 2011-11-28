@@ -10,6 +10,7 @@
 {- LANGUAGE NoMonoLocalBinds -}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 
 module Narradar.Types.Problem.InitialGoal where
 
@@ -36,7 +37,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Text.XHtml (HTML(..), theclass, (+++))
 
-import Data.Term hiding ((!))
+import Data.Term hiding ((!), TermF, Var)
+import qualified Data.Term.Family as Family
 import Data.Term.Rules
 
 import Narradar.Types.DPIdentifiers
@@ -104,8 +106,8 @@ instance ( t ~ f id, MapId f, DPSymbol id
          , HasId t, Foldable t, Unify t
          , Ord (t(Term t Var)), Pretty (t(Term t Var))
          , Traversable (Problem p), Pretty p
-         , ICap t Var (p, NarradarTRS t Var)
-         , IUsableRules t Var p (NarradarTRS t Var)
+         , ICap (p, NarradarTRS t Var)
+         , IUsableRules p (NarradarTRS t Var)
          ) =>
      MkProblem (InitialGoal t p) (NarradarTRS t Var)
  where
@@ -348,8 +350,8 @@ initialGoalProblem :: ( t ~ f id, MapId f, DPSymbol id
                       , HasId t, Unify t, Ord (Term t Var), Pretty (t(Term t Var))
                       , MkDPProblem typ (NarradarTRS t Var)
                       , Traversable (Problem typ), Pretty typ
-                      , ICap t Var (typ, NarradarTRS t Var)
-                      , IUsableRules t Var typ (NarradarTRS t Var)
+                      , ICap (typ, NarradarTRS t Var)
+                      , IUsableRules typ (NarradarTRS t Var)
                       ) =>
                       [CAGoal t]
                    -> Maybe(DGraph t Var)
@@ -375,8 +377,8 @@ involvedNodes :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
 involvedNodes p = involvedNodes' (getFramework p) (getP p)
 
 -- | returns the vertexes in the DGraph which are in a path from an initial pair to a given TRS P
-involvedNodes' :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var)
-                  ,HasRules t Var trs
+involvedNodes' :: (IsDPProblem base, HasId t, Foldable t, Ord (Term t Var), HasRules trs
+                  ,Rule t Var ~ Family.Rule trs
                   ) => InitialGoal t base -> trs -> [Vertex]
 involvedNodes' p@InitialGoal{dgraph_PType=Just dg@DGraph{..},..} pTRS
   = flattenSCCs (map (safeAt "involvedNodes" sccs) sccsInPath)
@@ -397,8 +399,8 @@ involvedNodes' p@InitialGoal{dgraph_PType=Just dg@DGraph{..},..} pTRS
 involvedPairs :: (t ~ f id, HasId t, MapId f, Foldable t, Unify t
                  ,IsDPProblem base, Traversable (Problem base)
                  ,Ord (Term t Var)
-                 ,ICap t Var (base, NarradarTRS t Var)
-                 ,IUsableRules t Var base (NarradarTRS t Var)
+                 ,ICap (base, NarradarTRS t Var)
+                 ,IUsableRules base (NarradarTRS t Var)
                  ,Pretty base, Pretty (Term t Var)
                  ,DPSymbol id
                   ) => InitialGoal t base -> NarradarTRS t Var -> NarradarTRS t Var -> [Rule t Var]
@@ -415,9 +417,9 @@ involvedPairs p trs dps = rules dps
 
 reachableUsableRules :: (t ~ f id, Ord(Term t Var), HasId t, Foldable t, Unify t, MapId f
                         ,MkDPProblem base (NarradarTRS t Var), Traversable (Problem base)
-                        ,ICap t Var (base, NarradarTRS t Var)
-                        ,IUsableRules t Var base (NarradarTRS t Var)
-                        ,NeededRules t Var base (NarradarTRS t Var)
+                        ,ICap (base, NarradarTRS t Var)
+                        ,IUsableRules base (NarradarTRS t Var)
+                        ,NeededRules base (NarradarTRS t Var)
                         ,Pretty base, Pretty (Term t Var)
                         ,DPSymbol id
                         ) => Problem (InitialGoal t base) (NarradarTRS t Var) -> NarradarTRS t Var
@@ -442,7 +444,7 @@ instance Bifunctor CAGoalF where
 
 -- NFData
 
-instance (NFData (t(Term t Var)), NFData(Term t Mode), NFData (TermId t), NFData (Problem p trs)) =>
+instance (NFData (t(Term t Var)), NFData(Term t Mode), NFData (Family.Id1 t), NFData (Problem p trs)) =>
   NFData (Problem (InitialGoal t p) trs)
  where
   rnf (InitialGoalProblem gg g p) = rnf gg `seq` rnf g `seq` rnf p `seq` ()
@@ -483,8 +485,8 @@ instance (Pretty (Term t Var), Pretty (Term t Mode), PprTPDB (Problem typ trs)) 
 
 -- ICap
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-    ICap t v (InitialGoal id p, trs)
+instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
+    ICap (InitialGoal id p, trs)
   where
     icap (InitialGoal{..},trs) = icap (baseFramework,trs)
 
@@ -510,11 +512,11 @@ instance (t ~ f id, MapId f, HasId t, Foldable t, Unify t
          ,IsDPProblem p, Traversable (Problem p), Pretty p
          ,DPSymbol id
          ,trs ~ NarradarTRS t Var
-         ,ICap t Var (p, trs)
-         ,IUsableRules t Var p trs
-         ,NeededRules t Var p trs
+         ,ICap (p, trs)
+         ,IUsableRules p trs
+         ,NeededRules p trs
          ) =>
-          IUsableRules (f id) Var (InitialGoal (f id) p) trs
+          IUsableRules (InitialGoal (f id) p) trs
   where
     iUsableRulesVarM it@(InitialGoal _ _ typ) trs dps v = do
       reachableRules <- neededRulesM typ trs dps (rhs <$> involvedPairs it trs dps)
@@ -572,7 +574,7 @@ instance Pretty (Term t v) => Pretty (DGraph t v) where
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
 
-instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (DGraph t v) where
+instance (NFData (t(Term t v)), NFData (Family.Id1 t), NFData v) => NFData (DGraph t v) where
   rnf (DGraph p pm ip rp sccs sccsm sccg)  = rnf p  `seq`
                                              rnf pm `seq`
                                              rnf ip `seq`
@@ -601,8 +603,8 @@ mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
             , HasId t, Unify t
             , Pretty (Term t v)
             , Ord    (Term t v)
-            , ICap t v (typ, NarradarTRS t v)
-            , IUsableRules t v typ (NarradarTRS t v)
+            , ICap (typ, NarradarTRS t v)
+            , IUsableRules typ (NarradarTRS t v)
             ) => Problem typ (NarradarTRS t v) -> [CAGoal t] -> DGraph t v
 --mkDGraph (getP -> dps) _ | pprTrace ("mkDGraph with pairs: "<> dps) False = undefined
 mkDGraph p@(getP -> DPTRS _ _ gr _ _) gg = mkDGraph' (getFramework p) (getR p) (getP p) gg
@@ -611,7 +613,7 @@ mkDGraph' :: ( t ~ f id, DPSymbol id, MapId f
              , v ~ Var
              , IsDPProblem typ, Traversable (Problem typ), Pretty typ
              , HasId t, Unify t, Pretty (Term t v)
-             , ICap t v (typ, NarradarTRS t v)
+             , ICap (typ, NarradarTRS t v)
              ) => typ -> NarradarTRS t v -> NarradarTRS t v -> [CAGoal t] -> DGraph t v
 mkDGraph' typ trs pairs@(DPTRS dpsA _ fullgraph _ _) goals = runIcap (rules trs ++ rules pairs) $ do
   let pairsMap = Map.fromList (map swap $ assocs dpsA)
@@ -687,9 +689,9 @@ expandDGraph ::
       , Traversable (Problem typ)
       , IsDPProblem typ, Pretty typ
       , MkDPProblem (InitialGoal t typ) (NarradarTRS t Var)
-      , ICap t Var (typ, NarradarTRS t Var)
-      , IUsableRules t Var typ (NarradarTRS t Var)
-      , NeededRules t Var typ (NarradarTRS t Var)
+      , ICap (typ, NarradarTRS t Var)
+      , IUsableRules typ (NarradarTRS t Var)
+      , NeededRules typ (NarradarTRS t Var)
       ) =>
        Problem (InitialGoal t typ) (NarradarTRS t Var)
     -> Rule t Var
@@ -707,9 +709,9 @@ expandDGraph' ::
       , Traversable (Problem typ)
       , IsDPProblem typ, Pretty typ
       , MkDPProblem (InitialGoal t typ) (NarradarTRS t Var)
-      , ICap t Var (typ, NarradarTRS t Var)
-      , IUsableRules t Var typ (NarradarTRS t Var)
-      , NeededRules t Var typ (NarradarTRS t Var)
+      , ICap (typ, NarradarTRS t Var)
+      , IUsableRules typ (NarradarTRS t Var)
+      , NeededRules typ (NarradarTRS t Var)
       ) =>
        Problem (InitialGoal t typ) (NarradarTRS t Var)
     -> Int

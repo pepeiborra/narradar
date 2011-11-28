@@ -65,6 +65,8 @@ import           MuTerm.Framework.DotRep
 import           MuTerm.Framework.Strategy
 import           MuTerm.Framework.Output
 
+import qualified Data.Term.Family as Family
+
 import           Narradar.Constraints.Unify
 import           Narradar.Types.ArgumentFiltering     (AF_, simpleHeu, bestHeu, innermost)
 import qualified Narradar.Types.ArgumentFiltering     as AF
@@ -309,6 +311,7 @@ trsParser = do
                   $ mkDPProblem (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r' (mkTRS dps)
 
     _   -> fail "Invalid combination of rules, pairs and/or goals"
+
 -- ------------
 -- Debug stuff
 -- ------------

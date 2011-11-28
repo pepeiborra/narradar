@@ -22,6 +22,7 @@ import qualified Data.Map as Map
 import Text.XHtml (theclass)
 
 import Data.Term
+import qualified Data.Term.Family as Family
 import Data.Term.Rules
 
 import MuTerm.Framework.Problem
@@ -52,7 +53,7 @@ instance (Ord id, IsProblem p) => IsProblem (MkNarrowingGoal id p)  where
   getFramework (NarrowingGoalProblem g af p) = NarrowingGoal g af bestHeu (getFramework p)
   getR   (NarrowingGoalProblem _ _ p) = getR p
 
-instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ SignatureId (Problem p trs)) =>
+instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.Id trs) =>
     MkProblem (MkNarrowingGoal id p) trs where
   mkProblem (NarrowingGoal g af _ base) rr
       = NarrowingGoalProblem g (af `mappend` AF.init p) p where p = mkProblem base rr
@@ -61,7 +62,7 @@ instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Signatu
 instance (Ord id, IsDPProblem p) => IsDPProblem (MkNarrowingGoal id p) where
   getP   (NarrowingGoalProblem _ _ p) = getP p
 
-instance (id ~ SignatureId (Problem p trs), HasSignature trs, Ord id, MkDPProblem p trs) =>
+instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
     MkDPProblem (MkNarrowingGoal id p) trs where
   mapP f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapP f p)
   mkDPProblem (NarrowingGoal g af _ base) rr dp = NarrowingGoalProblem g (af `mappend` AF.init p) p
@@ -74,7 +75,7 @@ narrowingGoal' g af = NarrowingGoal g af bestHeu rewriting
 mkDerivedNarrowingGoalProblem g mkH p = do
   let heu = mkHeu mkH p
       af  = mkGoalAF g `mappend` AF.init p
-  af' <-  Set.toList $ invariantEV heu p af
+  af' <-  Set.toList $ invariantEV heu (rules p) af
   let p' = NarrowingGoalProblem g af' p --  $ (iUsableRules p (rhs <$> rules (getP p)))
   return p'
 
@@ -110,9 +111,10 @@ instance Pretty p => Pretty (MkNarrowingGoal id p) where
 instance HTMLClass (MkNarrowingGoal id Rewriting) where htmlClass _ = theclass "NDP"
 instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass "GNDP"
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
+instance (HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
          ,Pretty id, Pretty (Goal id)
-         ,Foldable t, HasId t, id ~ TermId t
+         ,Foldable t, HasId t
+         ,id ~ Id1 t
          ,PprTPDB (Problem base trs), HasMinimality base
          ) => PprTPDB (Problem (MkNarrowingGoal id base) trs) where
   pprTPDB (NarrowingGoalProblem g pi p) =
@@ -122,18 +124,20 @@ instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
 
 -- Icap
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs)) =>
-    ICap t v (MkNarrowingGoal id p, trs)
+instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
+    ICap (MkNarrowingGoal id p, trs)
   where
     icap (NarrowingGoal _ _ _ p,trs) = icap (p,trs)
 
 -- Usable Rules
 
-instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs
+instance (Enum v, Unify t, Ord (Term t v), IsTRS trs, GetVars trs
          ,ApplyAF (Term t v), ApplyAF trs
-         , id ~ AFId trs, AFId (Term t v) ~ id, Ord id, Ord (t(Term t v))
-         ,IUsableRules t v p trs, ICap t v (p,trs)) =>
-   IUsableRules t v (MkNarrowingGoal id p) trs
+         , id ~ Family.Id trs
+         , id ~ Id1 t
+         , Ord id, Ord (t(Term t v))
+         ,IUsableRules p trs, ICap (p,trs)) =>
+   IUsableRules (MkNarrowingGoal id p) trs
  where
    iUsableRulesM (NarrowingGoal _ pi _ b) trs dps tt = return trs
    iUsableRulesVarM (NarrowingGoal _ _ _ b) = iUsableRulesVarM b

@@ -33,7 +33,7 @@ import Data.Typeable
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P
 
-
+import qualified Data.Id.Family as Family
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Labellings
@@ -58,8 +58,8 @@ type LabelledAF = AF_ LId
 
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
-init      :: (HasSignature sig) => sig -> AF_ (SignatureId sig)
-empty     :: (HasSignature sig) => sig -> AF_ (SignatureId sig)
+init      :: (HasSignature sig) => sig -> AF_ (Family.Id sig)
+empty     :: (HasSignature sig) => sig -> AF_ (Family.Id sig)
 singleton :: Ord id => id -> [Int] -> AF_ id
 singleton':: Ord id => id -> Either Int [Int] -> AF_ id
 fromList  :: Ord id => [(id,[Int])] -> AF_ id
@@ -75,10 +75,10 @@ map'      :: (id -> Either Int [Int] -> Either Int [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
 mapSymbols':: Ord id' => (id -> Either Int [Int] -> id') -> AF_ id -> AF_ id'
 filter    :: Ord id => (id -> Either Int (Set Int) -> Bool) -> AF_ id -> AF_ id
-invert    :: (HasSignature sig) => sig -> AF_ (SignatureId sig) -> AF_ (SignatureId sig)
+invert    :: (HasSignature sig) => sig -> AF_ (Family.Id sig) -> AF_ (Family.Id sig)
 restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
-splitCD   :: (HasSignature sig, id ~ SignatureId sig, Pretty id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
+splitCD   :: (HasSignature sig, id ~ Family.Id sig, Pretty id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
 combine :: (Failure FailedToCombineAFs m, Ord id) => AF_ id -> AF_ id -> m (AF_ id)
 
 cut id i (AF m)  = case Map.lookup id m of
@@ -202,12 +202,9 @@ combine (AF a1) (AF a2)
 -- Regular AF Application
 -- ----------------------
 class ApplyAF (t :: *) where
-   type AFId t :: *
-   apply :: Ord (AFId t) => AF_ (AFId t) -> t -> t
+   apply :: Ord (Family.Id t) => AF_ (Family.Id t) -> t -> t
 
-instance ApplyAF (TermN id) where
-   type AFId (TermN id) = id
-   apply = applyTerm
+instance ApplyAF (TermN id) where apply = applyTerm
 
 applyTerm :: forall id . Ord id => AF_ id -> TermN id -> TermN id
 applyTerm af = foldTerm return f
@@ -218,15 +215,12 @@ applyTerm af = foldTerm return f
                | otherwise = Impure t
 
 instance ApplyAF a => ApplyAF [a] where
-    type AFId [a] = AFId a
     apply af = fmap (apply af)
 
 instance (ApplyAF a) => ApplyAF (RuleF a) where
-    type AFId (RuleF a) = AFId a
     apply af = fmap (apply af)
 
 instance ApplyAF (Term (WithNote1 n (TermF id)) v) where
-    type AFId (Term (WithNote1 n (TermF id)) v) = id
     apply af = foldTerm return f where
       f t@(Note1 (n,Term id tt))
                | Just ii <- lookup' id af = either (\i  -> tt !! pred i)
@@ -252,7 +246,7 @@ selectBest = unfoldr findOne where
 -- ----------
 -- Soundness
 -- ----------
-isSoundAF :: (ExtraVars v t, Ord (AFId t), ApplyAF t) => AF_ (AFId t) -> t -> Bool
+isSoundAF :: (ExtraVars t, Ord (Family.Id t), ApplyAF t) => AF_ (Family.Id t) -> t -> Bool
 isSoundAF     af trs = null (extraVars $ apply af trs)
 
 
@@ -263,9 +257,9 @@ type HeuFunction id t v = (Foldable t, HasId t) => AF_ id -> Term t v -> Positio
 
 -- | The type of heuristics
 data Heuristic (id :: *) where
-      Heuristic :: (forall t v. id ~ TermId t => HeuFunction id t v) -> Bool -> Heuristic id
+      Heuristic :: (forall t v. id ~ Family.Id1 t => HeuFunction id t v) -> Bool -> Heuristic id
 
-runHeu :: (TermId t ~ id) => Heuristic id -> HeuFunction id t v
+runHeu :: (Family.Id1 t ~ id) => Heuristic id -> HeuFunction id t v
 runHeu (Heuristic f _) = f
 
 isSafeOnDPs :: Heuristic id -> Bool
@@ -275,7 +269,7 @@ isSafeOnDPs (Heuristic _ b) = b
 class PolyHeuristic tag id where runPolyHeu :: tag id -> Heuristic id
 
 -- | Wrapper for heuristics which depend on the problem signature
-data MkHeu tag = MkHeu { mkTag :: (HasSignature sig, id ~ SignatureId sig, PolyHeuristic tag id) => sig -> tag id }
+data MkHeu tag = MkHeu { mkTag :: (HasSignature sig, id ~ Family.Id sig, PolyHeuristic tag id) => sig -> tag id }
 
 -- | Wrapper around a non-overloaded heuristic
 data WrapHeu id = WrapHeu ((Ord id) => Heuristic id)
@@ -284,10 +278,10 @@ instance (Ord id) => PolyHeuristic WrapHeu id where runPolyHeu (WrapHeu run) = r
 simpleHeu ::  (forall id . (Ord id) => Heuristic id) -> MkHeu WrapHeu
 simpleHeu h = MkHeu (\_sig -> WrapHeu h)
 
-simpleHeu' ::  (forall id sig. (HasSignature sig, id ~ SignatureId sig ) => sig -> Heuristic id) -> MkHeu WrapHeu
+simpleHeu' ::  (forall id sig. (HasSignature sig, id ~ Family.Id sig ) => sig -> Heuristic id) -> MkHeu WrapHeu
 simpleHeu' h = MkHeu (\sig -> WrapHeu (h sig))
 
-mkHeu :: (PolyHeuristic tag id, HasSignature sig, id ~ SignatureId sig) => MkHeu tag -> sig -> Heuristic id
+mkHeu :: (PolyHeuristic tag id, HasSignature sig, id ~ Family.Id sig) => MkHeu tag -> sig -> Heuristic id
 mkHeu (MkHeu mkTag) sig = runPolyHeu (mkTag sig)
 
 
@@ -301,12 +295,12 @@ bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
 innermost, outermost :: forall id . Ord id => Heuristic id
 
 innermost = Heuristic f True where
-   f :: HeuFunction (TermId t) t v
+   f :: HeuFunction (Family.Id1 t) t v
    f _ _ [] = mempty
    f _ t pos | Just root <- getId (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
 outermost = Heuristic f False where
-   f :: HeuFunction (TermId t) t v
+   f :: HeuFunction (Family.Id1 t) t v
    f _ _ [] = mempty
    f _ t pos | Just root <- getId t = Set.singleton (root, head pos)
 

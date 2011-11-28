@@ -49,6 +49,26 @@ import Test.Framework.Options
 import Test.Framework.Runners.Options
 #endif
 
+echoV str = do
+  (flags@Options{..}, _, _errors) <- getOptions
+  when (verbose>1) $ hPutStrLn stderr str
+
+--printDiagram :: String -> Options -> Proof PrettyDotF mp a -> IO ()
+printDiagram tmp Options{..} proof
+       | isNothing pdfFile = return ()
+       | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
+                               let dotSrc = dotProof' DotProof{showFailedPaths = verbose > 1} proof
+                               hPutStrLn h dotSrc
+                               hClose h
+#ifdef DEBUG
+                               when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
+#endif
+                               let dotCmd = printf "dot -Tpdf %s -o%s" fp the_pdf
+                               echoV dotCmd
+                               dotOk <- system dotCmd
+                               echo ("PDF proof written to " ++ the_pdf)
+                               return (dotOk == ExitSuccess, ())
+
 narradarMain :: forall mp.
                  (IsMZero mp, Traversable mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
@@ -67,41 +87,26 @@ narradarMain :: forall mp.
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
-  let echoV str = when (verbose>1) $ hPutStrLn stderr str
   tmp <- getTemporaryDirectory
-  let printDiagram :: Proof PrettyDotF mp a -> IO ()
-      printDiagram proof
-       | isNothing pdfFile = return ()
-       | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
-                               let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
-                               hPutStrLn h dotSrc
-                               hClose h
-#ifdef DEBUG
-                               when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
-#endif
-                               let dotCmd = printf "dot -Tpdf %s -o%s" fp the_pdf
-                               echoV dotCmd
-                               dotOk <- system dotCmd
-                               echo ("PDF proof written to " ++ the_pdf)
-                               return (dotOk == ExitSuccess, ())
 
   a_problem <- eitherM $ narradarParse problemFile input
 
-  let proof    = dispatchAProblem a_problem
+  let --proof :: forall info. Proof info mp Final
+      proof = dispatchAProblem a_problem
   sol <- maybe (fmap Just) withTimeout timeout $
          evaluate $ run (runProof proof)
   let diagrams = isJust pdfFile
 
   case join sol of
     Just sol -> do putStrLn "YES"
-                   when diagrams $ printDiagram sol
+--                   when diagrams $ printDiagram tmp flags sol
                    when (verbose>0) $ print $ pPrint sol
 
     Nothing  -> do
              putStrLn "MAYBE"
              let proof' = unsafeSliceProof proof
              when (verbose > 1) $ print $ pprProofFailures proof'
-             when (verbose > 1 && diagrams) (printDiagram proof') `const` proof
+--             when (verbose > 1 && diagrams) (printDiagram tmp flags proof') `const` proof
   where
     catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
 
@@ -131,21 +136,21 @@ prologMain run = catchTimeout $ do
   (flags@Options{..}, _, _errors) <- getOptions
   let echoV str = when (verbose>1) $ hPutStrLn stderr str
   tmp <- getTemporaryDirectory
-  let printDiagram :: Proof PrettyDotF mp a -> IO ()
-      printDiagram proof
-       | isNothing pdfFile = return ()
-       | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
-                               let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
-                               hPutStrLn h dotSrc
-                               hClose h
-#ifdef DEBUG
-                               when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
-#endif
-                               let dotcmd = printf "dot -Tpdf %s -o%s" fp the_pdf
-                               echoV dotcmd
-                               dotok <- system dotcmd
-                               echo ("PDF proof written to " ++ the_pdf)
-                               return (dotok == ExitSuccess, ())
+  let --printDiagram :: Proof PrettyDotF mp a -> IO ()
+--       printDiagram proof
+--        | isNothing pdfFile = return ()
+--        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
+--                                let dotSrc  = dotProof' DotProof{showFailedPaths = verbose > 1} proof
+--                                hPutStrLn h dotSrc
+--                                hClose h
+-- #ifdef DEBUG
+--                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
+-- #endif
+--                                let dotcmd = printf "dot -Tpdf %s -o%s" fp the_pdf
+--                                echoV dotcmd
+--                                dotok <- system dotcmd
+--                                echo ("PDF proof written to " ++ the_pdf)
+--                                return (dotok == ExitSuccess, ())
 
   prologProblem <- eitherM $ parse prologParser problemFile input
 
@@ -155,13 +160,13 @@ prologMain run = catchTimeout $ do
 
   case sol of
     Just sol -> do putStrLn "YES"
-                   when diagrams $ printDiagram sol
+--                   when diagrams $ printDiagram sol
                    when (verbose>0) $ print $ pPrint sol
 
     Nothing  -> do
              putStrLn "MAYBE"
              when (verbose > 1) $ print $ pprProofFailures proof
-             when (diagrams && verbose > 0) $ printDiagram (sliceProof proof)
+--             when (diagrams && verbose > 0) $ printDiagram (sliceProof proof)
   where
     catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE")
 -- ------------------------------

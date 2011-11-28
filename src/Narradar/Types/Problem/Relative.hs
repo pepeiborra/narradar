@@ -17,8 +17,9 @@ import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
 import qualified Data.Set as Set
 
-import Data.Term
+import Data.Term hiding (TermF)
 import Data.Term.Rules
+import qualified Data.Term.Family as Family
 
 import Narradar.Types.ArgumentFiltering (AF_, ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
@@ -96,11 +97,14 @@ instance ( trs ~ NarradarTRS t v
    where
       p0' = mapR (filterNarradarTRS (`Set.notMember` narradarTRStoSet relativeTRS)) baseProblem
 
-instance ( IsTRS t v trs
+instance ( IsTRS trs
+         , v ~ Family.Var trs
+         , t ~ Family.TermF trs
+         , Rule t v ~ Family.Rule trs
          , MkProblem base trs
          , Pretty (t(Term t v))
          , Ord (Term t v)
-         , HasId t, Functor t, Foldable t, Pretty (TermId t), Pretty v
+         , HasId t, Functor t, Foldable t, Pretty (Family.Id1 t), Pretty v
          , PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (Relative trs base) trs) where
   pprTPDB RelativeProblem{..} =
@@ -116,13 +120,13 @@ instance ( IsTRS t v trs
 
 -- ICap
 
-instance (HasRules t v trs, Unify t, GetVars v trs, ICap t v (p,trs')) =>
-         ICap t v (Relative trs p, trs')
+instance (HasRules trs, Unify (TermF trs), GetVars trs, ICap (p,trs')) =>
+         ICap (Relative trs p, trs')
  where
          icap (Relative _ p,trs) = icap (p,trs)
 
 -- Usable Rules
-instance (Monoid trs, IUsableRules t v b trs) => IUsableRules t v (Relative trs b) trs where
+instance (Monoid trs, IUsableRules b trs) => IUsableRules (Relative trs b) trs where
   iUsableRulesM _ trs _ _ = return trs
   iUsableRulesVarM = liftUsableRulesVarM
 {-

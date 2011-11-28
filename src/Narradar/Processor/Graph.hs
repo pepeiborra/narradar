@@ -3,6 +3,7 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
@@ -41,13 +42,17 @@ import Narradar.Types.Problem.InitialGoal
 import Narradar.Utils
 import Narradar.Framework.Ppr
 
+import qualified Data.Term.Family as Family
+
 -- -------------------------------------
 -- DP Processors estimating the graph
 -- -------------------------------------
 
-data DependencyGraph = DependencyGraphSCC {useInverse::Bool}
-                     | DependencyGraphCycles {useInverse::Bool}
+data DependencyGraph (info :: * -> *) = DependencyGraphSCC {useInverse::Bool}
+                                      | DependencyGraphCycles {useInverse::Bool}
         deriving (Eq, Ord, Show)
+
+type instance InfoConstraint (DependencyGraph info) = info
 
 dependencyGraphSCC = DependencyGraphSCC True
 dependencyGraphCycles = DependencyGraphCycles True
@@ -55,17 +60,19 @@ dependencyGraphCycles = DependencyGraphCycles True
 instance ( trs ~ NarradarTRS t Var
          , problem ~ Problem typ trs, Info info problem
          , MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
-         , Unify t, ICap t Var (typ,trs)
+         , Unify t, ICap (typ,trs)
          , Pretty (Term t Var), Pretty typ
          , Info info DependencyGraphProof
          ) =>
-    Processor info DependencyGraph (Problem typ (NarradarTRS t Var)) (Problem typ (NarradarTRS t Var)) where
+    Processor (DependencyGraph info) (Problem typ (NarradarTRS t Var)) where
+  type Typ (DependencyGraph info) (Problem typ (NarradarTRS t Var)) = typ
+  type Trs (DependencyGraph info) (Problem typ (NarradarTRS t Var)) = NarradarTRS t Var
   apply (DependencyGraphSCC useInverse) = sccProcessor useInverse
   apply (DependencyGraphCycles useInverse) = cycleProcessor useInverse
 
 
 instance ( t ~ f (DPIdentifier id0), MapId f
-         , TermId t ~ DPIdentifier id0, Ord id0
+         , Id1 t ~ DPIdentifier id0, Ord id0
          , trs ~ NarradarTRS t Var
          , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
          , IsDPProblem typ0
@@ -73,15 +80,15 @@ instance ( t ~ f (DPIdentifier id0), MapId f
          , Traversable (Problem typ0)
          , HasId t, Unify t, Ord (Term t Var)
          , Pretty (t(Term t Var)), Pretty typ0
-         , ICap t Var (typ0,trs)
-         , IUsableRules t Var typ0 trs
+         , ICap (typ0,trs)
+         , IUsableRules typ0 trs
          , ProblemColor problem, PprTPDB problem
          , Info info DependencyGraphProof
          ) =>
-    Processor info DependencyGraph
-             (Problem (InitialGoal t typ0) (NarradarTRS t Var))
-             (Problem (InitialGoal t typ0) (NarradarTRS t Var))
+    Processor (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
+  type Typ (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var)) = InitialGoal t typ0
+  type Trs (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var)) = NarradarTRS t Var
   apply DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
   apply (DependencyGraphSCC useInverse)
         p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
@@ -254,7 +261,7 @@ type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
                                  ,MkDPProblem typ (NarradarTRS t Var)
                                  ,Traversable (Problem typ)
                                  ,Pretty (Term t Var), Pretty typ
-                                 ,Unify t, ICap t Var (typ, trs)
+                                 ,Unify t, ICap (typ, trs)
                                  ,Info info DependencyGraphProof
                                  ,Monad mp
                                  ) => Bool ->

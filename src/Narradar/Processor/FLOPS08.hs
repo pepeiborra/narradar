@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -33,6 +34,7 @@ import Narradar.Types.Problem.InitialGoal as IG
 import Narradar.Utils
 
 import qualified Data.Map as Map
+import qualified Data.Term.Family as Family
 import qualified Narradar.Types.ArgumentFiltering as AF
 
 import Debug.Hood.Observe
@@ -53,19 +55,16 @@ instance Pretty id => Pretty (NarrowingGoalToRewritingProof id) where
                                                text "The argument filtering used is:" $$
                                                pPrint af
 
-data ComputeSafeAF heu = ComputeSafeAF (MkHeu heu)
-instance (t   ~ TermF id
-         ,v   ~ Var
-         ,trs ~ NTRS id
-         ,DPSymbol id, Ord id, Pretty id
+data ComputeSafeAF heu (info :: * -> *) = ComputeSafeAF (MkHeu heu)
+type instance InfoConstraint (ComputeSafeAF heu info) = info
+instance (DPSymbol id, Ord id, Pretty id
          ,PolyHeuristic heu id, Lattice (AF_ id)
          ,Info info (NarrowingGoalToRewritingProof id)
          ) =>
-    Processor info (ComputeSafeAF heu)
-              (NProblem (InitialGoal (TermF id) Narrowing) id)
-              (NProblem (NarrowingGoal id) id)
-
+    Processor (ComputeSafeAF heu info) (NProblem (InitialGoal (TermF id) Narrowing) id)
   where
+  type Typ (ComputeSafeAF heu info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NarrowingGoal id
+  type Trs (ComputeSafeAF heu info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NTRS id
   applySearch (ComputeSafeAF mk) p
     | null orProblems = [dontKnow (NarrowingGoalToRewritingFail :: NarrowingGoalToRewritingProof id) p]
     | otherwise = map return orProblems
@@ -74,35 +73,35 @@ instance (t   ~ TermF id
        let heu = mkHeu mk p
        Abstract g <- fmap2 termToGoal (IG.goals p)
        let p'  = mkDerivedDPProblem (narrowingGoal g) p
-       af' <-  Set.toList $ invariantEV heu p (NarrowingGoal.pi p')
+       af' <-  Set.toList $ invariantEV heu (rules p) (NarrowingGoal.pi p')
        return p'{pi=af'}
 
-data InferAF = InferAF
+data InferAF (info :: * -> *) = InferAF
+type instance InfoConstraint (InferAF info) = info
+
 instance (Observable id, Ord id, Pretty id, Show id, DPSymbol id
-         ) => Processor info InferAF
-              (NProblem (InitialGoal (TermF id) Narrowing) id)
-              (NProblem (NarrowingGoal id) id)
+         ) => Processor (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id)
  where
+  type Typ (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NarrowingGoal id
+  type Trs (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NTRS id
   apply InferAF p = mprod [return (mkDerivedDPProblem (narrowingGoal' g piDP) p)
                              | Abstract g <- fmap2 termToGoal (IG.goals p)
                              , let pi = inferAF (getR p) (bimap unmarkDPSymbol id g)
                                    piDP = AF.mapSymbols markDPSymbol pi `mappend` pi ]
 
-data NarrowingGoalToRewriting heu = NarrowingGoalToRewriting (MkHeu heu)
-instance (t   ~ TermF id
-         ,v   ~ Var
-         ,trs ~ NTRS id
-         ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
-         ,ICap t v (typ, trs), IUsableRules t v typ trs
+data NarrowingGoalToRewriting heu (info :: * -> *) = NarrowingGoalToRewriting (MkHeu heu)
+type instance InfoConstraint (NarrowingGoalToRewriting heu info) = info
+instance (HasSignature (NProblem typ id)
+         ,ICap (typ, trs), IUsableRules typ trs
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,ApplyAF (NProblem typ id)
          ,Info info (NarrowingGoalToRewritingProof id)
          ) =>
-    Processor info (NarrowingGoalToRewriting heu)
-              (NProblem (MkNarrowingGoal id typ) id)
-              (NProblem typ id)
+    Processor (NarrowingGoalToRewriting heu info) (NProblem (MkNarrowingGoal id typ) id)
   where
+  type Typ (NarrowingGoalToRewriting heu info) (NProblem (MkNarrowingGoal id typ) id) = typ
+  type Trs (NarrowingGoalToRewriting heu info) (NProblem (MkNarrowingGoal id typ) id) = NTRS id
   applySearch (NarrowingGoalToRewriting mk) p
     | null orProblems = [dontKnow (NarrowingGoalToRewritingFail :: NarrowingGoalToRewritingProof id) p]
     | otherwise = orProblems
@@ -110,7 +109,7 @@ instance (t   ~ TermF id
      orProblems = do
        let heu = mkHeu mk p
            base_p = getFramework (getBaseProblem p)
-       af' <-  Set.toList $ invariantEV heu p (NarrowingGoal.pi p)
+       af' <-  Set.toList $ invariantEV heu (rules p) (NarrowingGoal.pi p)
        let p' = mkDerivedDPProblem base_p p
        return $ singleP (NarrowingGoalToRewritingProof af') p (AF.apply af' p')
 
@@ -195,7 +194,7 @@ e _g (l :-> r) div
    [ (uniqueId v, V) | v <- Set.toList (getVars r `Set.difference` getVars l)] ++
    [ (uniqueId v, m) | (vv,m) <- map (toList.getVars) tt `zip` mydiv, v <- vv])
 
-bv,bv' :: (SignatureId trs ~ id, HasSignature trs
+bv,bv' :: (HasSignature trs, id ~ Family.Id trs
           ,Observable trs, Observable id, Ord id, Show id
           ) => trs -> id -> DivEnv -> Division id -> TermN id -> [Mode]
 bv = bv' -- observe "bv" bv'

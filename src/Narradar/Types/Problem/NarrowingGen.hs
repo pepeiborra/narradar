@@ -29,7 +29,8 @@ import           Data.Set                         (Set)
 import qualified Data.Set                         as Set
 import           Text.XHtml                       (theclass)
 
-import           Data.Term
+import           Data.Term                        hiding (TermF)
+import qualified Data.Term.Family                 as Family
 import           Data.Term.Rules
 
 import           MuTerm.Framework.Problem
@@ -166,19 +167,20 @@ instance Pretty p => Pretty (MkNarrowingGen p) where
 instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenNarr"
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Foldable t
+instance (t ~ Family.TermF trs
+         ,HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
+         ,HasId t, Pretty (Id1 t), Foldable t
          ,IsDPProblem base, PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (MkNarrowingGen base) trs) where
   pprTPDB p@NarrowingGenProblem{..} = pprTPDB baseProblem
 
 
 -- ICap
-instance ICap t v (st, NarradarTRS t v) => ICap t v (MkNarrowingGen st, NarradarTRS t v) where icap = liftIcap
+instance ICap (st, NarradarTRS t v) => ICap (MkNarrowingGen st, NarradarTRS t v) where icap = liftIcap
 
 -- Usable Rules
 
-instance (IUsableRules t v base trs) => IUsableRules t v (MkNarrowingGen base) trs where
+instance (IUsableRules base trs) => IUsableRules (MkNarrowingGen base) trs where
    iUsableRulesM    = liftUsableRulesM
    iUsableRulesVarM = liftUsableRulesVarM
 

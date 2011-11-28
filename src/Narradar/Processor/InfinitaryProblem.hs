@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
@@ -26,29 +27,30 @@ import Narradar.Utils
 import Lattice
 import Prelude hiding (pi)
 
-data InfinitaryToRewriting heu = InfinitaryToRewriting (MkHeu heu) Bool
+import qualified Data.Term.Family as Family
+
+data InfinitaryToRewriting heu (info :: * -> *) = InfinitaryToRewriting (MkHeu heu) Bool
 data NarrowingGoalToInfinitary heu = NarrowingGoalToInfinitary (MkHeu heu) Bool
+
+type instance InfoConstraint (InfinitaryToRewriting heu info) = info
 
 infinitaryToRewriting heu = apply(InfinitaryToRewriting heu False)
 narrowingGoalToInfinitary heu = apply(NarrowingGoalToInfinitary heu False)
 
 -- | This is the infinitary constructor rewriting AF processor described in
 --   "Termination of Logic Programs ..." (Schneider-Kamp et al)
-instance (t   ~ TermF id
-         ,v   ~ Var
-         ,trs ~ NTRS id
-         ,HasSignature (NProblem typ id), id ~ SignatureId (NProblem typ id)
+instance (HasSignature (NProblem typ id)
          ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,ApplyAF (NProblem typ id)
          ,Info info (InfinitaryToRewritingProof id)
-         ,ICap t v (typ, trs)
-         ,IUsableRules t v typ trs
+         ,ICap (typ, NTRS id)
+         ,IUsableRules typ (NTRS id)
          ) =>
-    Processor info (InfinitaryToRewriting heu)
-              (NProblem (Infinitary id typ) id)
-              (NProblem typ id)
+    Processor (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id)
   where
+  type Typ (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id) = typ
+  type Trs (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id) = NTRS id
   applySearch (InfinitaryToRewriting mk usable) p
     | null orProblems = [dontKnow (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
     | otherwise = orProblems
@@ -57,7 +59,7 @@ instance (t   ~ TermF id
        let heu    = mkHeu mk p
            base_p = getFramework (Infinitary.baseProblem p)
        let p' = if usable then iUsableRules p (rhs <$> rules (getP p)) else p
-       af' <-  Set.toList $ invariantEV heu p' (Infinitary.pi p')
+       af' <-  Set.toList $ invariantEV heu (rules p') (Infinitary.pi p')
        return $ singleP (InfinitaryToRewritingProof af') p
                         (AF.apply af' . mkDerivedDPProblem base_p $ p')
 

@@ -3,6 +3,8 @@
 {-# LANGUAGE ViewPatterns, PatternGuards #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Narradar.Processor.SubtermCriterion where
 
@@ -21,10 +23,12 @@ import Narradar.Types.ArgumentFiltering (AF_)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Utils (on)
 
-data SubtermCriterion         = SubtermCriterion deriving (Eq, Show, Ord)
+data SubtermCriterion (info :: * -> *) = SubtermCriterion deriving (Eq, Show, Ord)
 data SubtermCriterionProof id = SubtermCriterionProof (Proj id)
                               | SubtermCriterionFailMinimality
      deriving (Eq, Show, Ord)
+
+type instance InfoConstraint (SubtermCriterion info) = info
 
 instance (Pretty (DPIdentifier id), Ord id) => Pretty (SubtermCriterionProof (DPIdentifier id)) where
     pPrint SubtermCriterionFailMinimality = text "The problem does not have the minimality property," $$
@@ -34,8 +38,10 @@ instance (Pretty (DPIdentifier id), Ord id) => Pretty (SubtermCriterionProof (DP
                                         nest 2 pi
 
 instance (Info info (SubtermCriterionProof id), Ord id, Pretty id) =>
-         Processor info SubtermCriterion (Problem Rewriting (NTRS id)) (Problem Rewriting (NTRS id))
+         Processor (SubtermCriterion info) (Problem Rewriting (NTRS id))
   where
+   type Typ (SubtermCriterion info) (Problem Rewriting (NTRS id)) = Rewriting
+   type Trs (SubtermCriterion info) (Problem Rewriting (NTRS id)) = NTRS id
    apply SubtermCriterion p0
      | getMinimalityFromProblem p0 /= M = dontKnow (SubtermCriterionFailMinimality ::SubtermCriterionProof id) p0
      | otherwise = case subtermCriterion (getP p0) of
@@ -43,22 +49,31 @@ instance (Info info (SubtermCriterionProof id), Ord id, Pretty id) =>
                                 Just (pTRS',prj) -> singleP (SubtermCriterionProof prj) p0 (setP pTRS' p0)
 
 instance (Info info (SubtermCriterionProof id),Ord id, Pretty id) =>
-         Processor info SubtermCriterion (Problem IRewriting (NTRS id)) (Problem IRewriting (NTRS id))
+         Processor (SubtermCriterion info) (Problem IRewriting (NTRS id))
   where
+   type Typ (SubtermCriterion info) (Problem IRewriting (NTRS id)) = IRewriting
+   type Trs (SubtermCriterion info) (Problem IRewriting (NTRS id)) = NTRS id
    apply SubtermCriterion p0 = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP  (SubtermCriterionProof prj) p0 (setP pTRS' p0)
 
 instance(Info info (Problem base (NTRS id))
-        ,Processor info SubtermCriterion (Problem base (NTRS id)) (Problem base (NTRS id))) =>
-         Processor info SubtermCriterion (Problem (MkNarrowingGen base) (NTRS id)) (Problem (MkNarrowingGen base) (NTRS id))
+        ,Processor (SubtermCriterion info) (Problem base (NTRS id))
+        ,Problem base (NTRS id) ~ Res (SubtermCriterion info) (Problem base (NTRS id))
+        ) =>
+         Processor (SubtermCriterion info) (Problem (MkNarrowingGen base) (NTRS id))
   where
+   type Typ (SubtermCriterion info) (Problem (MkNarrowingGen base) (NTRS id)) = MkNarrowingGen base
+   type Trs (SubtermCriterion info) (Problem (MkNarrowingGen base) (NTRS id)) = NTRS id
    apply = liftProcessor
 
 instance (Info info (Problem base (NTRS id))
-         ,Processor info SubtermCriterion (Problem base (NTRS id)) (Problem base (NTRS id))) =>
-         Processor info SubtermCriterion (Problem (InitialGoal (TermF id) base) (NTRS id)) (Problem (InitialGoal (TermF id) base) (NTRS id))
+         ,Processor (SubtermCriterion info) (Problem base (NTRS id))
+         ,Problem base (NTRS id) ~ Res (SubtermCriterion info) (Problem base (NTRS id))) =>
+         Processor (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id))
   where
+   type Typ (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id)) = InitialGoal (TermF id) base
+   type Trs (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id)) = NTRS id
    apply = liftProcessor
 
 -- --------------

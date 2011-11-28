@@ -18,7 +18,9 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable as T (Traversable, mapM)
 
-import Data.Term
+import Data.Term hiding (Var)
+import qualified Data.Term as Family
+import qualified Data.Rule.Family as Family
 import Data.Term.Rules
 
 import Narradar.Constraints.ICap
@@ -27,46 +29,62 @@ import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Types.ArgumentFiltering as AF (AF_, ApplyAF(..))
 
-class (Rename v, Monoid trs) => IUsableRules t v typ trs where
-    iUsableRulesM    :: MonadVariant v m => typ -> trs -> trs -> [Term t v] -> m trs
-    iUsableRulesVarM :: MonadVariant v m => typ -> trs -> trs -> v -> m(Set (Rule t v))
+class Monoid trs => IUsableRules typ trs where
+    iUsableRulesM    :: (v ~ VarM m, v ~ Family.Var trs, t ~ Family.TermF trs, MonadVariant m) => typ -> trs -> trs -> [Term t v] -> m trs
+    iUsableRulesVarM :: (v ~ VarM m, v ~ Family.Var trs, t ~ Family.TermF trs, MonadVariant m) => typ -> trs -> trs -> v -> m(Set (Rule t v))
 
 data Proxy a
 proxy = undefined
 
 deriveUsableRulesFromTRS :: forall t v typ trs m.
-                            (IUsableRules t v typ trs, IsTRS t v trs, MonadVariant v m) =>
+                            ( IUsableRules typ trs, IsTRS trs
+                            , v ~ Family.VarM m
+                            , v ~ Family.Var trs
+                            , t ~ Family.TermF trs
+                            , Rule t v ~ Family.Rule trs
+                            , MonadVariant m) =>
                             Proxy trs -> typ -> [Rule t v] -> [Rule t v] -> [Term t v] -> m [Rule t v]
-deriveUsableRulesFromTRS _   typ r p = liftM rules . iUsableRulesM typ (tRS r :: trs) (tRS p :: trs)
+deriveUsableRulesFromTRS _ typ r p = liftM rules . iUsableRulesM typ (tRS r :: trs) (tRS p :: trs)
 
 deriveUsableRulesVarFromTRS :: forall t v typ trs m.
-                              (IUsableRules t v typ trs, IsTRS t v trs, MonadVariant v m) =>
+                              ( IUsableRules typ trs, IsTRS trs
+                              , v ~ VarM m
+                              , v ~ Family.Var trs
+                              , t ~ Family.TermF trs
+                              , Rule t v ~ Family.Rule trs
+                              , MonadVariant m) =>
                             Proxy trs -> typ -> [Rule t v] -> [Rule t v] -> v -> m (Set(Rule t v))
 deriveUsableRulesVarFromTRS _ typ r p = iUsableRulesVarM typ (tRS r :: trs) (tRS p :: trs)
 
 iUsableRules :: ( p ~ Problem typ
-                , Ord (Term t v), Enum v, Rename v
+                , v ~ Family.Var trs
+                , t ~ Family.TermF trs
+                , Ord (Term t v), Enum v, Rename v, Ord v
                 , MkProblem typ trs, IsDPProblem typ, Traversable p
-                , IsTRS t v trs, GetVars v trs, IUsableRules t v typ trs
+                , IsTRS trs, GetVars trs, IUsableRules typ trs
                 ) =>
                 p trs -> [Term t v] -> p trs
 iUsableRules p = runIcap p . iUsableRulesMp p
 
 iUsableRulesVar :: ( p ~ Problem typ
-                , Ord (Term t v), Enum v, Rename v
-                , IsDPProblem typ, Traversable p
-                , IsTRS t v trs, GetVars v trs, IUsableRules t v typ trs
+                   , v ~ Family.Var trs
+                   , t ~ Family.TermF trs
+                   , Ord (Term t v), Enum v, Rename v, Ord v
+                   , IsDPProblem typ, Traversable p
+                   , IsTRS trs, GetVars trs, IUsableRules typ trs
                 ) =>
                 p trs -> v -> Set(Rule t v)
 iUsableRulesVar p = runIcap p . iUsableRulesVarMp p
 
 iUsableRules3 typ trs dps = runIcap (getVars trs `mappend` getVars dps) . iUsableRulesM typ trs dps
 
-iUsableRulesMp ::
-  (MkProblem typ trs,
-   IsDPProblem typ,
-   IUsableRules t v typ trs,
-   MonadVariant v m) =>
+iUsableRulesMp :: ( MkProblem typ trs,
+                    IsDPProblem typ,
+                    IUsableRules typ trs,
+                    MonadVariant m,
+                    v ~ VarM m,
+                    v ~ Family.Var trs,
+                    t ~ Family.TermF trs ) =>
   Problem typ trs -> [Data.Term.Term t v] -> m (Problem typ trs)
 
 iUsableRulesMp p tt = do { trs' <- iUsableRulesM (getFramework p) (getR p) (getP p) tt
@@ -84,15 +102,18 @@ liftUsableRulesVarM typ trs dps = iUsableRulesVarM (getBaseFramework typ) trs dp
 
 f_UsableRules :: forall term vk acc t v trs typ problem m.
                  ( Ord (Term t v), Unify t, Ord v
-                 , problem ~ (typ, trs)
-                 , term ~ Term t v
-                 , vk ~ (v -> m acc)
-                 , acc ~ Set (Rule t v)
-                 , HasRules t v trs, GetVars v trs
-                 , ICap t v problem
-                 , MonadVariant v m
+                 , term     ~ Term t v
+                 , v        ~ VarM m
+                 , v        ~ Family.Var trs
+                 , t        ~ Family.TermF trs
+                 , Rule t v ~ Family.Rule trs
+                 , vk       ~ (v -> m acc)
+                 , acc      ~ Set (Rule t v)
+                 , HasRules trs, GetVars trs
+                 , ICap (typ,trs)
+                 , MonadVariant m
                  ) =>
-                 problem -> vk -> [term] -> m acc
+                 (typ, trs) -> vk -> [term] -> m acc
 f_UsableRules p@(_,trs) _  tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined
 f_UsableRules p@(_,trs) vk tt = go mempty tt where
   go acc []       = return acc
@@ -107,17 +128,22 @@ f_UsableRules p@(_,trs) vk tt = go mempty tt where
 
 
 f_UsableRulesAF :: forall term vk acc t id v trs typ problem m.
-                 ( problem ~ (typ,trs)
-                 , term    ~ Term t v
+                 ( term    ~ Term t v
+                 , t       ~ Family.TermF trs
+                 , v       ~ VarM m
+                 , v       ~ Family.Var trs
+                 , Rule t v~ Family.Rule trs
                  , vk      ~ (v -> m acc)
                  , acc     ~ Set (Rule t v)
-                 , id      ~ AFId trs, AFId term ~ id, Ord id
+                 , id      ~ Id trs
+                 , id      ~ Id term
+                 , Ord id
                  , Ord (Term t v), Unify t, Ord v, ApplyAF term
-                 , HasRules t v trs, ApplyAF trs, GetVars v trs
-                 , ICap t v problem
-                 , MonadVariant v m
+                 , HasRules trs, ApplyAF trs, GetVars trs
+                 , ICap (typ, trs)
+                 , MonadVariant m
                  ) =>
-                 problem -> AF_ id -> vk -> [term] -> m acc
+                 (typ, trs) -> AF_ id -> vk -> [term] -> m acc
 
 f_UsableRulesAF p@(typ,trs)    _   _ tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined
 f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
@@ -139,19 +165,21 @@ f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
 -- Needed Rules
 -- ----------------
 
-class (Rename v, Monoid trs) => NeededRules t v typ trs | trs -> t v where
-    neededRulesM :: MonadVariant v m => typ -> trs -> trs -> [Term t v] -> m trs
+class Monoid trs => NeededRules typ trs where
+    neededRulesM :: (v ~ VarM m, t ~ Family.TermF trs, v ~ Family.Var trs, MonadVariant m) => typ -> trs -> trs -> [Term t v] -> m trs
 
 -- We lift the needed rules automatically
-instance (FrameworkExtension ext, NeededRules t v base trs) => NeededRules t v (ext base) trs
+instance (FrameworkExtension ext, NeededRules base trs) => NeededRules (ext base) trs
   where neededRulesM typ trs dps = neededRulesM (getBaseFramework typ) trs dps
 
 
 neededRules :: ( p ~ Problem typ
-                , Ord (Term t v), Enum v, Rename v
-                , MkProblem typ trs, IsDPProblem typ, Traversable p
-                , IsTRS t v trs, GetVars v trs, NeededRules t v typ trs
-                ) =>
+               , v ~ Family.Var trs
+               , t ~ Family.TermF trs
+               , Ord (Term t v), Enum v, Rename v, Ord v
+               , MkProblem typ trs, IsDPProblem typ, Traversable p
+               , IsTRS trs, GetVars trs, NeededRules typ trs
+               ) =>
                 p trs -> [Term t v] -> p trs
 neededRules p tt = runIcap p $ do
                      trs' <- neededRulesM (getFramework p) (getR p) (getP p) tt

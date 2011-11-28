@@ -24,6 +24,7 @@ import qualified Data.Set as Set
 import Text.XHtml (HTML(..), theclass)
 
 import Data.Term
+import qualified Data.Term.Family as Family
 import Data.Term.Rules
 
 import Narradar.Constraints.UsableRules
@@ -166,8 +167,12 @@ instance HTMLClass Rewriting  where htmlClass (MkRewriting Standard _) = theclas
 instance HTMLClass IRewriting where htmlClass (MkRewriting Innermost _) = theclass "IDP"
 
 
-instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (TermId t), Functor t, Foldable t
+instance (v ~ Family.Var trs
+         ,t ~ Family.TermF trs
+         ,Rule t v ~ Family.Rule trs
+         ,Pretty v, Ord v
+         ,HasRules trs, GetVars trs, Pretty (t(Term t v))
+         ,HasId t, Pretty (Id1 t), Functor t, Foldable t
          ) => PprTPDB (Problem (MkRewriting st) trs) where
   pprTPDB prob@(RewritingProblem r p st m) = vcat
      [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))
@@ -186,8 +191,9 @@ instance (HasRules t v trs, GetVars v trs, Pretty v, Pretty (t(Term t v))
 
 -- ICap
 
-instance (Unify t, Rename v, Ord v) => ICap t v (MkRewriting st, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
-instance (Ord v, Rename v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) where
+instance (Unify t, Rename v, Ord v
+         ) => ICap (MkRewriting st, NarradarTRS t v) where icap (typ,trs) = icap (typ, rules trs)
+instance (Ord v, Rename v, Unify t) => ICap (MkRewriting st, [Rule t v]) where
   icap (MkRewriting st m, trs) t
     | not(isInnermost st) = icap trs t
     | otherwise = do
@@ -205,7 +211,7 @@ instance (Ord v, Rename v, Unify t) => ICap t v (MkRewriting st, [Rule t v]) whe
 
 -- Usable Rules
 
-instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v (MkRewriting st) (NarradarTRS t v) where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules (MkRewriting st) (NarradarTRS t v) where
   iUsableRulesM m trs dps tt = do
     trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) =<< getFresh tt
     return (tRS $ toList trs')
@@ -214,18 +220,18 @@ instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v 
     | isInnermost st = return Set.empty
     | otherwise      = return $ Set.fromList $ rules trs
 
-instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v Rewriting [Rule t v] where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules Rewriting [Rule t v] where
   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
   iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
-instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules t v IRewriting [Rule t v] where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => IUsableRules IRewriting [Rule t v] where
   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
   iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
-instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => NeededRules t v (MkRewriting st) (NarradarTRS t v) where
+instance (Ord(Term t v), Ord v, Rename v, Unify t, HasId t) => NeededRules (MkRewriting st) (NarradarTRS t v) where
   neededRulesM _ = iUsableRulesM irewriting
 
 -- Insert Pairs
 
-instance (Pretty id, Ord id) =>InsertDPairs Rewriting  (NTRS id) where insertDPairs = insertDPairsDefault
-instance (Pretty id, Ord id) =>InsertDPairs IRewriting (NTRS id) where insertDPairs = insertDPairsDefault
+instance (Pretty id, Ord id) => InsertDPairs Rewriting  (NTRS id) where insertDPairs = insertDPairsDefault
+instance (Pretty id, Ord id) => InsertDPairs IRewriting (NTRS id) where insertDPairs = insertDPairsDefault

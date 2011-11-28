@@ -56,8 +56,8 @@ import Narradar.Types.Problem
 import Narradar.Types.Problem.InitialGoal
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Utils
-import Narradar.Types.ArgumentFiltering (AFId)
 
+import qualified Data.Term.Family as Family
 import qualified Funsat.ECircuit as ECircuit
 import qualified Narradar.Constraints.RPO as RPO
 import qualified Narradar.Types as Narradar
@@ -77,10 +77,10 @@ instance SATSymbol MPOsymbol  where mkSATSymbol = mpo
 
 -- | RPO + AF
 
-rpoAF :: (id ~ SignatureId trs
+rpoAF :: (id ~ Family.Id trs
          ,Ord id, Show id
          ,HasSignature trs
-         ,HasRules (TermF id) v' trs
+         ,HasRules trs, Rule (TermF id) v' ~ Family.Rule trs
          ,Ord v', Show v', Pretty v', Hashable v'
          ,SATSymbol sid
          ,HasStatus v (sid v id)
@@ -102,7 +102,7 @@ rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
 rpoAF_DP ::
          (trs  ~ NarradarTRS (TermF id) v'
          ,trs' ~ NarradarTRS (TermF (sid v id)) v'
-         ,id   ~ SignatureId trs
+         ,id   ~ Family.Id trs
          ,Ord id, Show id
          ,Ord v', Show v', Pretty v', Hashable v'
          ,MkDPProblem typ trs'
@@ -840,7 +840,7 @@ omegaIGgen p
                           , isLinear l && P.all isVar (properSubterms l)
                           , let arity = length (properSubterms l)]
 
-rulesFor :: (HasId t, TermId t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
+rulesFor :: (HasId t, Id1 t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
 
 -- --------------------------------------

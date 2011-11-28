@@ -40,7 +40,6 @@ instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
 
 instance Dispatch thing where dispatch _ = error "missing dispatcher"
 
-
 -- Prolog
 instance Dispatch PrologProblem where
   dispatch = apply SKTransform >=> dispatch
@@ -69,10 +68,10 @@ instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, Hashable id) => D
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
 
-instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, Hashable id) =>
-    Dispatch (NProblem (InitialGoal (TermF (DPIdentifier id)) Narrowing) (DPIdentifier id)) where
-  dispatch = (return .|. dg) >=>
-             apply NarrowingGoalToRelativeRewriting >=> dispatch
+-- instance (Pretty (DPIdentifier id), Pretty (GenId id), Ord id, Hashable id) =>
+--     Dispatch (NProblem (InitialGoal (TermF (DPIdentifier id)) Narrowing) (DPIdentifier id)) where
+--   dispatch = (return .|. dg) >=>
+--              apply NarrowingGoalToRelativeRewriting >=> dispatch
 
 instance Dispatch (NProblem (InitialGoal (TermF Id) IRewriting) Id) where
   dispatch = ev >=> dg >=> rpoPlus gt1 >=> final
@@ -82,12 +81,13 @@ instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
                       (dg >=> rpoPlus gt2 >=> final)
                     )
 
-instance (Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) INarrowingGen) (GId id)) where
-  dispatch = dg >=> rpoPlus gt2 >=> final
+--instance (Pretty (GenId id), Ord id, Hashable id) =>
+-- Dispatch (NProblem (InitialGoal (TermF (GId id)) INarrowingGen) (GId id)) where
+--  dispatch = dg >=> rpoPlus gt2 >=> final
 
-instance (Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
-  dispatch = (inn >=> dispatch) .|.
-             (dg  >=> rpoPlus gt2 >=> final)
+-- instance (Pretty (GenId id), Ord id, Hashable id) => Dispatch (NProblem (InitialGoal (TermF (GId id)) NarrowingGen) (GId id)) where
+--   dispatch = (inn >=> dispatch) .|.
+--              (dg  >=> rpoPlus gt2 >=> final)
 
 -- Relative
 instance (Dispatch (NProblem base id)

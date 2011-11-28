@@ -11,10 +11,14 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Types
 
+import qualified Data.Term.Family as Family
+
 -- --------------------------------------------------------------------
 -- Convert a relative DP problem into a vanilla DP problem (LOPSTR09)
 -- --------------------------------------------------------------------
-data RelativeToRegular = RelativeToRegular
+data RelativeToRegular (info :: * -> *) = RelativeToRegular
+type instance InfoConstraint (RelativeToRegular info) = info
+
 data RelativeToRegularProof = RelativeToRegularProof | RelativeToRegularProofFail
           deriving (Eq, Ord, Show)
 
@@ -27,13 +31,16 @@ instance Pretty RelativeToRegularProof where
                                         text "the result from LOPSTR09 does not apply."
 
 instance ( MkProblem base trs
-         , SignatureId trs ~ TermId t
+         , Family.Id trs ~ Id1 t
+         , Family.Rule trs ~ Rule t v
          , Ord (t(Term t v)), Ord v, Enum v, Rename v
          , HasId t, Unify t
-         , Monoid trs, HasRules t v trs, HasSignature trs
+         , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProof
          , HasMinimality base
-         ) => Processor info RelativeToRegular (Problem (Relative trs base) trs) (Problem base trs) where
+         ) => Processor (RelativeToRegular info) (Problem (Relative trs base) trs) where
+  type Typ (RelativeToRegular info) (Problem (Relative trs base) trs) = base
+  type Trs (RelativeToRegular info) (Problem (Relative trs base) trs) = trs
   apply RelativeToRegular p@RelativeProblem{relativeTRS}
     | isGeneralizedRelaxedHierarchicalCombination (getR p) relativeTRS
     = let p' = setMinimality A (getBaseProblem p)

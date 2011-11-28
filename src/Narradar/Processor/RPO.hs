@@ -25,6 +25,7 @@ import Data.Maybe (fromJust)
 import Data.Monoid
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Term.Family as Family
 
 import Narradar.Framework.GraphViz
 
@@ -66,7 +67,8 @@ runSAT Yices = satYices YicesOpts{maxWeight = 20, timeout = Nothing}
 -- runS (YicesSimp  timeout) = unsafePerformIO . solveYicesSimp YicesOpts{maxWeight = 20, timeout = Just 60}
 -- runS (YicesSimp1 timeout) = unsafePerformIO . solveYicesSimp1 YicesOpts{maxWeight = 20, timeout = Just 60}
 
-data RPOProc where RPOProc :: SATSymbol e => Extension e -> UsableRules -> Solver -> RPOProc
+data RPOProc (info :: * -> *) where RPOProc :: SATSymbol e => Extension e -> UsableRules -> Solver -> RPOProc info
+type instance InfoConstraint (RPOProc info) = info
 data Extension a where
     RPOSAF :: Extension RPOSsymbol
     RPOAF  :: Extension RPOsymbol
@@ -80,11 +82,10 @@ data SATSolver = Yices | Minisat | Funsat
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
-         ) => Processor info RPOProc
-                             (NProblem Rewriting id)
-                             (NProblem Rewriting id)
+         ) => Processor (RPOProc info) (NProblem Rewriting id)
    where
-
+    type Typ (RPOProc info) (NProblem Rewriting id) = Rewriting
+    type Trs (RPOProc info) (NProblem Rewriting id) = NTRS id
     apply (RPOProc RPOSAF usablerules SMTFFI)    p = procAF p RPOSAF usablerules ((smtFFI.) . rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF p RPOSAF usablerules ((runSAT s .). rpoAF_DP True)
@@ -108,10 +109,10 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
-         ) => Processor info RPOProc
-                             (NProblem IRewriting id)
-                             (NProblem IRewriting id)
+         ) => Processor (RPOProc info) (NProblem IRewriting id)
    where
+    type Typ (RPOProc info) (NProblem IRewriting id) = IRewriting
+    type Trs (RPOProc info) (NProblem IRewriting id) = NTRS id
     apply (RPOProc RPOSAF usablerules SMTFFI)    p = procAF p RPOSAF usablerules ((smtFFI.) . rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF p RPOSAF usablerules ((runSAT s .). rpoAF_DP True)
@@ -136,10 +137,10 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
 instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
-         ) => Processor info RPOProc
-                             (NProblem (InitialGoal (TermF id) Rewriting) id)
-                             (NProblem (InitialGoal (TermF id) Rewriting) id)
+         ) => Processor (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id)
    where
+    type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = InitialGoal (TermF id) Rewriting
+    type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = NTRS id
     apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
@@ -164,10 +165,10 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ,Info info (NProblem IRewriting id)
-         ) => Processor info RPOProc
-                             (NProblem (InitialGoal (TermF id) IRewriting) id)
-                             (NProblem (InitialGoal (TermF id) IRewriting) id)
+         ) => Processor (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id)
    where
+    type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = InitialGoal (TermF id) IRewriting
+    type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = NTRS id
     apply (RPOProc RPOSAF usableRules SMTFFI)    = liftProblem $ \p -> procAF p RPOSAF usableRules ((smtFFI.) . rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) = liftProblem $ \p -> procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
@@ -192,10 +193,10 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id
 instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
-         ) => Processor info RPOProc
-                             (NProblem (InitialGoal (TermF id) NarrowingGen) id)
-                             (NProblem (InitialGoal (TermF id) NarrowingGen) id)
+         ) => Processor (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id)
    where
+    type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = InitialGoal (TermF id) NarrowingGen
+    type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = NTRS id
     apply (RPOProc RPOSAF usableRules SMTFFI)    p = procAF_IGgen p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) p = procAF_IGgen p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP True)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IGgen p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
@@ -220,10 +221,10 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ,Info info (NProblem INarrowingGen id)
-         ) => Processor info RPOProc
-                             (NProblem (InitialGoal (TermF id) INarrowingGen) id)
-                             (NProblem (InitialGoal (TermF id) INarrowingGen) id)
+         ) => Processor (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id)
    where
+    type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = InitialGoal (TermF id) INarrowingGen
+    type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = NTRS id
     apply (RPOProc RPOSAF usableRules SMTFFI)    = liftProblem $ \p -> procAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) = liftProblem $ \p -> procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP True)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP True)
@@ -246,10 +247,10 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
-         ) => Processor info RPOProc
-                             (NProblem Narrowing id)
-                             (NProblem Narrowing id)
+         ) => Processor (RPOProc info) (NProblem Narrowing id)
   where
+    type Typ (RPOProc info) (NProblem Narrowing id) = Narrowing
+    type Trs (RPOProc info) (NProblem Narrowing id) = NTRS id
    -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
     apply (RPOProc RPOSAF usableRules SMTFFI)    p = procNAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_NDP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) p = procNAF p RPOSAF usablerules ((smtSerial.). rpoAF_NDP True)
@@ -274,10 +275,10 @@ instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)
-         ) => Processor info RPOProc
-                        (NProblem CNarrowing id)
-                        (NProblem CNarrowing id)
+         ) => Processor (RPOProc info) (NProblem CNarrowing id)
   where
+    type Typ (RPOProc info) (NProblem CNarrowing id) = CNarrowing
+    type Trs (RPOProc info) (NProblem CNarrowing id) = NTRS id
    -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
     apply (RPOProc RPOSAF usableRules SMTFFI)    p = procNAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_NDP True)
 --    apply (RPOProc RPOSAF usablerules SMTSerial) p = procNAF p RPOSAF usablerules ((smtSerial.). rpoAF_NDP True)
@@ -479,7 +480,7 @@ data RPOProof id where
 -}
      RPOFail :: RPOProof id
 
-rpoFail :: Problem typ (NarradarTRS t Narradar.Var) -> RPOProof (TermId t)
+rpoFail :: Problem typ (NarradarTRS t Narradar.Var) -> RPOProof (Family.Id1 t)
 rpoFail _ = RPOFail
 
 instance (Ord id, Pretty id) => Pretty (RPOProof id) where

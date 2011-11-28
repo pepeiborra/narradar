@@ -34,6 +34,8 @@ import Data.Traversable (Traversable)
 import qualified Data.Traversable as T
 import Prelude as P hiding (concatMap)
 
+import qualified Data.Term as Family
+
 import Narradar.Types.ArgumentFiltering (ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
@@ -46,6 +48,11 @@ import Narradar.Constraints.UsableRules
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Utils
+
+import qualified Data.Id.Family as Family
+import qualified Data.Rule.Family as Family
+import qualified Data.Term.Family as Family
+import qualified Data.Var.Family as Family
 
 #ifdef HOOD
 import Debug.Hood.Observe
@@ -81,12 +88,12 @@ pair2|_____|_____|
 data NarradarTRSF a where
     TRS       :: (HasId t, Ord (Term t v)) =>
                  { rulesS :: Set (Rule t v)
-                 , sig    :: Signature (TermId t)
+                 , sig    :: Signature (Family.Id1 t)
                  } -> NarradarTRSF (Rule t v)
 
-    PrologTRS :: (HasId t, RemovePrologId (TermId t), Ord (Term t v)) =>
-                 { rulesByClause :: Map (WithoutPrologId (TermId t)) (Set (Rule t v))
-                 , sig           :: Signature (TermId t)
+    PrologTRS :: (HasId t, RemovePrologId (Family.Id1 t), Ord (Term t v)) =>
+                 { rulesByClause :: Map (WithoutPrologId (Family.Id1 t)) (Set (Rule t v))
+                 , sig           :: Signature (Family.Id1 t)
                  } -> NarradarTRSF (Rule t v)
 
     DPTRS     :: (HasId t, Ord (Term t v)) =>
@@ -94,14 +101,18 @@ data NarradarTRSF a where
                  , rulesUsed :: NarradarTRSF (Rule t v)
                  , depGraph  :: Graph
                  , unifiers  :: (Unifiers t v :!: Unifiers t v)
-                 , sig       :: Signature (TermId t)
+                 , sig       :: Signature (Family.Id1 t)
                  } -> NarradarTRSF (Rule t v)
 
       -- | Used in very few places instead of TRS, when the order of the rules is important
-    ListTRS :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (TermId t) -> NarradarTRSF (Rule t v)
+    ListTRS :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (Family.Id1 t) -> NarradarTRSF (Rule t v)
+
+type instance Family.Id     (NarradarTRSF a) = Family.Id a
+type instance Family.Rule   (NarradarTRSF a) = Family.Rule a
+type instance Family.Var    (NarradarTRSF a) = Family.Var a
+type instance Family.TermF  (NarradarTRSF a) = Family.TermF a
 
 type Unifiers t v = Array (Int,Int) (Maybe (Substitution t v))
-
 type NarradarTRS t v = NarradarTRSF (Rule t v)
 type NTRS id = NarradarTRS (TermF id) Var
 
@@ -144,7 +155,7 @@ instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
     pPrint trs@PrologTRS{} = vcat $ map pPrint $ rules trs
     pPrint (ListTRS  rr _) = vcat $ map pPrint rr
 
-instance (NFData (t(Term t v)), NFData (TermId t), NFData v) => NFData (NarradarTRS t v) where
+instance (NFData (t(Term t v)), NFData (Family.Id1 t), NFData v) => NFData (NarradarTRS t v) where
     rnf (TRS rr sig) = rnf rr `seq` rnf sig `seq` ()
     rnf (DPTRS dps rr g unif sig) = rnf dps `seq` rnf rr `seq` rnf sig `seq` rnf unif `seq` rnf sig
 --    rnf (PrologTRS rr sig)    = rnf rr
@@ -176,25 +187,24 @@ narradarTRStoSet (ListTRS rr _) = Set.fromList rr
 -- ------------------------------
 -- Data.Term framework instances
 -- ------------------------------
-instance HasRules t v (NarradarTRS t v) where
+instance HasRules (NarradarTRS t v) where
   rules(TRS       rr _)       = toList rr
   rules(PrologTRS rr _)       = toList $ mconcat (Map.elems rr)
   rules(DPTRS     rr _ _ _ _) = elems rr
   rules(ListTRS   rr _)       = rr
 
-instance Ord (TermId t) => HasSignature (NarradarTRS t v) where
-    type SignatureId (NarradarTRS t v) = TermId t -- SignatureId [Rule (TermF id) v]
+instance Ord (Family.Id1 t) => HasSignature (NarradarTRS t v) where
     getSignature (TRS           _ sig) = sig
     getSignature (PrologTRS     _ sig) = sig
     getSignature (DPTRS   _ _ _ _ sig) = sig
     getSignature (ListTRS rr      sig) = sig
 
-instance (Ord (Term t v), Foldable t, HasId t) => IsTRS t v (NarradarTRS t v) where
+instance (Ord (Term t v), Foldable t, HasId t) => IsTRS (NarradarTRS t v) where
   tRS  rr = TRS (Set.fromList rr) (getSignature rr)
 
-instance (Ord v, Functor t, Foldable t) => GetVars v (NarradarTRS t v) where getVars = getVars . rules
+instance (Ord v, Functor t, Foldable t) => GetVars (NarradarTRS t v) where getVars = getVars . rules
 
-instance (Traversable t, Ord v, GetFresh t v (Set (Rule t v))) => GetFresh t v (NarradarTRS t v) where
+instance (Traversable t, Ord v, GetFresh (Set (Rule t v))) => GetFresh (NarradarTRS t v) where
     getFreshM (TRS rr sig) = getFresh (toList rr) >>= \rr' -> return (TRS (Set.fromDistinctAscList rr') sig)
     getFreshM (ListTRS rr sig) = getFresh rr >>= \rr' -> return (ListTRS rr' sig)
     getFreshM (PrologTRS (unzip . Map.toList -> (i, rr)) sig) =
@@ -206,62 +216,62 @@ instance (Traversable t, Ord v, GetFresh t v (Set (Rule t v))) => GetFresh t v (
 -- Narradar instances
 -- -------------------
 
-class IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
-instance IUsableRules (TermF id) Var typ (NTRS id) => NUsableRules typ id
+class IUsableRules typ (NTRS id) => NUsableRules typ id
+instance IUsableRules typ (NTRS id) => NUsableRules typ id
 
-class NeededRules (TermF id) Var typ (NTRS id) => NNeededRules typ id
-instance NeededRules (TermF id) Var typ (NTRS id) => NNeededRules typ id
+class NeededRules typ (NTRS id) => NNeededRules typ id
+instance NeededRules typ (NTRS id) => NNeededRules typ id
 
-class ICap (TermF id) Var (typ, NTRS id) => NCap typ id
-instance ICap (TermF id) Var (typ, NTRS id) => NCap typ id
+class ICap (typ, NTRS id) => NCap typ id
+instance ICap (typ, NTRS id) => NCap typ id
 
 
 instance (Functor t, Foldable t) => Size (NarradarTRS t v) where size = F.sum . fmap size . rules
 
-instance (Ord (Term t v), ICap t v [Rule t v]) => ICap t v (NarradarTRS t v) where
+instance (Ord (Term t v), ICap [Rule t v]) => ICap (NarradarTRS t v) where
   icap trs = icap (rules trs)
 
 instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTRS t v) where
-  type AFId (NarradarTRS t v) = AFId (Term t v)
-
   apply af (PrologTRS rr _)    = prologTRS' ((Map.map . Set.map) (AF.apply af) rr)
   apply af trs@TRS{}           = tRS$ AF.apply af <$$> rules trs
   apply af (DPTRS a rr g uu _) = tRS (AF.apply af <$$> toList a) -- cannot recreate the graph without knowledge of the problem type
   apply af (ListTRS rr _)      = let rr' = AF.apply af <$$> rr in ListTRS rr' (getSignature rr')
 
-instance (Functor t, Foldable t, Ord v) =>  ExtraVars v (NarradarTRS t v) where
+instance (Functor t, Foldable t, Ord v) =>  ExtraVars (NarradarTRS t v) where
   extraVars (TRS rr _)        = extraVars rr
   extraVars (PrologTRS rr _)  = extraVars rr
   extraVars (DPTRS a _ _ _ _) = extraVars (A.elems a)
 
-instance (ICap t v (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap t v (typ, [Rule t v]) where
+instance (ICap (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap (typ, [Rule t v]) where
   icap (typ, p) = icap (typ, mkTRS p)
 
 -- ------------
 -- Constructors
 -- ------------
-mkTRS :: (Ord (Term t v), Foldable t, HasId t) => [Rule t v] -> NarradarTRS t v
+mkTRS :: (Ord(Term t v), Foldable t, HasId t) => [Rule t v] -> NarradarTRS t v
 mkTRS = tRS
 
 tRS' rr sig  = TRS (Set.fromList rr) sig
 
-prologTRS ::  (Ord (Term t v), RemovePrologId (TermId t), Foldable t, HasId t) =>
-              [(WithoutPrologId (TermId t), Rule t v)] -> NarradarTRS t v
+prologTRS ::  (Ord (Term t v), RemovePrologId (Family.Id1 t), Foldable t, HasId t) =>
+              [(WithoutPrologId (Family.Id1 t), Rule t v)] -> NarradarTRS t v
 prologTRS rr = prologTRS' (Map.fromListWith mappend $ map (second Set.singleton) rr)
 
-prologTRS' :: (Ord (Term t v), RemovePrologId (TermId t), Foldable t, HasId t) =>
-              Map (WithoutPrologId (TermId t)) (Set(Rule t v)) -> NarradarTRS t v
+prologTRS' :: (Ord (Term t v), RemovePrologId (Family.Id1 t), Foldable t, HasId t) =>
+              Map (WithoutPrologId (Family.Id1 t)) (Set(Rule t v)) -> NarradarTRS t v
 prologTRS' rr = PrologTRS rr (getSignature rr)
 
 narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 
 
 -- | Assumes that the rules have already been renamed apart
-dpTRS :: ( SignatureId trs ~ TermId t
+dpTRS :: ( Family.Id trs ~ Family.Id1 t
          , trs ~ NarradarTRS t v
-         , Ord (Term t v), HasId t, Unify t, Enum v
-         , HasSignature trs, GetFresh t v trs, GetVars v trs, IsTRS t v trs
-         , IUsableRules t v typ trs, ICap t v (typ, trs)
+         , Rule t v ~ Family.Rule trs
+         , Ord (Term t v), HasId t, Unify t
+         , Enum v, Ord v, Rename v
+         , HasSignature trs, GetFresh trs, GetVars trs, IsTRS trs
+         , IUsableRules typ trs, ICap (typ, trs)
          , Pretty (Term t v), Pretty v
          ) =>
          typ -> NarradarTRS t v -> NarradarTRS t v -> NarradarTRS t v
@@ -349,12 +359,16 @@ rulesGraph _ = error "rulesGraph: only DP TRSs carry the dependency graph"
 computeDPUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
+                     , t ~ Family.TermF trs
+                     , v ~ VarM m
+                     , v ~ Family.Var trs
+                     , Rule t v ~ Family.Rule trs
                      , Ord v, Unify t
-                     , HasRules t v trs, GetFresh t v trs
-                     , IUsableRules t v typ trs
-                     , ICap t v (typ, trs)
+                     , HasRules trs, GetFresh trs
+                     , IUsableRules typ trs
+                     , ICap (typ, trs)
                      , Pretty (Term t v), Pretty v
-                     , MonadVariant v m) =>
+                     , MonadVariant m) =>
                      typ -> trs -> trs -> m(unif :!: unif)
 computeDPUnifiers _ _ dps | trace "computeDPUnifiers" False = undefined
 computeDPUnifiers typ trs dps = do
@@ -369,11 +383,15 @@ computeDPUnifiers typ trs dps = do
 computeDirectUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
+                     , t ~ Family.TermF trs
+                     , v ~ VarM m
+                     , v ~ Family.Var trs
+                     , Rule t v ~ Family.Rule trs
                      , Ord v, Unify t
-                     , HasRules t v trs, GetFresh t v trs
-                     , ICap t v (typ, trs)
+                     , HasRules trs, GetFresh trs
+                     , ICap (typ, trs)
                      , Pretty (Term t v), Pretty v
-                     , MonadVariant v m) =>
+                     , MonadVariant m) =>
                      (typ, trs) -> trs -> m unif
 computeDirectUnifiers p_f (rules -> the_dps) = do
    rhss'<- P.mapM (\(_:->r) -> getFresh r >>= icap p_f) the_dps
@@ -391,12 +409,16 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
 computeInverseUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
+                     , v ~ VarM m
+                     , v ~ Family.Var trs
+                     , t ~ Family.TermF trs
+                     , Rule t v ~ Family.Rule trs
                      , Ord v, Unify t
-                     , HasRules t v trs, GetFresh t v trs
-                     , IUsableRules t v typ trs
-                     , ICap t v (typ, trs)
+                     , HasRules trs, GetFresh trs
+                     , IUsableRules typ trs
+                     , ICap (typ, trs)
                      , Pretty (Term t v), Pretty v
-                     , MonadVariant v m) =>
+                     , MonadVariant m) =>
                      (typ, trs) -> trs -> m unif
 --computeInverseUnifiers _ _ | trace "computeInverseUnifiers" False = undefined
 computeInverseUnifiers (typ, trs) dps = do
@@ -429,21 +451,5 @@ getEDGfromUnifiers (unif :!: _) = G.buildG (m,n) the_edges where
                    ]
   ((m,_),(n,_)) = bounds unif
 
-
--- -------------------------------
--- Auxiliary Data.Term instances
--- -------------------------------
-
-instance (Ord a, Ord (SignatureId [a]), HasSignature (Set a)) => HasSignature [Set a] where
-    type SignatureId [Set a] = SignatureId (Set a)
-    getSignature = getSignature . mconcat
-
-instance HasSignature [a] => HasSignature (Map k a) where
-    type SignatureId (Map k a) = SignatureId [a]
-    getSignature = getSignature . Map.elems
-
-instance (Ord a, GetFresh t v a) => GetFresh t v (Set a) where getFreshM = liftM Set.fromList . getFreshM . Set.toList
-instance HasRules t v a => HasRules t v (Set   a) where rules = foldMap rules . toList
-instance HasRules t v a => HasRules t v (Map k a) where rules = foldMap rules . Map.elems
 
 instance Pretty (Unifiers t v) where pPrint = pPrint . amap (maybe "N" (const "Y"))

@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Var where
@@ -8,6 +9,8 @@ import Data.Term (Rename(..))
 import Data.Term.Rules
 import Data.Set as Set
 import Narradar.Framework.Ppr
+
+import qualified Data.Var.Family as Family
 
 #ifdef HOOD
 import Debug.Hood.Observe
@@ -40,7 +43,9 @@ instance Pretty Var where
 instance Rename Var where
     rename (Var name i) (Var _ i') = Var ((++ show i') `fmap` name) i'
 
-instance GetVars Var Var where getVars = Set.singleton
+instance GetVars Var where getVars = Set.singleton
+
+type instance Family.Var Var = Var
 
 #ifdef HOOD
 instance Observable Var where

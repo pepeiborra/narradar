@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -33,9 +34,13 @@ import Narradar.Types.Problem.NarrowingGoal
 import Narradar.Utils
 import Lattice
 
+import qualified Data.Term.Family as Family
 
-data NarrowingToRewritingICLP08 heu = NarrowingToRewritingICLP08 (MkHeu heu)
-                                    | NarrowingToRewritingICLP08_SCC (MkHeu heu)
+data NarrowingToRewritingICLP08 heu (info :: * -> *) =
+          NarrowingToRewritingICLP08 (MkHeu heu)
+        | NarrowingToRewritingICLP08_SCC (MkHeu heu)
+
+type instance InfoConstraint (NarrowingToRewritingICLP08 heu info) = info
 
 
 instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (TermN id)
@@ -48,7 +53,9 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
          , NCap base id
          , NUsableRules base id
          ) =>
-    Processor info (NarrowingToRewritingICLP08 heu) (Problem (MkNarrowing base) (NTRS id) ) (Problem base (NTRS id) ) where
+    Processor (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id) ) where
+  type Typ (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id)) = base
+  type Trs (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id)) = NTRS id
   applySearch (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
@@ -74,9 +81,10 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
                         | af <- Set.toList afs]
 
 
-instance ( HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
+instance ( HasSignature (NProblem base id)
+         , id ~ Family.Id (NProblem base id)
          , PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (TermN id)
-         , ApplyAF (NProblem base id)
+         , ApplyAF (TermN id)
          , Info info (NProblem (MkNarrowingGoal id base) id)
          , Info info (NProblem base id)
          , Info info (NarrowingToRewritingProof id)
@@ -84,17 +92,33 @@ instance ( HasSignature (NProblem base id), id ~ SignatureId (NProblem base id)
          , NUsableRules base id
          , NCap base id
          ) =>
-    Processor info (NarrowingToRewritingICLP08 heu)
-                   (NProblem (MkNarrowingGoal id base) id)
-                   (NProblem base id)
+    Processor (NarrowingToRewritingICLP08 heu info)
+              (NProblem (MkNarrowingGoal id base) id)
  where
-  applySearch (NarrowingToRewritingICLP08 mk) p@(getFramework -> NarrowingGoal _ pi_groundInfo0 _ base)
+  type Typ (NarrowingToRewritingICLP08 heu info) (NProblem (MkNarrowingGoal id base) id) = base
+  type Trs (NarrowingToRewritingICLP08 heu info) (NProblem (MkNarrowingGoal id base) id) = NTRS id
+
+bad :: forall id base info heu m .
+       (Monad m
+       ,Ord id, Pretty id
+       ,ICap (base, NTRS id)
+       ,IUsableRules base (NTRS id)
+       ,Info info (NarrowingToRewritingProof id)
+       ,Info info (NProblem (MkNarrowingGoal id base) id)
+       ,Foldable (Problem base)
+       ,Ord (TermN id)
+       ,ApplyAF (TermN id)
+       ,Lattice (AF_ id)
+       ,PolyHeuristic heu id
+       ,MkDPProblem base (NTRS id)) =>
+    NarrowingToRewritingICLP08 heu info -> NProblem (MkNarrowingGoal id base) id -> [Proof info m (NProblem base id)]
+bad (NarrowingToRewritingICLP08 mk) p@(getFramework -> NarrowingGoal _ pi_groundInfo0 _ base)
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where heu = mkHeu mk p
           af0 = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) pi_groundInfo0
           afs = unEmbed $ do
-                  af00 <- embed $ invariantEV heu p af0
+                  af00 <- embed $ invariantEV heu (rules p) af0
                   let pi_groundInfo = AF.init p `mappend` AF.restrictTo (getConstructorSymbols p) af00
                   embed $ findGroundAF' heu pi_groundInfo af0 p R.=<< Set.fromList(rules $ getP p)
           orProblems = [ singleP (NarrowingToRewritingICLP08Proof af) p $
@@ -122,32 +146,34 @@ instance Pretty id => Pretty (NarrowingToRewritingProof id) where
 -- ---------------
 -- building blocks
 -- ---------------
+findGroundAF :: ( Ord id, Pretty id, Lattice (AF_ id)
+                , Foldable (Problem typ)
+                , MkDPProblem typ (NTRS id)
+                , ICap (typ, NTRS id)
+                , IUsableRules typ (NTRS id)
+                ) => Heuristic id -> AF_ id -> NProblem typ id -> RuleN id -> Set (AF_ id)
 findGroundAF heu af0 p (_:->r)
   | isVar r = Set.empty
-  | otherwise = mkGround r R.>>= invariantEV heu p
+  | otherwise = mkGround r R.>>= invariantEV heu (rules p)
             where
               mkGround t = cutWith heu af0 t varsp -- TODO Fix: cut one at a time
                   where varsp = [noteV v | v <- vars (annotateWithPos t)]
 
 
 -- | Takes a heuristic, an af with groundness information, an af to use as starting point, a problem and a rule,
-findGroundAF' :: ( IsDPProblem typ, HasSignature (Problem typ (NarradarTRS t Var))
-                 , Traversable t, HasId t, ApplyAF (Term t Var), Ord (Term t Var)
-                 , id ~ TermId t, id ~ AFId (Term t Var), id ~ SignatureId (Problem typ (NarradarTRS t Var))
-                 , Ord id, Pretty id, Lattice (AF_ id), Foldable (Problem typ)
-                 , ApplyAF (Problem typ (NarradarTRS t Var))
-                 , ApplyAF (Term (WithNote1 Position t) (WithNote Position Var))
-                 , AFId (Term (WithNote1 Position t) (WithNote Position Var)) ~ id
+findGroundAF' :: ( IsDPProblem typ
+                 , Ord id, Pretty id, Lattice (AF_ id)
+                 , Foldable (Problem typ)
                  ) =>
                 Heuristic id
              -> AF_ id         -- ^ Groundness information
              -> AF_ id         -- ^ the argument filtering to constrain
-             -> Problem typ (NarradarTRS t Var)
-             -> Rule t Var     -- ^ the rule to make ground
+             -> Problem typ (NTRS id)
+             -> RuleN id     -- ^ the rule to make ground
              -> Set (AF_ id)
 findGroundAF' heu pi_groundInfo af0 p (_:->r)
   | isVar r = Set.empty
-  | otherwise = mkGround r R.>>= invariantEV heu p
+  | otherwise = mkGround r R.>>= invariantEV heu (rules p)
             where
               mkGround t = cutWith heu (af0 `mappend` pi_c) t varsp -- TODO Fix: cut one at a time
                   where varsp = [noteV v | v <- vars (annotateWithPos t)] \\

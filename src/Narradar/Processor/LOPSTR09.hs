@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Processor.LOPSTR09 where
@@ -40,9 +41,11 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 -- ------------------------------------------------------------
 -- | This is the processor described at the LOPSTR'09 paper
 -- ------------------------------------------------------------
-data NarrowingGoalToRelativeRewriting = NarrowingGoalToRelativeRewriting deriving (Eq, Show)
+data NarrowingGoalToRelativeRewriting (info :: * -> *) = NarrowingGoalToRelativeRewriting deriving (Eq, Show)
 data NarrowingGoalToRelativeRewritingProof = NarrowingGoalToRelativeRewritingProof | NotConstructorBased
            deriving (Eq, Show)
+
+type instance InfoConstraint (NarrowingGoalToRelativeRewriting info) = info
 
 instance Pretty NarrowingGoalToRelativeRewritingProof where
   pPrint NarrowingGoalToRelativeRewritingProof = text "Finiteness of the following relative termination" $$
@@ -58,17 +61,16 @@ instance (gid ~ DPIdentifier (GenId id)
          ,MkDPProblem (InitialGoal (TermF gid) (MkNarrowingGen base)) (NTRS gid)
          ,NCap base gid
          ,NUsableRules base gid
-         ,HasSignature (NProblem base (DPIdentifier id)), DPIdentifier id ~ SignatureId (NProblem base (DPIdentifier id))
+         ,HasSignature (NProblem base (DPIdentifier id))
 --         ,InsertDPairs (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) (NTRS gid)
          ,InsertDPairs base (NTRS gid)
          ,Info info NarrowingGoalToRelativeRewritingProof
          ) =>
-         Processor info NarrowingGoalToRelativeRewriting
-                        (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
-                        (NProblem (Relative (NTRS gid) (InitialGoal (TermF gid)
-                                                                    (MkNarrowingGen base)))
-                                  gid)
+         Processor (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
   where
+    type Typ (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id)) =
+        Relative (NTRS (DPIdentifier (GenId id))) (InitialGoal (TermF (DPIdentifier (GenId id))) (MkNarrowingGen base))
+    type Trs (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id)) = NTRS (DPIdentifier (GenId id))
     apply NarrowingGoalToRelativeRewriting prob@NarrowingGoalProblem{goal=Goal goal_f modes}
       | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
       = singleP NarrowingGoalToRelativeRewritingProof prob $
@@ -88,16 +90,15 @@ instance (gid ~ DPIdentifier (GenId id)
          ,MkDPProblem (InitialGoal (TermF gid) (MkNarrowingGen base)) (NTRS gid)
          ,NCap base gid
          ,NUsableRules base gid
-         ,HasSignature (NProblem base (DPIdentifier id)), DPIdentifier id ~ SignatureId (NProblem base (DPIdentifier id))
+         ,HasSignature (NProblem base (DPIdentifier id))
          ,InsertDPairs (MkNarrowing base) (NTRS gid)
          ,Info info NarrowingGoalToRelativeRewritingProof
          ) =>
-         Processor info NarrowingGoalToRelativeRewriting
-                        (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id))
-                        (NProblem (Relative (NTRS gid) (InitialGoal (TermF gid)
-                                                                    (MkNarrowingGen base)))
-                                  gid)
+         Processor (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id))
   where
+ type Typ (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id)) =
+     Relative (NTRS (DPIdentifier (GenId id))) (InitialGoal (TermF (DPIdentifier (GenId id))) (MkNarrowingGen base))
+ type Trs (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id)) = NTRS (DPIdentifier (GenId id))
  apply NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{..}
       | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
           = mprod [singleP NarrowingGoalToRelativeRewritingProof prob p | p <- newProblems]
@@ -156,7 +157,7 @@ procLOPSTR09 :: (gid ~ DPIdentifier (GenId id)
                 ,MkDPProblem (InitialGoal (TermF gid) (MkNarrowingGen base)) (NTRS gid)
                 ,NCap base gid
                 ,NUsableRules base gid
-                ,HasSignature (NProblem base (DPIdentifier id)), DPIdentifier id ~ SignatureId (NProblem base (DPIdentifier id))
+                ,HasSignature (NProblem base (DPIdentifier id))
                 ,InsertDPairs base (NTRS gid)
                 ) =>
                 NTRS (DPIdentifier id) -> NTRS (DPIdentifier id) -> DPIdentifier id -> [Mode] -> base ->
@@ -199,11 +200,13 @@ procLOPSTR09 rr pp goal_f modes baseFramework
 -- | Transforms a Prolog problem into a Narrowing problem
 -- ------------------------------------------------------
 
-data SKTransform = SKTransform
-instance Info info SKTransformProof =>
-         Processor info SKTransform
-                   PrologProblem {- ==> -} (NProblem (InitialGoal (TermF DRP) Narrowing) DRP)
+data SKTransform (info :: * -> *) = SKTransform
+type instance InfoConstraint (SKTransform info) = info
+
+instance Info info SKTransformProof => Processor (SKTransform info) PrologProblem
  where
+  type Typ (SKTransform info) PrologProblem = InitialGoal (TermF DRP) Narrowing
+  type Trs (SKTransform info) PrologProblem = NTRS DRP
   apply SKTransform p0@PrologProblem{..} =
    andP SKTransformProof p0
      [ mkNewProblem (initialGoal [Abstract the_goal] narrowing) sk_rr
@@ -223,13 +226,13 @@ instance Pretty SKTransformProof where
       = text "Transformed into an initial goal narrowing problem" $$
         text "(Schneider-Kamp transformation)"
 
-data SKTransformInf heu = SKTransformInf (MkHeu heu)
-instance (Info info SKTransformProof
-         ,PolyHeuristic heu DRP
-         ) =>
-         Processor info (SKTransformInf heu)
-                   PrologProblem {- ==> -} (NProblem (Infinitary DRP Rewriting) DRP)
+data SKTransformInf heu (info :: * -> *) = SKTransformInf (MkHeu heu)
+type instance InfoConstraint (SKTransformInf heu info) = info
+
+instance (Info info SKTransformProof, PolyHeuristic heu DRP) => Processor (SKTransformInf heu info) PrologProblem
  where
+  type Typ (SKTransformInf heu info) PrologProblem = Infinitary DRP Rewriting
+  type Trs (SKTransformInf heu info) PrologProblem = NTRS DRP
   apply (SKTransformInf heu) p0@PrologProblem{..} =
    andP SKTransformProof p0 =<< sequence
      [  msum (map return probs)
