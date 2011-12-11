@@ -107,7 +107,7 @@ Library
                   yices > 0.0.0.4,
                   bindings-yices,
                   alacarte >= 0.4, 
-                  funsat >= 0.6.2,
+                  funsat >= 0.6.3,
                   term >= 0.2.20111120,
                   muterm-framework >= 1.5,
                   muterm-framework-charts >= 0.3,
