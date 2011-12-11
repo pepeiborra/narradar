@@ -201,7 +201,7 @@ instance (trs ~ NarradarTRS t v
  where
   type Typ (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id)) = InitialGoal (f id) typ
   type Trs (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id)) = NarradarTRS (f id) Var
-  applySearch Instantiation p@InitialGoalProblem{..}
+  applySearch Instantiation p@InitialGoalProblem{dgraph}
    | null currentPairs      = [return p]
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p0 p1
@@ -274,7 +274,7 @@ instance (v ~ Var
  where
  type Typ (FInstantiation info) (NarradarProblem (InitialGoal t typ) t) = InitialGoal t typ
  type Trs (FInstantiation info) (NarradarProblem (InitialGoal t typ) t) = NarradarTRS t Var
- applySearch FInstantiation p@InitialGoalProblem{..}
+ applySearch FInstantiation p@InitialGoalProblem{dgraph}
   | null currentPairs      = [return p]
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
   | isCollapsing (getR p)  = mzero  -- no point in instantiating everything around
@@ -467,7 +467,7 @@ narrowingIG, narrowing_innermostIG
              ,Monad mp
              ) =>
              Problem (InitialGoal t typ) trs -> [Proof info mp (Problem (InitialGoal t typ) trs)]
-narrowingIG p0@InitialGoalProblem{..}
+narrowingIG p0@InitialGoalProblem{dgraph}
   | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingIG Processor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0 p'
@@ -509,7 +509,7 @@ narrowingIG p0@InitialGoalProblem{..}
                  pos_uu   = if null uu then Set.empty
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
-narrowing_innermostIG p0@InitialGoalProblem{..}
+narrowing_innermostIG p0@InitialGoalProblem{dgraph}
   | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0 p'
