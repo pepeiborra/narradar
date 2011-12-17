@@ -143,7 +143,6 @@ Library
      Narradar.Constraints.RPO,
      Narradar.Constraints.SAT.MonadSAT,
      Narradar.Constraints.SAT.Solve,
-     Narradar.Constraints.SAT.RPOCircuit,
      Narradar.Constraints.SAT.YicesCircuit,
      Narradar.Constraints.SAT.YicesFFICircuit,
      Narradar.Constraints.SAT.RPOAF,

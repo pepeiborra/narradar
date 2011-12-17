@@ -18,7 +18,7 @@
 {-| Extension of Funsat.Circuit to generate RPO constraints as boolean circuits
 
 -}
-module Narradar.Constraints.SAT.RPOCircuit
+module Funsat.RPOCircuit
    (Circuit(..)
    ,ECircuit(..)
    ,NatCircuit(..)
@@ -64,6 +64,7 @@ module Narradar.Constraints.SAT.RPOCircuit
 -}
 
 import Control.Applicative
+import qualified Data.Array.IArray as A
 import Control.Arrow (first, second)
 import Control.Exception as CE (assert)
 import Control.Monad.Cont
@@ -74,6 +75,7 @@ import Data.Bimap( Bimap )
 import Data.ByteString.Lazy.Char8 (ByteString)
 import Data.Foldable (Foldable, foldMap)
 import Data.List( nub, foldl', sortBy, (\\))
+import Data.List.Split (chunk)
 import Data.Map( Map )
 import Data.Maybe( fromJust )
 import Data.Hashable
@@ -93,14 +95,6 @@ import Funsat.ECircuit ( Circuit(..)
                        , projectECircuitSolution, reconstructNatsFromBits)
 import Funsat.Types( CNF(..), Lit(..), Var(..), var, lit, Solution(..), litSign, litAssignment )
 
-import qualified Narradar.Types.ArgumentFiltering as AF
-import Narradar.Types hiding (Var,V,var,fresh)
-import Narradar.Utils ( chunks, selectSafe, safeAtL, on )
-
-import System.Directory (getTemporaryDirectory)
-import System.FilePath
-import System.IO
-
 
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.Graph.Inductive.Graph as Graph
@@ -113,6 +107,15 @@ import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
 import qualified Prelude as Prelude
 import qualified Data.HashMap as HashMap
+
+import Data.Term hiding (Var)
+import Data.Term.Rules (collectIds)
+import qualified Data.Term.Family as Family
+
+import Text.PrettyPrint.HughesPJClass hiding (first)
+
+--    debug msg = hPutStrLn stderr ("toCNFRpo - " ++ msg) >> hFlush stderr
+debug msg = return ()
 
 type k :->:  v = HashMap.HashMap k v
 type k :<->: v = Bimap.Bimap k v
@@ -1392,7 +1395,7 @@ removeComplex freshVars c = assert disjoint $ (go code, bitnats)
 
   -- encoding nats as binary numbers
   bitwidth = fst . head . dropWhile ( (< Bimap.size (natMap maps)) . snd) . zip [1..] . iterate (*2) $ 2
-  bitnats  = HashMap.fromList (Bimap.elems (natMap maps) `zip` chunks bitwidth freshVars)
+  bitnats  = HashMap.fromList (Bimap.elems (natMap maps) `zip` chunk bitwidth freshVars)
   disjoint = all (`notElem` Bimap.elems (varMap maps))  (concat $ HashMap.elems bitnats)
   lookupBits c = fromJust $ HashMap.lookup (getChildren' c (natMap maps)) bitnats
 
@@ -1545,8 +1548,6 @@ toCNF c@(FrozenShared !sharedCircuit !circuitMaps) =
        , rpoProblemCodeMap = toCnfMap m
        , rpoProblemBitMap  = bitMap}
   where
-    debug msg = hPutStrLn stderr ("toCNFRpo - " ++ msg) >> hFlush stderr
-
     writeClauses cc = incC (length cc) >> tell cc
 
     bitWidth  = fst . head
@@ -1787,6 +1788,32 @@ instance Hashable Var where
   toList (VarTrie t) = map (first V) (HashMap.toList t)
 -}
 instance Hashable Var where hash (V i) = i
+
+-- ----------
+-- Helpers
+-- ----------
+safeAtL msg [] _   = error ("safeAtL - index too large (" ++ msg ++ ")")
+safeAtL msg (x:_) 0 = x
+safeAtL msg (_:xx) i = safeAtL msg xx (pred i)
+
+
+selectSafe :: String -> [Int] -> [a] -> [a]
+selectSafe msg ii xx
+  | len > 5   = map (safeIx (A.!) (A.listArray (0, len - 1) xx)) ii
+  | otherwise = map (safeIx (!!) xx) ii
+  where
+    len = length xx
+    safeIx :: (container a -> Int -> a) -> container a -> Int -> a
+    safeIx (!!) xx i
+        | i > len - 1 = error ("select(" ++ msg ++ "): index too large")
+        | i < 0       = error ("select(" ++ msg ++ "): negative index")
+        | otherwise = xx !! i
+
+propSelect ii xx = map (xx!!) ii' == selectSafe "" ii' xx
+  where _types = (xx::[Int], ii::[Int])
+        ii'   = filter (< length xx) (map abs ii)
+
+
 -- -------
 -- Errors
 -- -------
@@ -1795,3 +1822,4 @@ typeError :: String -> a
 typeError msg = error (msg ++ "\nPlease send an email to the pepeiborra@gmail.com requesting a typed circuit language.")
 
 
+on cmp f x y = f x `cmp` f y
