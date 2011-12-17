@@ -29,7 +29,7 @@ import Data.Monoid
 import Data.Map ( Map)
 import Data.Set ( Set )
 import Data.Traversable ( traverse )
-import Data.NarradarTrie (HasTrie, empty, lookup, insert, (:->:))
+--import Data.NarradarTrie (HasTrie, empty, lookup, insert, (:->:))
 import Debug.Trace
 import System.IO
 import System.IO.Unsafe
@@ -45,23 +45,24 @@ import qualified Data.Foldable as Foldable
 import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
-import qualified Data.NarradarTrie as Trie
+--import qualified Data.NarradarTrie as Trie
 import qualified Test.QuickCheck as QC
 import qualified Language.CNF.Parse.ParseDIMACS as ParseCNF
 import qualified Funsat.Circuit as Funsat
 
 import qualified Narradar.Types as Narradar
+import Narradar.Constraints.SAT.MonadSAT as MonadSAT hiding (Tree)
 import Narradar.Constraints.SAT.Solve
 import Narradar.Constraints.SAT.RPOAF ()
 import Narradar.Constraints.SAT.RPOAF.Symbols
-import Narradar.Constraints.SAT.RPOCircuit as C
-import Narradar.Constraints.SAT.RPOCircuit as Circuit
-import Narradar.Constraints.SAT.RPOCircuit hiding( Circuit(..), ECircuit(..) )
+import qualified Narradar.Constraints.SAT.RPOCircuit as C
+import Narradar.Constraints.SAT.RPOCircuit hiding( Tree, Circuit(..), ECircuit(..) )
 import Narradar.Constraints.SAT.RPOCircuit
-                     ( Circuit(input,true,false)
+                     ( Circuit(andL,input,true,false)
                      , ECircuit(ite,xor,onlyif)
-                     , NatCircuit(eq,lt,nat))
-import Narradar.Constraints.SAT.YicesFFICircuit
+                     , NatCircuit(eq,lt,nat)
+                     )
+import Narradar.Constraints.SAT.YicesFFICircuit (YicesSource)
 import Narradar.Types.DPIdentifiers (DPIdentifier(..))
 import Narradar.Types.Term
 
@@ -83,6 +84,7 @@ import System.Process
 import Text.Printf
 import Debug.Trace
 
+type Tree id var = C.Tree id Narradar.Var var
 
 main :: IO ()
 main = defaultMain properties
@@ -302,8 +304,8 @@ trivial pred = classify pred "Trivial"
 instance OneCircuit ECircuit.Shared
 
 mkFunsatSimp1Prop :: forall id v.
-                    ( Ord v, HasTrie v, Show v, Bounded v, Enum v, DefaultValue v (Either Int Bool)
-                    , Ord id, HasTrie id, Show id
+                    ( Ord v, Show v, Bounded v, Enum v, DefaultValue v (Either Int Bool)
+                    , Ord id, Show id
                     ) => SizedGen (Tree id v) -> Property
 mkFunsatSimp1Prop gen = forAll (sized gen) $ \c ->
     let (pblm@(ECircuitProblem{ eproblemCnf = cnf }), natbits)
@@ -312,7 +314,7 @@ mkFunsatSimp1Prop gen = forAll (sized gen) $ \c ->
            . castCircuit $ c
         (solution, _, _) = solve1 cnf
     in case solution of
-         Sat{} -> let benv = reconstructNatsFromBits (Trie.toList natbits) $ projectECircuitSolution solution pblm
+         Sat{} -> let benv = reconstructNatsFromBits natbits $ projectECircuitSolution solution pblm
                       benv' = benv `mappend` defaultValues (toList c)
                   in   label "Sat"
                      . trivial (Map.null benv)
@@ -321,8 +323,8 @@ mkFunsatSimp1Prop gen = forAll (sized gen) $ \c ->
          Unsat{} -> label "Unsat (unverified)" True
 
 mkFunsatDirectProp :: forall id v.
-                    ( Ord v, HasTrie v, Show v, Bounded v, Enum v, DefaultValue v (Either Int Bool)
-                    , Ord id, HasTrie id, Show id
+                    ( Ord v, Show v, Bounded v, Enum v, DefaultValue v (Either Int Bool)
+                    , Ord id,Show id
                     ) => SizedGen (Tree id v) -> Property
 mkFunsatDirectProp gen = forAll (sized gen) $ \c ->
     let pblm@(RPOCircuitProblem{ rpoProblemCnf = cnf })
@@ -352,11 +354,11 @@ mkFunsatSimp1RPOProp' (c, pool)  =
            = toCNF' pool
            . runShared
 --           . (castRPOCircuit :: Tree id v -> Shared id v)
-           . (castRPOCircuit :: (Ord v, HasTrie v, Show v, RPOExtCircuit (Shared id) id, Ord id, Show id, HasPrecedence v id, HasFiltering v id, HasStatus v id) => Tree id v -> Shared id v)
+           . (castRPOCircuit :: (Ord v, Show v, RPOExtCircuit (Shared id) id, Ord id, Show id, HasPrecedence v id, HasFiltering v id, HasStatus v id) => Tree id v -> Shared id v)
            $ c
         (solution, _, _) = solve1 cnf
     in case solution of
-         Sat{} -> let benv  = reconstructNatsFromBits (Trie.toList natbits) $ projectECircuitSolution solution pblm
+         Sat{} -> let benv  = reconstructNatsFromBits ( natbits) $ projectECircuitSolution solution pblm
                       benv' = benv `mappend` defaultValues (toList c)
                   in   label "Sat"
                      . trivial (Map.null benv)
@@ -370,7 +372,7 @@ mkFunsatDirectRPOProp' c  =
            = toCNF
            . runShared
 --           . (castRPOCircuit :: Tree id v -> Shared id v)
-           . (castRPOCircuit :: (Ord v, HasTrie v, Show v, RPOExtCircuit (Shared id) id, Ord id, Show id, HasPrecedence v id, HasFiltering v id, HasStatus v id) => Tree id v -> Shared id v)
+           . (castRPOCircuit :: (Ord v, Show v, RPOExtCircuit (Shared id) id, Ord id, Show id, HasPrecedence v id, HasFiltering v id, HasStatus v id) => Tree id v -> Shared id v)
            $ c
         (solution, _, _) = solve1 cnf
     in case solution of
@@ -384,8 +386,8 @@ mkFunsatDirectRPOProp' c  =
 
 
 mkYicesDirectProp :: forall id v.
-                     (Ord v, HasTrie v, Show v, Bounded v, Enum v
-                     ,Ord id, Show id, HasTrie id
+                     (Ord v, Show v, Bounded v, Enum v
+                     ,Ord id, Show id
                      ) => SizedGen (Tree id v) -> Property
 mkYicesDirectProp gen = forAll (sized gen) $ \c ->
     let correct = unsafePerformIO $
@@ -397,8 +399,8 @@ mkYicesDirectProp gen = forAll (sized gen) $ \c ->
          Just x  -> label "Sat" x
 
 mkYicesSimp1Prop :: forall id v.
-                    (Ord v, HasTrie v, Show v, Bounded v, Enum v
-                    ,Ord id, Show id, HasTrie id
+                    (Ord v, Show v, Bounded v, Enum v
+                    ,Ord id
                     ) => SizedGen (Tree id v) -> Property
 mkYicesSimp1Prop gen = forAll (sized gen) $ \(c :: Tree id v) ->
     let correct = unsafePerformIO $
@@ -410,8 +412,8 @@ mkYicesSimp1Prop gen = forAll (sized gen) $ \(c :: Tree id v) ->
          Just x  -> label "Sat" x
 
 
-mkYicesDirectRPOProp :: forall id v. ( Ord v, HasTrie v, Show v, Bounded v, Enum v
-                                     , Ord id, Show id, HasTrie id
+mkYicesDirectRPOProp :: forall id v. ( Ord v, Show v, Bounded v, Enum v
+                                     , Ord id, Show id
                                      , HasPrecedence v id, HasFiltering v id, HasStatus v id
                                      , RPOExtCircuit (Shared id) id
                                      ) => SizedGen (Tree id v) -> Property
@@ -425,8 +427,8 @@ mkYicesDirectRPOProp gen = forAll (sized gen) $ \(c :: Tree id v) ->
          Just x  -> label "Sat" x
 
 mkYicesSimp1RPOProp :: forall id v.
-                       (Ord v, HasTrie v, Show v, Bounded v, Enum v
-                       ,Ord id, HasTrie id, Show id
+                       (Ord v, Show v, Bounded v, Enum v
+                       ,Ord id, Show id
                        ,HasPrecedence v id, HasFiltering v id, HasStatus v id
                        ,RPOExtCircuit (Shared id) id
                        ) => SizedGen (Tree id v,[v]) -> Property
@@ -440,8 +442,8 @@ mkYicesSimp1RPOProp gen = forAll (sized gen) $ \(c :: Tree id v, pool) ->
          Just x  -> label "Sat" x
 
 
-mkSMTDirectRPOProp :: forall id v. ( v ~ Var, Ord v, HasTrie v, Show v, Bounded v, Enum v
-                                   , Ord id, Show id, HasTrie id, Pretty id
+mkSMTDirectRPOProp :: forall id v. ( v ~ Var, Ord v, Show v, Bounded v, Enum v
+                                   , Ord id, Show id, Pretty id
                                    , HasPrecedence v id, HasFiltering v id, HasStatus v id
                                    , RPOExtCircuit (YicesSource id) id
                                    ) => SizedGen (Tree id v) -> Property
@@ -916,7 +918,7 @@ detailedOutputFor k symbol_rules = do
       return (sound, correct, benv, symbols, symbols' :: [RDPId])
 
 testRulePropDirect' ::
-              (sid ~ symb Var DPId, HasTrie sid, Ord sid, Show sid, Pretty sid)
+              (sid ~ symb Var DPId, Ord sid, Show sid, Pretty sid)
               => SymbolFactory symb
               -> [RuleN Id]
               -> ( [RuleN sid] -> SAT sid Var (EvalM Var a) )
@@ -963,7 +965,7 @@ testRulePropDirect' ext rules k = do
          Unsat{} -> return Nothing
 
 testRulePropSimp' ::
-              (sid ~ symb Var DPId, HasTrie sid, Ord sid, Show sid, Pretty sid)
+              (sid ~ symb Var DPId, Ord sid, Show sid, Pretty sid)
               => SymbolFactory symb
               -> [RuleN Id]
               -> ( [RuleN sid] -> SAT sid Var (EvalM Var a) )
@@ -1001,7 +1003,7 @@ testRulePropSimp' ext rules k = do
 --    system ("open " ++ tmpFile)
 
     case solution of
-         Sat{} -> let benv = reconstructNatsFromBits (Trie.toList natbits) $ projectECircuitSolution solution pblm
+         Sat{} -> let benv = reconstructNatsFromBits ( natbits) $ projectECircuitSolution solution pblm
                   in return $ Just (benv, symbols, runEvalM benv res)
 
          Unsat{} -> return Nothing
@@ -1021,7 +1023,7 @@ geRule (l:->r) = assert [l `termGt` r, l `termEq` r] >> return correct
    correct = evalB (l`termEq`r)
 
 data ExistSolver symb = forall repr m .
-                        ( RPOCircuit repr (symb Var DPId)
+                        ( RPOCircuit repr DPId Var
                         , Decode (symb Var DPId) (SymbolRes DPId) Var
                         , Show (symb Var DPId)
                         , MonadSAT repr Var m) =>
@@ -1033,7 +1035,7 @@ satYicesSimpSolver = (unsafePerformIO . satYicesSimp' [toEnum 100..] (YicesOpts 
 satYicesSolver = (unsafePerformIO . satYices' [toEnum 100..] (YicesOpts 20 Nothing))
 
 mkRuleGtProp, mkRuleEqProp
-             :: (id ~ symb Var DPId, Ord id, RPOExtCircuit (Shared id) id
+             :: (id ~ symb Var DPId, Ord id, RPOExtCircuit (Shared id) id Var
                 ,HasPrecedence Var id, HasStatus Var id, HasFiltering Var id
                 ) => SymbolFactory symb -> ExistSolver symb -> [RuleN Id] -> Property
 mkRuleGtProp ext (ExistSolver solve) rules
@@ -1132,7 +1134,7 @@ test_circuitToCnfBS vars treeCircuit = do
          Unsat{} -> putStrLn "Unsat"
 -}
 
-test_circuitToCnf :: forall id. (HasTrie id, Ord id, Show id) => [Eval NVar] -> Tree id NVar -> IO ()
+test_circuitToCnf :: forall id. (Ord id, Show id) => [Eval NVar] -> Tree id NVar -> IO ()
 test_circuitToCnf vars treeCircuit =
     let pblm@(RPOCircuitProblem{ rpoProblemCnf = cnf }) =
             toCNF $ runShared (castCircuit treeCircuit :: Shared id NVar)
@@ -1279,17 +1281,8 @@ instance Enum NVar where
 
 instance Arbitrary NVar where
   arbitrary = do {con <- elements [VB,VN]; (con . abs) `liftM` arbitrary}
-instance Decode NVar Bool NVar where decode v@VB{} = evalB (input v)
+--instance Decode NVar Bool NVar where decode v@VB{} = evalB (input v)
 --instance Decode [NVar] Integer NVar where decode vv = evalN (ECircuit.nat vv)
-instance HasTrie NVar where
-  data NVar :->: x = NVarTrie !(Int :->: x) !(Int :->: x)
-  empty = NVarTrie Trie.empty Trie.empty
-  lookup (VN v) (NVarTrie nt _) = Trie.lookup v nt
-  lookup (VB v) (NVarTrie _ bt) = Trie.lookup v bt
-  insert (VN x) v (NVarTrie nt bt) = NVarTrie (Trie.insert x v nt) bt
-  insert (VB x) v (NVarTrie nt bt) = NVarTrie nt (Trie.insert x v nt)
-  toList (NVarTrie nt bt) = map (first VN) (Trie.toList nt) ++
-                            map (first VB) (Trie.toList bt)
 
 
 sizedNatCircuit :: (Functor c, ECircuit c, OneCircuit c, NatCircuit c) => Int -> Gen (c NVar)
@@ -1350,14 +1343,14 @@ type Proxy a = a
 sizedxPOCircuit :: forall c (lpoid :: * -> * -> *) id.
                    (HasPrecedence Var id, HasStatus Var id, HasFiltering Var id
                    ,id ~ lpoid Var (DPIdentifier Id)
-                   ,Ord id, HasTrie id
+                   ,Ord id
                    ,ECircuit c, OneCircuit c, NatCircuit c, RPOCircuit c id
                    ,Arbitrary (SAT' Id lpoid Var (RuleN id))
                    ) => Proxy id -> Int -> Gen (c Var, [Var])
 sizedxPOCircuit _ size = do
   c <- go size
   let (circuit, St pool constraints _) = runSAT' c
-  return (circuit `and` removeExist (runShared constraints), pool)
+  return (circuit `MonadSAT.and` removeExist (runShared constraints), pool)
  where
   go :: Int -> Gen (SAT' Id lpoid Var (c Var))
   go 0 = return . return . input . V $ 1
@@ -1442,27 +1435,6 @@ shrinkETree t = []
 
 data Id = F | F2 | G | G2 | S | Z deriving (Eq, Ord, Show)
 instance Pretty Id where pPrint = text . show
-instance HasTrie Id where
-  data Id :->: x = IdTrie (Maybe x) (Maybe x) (Maybe x) (Maybe x) (Maybe x) (Maybe x)
-  empty = IdTrie Nothing Nothing Nothing Nothing Nothing Nothing
-  lookup F  (IdTrie f _  _ _  _ _) = f
-  lookup F2 (IdTrie _ f2 _ _  _ _) = f2
-  lookup G  (IdTrie _ _  g _  _ _) = g
-  lookup G2 (IdTrie _ _ _  g2 _ _) = g2
-  lookup S  (IdTrie _ _ _ _   s _) = s
-  lookup Z  (IdTrie _ _ _ _ _   z) = z
-  insert F  v (IdTrie f f2 g g2 s z) = IdTrie (Just v) f2 g g2 s z
-  insert F2 v (IdTrie f f2 g g2 s z) = IdTrie f (Just v) g g2 s z
-  insert G  v (IdTrie f f2 g g2 s z) = IdTrie f f2 (Just v) g2 s z
-  insert G2 v (IdTrie f f2 g g2 s z) = IdTrie f f2 g (Just v) s z
-  insert S v  (IdTrie f f2 g g2 s z) = IdTrie f f2 g g2 (Just v) z
-  insert Z v  (IdTrie f f2 g g2 s z) = IdTrie f f2 g g2 s (Just v)
-  toList (IdTrie f f2 g g2 s z) = catMaybes [(,) F  `fmap` f
-                                            ,(,) F2 `fmap` f2
-                                            ,(,) G  `fmap` g
-                                            ,(,) G2 `fmap` g2
-                                            ,(,) S  `fmap` s
-                                            ,(,) Z  `fmap` z]
 
 
 -- Generating Terms
@@ -1605,7 +1577,7 @@ instance Arbitrary (SAT' Id LPOsymbol Var (RuleN LDPId))
       rhs <- sized sizedTerm
       let rule  = lhs :-> rhs
           symbs = toList $ getAllSymbols rule
-      return $ traverse (mapTermSymbolsA (mkSATSymbol' lpo)) rule
+      return $ traverse (mapTermSymbolsM (mkSATSymbol' lpo)) rule
 
 instance Arbitrary (SAT' Id MPOsymbol Var (RuleN (MPOsymbol Var DPId)))
   where
@@ -1614,7 +1586,7 @@ instance Arbitrary (SAT' Id MPOsymbol Var (RuleN (MPOsymbol Var DPId)))
       rhs <- sized sizedTerm
       let rule  = lhs :-> rhs
           symbs = toList $ getAllSymbols rule
-      return $ traverse (mapTermSymbolsA (mkSATSymbol' mpo)) rule
+      return $ traverse (mapTermSymbolsM (mkSATSymbol' mpo)) rule
 
 instance Arbitrary (SAT' Id LPOSsymbol Var (RuleN (LPOSsymbol Var DPId)))
   where
@@ -1623,28 +1595,20 @@ instance Arbitrary (SAT' Id LPOSsymbol Var (RuleN (LPOSsymbol Var DPId)))
       rhs <- sized sizedTerm
       let rule  = lhs :-> rhs
           symbs = toList $ getAllSymbols rule
-      return $ traverse (mapTermSymbolsA (mkSATSymbol' lpos)) rule
+      return $ traverse (mapTermSymbolsM (mkSATSymbol' lpos)) rule
 
 
 type SAT' id lpoid v = StateT (Map id (lpoid v (DPIdentifier id))  )
-                              (SAT    (lpoid v (DPIdentifier id)) v)
+                              (SAT    (lpoid v (DPIdentifier id)) Var v)
 
 runSAT' = (`runState` st0{pool=[V 1000..]}) . unSAT . (`evalStateT` Map.empty)
-
--- --mkSATSymbol' :: Id -> SAT' Id Var LDPId
--- mkSATSymbol' mk s = do
---   dict <- get
---   case Map.lookup s dict of
---     Just sat -> return sat
---     _        -> do
---       s' <- lift $ mkSATSymbol mk s
---       modify (Map.insert s s')
---       return s'
 
 mkSATSymbol' mk s = f <$> get where
   f dict = case Map.lookup s dict of
              Just sat -> pure sat
-             _        -> mkSATSymbol mk s <$ modify (Map.insert s s')
+             _        -> do
+               s' <- mkSATSymbol mk s
+               return s' <$ modify (Map.insert s' s')
 
 -- --------
 -- Helpers
