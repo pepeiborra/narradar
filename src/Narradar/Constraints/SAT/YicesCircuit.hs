@@ -186,7 +186,7 @@ instance ExistCircuit (YicesSource id) where
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "bool")] exp
 
-instance (Hashable id, Ord id,  RPOExtCircuit (YicesSource id) id Narradar.Var) =>
+instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id Narradar.Var) =>
    RPOCircuit (YicesSource id) id Narradar.Var where
  termGt s t = YicesSource $ do
       env <- get

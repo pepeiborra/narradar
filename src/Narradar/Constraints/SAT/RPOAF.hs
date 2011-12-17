@@ -78,11 +78,12 @@ instance SATSymbol MPOsymbol  where mkSATSymbol = mpo
 -- | RPO + AF
 
 rpoAF :: (id ~ Family.Id trs
-         ,Ord id, Show id
+         ,Ord id, Show id, Pretty id
          ,HasSignature trs
          ,HasRules trs, Rule (TermF id) v' ~ Family.Rule trs
          ,Ord v', Show v', Pretty v', Hashable v'
          ,SATSymbol sid
+         ,Pretty (sid v id)
          ,HasStatus v (sid v id)
          ,HasFiltering v (sid v id)
          ,HasPrecedence v (sid v id)
@@ -103,11 +104,11 @@ rpoAF_DP ::
          (trs  ~ NarradarTRS (TermF id) v'
          ,trs' ~ NarradarTRS (TermF (sid v id)) v'
          ,id   ~ Family.Id trs
-         ,Ord id, Show id
+         ,Ord id, Show id, Pretty id
          ,Ord v', Show v', Pretty v', Hashable v'
          ,MkDPProblem typ trs'
          ,SATSymbol sid
-         ,Ord (sid v id)
+         ,Ord (sid v id), Pretty (sid v id)
          ,HasStatus v (sid v id)
          ,HasFiltering v (sid v id)
          ,HasPrecedence v (sid v id)
@@ -128,16 +129,24 @@ rpoAF_DP allowCol omega p
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
 
+  () <- pprTrace (text "Asserting omega") $ return ()
   assertAll [omega p']
+
+  () <- pprTrace (text "asserting decreasingness of rules") $ return ()
   assertAll [ l >~ r | l:->r <- rules dps']
 
+  () <- pprTrace (text "asserting decreasingness of pairs") $ return ()
   assertAll [(l > r) <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
+
+  () <- pprTrace (text "asserting that at least one pair is decreassing") $ return ()
   assert (map input decreasing_dps)
 
   -- Ensure that we find the solution which removes the most pairs possible
+  () <- pprTrace (text "assert that we find the best solution possible") $ return ()
   sequence_ [ assertW 1 [input b] | b <- decreasing_dps]
 
   -- Ensure that only really usable rules are selected
+  () <- pprTrace (text "assert that only usable rules are selected") $ return ()
   mapM_ (assertW 1 . (:[]) . not . input . usable) (Map.elems dict)
 
   return $ do
@@ -232,12 +241,12 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
        isTheRightKind = id
 
 
-rpoAF_NDP :: 
+rpoAF_NDP ::
          (problem  ~ NProblem typ  id
          ,problem' ~ NProblem typ  sid
          ,sid  ~ satSymbol Var id
-         ,Ord id, Show id
-         ,Ord sid
+         ,Ord id, Show id, Pretty id
+         ,Ord sid, Pretty sid
          ,MkDPProblem typ (NTRS sid)
          ,SATSymbol satSymbol
          ,HasStatus Var sid
@@ -268,7 +277,7 @@ rpoAF_NDP allowCol omega p
   assert (map input decreasing_dps)
   assert af_ground_rhs_dps
 -- FIXME reenable the variable condition
---  assert variable_cond
+  -- assert variable_cond
 
   assertAll (omega  p' :
              [ l >~ r | l:->r <- rules dps'])
@@ -341,19 +350,19 @@ instance (RPOCircuit repr (LPOSsymbol v a) tvar, AssertCircuit repr, OneCircuit 
 --  exGe = lexpge_exist
 
 instance (RPOCircuit repr (LPOsymbol v a) tvar, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
-         ,Ord a, Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
+         ,Pretty a, Ord a, Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (LPOsymbol v a) tvar where
   exEq s t = lexeq_existA s t
   exGt s t = lexgt_existA s t
 
 instance (RPOCircuit repr (MPOsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
-         ,Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
+         ,Pretty a,Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (MPOsymbol v a) tvar where
   exEq s t = muleq s t
   exGt s t = mulgt s t
 
 instance (RPOCircuit repr (RPOsymbol v a) tvar, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr, Ord a
-         ,Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
+         ,Pretty a, Ord tvar, Pretty tvar, Show tvar, Hashable tvar) =>
   RPOExtCircuit repr (RPOsymbol v a) tvar where
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]
@@ -720,7 +729,7 @@ omegaUsable p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
          rls       = rulesFor id_t trs
          rest      = trs \\ rls -- :: [Rule t Var]
 
-omegaNeeded p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
+omegaNeeded p = pprTrace (text "Solving P=" <+> getP p $$ text "where dd = " <+> dd) $
             and ([go r trs | _:->r <- dps] ++
                  [iusable f --> and [ l >~ r | l:->r <- rulesFor f trs]
                    | f <- Set.toList dd ]  ++
