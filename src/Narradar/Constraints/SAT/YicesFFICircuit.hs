@@ -10,6 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 
 module Narradar.Constraints.SAT.YicesFFICircuit
@@ -63,10 +64,11 @@ import qualified Data.Set as Set
 --import qualified Data.NarradarTrie as Trie
 import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
-import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
+import qualified Funsat.RPOCircuit as RPOCircuit
 import qualified Narradar.Types.Var as Narradar
 import qualified Prelude as Prelude
 import qualified Data.HashMap as Trie
+import qualified Data.Term.Family as Family
 
 import Funsat.ECircuit ( Circuit(..)
                        , ECircuit(..)
@@ -74,15 +76,20 @@ import Funsat.ECircuit ( Circuit(..)
                        , ExistCircuit(..)
                        , BIEnv)
 
-import Narradar.Constraints.SAT.RPOCircuit ( RPOCircuit(..)
-                                           , RPOExtCircuit(..)
-                                           , AssertCircuit(..)
-                                           , OneCircuit(..)
-                                           , oneExist)
+import Funsat.RPOCircuit ( RPOCircuit(..)
+                         , RPOExtCircuit(..)
+                         , AssertCircuit(..)
+                         , OneCircuit(..)
+                         , HasStatus(..)
+                         , HasPrecedence(..)
+                         , HasFiltering(..)
+                         , oneExist)
 
 type k :->: v = Trie.HashMap k v
 
 newtype YicesSource id var = YicesSource { unYicesSource :: RWST Context () (YMaps id var) IO Expr}
+
+type instance Family.Id1 (YicesSource id) = id
 
 data VarType = Bool | Nat deriving (Eq, Ord, Show)
 
@@ -136,6 +143,7 @@ computeBIEnv ctx YMaps{variables} = do
     _ -> return Nothing
 
 instance Circuit (YicesSource id) where
+  type Co (YicesSource id) var = (Ord var, Show var)
   true  = liftY0 mkTrue
   false = liftY0 mkFalse
 
@@ -221,8 +229,11 @@ instance AssertCircuit (YicesSource id) where
       liftIO $ Yices.assert ctx ass
       unYicesSource c
 
-instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id Narradar.Var) =>
-    RPOCircuit (YicesSource id) id Narradar.Var where
+instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) (TermN id)) =>
+    RPOCircuit (YicesSource id) (TermN id) where
+ type CoRPO_ (YicesSource id) (TermN id) v =
+    ( HasStatus v id, HasPrecedence v id, HasFiltering v id)
+
  termGt s t = YicesSource $ do
       env <- gets termGtMap
       ctx <- ask

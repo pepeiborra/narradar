@@ -104,10 +104,11 @@ Library
                   suitable,
                   split,
 --                  parse-dimacs,
-                  yices > 0.0.0.4,
+                  yices > 0.0.0.8,
                   bindings-yices,
-                  alacarte >= 0.4, 
-                  funsat >= 0.6.3,
+                  alacarte >= 0.4,
+                  funsat-lang, 
+                  funsat-rpo,
                   term >= 0.2.20111120,
                   muterm-framework >= 1.5,
                   muterm-framework-charts >= 0.3,
@@ -118,6 +119,7 @@ Library
                   hashmap,
                   suitable,
                   bifunctors
+
 
   if flag(aprove)
     build-depends:network, 

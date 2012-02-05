@@ -10,6 +10,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Narradar.Constraints.SAT.MonadSAT
     ( module Narradar.Constraints.SAT.MonadSAT
@@ -17,7 +18,7 @@ module Narradar.Constraints.SAT.MonadSAT
     , Circuit, ECircuit, NatCircuit, OneCircuit, RPOCircuit
     , RPOExtCircuit(..), ExistCircuit(..)
     , AssertCircuit(..), assertCircuits
-    , castCircuit, castRPOCircuit, Clause
+    , castCircuit, Clause
     , Tree, printTree, mapTreeTerms
     , Eval, evalB, evalN, BIEnv, EvalM
     , input, true, false, not, ite, eq, lt, gt, one
@@ -28,20 +29,21 @@ module Narradar.Constraints.SAT.MonadSAT
     ) where
 
 import           Control.Arrow                       (first,second)
+import           Control.Monad.Reader                (MonadReader(..),liftM)
 import           Data.Hashable
 import           Data.List                           (foldl')
-import           Funsat.Circuit                      (BEnv)
+import           Funsat.ECircuit                     (BEnv, BIEnv, Eval, EvalF(..), runEval)
 import           Funsat.Types                        (Clause,Solution(..))
 import           Prelude                             hiding (and, not, or, any, all, lex, (>))
 
 import           Narradar.Utils
 import           Narradar.Framework.Ppr              as Ppr
 import           Narradar.Constraints.RPO            (Status(..), mkStatus)
-import           Narradar.Constraints.SAT.RPOCircuit hiding (and,or, nat)
+import           Funsat.RPOCircuit                   hiding (and,or, nat)
 
 import qualified Funsat.ECircuit                     as ECircuit
 import qualified Funsat.Types                        as Funsat
-import qualified Narradar.Constraints.SAT.RPOCircuit as Funsat
+import qualified Funsat.RPOCircuit                   as Funsat
 import qualified Prelude                             as P
 
 -- --------
@@ -72,7 +74,7 @@ lit (V i) = Funsat.L i
 
 instance Pretty Var where pPrint (V i) = text "v" <> i
 
-nat :: (Ord v, Hashable v, Show v) => NatCircuit repr => Natural v -> repr v
+nat :: (Co repr v) => NatCircuit repr => Natural v -> repr v
 nat (Natural n) = ECircuit.nat n
 
 type Weight = Int
@@ -80,7 +82,28 @@ type Weight = Int
 -- ---------------------
 -- Interpreting booleans
 -- ---------------------
-type Precedence = [Integer]
+newtype Flip t a b = Flip {unFlip::t b a}
+type EvalM = Flip EvalF
+
+runEvalM :: BIEnv e -> EvalM e a -> a
+runEvalM env = flip unEval env . unFlip
+
+instance Functor (EvalM v) where fmap f (Flip (Eval m)) = Flip $ Eval $ \env -> f(m env)
+instance Monad (EvalM v) where
+  return x = Flip $ Eval $ \_ -> x
+  m >>= f  = Flip $ Eval $ \env -> runEvalM env $ f $ runEvalM env m
+
+instance MonadReader (BIEnv v) (EvalM v) where
+  ask       = Flip $ Eval $ \env -> env
+  local f m = Flip $ Eval $ \env -> runEvalM (f env) m
+
+evalB :: Eval v -> EvalM v Bool
+evalN :: Eval v -> EvalM v Int
+evalB c = liftM (fromRight :: Either Int Bool -> Bool) (eval c)
+evalN c = liftM (fromLeft  :: Either Int Bool -> Int)  (eval c)
+eval  c = do {env <- ask; return (runEval env c)}
+
+--type Precedence = [Integer]
 
 class Decode a b var | a b -> var where decode :: a -> EvalM var b
 

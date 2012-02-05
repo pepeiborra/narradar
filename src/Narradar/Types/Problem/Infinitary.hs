@@ -15,7 +15,7 @@ import Control.Exception (assert)
 import Control.Monad.Free
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM, fmapDefault, foldMapDefault)
-import Data.Monoid
+import Data.Monoid ( Monoid(..) )
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Map as Map

@@ -17,9 +17,9 @@ import           Control.DeepSeq
 import           Data.AlaCarte                (Expr)
 import           Data.Foldable(Foldable       (..), toList)
 import           Data.Hashable
-import           Data.Traversable        as T (Traversable(..), mapM)
+import           Data.Traversable             as T (Traversable(..), mapM)
 import           Data.Maybe
-import           Data.Monoid
+import           Data.Monoid                  (Monoid(..), Any(..))
 import           Data.Typeable
 
 import           Narradar.Types.DPIdentifiers

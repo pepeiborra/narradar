@@ -22,13 +22,12 @@ import Data.Bifunctor (bimap)
 import Data.List (partition, find, inits, unfoldr, sortBy)
 import Data.Map (Map)
 import Data.Maybe
-import Data.Monoid
+import Data.Monoid (Monoid(..))
 import Data.Set (Set)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Foldable as F
 import Data.Foldable (Foldable)
-import Data.Monoid
 import Data.Typeable
 import Prelude hiding (lookup, map, and, or)
 import qualified Prelude as P

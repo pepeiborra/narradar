@@ -24,15 +24,16 @@ import Bindings.Yices ( Context, mkContext, interrupt, setVerbosity, assertWeigh
 import           Control.Applicative
 import           Control.Arrow                            (first,second)
 import           Control.Exception                        (evaluate, try, SomeException)
-import           Control.Monad.RWS
+import           Control.Monad.RWS                        (RWST(..), MonadReader(..), runRWST)
 import           Control.Monad.State
 import           Data.Array.Unboxed
 import           Data.List                                (unfoldr)
-import           Data.Monoid
+import           Data.Monoid                              (Monoid(..))
 import           Data.Hashable
 import           Data.Term.Rules                          (getAllSymbols)
+import           Funsat.Types                             (Solution(Sat))
 import           Funsat.Circuit                           (BEnv, and,or,not)
-import           Funsat.Types                             (Clause,Solution(..))
+import           Funsat.RPOCircuit                        hiding (nat)
 import           Math.SMT.Yices.Syntax
 import           System.Directory
 import           System.FilePath
@@ -43,24 +44,23 @@ import           System.TimeIt
 import           Text.Printf
 
 import           Narradar.Constraints.SAT.MonadSAT        hiding (and,or)
-import           Narradar.Constraints.SAT.RPOCircuit      hiding (nat)
 import           Narradar.Constraints.SAT.YicesCircuit    as Serial (YicesSource, YMaps(..), emptyYMaps, runYices', generateDeclarations, solveDeclarations)
 import           Narradar.Constraints.SAT.YicesFFICircuit as FFI    (YicesSource, YMaps(..), emptyYMaps, computeBIEnv, runYicesSource)
 import           Narradar.Framework                       (TimeoutException(..))
 import           Narradar.Framework.Ppr
 import           Narradar.Utils                           ( debug, echo, echo', readProcessWithExitCodeBS )
+import           Narradar.Types                           ( TermN )
 
 import qualified Bindings.Yices                           as Yices
 import qualified Control.Exception                        as CE
-import qualified Funsat.Solver                            as Funsat
-import qualified Funsat.Types                             as Funsat
 import qualified Data.ByteString.Char8                    as BS
 import qualified Data.ByteString.Lazy.Char8               as LBS
 import qualified Data.HashMap                             as HashMap
 import qualified Data.Map                                 as Map
 import qualified Data.Set                                 as Set
+import qualified Funsat.Types                             as Funsat
+import qualified Funsat.RPOCircuit                        as RPOCircuit
 import qualified Narradar.Types                           as Narradar
-import qualified Narradar.Constraints.SAT.RPOCircuit      as RPOCircuit
 
 import           Prelude                                  hiding (and, not, or, any, all, lex, (>))
 import qualified Prelude                                  as P
@@ -162,13 +162,13 @@ instance MonadSAT (FFI.YicesSource id) Var (SMTY' id) where
 -- ------------------------------------------
 -- Boolean Circuits MonadSAT implementation
 -- ------------------------------------------
-data St tid tvar v = St { pool     :: [v]
-                        , circuit  :: !(Shared tid tvar v)
-                        , weightedClauses :: [(Weight, Clause)]}
+data St term v = St { pool     :: [v]
+                    , circuit  :: !(Shared term v)
+                    , weightedClauses :: [(Weight, Clause)]}
 
-newtype SAT tid tvar v a = SAT {unSAT :: State (St tid tvar v) a} deriving (Functor, Monad, MonadState (St tid tvar v))
+newtype SAT term v a = SAT {unSAT :: State (St term v) a} deriving (Functor, Monad, MonadState (St term v))
 
-instance (Ord v, Hashable v, Show v) => MonadSAT (Shared tid tvar) v (SAT tid tvar v) where
+instance (Ord v, Hashable v, Show v) => MonadSAT (Shared term) v (SAT term v) where
   boolean = do {st <- get; put st{pool=tail (pool st)}; return (head $ pool st)}
   natural = do {b <- boolean; return (Natural b)}
   assert   [] = return ()
@@ -183,7 +183,7 @@ st0 = St [minBound..] true []
 data YicesOpts = YicesOpts {maxWeight :: Int, timeout :: Maybe Int}
 defaultYicesOpts = YicesOpts 0 Nothing
 
-satYices :: (Hashable id, Ord id, Show id) => YicesOpts -> SAT id Narradar.Var Var (EvalM Var a) -> IO (Maybe a)
+satYices :: (Hashable id, Ord id, Show id) => YicesOpts -> SAT (TermN id) Var (EvalM Var a) -> IO (Maybe a)
 satYices = satYices' [toEnum 1 ..]
 satYices' pool0 yo (SAT m) = do
   let (val, St _ circuit weighted) = runState m (St pool0 true [])
@@ -232,44 +232,44 @@ solveYices YicesOpts{..} cnf weighted val = do
             debug ("not satisfiable" ++ mb_time)
             return Nothing
 
--- *** Funsat solver by simplification to vanilla Circuits
+-- -- *** Funsat solver by simplification to vanilla Circuits
 
-solveFun :: ( Hashable id, Ord id, Bounded v
-            , Enum v, Show v, Ord v, Hashable v
-            , Ord tv, Hashable tv, Show tv) =>
-            SAT id tv v (EvalM v a) -> Maybe a
-solveFun = fmap (uncurry $ flip runEvalM) . runFun
+-- solveFun :: ( Hashable id, Ord id, Bounded v
+--             , Enum v, Show v, Ord v, Hashable v
+--             , Ord tv, Hashable tv, Show tv) =>
+--             SAT id tv v (EvalM v a) -> Maybe a
+-- solveFun = fmap (uncurry $ flip runEvalM) . runFun
 
-solveFunDirect :: ( Hashable id, Ord id, Show id
-                  , Bounded v, Enum v, Hashable v, Ord v, Show v
-                  , Hashable tv, Ord tv, Show tv) =>
-                  SAT id tv v (EvalM v a) -> Maybe a
-solveFunDirect = fmap (uncurry $ flip runEvalM) . runFunDirect
+-- solveFunDirect :: ( Hashable id, Ord id, Show id
+--                   , Bounded v, Enum v, Hashable v, Ord v, Show v
+--                   , Hashable tv, Ord tv, Show tv) =>
+--                   SAT id tv v (EvalM v a) -> Maybe a
+-- solveFunDirect = fmap (uncurry $ flip runEvalM) . runFunDirect
 
-runFunDirect :: (Hashable id, Ord id, Show id
-                ,Bounded v, Enum v, Ord v, Show v
-                ,Hashable v, Hashable tv, Ord tv, Show tv) =>
-                SAT id tv v a -> Maybe (a, BIEnv v)
-runFunDirect (SAT m) = let
-    (val, St _ circuit _weighted) = runState m st0
+-- runFunDirect :: (Hashable id, Ord id, Show id
+--                 ,Bounded v, Enum v, Ord v, Show v
+--                 ,Hashable v, Hashable tv, Ord tv, Show tv) =>
+--                 SAT id tv v a -> Maybe (a, BIEnv v)
+-- runFunDirect (SAT m) = let
+--     (val, St _ circuit _weighted) = runState m st0
 
-    -- Skip weighted booleans as Funsat does not do weighted SAT
-    circuitProb = toCNF  (runShared circuit)
-    (sol,_,_)   = Funsat.solve1 $ rpoProblemCnf circuitProb
+--     -- Skip weighted booleans as Funsat does not do weighted SAT
+--     circuitProb = toCNF  (runShared circuit)
+--     (sol,_,_)   = Funsat.solve1 $ rpoProblemCnf circuitProb
 
-  in case sol of
-       Sat{}   -> Just (val, projectRPOCircuitSolution sol circuitProb)
-       Unsat{} -> Nothing
+--   in case sol of
+--        Sat{}   -> Just (val, projectRPOCircuitSolution sol circuitProb)
+--        Unsat{} -> Nothing
 
-runFun :: (Hashable id, Ord id, Bounded v, Enum v, Ord v, Hashable v, Hashable tvar, Ord tvar, Show v) =>
-          SAT id tvar v a -> Maybe (a, BIEnv v)
-runFun (SAT m) = let
-    (val, St pool circuit _weighted) = runState m st0
+-- runFun :: (Hashable id, Ord id, Bounded v, Enum v, Ord v, Hashable v, Hashable tvar, Ord tvar, Show v) =>
+--           SAT id tvar v a -> Maybe (a, BIEnv v)
+-- runFun (SAT m) = let
+--     (val, St pool circuit _weighted) = runState m st0
 
-    -- Skip weighted booleans as Funsat does not do weighted SAT
-    (circuitProb, natbits) = toCNF' pool (runShared circuit)
-    (sol,_,_)   = Funsat.solve1 (eproblemCnf circuitProb)
+--     -- Skip weighted booleans as Funsat does not do weighted SAT
+--     (circuitProb, natbits) = toCNF' pool (runShared circuit)
+--     (sol,_,_)   = Funsat.solve1 (eproblemCnf circuitProb)
 
-  in case sol of
-       Sat{}   -> Just (val, reconstructNatsFromBits (HashMap.toList natbits) $ projectECircuitSolution sol circuitProb)
-       Unsat{} -> Nothing
+--   in case sol of
+--        Sat{}   -> Just (val, reconstructNatsFromBits (HashMap.toList natbits) $ projectECircuitSolution sol circuitProb)
+--        Unsat{} -> Nothing

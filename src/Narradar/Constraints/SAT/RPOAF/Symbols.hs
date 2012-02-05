@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 
 module Narradar.Constraints.SAT.RPOAF.Symbols where
@@ -26,12 +27,13 @@ import qualified Data.Array                        as A
 import           Data.Foldable                     (Foldable, foldMap, toList)
 import           Data.List                         ((\\), transpose, inits, zip4)
 import           Data.Maybe
-import           Data.Monoid
+import           Data.Monoid                       ( Monoid(..) )
 import           Data.Hashable
 import           Data.Typeable
 import qualified Data.Map                          as Map
 import qualified Data.Set                          as Set
 import           Data.Traversable                  (Traversable)
+import           Funsat.Circuit                    (Co)
 import           Narradar.Framework.Ppr            as Ppr
 
 import           Narradar.Constraints.SAT.MonadSAT
@@ -125,7 +127,7 @@ instance Decode (RPOSsymbol v a) (SymbolRes a) v where decode = decodeSymbol
 type SymbolFactory s = forall id symb m repr . (Show id, Pretty id, DPSymbol id, MonadSAT repr Var m ) => (id, Int, Bool) -> m (s Var id)
 
 --rpos :: SymbolFactory RPOSsymbol
-rpos :: (MonadSAT repr v m, Show id, Decode v Bool v) =>
+rpos :: (MonadSAT repr v m, Co repr v, Show id, Decode v Bool v) =>
         (id, Int, Bool) -> m (RPOSsymbol v id)
 rpos (x, ar, defined) = do
   n_b      <- natural

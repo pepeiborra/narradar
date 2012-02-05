@@ -22,7 +22,7 @@ import Data.Hashable
 import Data.Typeable
 import Data.List ((\\), groupBy, sortBy, inits)
 import Data.Maybe (fromJust)
-import Data.Monoid
+import Data.Monoid (Monoid(..))
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.Term.Family as Family
@@ -59,7 +59,7 @@ import qualified Debug.Trace
 --       i -> Proof info mp o
 --rpo = apply (RPOProc RPOSAF SMTSerial)
 
-runSAT :: (Hashable id, Ord id, Show id) => SATSolver -> SAT id Narradar.Var Var (EvalM Var a) -> IO (Maybe a)
+runSAT :: (Hashable id, Ord id, Show id) => SATSolver -> SAT (TermN id) Var (EvalM Var a) -> IO (Maybe a)
 runSAT Yices = satYices YicesOpts{maxWeight = 20, timeout = Nothing}
 -- runS FunSat = solveFun
 -- runS FunSatDirect = solveFunDirect
@@ -469,7 +469,7 @@ data RPOProof id where
                    [RuleN id]       --  ^ Strictly Decreasing dps
                 -> [RuleN id]       --  ^ Usable Rules
                 -> [RPOAF.SymbolRes id]
-                -> [Tree id Narradar.Var Var] -- ^ Extra constraints
+                -> [Tree (TermN id) Var] -- ^ Extra constraints
                 -> RPOProof id
 {-
      RPOProof   :: Pretty (Rule t v) =>

@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 
 module Narradar.Constraints.SAT.YicesCircuit
@@ -44,13 +45,16 @@ import qualified Data.Set                            as Set
 import qualified Data.Map                            as Map
 import qualified Funsat.Circuit                      as Circuit
 import qualified Funsat.ECircuit                     as ECircuit
-import qualified Narradar.Constraints.SAT.RPOCircuit as RPOCircuit
+import qualified Funsat.RPOCircuit                   as RPOCircuit
 import qualified Narradar.Types                      as Narradar
 import qualified Prelude                             as Prelude
+import qualified Data.Term.Family                    as Family
 
 import           Funsat.ECircuit                     (Circuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
-import           Narradar.Constraints.SAT.RPOCircuit (RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), oneExist, termGt_, termGe_, termEq_)
+import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..)
+                                                     , HasPrecedence(..), HasFiltering(..), HasStatus(..)
+                                                     , oneExist, termGt_, termGe_, termEq_)
 
 deriving instance Eq  ExpY
 deriving instance Ord ExpY
@@ -60,6 +64,8 @@ deriving instance Ord TypY
 type k :->: v = HashMap.HashMap k v
 
 newtype YicesSource id var = YicesSource { unYicesSource :: State (YMaps id var) ExpY}
+
+type instance Family.Id1 (YicesSource id) = id
 
 newtype YVar = YV Int deriving (Enum, Eq, Ord)
 
@@ -121,6 +127,7 @@ solveDeclarations mb_timeout cmds = do
     _ -> return Nothing
 
 instance Circuit (YicesSource id) where
+  type Co (YicesSource id) v = (Ord v, Show v)
   true  = YicesSource $ return $ LitB True
   false = YicesSource $ return $ LitB False
   input v = YicesSource $ do
@@ -186,8 +193,11 @@ instance ExistCircuit (YicesSource id) where
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "bool")] exp
 
-instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id Narradar.Var) =>
-   RPOCircuit (YicesSource id) id Narradar.Var where
+instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) (TermN id)) =>
+   RPOCircuit (YicesSource id) (TermN id) where
+ type CoRPO_ (YicesSource id) (TermN id) v =
+    (HasPrecedence v id, HasFiltering v id, HasStatus v id)
+
  termGt s t = YicesSource $ do
       env <- get
       case HashMap.lookup (s,t) (termGtMap env) of

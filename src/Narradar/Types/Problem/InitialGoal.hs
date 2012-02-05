@@ -28,7 +28,7 @@ import Data.Array as A
 import Data.Graph as G
 import Data.Graph.SCC as SCC
 import Data.Maybe
-import Data.Monoid
+import Data.Monoid ( Monoid(..) )
 import Data.Strict ( Pair(..) )
 import Data.Suitable
 import Data.Set (Set)

@@ -203,6 +203,7 @@ hashId = HT.hashString . show
 
 isRight Right{} = True; isRight _ = False
 isLeft  Left{}  = True; isLeft  _ = False
+fromLeft  (Left  l) = l
 fromRight (Right a) = a
 catLefts  xx = [ x | Left  x <- xx]
 catRights xx = [ x | Right x <- xx]
