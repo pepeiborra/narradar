@@ -1,7 +1,7 @@
 name:                narradar
 build-type:          Simple
 cabal-version:       >= 1.8
-version:             0.2.20111120
+version:             0.3
 synopsis:            A termination of Narrowing prover
 description:         A termination of Narrowing prover
 category:            Math
@@ -73,12 +73,11 @@ Library
                 MultiParamTypeClasses,
                 DeriveFunctor
 
-  extra_libraries: yices
+  extra-libraries: yices
 
   build-Depends:  base,
-                  mtl >= 2.0.1.0,
-                  failure == 0.1.*,
-                  control-monad-failure == 0.7.*,
+                  mtl >= 2.1.3.1,
+                  failure ,
                   prettyclass,
                   array,
                   containers >= 0.4.2, 
@@ -100,21 +99,21 @@ Library
                   template-haskell,
                   control-monad-free >= 0.5.3, 
                   logict, 
-                  rmonad, 
-                  suitable,
+                  rmonad >= 0.8.0.3, 
+                  suitable >= 0.1.2,
                   split,
 --                  parse-dimacs,
                   yices > 0.0.0.8,
-                  bindings-yices,
-                  alacarte >= 0.4,
-                  funsat-lang, 
-                  funsat-rpo,
-                  term >= 0.2.20111120,
+                  bindings-yices >= 0.2,
+                  narradar-alacarte >= 0.6,
+                  narradar-funsat-lang >= 0.8, 
+                  narradar-funsat-rpo >= 0.2,
+                  narradar-term >= 0.3,
+                  narradar-trsparser >= 0.4.3, 
+                  narradar-prolog >= 0.3,
+                  narradar-prolog-tools >= 0.3,
                   muterm-framework >= 1.5,
-                  muterm-framework-charts >= 0.3,
-                  TRSParser >= 0.4.2, 
-                  prolog >= 0.2.20111111,
-                  prolog-tools >= 0.2.20111111,
+                  muterm-framework-charts >= 0.3.1,
                   hashable,
                   hashmap,
                   suitable,
@@ -205,7 +204,7 @@ Executable NARRADAR
   hs-source-dirs:  strategies
   main-is:         LOPSTR09.hs
   ghc-options:     -threaded
-  build-depends:   base, narradar, muterm-framework, prolog
+  build-depends:   base, narradar, muterm-framework, narradar-prolog
   cpp-options:     -DTHREADED
 
 
