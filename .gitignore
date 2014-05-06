@@ -1,4 +1,6 @@
 *.pdf
+.cabal-sandbox/
+repo/
 dist/
 wordpress-theme/
 *.hi
