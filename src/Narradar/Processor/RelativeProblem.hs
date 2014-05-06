@@ -31,7 +31,7 @@ instance Pretty RelativeToRegularProof where
                                         text "the result from LOPSTR09 does not apply."
 
 instance ( MkProblem base trs
-         , Family.Id trs ~ Id1 t
+         , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
          , Ord (t(Term t v)), Ord v, Enum v, Rename v
          , HasId t, Unify t

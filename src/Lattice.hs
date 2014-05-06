@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances #-}
-
+{-# LANGUAGE AllowAmbiguousTypes #-}
 module Lattice where
 import Control.Monad (liftM2)
 import Data.Maybe
@@ -12,24 +12,25 @@ infixr 5 \/
 infixr 5 /\
 
 
-class Eq a => Lattice a where
+class (Eq a) => Lattice a where
  bottom, top :: a
  meet,join   :: a -> a -> a
  lt          :: a -> a -> Maybe Bool
- x `lt` y    | m == x    = Just True
-             | m == y    = Just False
-             | otherwise = Nothing
-  where m = meet x y
+ x `lt` y    | meet x y == x = Just True
+             | meet x y == y = Just False
+             | otherwise     = Nothing
 
-
+ltJoin :: Lattice a => a -> a -> Bool
 x `ltJoin` y | x == y    = True
              | otherwise = x `join` y == y
 
 -- * These are approximate (incorrect) versions of meet/join
 --    which only work with linear orderings
+meetLinear :: Lattice a => a -> a -> a
 meetLinear a b | a `lt` b == Just True = a
                | otherwise= assert (a `lt` b == Just True) b
 
+joinLinear :: Lattice a => a -> a -> a
 joinLinear a b | meet a b == a = b
                | otherwise     = a
 
@@ -55,7 +56,7 @@ instance (Lattice a, Lattice b) => Lattice (a,b) where
   top    = (top, top)
   bottom = (bottom, bottom)
 
-instance (Eq a, Bounded [a]) => Lattice [a] where
+instance (Ord a, Bounded [a]) => Lattice [a] where
   meet = intersect
   join = union
 --  x `lt` y = Just (all (`elem` y) x)

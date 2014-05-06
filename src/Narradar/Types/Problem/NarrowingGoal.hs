@@ -7,6 +7,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Narradar.Types.Problem.NarrowingGoal where
 
@@ -114,7 +115,7 @@ instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass 
 instance (HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
          ,Pretty id, Pretty (Goal id)
          ,Foldable t, HasId t
-         ,id ~ Id1 t
+         ,id ~ Family.Id t
          ,PprTPDB (Problem base trs), HasMinimality base
          ) => PprTPDB (Problem (MkNarrowingGoal id base) trs) where
   pprTPDB (NarrowingGoalProblem g pi p) =
@@ -134,7 +135,7 @@ instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
 instance (Enum v, Unify t, Ord (Term t v), IsTRS trs, GetVars trs
          ,ApplyAF (Term t v), ApplyAF trs
          , id ~ Family.Id trs
-         , id ~ Id1 t
+         , id ~ Family.Id t
          , Ord id, Ord (t(Term t v))
          ,IUsableRules p trs, ICap (p,trs)) =>
    IUsableRules (MkNarrowingGoal id p) trs

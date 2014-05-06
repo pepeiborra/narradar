@@ -20,11 +20,13 @@ data Var = Var (Maybe String) Int deriving Show
 instance Eq  Var where Var _ i == Var _ j = i == j
 instance Ord Var where compare (Var _ i) (Var _ j) = compare i j
 
+type instance Family.Var Var = Var
+
 instance Enum Var where
     fromEnum (Var _ i) = i
     toEnum = Var Nothing
 
-instance Hashable Var where hash (Var _ i) = i
+instance Hashable Var where hashWithSalt _ (Var _ i) = i
 
 var :: Monad m => Int -> m Var
 var  = return . Var Nothing

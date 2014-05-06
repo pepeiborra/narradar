@@ -84,7 +84,7 @@ class GetPairs typ where
               , Rule t v ~ Family.Rule trs
               , t ~ f (DPIdentifier id)
               , Family.Id trs ~ DPIdentifier id
-              , Family.Id1 (f (DPIdentifier id)) ~ DPIdentifier id
+              , Family.Id (f (DPIdentifier id)) ~ DPIdentifier id
               , Ord id
               , Functor t, Foldable t, MapId f, HasId t
               ) => typ -> trs -> [Rule t v]
@@ -93,7 +93,7 @@ getPairsDefault ::
     ( HasRules trs, HasSignature trs
     , Rule (f id) v ~ Family.Rule trs
     , id ~ Family.Id trs
-    , id ~ Id1 (f id)
+    , id ~ Family.Id (f id)
     , MapId f, HasId (f id)
     , Foldable (f id), Functor (f id)
     , DPSymbol id

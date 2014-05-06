@@ -8,6 +8,7 @@
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Narradar.Utils where
@@ -32,7 +33,6 @@ import           Data.Array.Base                      (unsafeAt)
 import qualified Data.Foldable                        as F
 import           Data.Foldable                        (toList, foldMap, Foldable)
 import qualified Data.Graph                           as G
-import qualified Data.HashTable                       as HT
 import qualified Data.ByteString                      as BS
 import qualified Data.ByteString.Lazy                 as LBS
 import           Data.Int
@@ -65,6 +65,8 @@ import           Prelude                              hiding (mapM)
 
 -- Debugging
 -- ---------
+#ifdef DEBUG
+#endif
 
 #ifdef HOOD
 import           Debug.Hood.Observe                   hiding (O)
@@ -73,13 +75,13 @@ import           Debug.Hood.Observe                   hiding (O)
 #ifdef DEBUG
 import qualified Debug.Trace
 trace = Debug.Trace.trace
-debug :: String -> IO ()
-debug msg = do {hPutStrLn stderr msg; hFlush stderr}
+debug  msg = do {hPutStrLn stderr msg; hFlush stderr}
+debug' msg = do {hPutStr stderr msg; hFlush stderr}
 #else
 {-# INLINE trace #-}
 trace _ x = x
-debug :: String -> IO ()
-debug _ = return ()
+debug  _ = return ()
+debug' _ = return ()
 #endif
 
 pprTrace = trace . render . pPrint
@@ -198,8 +200,8 @@ snub = go Set.empty where
 
 (cmp `on` f) a b = cmp (f a) (f b)
 
-hashId :: Show a => a -> Int32
-hashId = HT.hashString . show
+--hashId :: Show a => a -> Int32
+--hashId = HT.hashString . show
 
 isRight Right{} = True; isRight _ = False
 isLeft  Left{}  = True; isLeft  _ = False
@@ -313,19 +315,6 @@ instance Arbitrary (Gr () ()) where
 -- -------------
 -- Memoization
 -- -------------
-{-# NOINLINE memoIO #-}
-memoIO :: Eq a => (a -> Int32) -> (a -> IO b) -> IO (a -> IO b)
-memoIO hash f = do
-  ht <- HT.new (==) hash
-  return (\x -> do
-            prev <- HT.lookup ht x
-            case prev of
-              Just res -> return res
-              Nothing  -> do
-                        res <- f x
-                        HT.insert ht x res
-                        return res)
-
 
 -- ------------------------------
 -- Higher Rank boolean operators
@@ -372,32 +361,32 @@ readProcessWithExitCodeBS exec args input = do
 -- --------------------------------------------
 
 instance Hashable id => Hashable (T id a) where
-  hash (T id) = hash id
+  hashWithSalt s (T id) = hashWithSalt s id
 
 instance Hashable id => Hashable (K id a) where
-  hash (K id) = hash id
+  hashWithSalt s (K id) = hashWithSalt s id
 
 instance Hashable PrologP_ where
-  hash Is = 1
-  hash Eq = 2
-  hash Cut = 3
-  hash Ifte = 4
-  hash Not = 5
+  hashWithSalt s Is = 1 `hashWithSalt` s
+  hashWithSalt s Eq = 2 `hashWithSalt` s
+  hashWithSalt s Cut = 3 `hashWithSalt` s
+  hashWithSalt s Ifte = 4 `hashWithSalt` s
+  hashWithSalt s Not = 5 `hashWithSalt` s
 
 instance Hashable PrologT_ where
-  hash Zero = 1
-  hash Succ = 2
-  hash Tup  = 3
-  hash Cons = 4
-  hash Nil  = 5
-  hash (String s) = 6 `combine` hash s
+  hashWithSalt s Zero = hashWithSalt s ( 1 :: Int)
+  hashWithSalt s Succ = hashWithSalt s ( 2 :: Int)
+  hashWithSalt s Tup  = hashWithSalt s ( 3 :: Int)
+  hashWithSalt s Cons = hashWithSalt s ( 4 :: Int)
+  hashWithSalt s Nil  = hashWithSalt s ( 5 :: Int)
+  hashWithSalt s (String x) = hashWithSalt s x
 
 instance (Hashable (f a), Hashable (g a)) => Hashable ((f:+:g) a) where
-  hash (Inl f) = hash f
-  hash (Inr g) = hash g
+  hashWithSalt s (Inl f) = hashWithSalt s f
+  hashWithSalt s (Inr g) = hashWithSalt s g
 
 instance (Functor f, Hashable (f Int)) => Hashable (Expr f) where
-  hash = foldExpr hash
+  hashWithSalt s = foldExpr (hashWithSalt s)
 
 -- -----------------------------------
 -- Missing useful monadic instances
@@ -426,13 +415,6 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
   mempty = mempty :!: mempty
   mappend (a :!: b) (a' :!: b') = mappend a a' :!: mappend b b'
 
-
--- --------------------------------
--- Deepseq instance for Bytestring
--- --------------------------------
-
-instance NFData BS.ByteString where rnf = rnf . show
-instance NFData LBS.ByteString where rnf = rnf . show
 
 -- ---------------
 -- Hood instances

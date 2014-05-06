@@ -33,10 +33,10 @@ data PrologId a = InId a | OutId a | UId Int | FunctorId a
 
 
 instance Hashable a => Hashable (PrologId a) where
-  hash (InId a)  = 1 `combine` hash a
-  hash (OutId a) = 2 `combine` hash a
-  hash (UId i)   = 3 `combine` i
-  hash (FunctorId a) = 4 `combine` hash a
+  hashWithSalt s (InId a)  = 1 `hashWithSalt` hashWithSalt s a
+  hashWithSalt s (OutId a) = 2 `hashWithSalt` hashWithSalt s a
+  hashWithSalt s (UId i)   = 3 `hashWithSalt` i
+  hashWithSalt s (FunctorId a) = 4 `hashWithSalt` hashWithSalt s a
 
 class Ord (WithoutPrologId id) => RemovePrologId id where
   type WithoutPrologId id :: *

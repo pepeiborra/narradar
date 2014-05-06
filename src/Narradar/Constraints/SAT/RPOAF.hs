@@ -13,86 +13,88 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Narradar.Constraints.SAT.RPOAF (
-   SATSymbol(..), SymbolRes(..)
+   SATSymbol(..), UsableSymbolRes(..), prec, filtering, status, theSymbolR
   ,RPOSsymbol(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
   ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
   ,rpo, rpos, lpo, lpos, mpo
   ,verifyRPOAF, isCorrect
   ,omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone
+  ,Usable, UsableSymbol(..)
   ) where
 
 import Control.Applicative
 import qualified Control.Exception as CE
 import Control.Monad
 import Control.Monad.Cont
-import Control.Monad.Identity
 import Control.Monad.List
 import Control.Monad.Reader
-import qualified Control.RMonad as R
-import qualified Data.Array as A
 import Data.Bifunctor
-import Data.Bifoldable
-import Data.Bitraversable
-import Data.Foldable (Foldable, foldMap, toList)
-import Data.List ((\\), find, transpose, inits, tails, zip4)
+import Data.Foldable (Foldable, toList)
+import Data.List ((\\), find, transpose, inits, tails)
 import Data.Maybe
 import Data.Monoid
 import Data.Hashable
 import Data.Traversable (traverse)
-import Data.Typeable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Traversable (Traversable, traverse)
-import Funsat.RPOCircuit (Co, CoRPO, WrapEval)
+import Data.Traversable (Traversable)
+import qualified Funsat.RPOCircuit.Symbols as Funsat
+import Funsat.RPOCircuit (Co, CoRPO, assertCircuits)
+import Funsat.RPOCircuit.Symbols (Natural(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), RPOSsymbol(..), RPOsymbol(..), mkSymbolDecoder)
 
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.Syntactic
 import Narradar.Constraints.SAT.MonadSAT
 import Narradar.Constraints.SAT.RPOAF.Symbols
 import Narradar.Framework
-import Narradar.Types.DPIdentifiers
+import Narradar.Types (DPSymbol)
 import Narradar.Types.Term
 import Narradar.Types.TRS
 import Narradar.Types.Problem
 import Narradar.Types.Problem.InitialGoal
 import Narradar.Types.Problem.NarrowingGen
+import qualified Narradar.Types as Narradar
 import Narradar.Utils
 
 import qualified Data.Term.Family as Family
-import qualified Funsat.ECircuit as ECircuit
-import qualified Narradar.Constraints.RPO as RPO
-import qualified Funsat.RPOCircuit as RPO
-import qualified Narradar.Types as Narradar
 import qualified Narradar.Types.ArgumentFiltering as AF
 import qualified Prelude as P
-import Prelude hiding (catch, lex, not, and, or, any, all, quot, (>))
+import Prelude hiding (lex, not, and, or, any, all, quot, (>))
 
 class SATSymbol sid where
-  mkSATSymbol :: (Decode v Bool v, Show id, Co repr v, MonadSAT repr v m) =>
-                 (id, Int, Bool) -> m (sid v id)
+  mkSATSymbol :: (v  ~ Family.Var sid
+                 ,id ~ Family.Id sid
+                 ,Decode v Bool, Show id, Co repr v, MonadSAT repr v m) =>
+                 (id, Int) -> m (sid, repr v)
 
-instance SATSymbol RPOSsymbol where mkSATSymbol = rpos
-instance SATSymbol RPOsymbol  where mkSATSymbol = rpo
-instance SATSymbol LPOSsymbol where mkSATSymbol = lpos
-instance SATSymbol LPOsymbol  where mkSATSymbol = lpo
-instance SATSymbol MPOsymbol  where mkSATSymbol = mpo
+instance SATSymbol (Usable(RPOSsymbol v id)) where mkSATSymbol = rpos
+instance SATSymbol (Usable(RPOsymbol  v id)) where mkSATSymbol = rpo
+instance SATSymbol (Usable(LPOSsymbol v id)) where mkSATSymbol = lpos
+instance SATSymbol (Usable(LPOsymbol  v id)) where mkSATSymbol = lpo
+instance SATSymbol (Usable(MPOsymbol  v id)) where mkSATSymbol = mpo
 
 -- | RPO + AF
 
 rpoAF :: (id ~ Family.Id trs
-         ,Ord id, Show id, Pretty id
+         ,id ~ Family.Id sid
+         ,v  ~ Family.Var sid
+         ,Rule (TermF id) tv ~ Family.Rule trs
+         ,TermF sid ~ Family.TermF repr
+         ,Eq tv
+         ,Ord sid, Show id, Pretty id
          ,HasSignature trs
-         ,HasRules trs, Rule (TermF id) v' ~ Family.Rule trs
+         ,HasRules trs
          ,SATSymbol sid
-         ,Pretty (sid v id)
-         ,HasStatus v (sid v id)
-         ,HasFiltering v (sid v id)
-         ,HasPrecedence v (sid v id)
-         ,RPOCircuit repr (Term (TermF(sid v id)) v'), CoRPO repr (Term (TermF(sid v id)) v') v
-         ,Decode v Bool v
+         ,Pretty sid
+         ,HasStatus sid
+         ,HasFiltering sid
+         ,HasPrecedence sid
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,Decode v Bool
          ,MonadReader r mr
-         ,MonadSAT repr v m) =>
-         Bool -> trs -> m( mr ((), r, [sid v id]))
+         ,MonadSAT repr v m
+         ,v ~ Var) =>
+         Bool -> trs -> m( mr ((), r, [sid]))
 rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
   let symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
   let problem = and [ l > r | l:->r <- symb_rules]
@@ -102,23 +104,29 @@ rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
 
 -- | Returns the indexes of non decreasing pairs and the symbols used
 rpoAF_DP ::
-         (trs  ~ NarradarTRS (TermF id) v'
-         ,trs' ~ NarradarTRS (TermF (sid v id)) v'
+         (trs  ~ NarradarTRS (TermF id) tv
+         ,trs' ~ NarradarTRS (TermF sid) tv
          ,id   ~ Family.Id trs
+         ,id   ~ Family.Id sid
+--         ,v    ~ Family.Var repr
+         ,v    ~ Family.Var sid
+--         ,v    ~ Family.Var v
+         ,TermF sid ~ Family.TermF repr
          ,Ord id, Show id
-         ,Ord v'
+         ,Ord tv
          ,MkDPProblem typ trs'
          ,SATSymbol sid
-         ,Ord (sid v id), Pretty (sid v id)
-         ,HasStatus v (sid v id)
-         ,HasFiltering v (sid v id)
-         ,HasPrecedence v (sid v id)
-         ,RPOCircuit repr (Term (TermF(sid v id)) v'), CoRPO repr (Term (TermF(sid v id)) v') v
-         ,UsableSymbol v (sid v id)
-         ,Decode v Bool v
-         ,MonadSAT repr v m) =>
+         ,Ord sid, Pretty sid
+         ,HasStatus sid
+         ,HasFiltering sid
+         ,HasPrecedence sid
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,UsableSymbol sid
+         ,Decode v Bool
+         ,MonadSAT repr v m
+         ,v ~ Var) =>
          Bool -> (Problem typ trs' -> repr v) -> Problem typ trs
-         -> m (EvalM v ([Int], BIEnv v, [sid v id]))
+         -> m (EvalM v ([Int], BIEnv v, [sid]))
 
 rpoAF_DP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
@@ -155,29 +163,38 @@ rpoAF_DP allowCol omega p
     let the_non_decreasing_pairs = [ r | (r,False) <- zip [(0::Int)..] decreasing]
     return the_non_decreasing_pairs
 
-rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid satSymbol repr m v' base extraConstraints.
+rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid satSymbol repr m tv v base extraConstraints.
          (initialgoal  ~ InitialGoal (TermF id) base
          ,initialgoal' ~ InitialGoal (TermF sid) base
-         ,problem  ~ NProblem initialgoal id
-         ,problem' ~ NProblem initialgoal' sid
-         ,sid  ~ satSymbol Var id
+         ,problem  ~ Problem initialgoal trs
+         ,problem' ~ Problem initialgoal' trs'
+         ,trs      ~ NarradarTRS (TermF id) tv
+         ,trs'     ~ NarradarTRS (TermF sid) tv
+         ,id       ~ Family.Id sid
+         ,v        ~ Family.Var sid
+         ,v        ~ Family.Var v
+         ,TermF sid~ Family.TermF repr
          ,Ord sid
          ,Ord id, Show id
+         ,Ord tv
          ,Traversable (Problem base), Pretty base
          ,MkDPProblem initialgoal' (NTRS sid)
          ,IsDPProblem base
-         ,SATSymbol satSymbol
-         ,HasStatus Var sid
-         ,HasFiltering Var sid
-         ,HasPrecedence Var sid
-         ,RPOExtCircuit repr (TermN sid), CoRPO repr (TermN sid) Var
-         ,UsableSymbol Var sid
-         ,Decode sid (SymbolRes id) Var
-         ,MonadSAT repr Var m) =>
+         ,SATSymbol sid
+         ,HasStatus sid
+         ,HasFiltering sid
+         ,HasPrecedence sid
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,UsableSymbol sid
+         ,MkDPProblem initialgoal' trs'
+--         ,Decode sid (SymbolRes id) v
+         ,MonadSAT repr v m
+         ,v ~ Var
+         ) =>
             Bool
-         -> (problem' -> (repr Var, EvalM Var extraConstraints))
+         -> (problem' -> (repr v, EvalM v extraConstraints))
          -> problem
-         -> m (EvalM Var ( ([Int], extraConstraints), BIEnv Var, [sid]))
+         -> m (EvalM v ( ([Int], extraConstraints), BIEnv v, [sid]))
 
 rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
   = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
@@ -191,7 +208,8 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
       p'   = mkDPProblem typ' trs' dps'
 
   let (omegaConstraint, extraConstraintsAdded) = omega p'
-  assertAll ( omegaConstraint : [ l >~ r | l:->r <- rules dps'])
+  assertAll [omegaConstraint]
+  assertAll [ l >~ r | l:->r <- rules dps']
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
@@ -238,28 +256,34 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
 --     CE.assert strictly $
 --     CE.assert weakly $
 
- where isTheRightKind :: InitialGoal (f id) base -> InitialGoal (f id) base
-       isTheRightKind = id
 
-
-rpoAF_NDP ::
-         (problem  ~ NProblem typ  id
-         ,problem' ~ NProblem typ  sid
-         ,sid  ~ satSymbol Var id
+rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
+         (problem  ~ Problem typ  trs
+         ,problem' ~ Problem typ  trs'
+         ,trs      ~ NarradarTRS (TermF id) tv
+         ,trs'     ~ NarradarTRS (TermF sid) tv
+         ,id       ~ Family.Id sid
+         ,v        ~ Family.Var sid
+         ,v        ~ Family.Var v
+         ,TermF sid~ Family.TermF repr
+         ,Ord tv
          ,Ord id, Show id, Pretty id
          ,Ord sid, Pretty sid
          ,MkDPProblem typ (NTRS sid)
-         ,SATSymbol satSymbol
-         ,HasStatus Var sid
-         ,HasFiltering Var sid
-         ,HasPrecedence Var sid
-         ,RPOCircuit repr (TermN sid), CoRPO repr (TermN sid) Var
-         ,UsableSymbol Var sid
-         ,MonadSAT repr Var m) =>
+         ,HasStatus sid
+         ,HasFiltering sid
+         ,HasPrecedence sid
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,UsableSymbol sid
+         ,SATSymbol sid
+         ,MkDPProblem typ trs'
+         ,Decode v Bool
+         ,MonadSAT repr v m
+         ,v ~ Var) =>
             Bool
-         -> (problem' -> repr Var)
+         -> (problem' -> repr v)
          -> problem
-         -> m (EvalM Var ( ([Int], [Int]), BIEnv Var, [sid]))
+         -> m (EvalM v ( ([Int], [Int]), BIEnv v, [sid]))
 rpoAF_NDP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
@@ -271,7 +295,7 @@ rpoAF_NDP allowCol omega p
   decreasing_dps <- replicateM (length $ rules dps') boolean
   assertAll [l > r <--> input dec | (l:->r, dec) <- rules dps' `zip` decreasing_dps]
 
-  let af_ground_rhs_dps :: forall repr. (Circuit repr, Co repr Var) => [repr Var]
+  let af_ground_rhs_dps :: forall repr. (Circuit repr, Co repr v) => [repr v]
       af_ground_rhs_dps = map afGroundRHS (rules dps')
 --      variable_cond     = and $ map variableCondition (rules dps')
 
@@ -291,7 +315,7 @@ rpoAF_NDP allowCol omega p
 
   return $ do
     decreasing <- decode decreasing_dps
-    af_ground  <- decode (af_ground_rhs_dps :: [Eval Var])
+    af_ground  <- decode (af_ground_rhs_dps :: [Eval v])
     return ([ r | (r,False) <- zip [(0::Int)..] decreasing]
            ,[ r | (r,False) <- zip [(0::Int)..] af_ground])
 
@@ -300,10 +324,10 @@ runRPOAF allowCol sig f = do
   let ids  = arities sig
       bits = calcBitWidth $ Map.size ids
 
-  symbols <- mapM mkSATSymbol
-                  [ (f, ar, def)
-                    | (f,ar) <-  Map.toList ids
-                    , let def = Map.member f (definedSymbols sig)]
+  (symbols, constraints) <- unzip <$> mapM mkSATSymbol (Map.toList ids)
+
+  assertAll constraints
+
   if allowCol
     then assertAll [not(listAF s) --> one [inAF i s | i <- [1..a]]
                     | (s,a) <- zip symbols (Map.elems ids)]
@@ -320,9 +344,8 @@ runRPOAF allowCol sig f = do
 -- Symbols set extensions
 -- ----------------------
 
-instance ( RPOCircuit repr (TermN(RPOSsymbol v a)), AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
-         , Ord a, Pretty a) =>
-    RPOExtCircuit repr (TermN(RPOSsymbol v a)) where
+instance ( RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr) =>
+    RPOExtCircuit repr (Usable (RPOSsymbol v a)) where
      exEq s t ss tt =
        and [useMul s, useMul t, muleq s t ss tt]
        \/
@@ -343,28 +366,29 @@ instance ( RPOCircuit repr (TermN(RPOSsymbol v a)), AssertCircuit repr, ExistCir
        \/
        and [not$ useMul s, not$ useMul t, lexpge_exist s t ss tt]
 -}
-instance (RPOCircuit repr (TermN(LPOSsymbol v a)), AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
+
+instance (RPOCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
          ,Ord a, Pretty a) =>
-  RPOExtCircuit repr (TermN(LPOSsymbol v a)) where
+  RPOExtCircuit repr (Usable(LPOSsymbol v a)) where
   exEq s t = lexpeq s t
   exGt s t = lexpgt_existA s t
 --  exGe = lexpge_exist
 
-instance (RPOCircuit repr (TermN(LPOsymbol v a)), AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
+instance (RPOCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
          ,Pretty a, Ord a) =>
-  RPOExtCircuit repr (TermN(LPOsymbol v a)) where
+  RPOExtCircuit repr (Usable(LPOsymbol v a)) where
   exEq s t = lexeq_existA s t
   exGt s t = lexgt_existA s t
 
-instance (RPOCircuit repr (TermN(MPOsymbol v a)), AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
+instance (RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          ,Pretty a, Ord a) =>
-  RPOExtCircuit repr (TermN(MPOsymbol v a)) where
+  RPOExtCircuit repr (Usable(MPOsymbol v a)) where
   exEq s t = muleq s t
   exGt s t = mulgt s t
 
-instance (RPOCircuit repr (TermN(RPOsymbol v a)), AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
+instance (RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          ,Pretty a, Ord a) =>
-  RPOExtCircuit repr (TermN(RPOsymbol v a)) where
+  RPOExtCircuit repr (Usable(RPOsymbol v a)) where
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]
       \/
@@ -434,7 +458,7 @@ lexgt_exist id_f id_g ff gg = (`runCont` id) $ do
 --          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
 --          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
 -- The proposition is true iff M[0,0] is true
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
                       , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
@@ -453,6 +477,27 @@ lexgt_exist id_f id_g ff gg = (`runCont` id) $ do
                          (f>g \/ (f~~g /\ m!!1!!1))
                          (m!!0!!1))
                     (m!!1!!0)
+
+
+lexgt_existA, lexpgt_existA, lexpge_existA, lexeq_existA ::
+  forall id termF tv v repr .
+                        (HasPrecedence id
+                        ,HasFiltering id
+                        ,HasStatus id
+                        ,HasId termF
+                        ,Foldable termF
+                        ,Eq(Term termF tv)
+                        ,id ~ Family.Id termF
+--                        ,id ~ Family.Id repr
+                        ,v  ~ Family.Var id
+                        ,termF ~ Family.TermF repr
+                        ,ECircuit repr
+                        ,ExistCircuit repr
+                        ,RPOCircuit repr
+                        ,AssertCircuit repr
+                        ,CoRPO repr termF tv v
+                        ) =>
+                        id -> id -> [Term termF tv] -> [Term termF tv] -> repr v
 lexgt_existA _    _    [] _  = false
 lexgt_existA id_f _    ff [] = or . map input . filtering_vv $ id_f
 lexgt_existA id_f id_g ff gg = (`runCont` id) $ do
@@ -466,17 +511,18 @@ lexgt_existA id_f id_g ff gg = (`runCont` id) $ do
 --          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
 --          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
 -- The proposition is true iff M[0,0] is true
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
                       , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
                                         `zip` tails (zip filters_g gg))]
 
-  return $ assertCircuits assertions (m!!0!!0)
+  return $ assertCircuits assertions (head $ head m)
  where
    filters_f = map input (filtering_vv id_f)
    filters_g = map input (filtering_vv id_g)
 
+   constraint :: [[repr v]] -> [(repr v,Term termF tv)] -> [(repr v,Term termF tv)] -> repr v
    constraint _ []     _      = false
    constraint _ ff      []    = or [ af_f | (af_f,_) <- ff]
    constraint m ((af_f,f):ff) ((af_g,g):gg)
@@ -490,7 +536,7 @@ lexeq_exist _    _    [] [] = true
 lexeq_exist id_f _    _  [] = not . or . map input . filtering_vv $ id_f
 lexeq_exist _    id_g [] _  = not . or . map input . filtering_vv $ id_g
 lexeq_exist id_f id_g ff gg = (`runCont` id) $ do
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
                       , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
@@ -511,21 +557,22 @@ lexeq_exist id_f id_g ff gg = (`runCont` id) $ do
                          (m!!0!!1))
                     (m!!1!!0)
 
-lexeq_existA _    _    [] [] = true
-lexeq_existA id_f _    _  [] = not . or . map input . filtering_vv $ id_f
-lexeq_existA _    id_g [] _  = not . or . map input . filtering_vv $ id_g
+--lexeq_existA _    _    [] [] = true
+--lexeq_existA id_f _    _  [] = not . or . map input . filtering_vv $ id_f
+--lexeq_existA _    id_g [] _  = not . or . map input . filtering_vv $ id_g
 lexeq_existA id_f id_g ff gg = (`runCont` id) $ do
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont exists)
+  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
   let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
                       | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
                       , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
                                         `zip` tails (zip filters_g gg)]
 
-  return ( assertCircuits assertions (m!!0!!0) )
+  return ( assertCircuits assertions (head $ head m) )
  where
    filters_f = map input (filtering_vv id_f)
    filters_g = map input (filtering_vv id_g)
 
+   constraint :: [[repr v]] -> [(repr v,Term termF tv)] -> [(repr v,Term termF tv)] -> repr v
    constraint _ []     []     = true
    constraint _ ff      []    = not $ or [ af_f | (af_f,_) <- ff]
    constraint _ []      gg    = not $ or [ af_g | (af_g,_) <- gg]
@@ -535,6 +582,17 @@ lexeq_existA id_f id_g ff gg = (`runCont` id) $ do
                          (f~~g /\ m!!1!!1)
                          (m!!0!!1))
                     (m!!1!!0)
+
+lexpeq, muleq,mulgt,mulge ::
+         ( var   ~ Family.Var id
+         , id    ~ Family.Id termF
+         , termF ~ Family.TermF repr
+         , HasId termF, Foldable termF
+         , HasFiltering id, HasStatus id, HasPrecedence id
+         , Eq (Term termF tvar), Eq id
+         , RPOCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
+         , CoRPO repr termF tvar var
+         ) => id -> id -> [Term termF tvar] -> [Term termF tvar] -> repr var
 
 
 --lexpeq :: (ECircuit repr, RPOCircuit repr (Symbol a)) =>
@@ -571,7 +629,7 @@ lexpgt id_f id_g ss tt = expgt_k (transpose $ enc_f) (transpose $ enc_g)
 lexpgt_exist id_f id_g [] _  = false
 lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (cont exists)
+  vf_k <- replicateM k (cont existsBool)
   let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
                     [the_tail]
       the_tail = if length ss P.> length tt
@@ -593,7 +651,7 @@ lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
 lexpgt_existA id_f id_g [] _  = false
 lexpgt_existA id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (cont exists)
+  vf_k <- replicateM k (cont existsBool)
   let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
                     [the_tail]
       the_tail = if length ss P.> length tt
@@ -614,7 +672,7 @@ lexpgt_existA id_f id_g ss tt = (`runCont` id) $ do
 
 lexpge_existA id_f id_g ss tt = (`runCont` id) $ do
   let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (cont exists)
+  vf_k <- replicateM k (cont existsBool)
   let constraints = zipWith3 expge_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
                     [the_tail]
       the_tail = if length ss P.> length tt
@@ -660,11 +718,19 @@ muleq id_f id_g ff gg =
                                       | (i, ep_i) <- zip [1..] epsilons])
 
 
+mulgen:: ( var   ~ Family.Var id
+         , id    ~ Family.Id termF
+         , termF ~ Family.TermF repr
+         , HasFiltering id, HasStatus id, HasPrecedence id
+         , HasId termF, Foldable termF, Eq (Term termF tvar), Eq id
+         , RPOCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
+         , CoRPO repr termF tvar var
+         ) => id -> id -> [Term termF tvar] -> [Term termF tvar] -> ([repr var] -> repr var) ->  repr var
 mulgen id_f id_g ff gg k = (`runCont` id) $ do
     let (i,j)    = (length ff, length gg)
 
-    epsilons  <- replicateM i (cont exists)
-    gammasM_t <- replicateM i $ replicateM j (cont exists)
+    epsilons  <- replicateM i (cont existsBool)
+    gammasM_t <- replicateM i $ replicateM j (cont existsBool)
     let gammasM = transpose gammasM_t
 
         oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms =
@@ -811,36 +877,36 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
 omegaIGgen :: forall problem initialgoal id base repr v.
               (problem ~ NProblem initialgoal id
               ,initialgoal ~ InitialGoal (TermF id) base
+              ,Var ~ Family.Var id
               ,Traversable (Problem base), MkDPProblem base (NTRS id), HasMinimality base
               ,NCap base id
               ,NUsableRules base id
               ,NNeededRules base id
               ,Pretty base
               ,Ord id, Pretty id, Show id, Hashable id, DPSymbol id, GenSymbol id
-              ,HasStatus Var id
-              ,HasFiltering Var id
-              ,HasPrecedence Var id
-              ,UsableSymbol Var id
-              ,RPOCircuit repr (TermN id), CoRPO repr (TermN id) Var
-              ,ECircuit repr
-              ) => problem  -> (repr Var, EvalM Var [Tree (TermN id) Var])
+              ,HasStatus id
+              ,HasFiltering id
+              ,HasPrecedence id
+              ,UsableSymbol id
+              ) => problem -> (Tree (TermN id) Var, EvalM Var [Tree (TermN id) Var])
 omegaIGgen p
   | isLeftLinear (getR p) = pprTrace ("omegaIGgen: partial = " <+> partial)
                             omegaIG p
   | (omegaConstraint,extra1) <- omegaIG p
   = (omegaConstraint /\ (iusable gen --> and extraConstraints)
     ,do { e1 <- extra1;
-          b  <- decode (iusable gen :: Eval Var);
+          b  <- decode (isEval $ iusable gen);
           return $
-           if b then (e1 ++ map isTree extraConstraints)
+           if b then (e1 ++ extraConstraints)
                 else []
         })
  where
    isTree = id :: forall term var. Tree term var -> Tree term var
+   isEval = id :: forall var. Eval var -> Eval var
    Just gen = find isGenSymbol (toList $ getDefinedSymbols p)
-   genTerm :: Term (TermF id) Narradar.Var
+--   genTerm :: Term (TermF id) Narradar.Var
    genTerm = term gen []
-   extraConstraints :: forall repr. (RPOCircuit repr (TermN id), CoRPO repr (TermN id) Var) => [repr Var]
+--   extraConstraints :: forall repr. (RPOExtCircuit repr id, CoRPO repr (TermF id) Var) => [repr Var]
    extraConstraints = [ genTerm > term f (replicate i genTerm) | (f,i) <- Map.toList partial]
    partial = definedSymbols (getSignature p)
              `Map.difference`
@@ -850,44 +916,31 @@ omegaIGgen p
                           , isLinear l && P.all isVar (properSubterms l)
                           , let arity = length (properSubterms l)]
 
-rulesFor :: (HasId t, Id1 t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
+rulesFor :: (HasId t, Family.Id t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
-
--- --------------------------------------
--- Support for Goal-problems identifiers
--- --------------------------------------
-
-instance (Show a, GenSymbol a) => GenSymbol (RPOSsymbol Var a) where
-    genSymbol = Symbol{ theSymbol    = genSymbol
-                      , encodePrec   = V 10
-                      , encodeUsable = V 11
-                      , encodeAFlist = V 12
-                      , encodeAFpos  = []
-                      , encodePerm   = []
-                      , encodeUseMset= V 13
-                      , decodeSymbol = mkSymbolDecoder genSymbol (Natural $ V 10) (V 11) (V 12) [] [] (V 13)
-                      }
-    goalSymbol = Symbol{ theSymbol    = genSymbol
-                       , encodePrec   = error "RPOAF.Symbol : goalSymbol"
-                       , encodeUsable = error "RPOAF.Symbol : goalSymbol"
-                       , encodeAFlist = error "RPOAF.Symbol : goalSymbol"
-                       , encodeAFpos  = error "RPOAF.Symbol : goalSymbol"
-                       , encodePerm   = []
-                       , encodeUseMset= error "RPOAF.Symbol : goalSymbol"
-                       , decodeSymbol = return (SymbolRes goalSymbol 0 False (Lex Nothing) (Right []))
-                       }
-    isGenSymbol  = isGenSymbol  . theSymbol
-    isGoalSymbol = isGoalSymbol . theSymbol
-
-deriving instance (Show a, GenSymbol a) => GenSymbol (LPOsymbol  Var a)
-deriving instance (Show a, GenSymbol a) => GenSymbol (LPOSsymbol Var a)
-deriving instance (Show a, GenSymbol a) => GenSymbol (MPOsymbol  Var a)
-deriving instance (Show a, GenSymbol a) => GenSymbol (RPOsymbol  Var a)
 
 -- --------
 -- Testing
 -- --------
 
+verifyRPOAF :: ( rule ~ RuleF term
+               , term ~ Term (TermF id) var
+               , rule ~ Family.Rule trs
+               , id   ~ Family.Id trs
+               , var  ~ Family.Var trs
+               , var  ~ Family.Var id
+               , var  ~ Family.Var var
+               , TermF id ~ Family.TermF trs
+--               , Narradar.Var ~ var
+               , Enum var, Ord var, GetVars var, Hashable var, Show var, Rename var
+               , Decode var Bool
+               , AF.ApplyAF term
+               , HasRules trs, HasSignature trs, AF.ApplyAF trs, GetVars trs
+               , Ord id, UsableSymbol id, Pretty id, Show id
+               , HasPrecedence id, HasStatus id, HasFiltering id
+               , IUsableRules typ trs
+               ) =>
+               typ -> trs -> trs -> [Int] -> EvalM var (VerifyRPOAF rule)
 verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
 
   theAf <- AF.fromList' `liftM` mapM getFiltering (toList $ getAllSymbols signature)

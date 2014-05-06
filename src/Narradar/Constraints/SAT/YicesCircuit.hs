@@ -18,24 +18,19 @@ module Narradar.Constraints.SAT.YicesCircuit
    ,generateDeclarations, solveDeclarations
    ) where
 
-import           Control.Applicative
-import           Control.Arrow                       (first, second)
-import Control.Exception as CE (assert)
+import           Control.Exception as CE             (catch, SomeException)
 import           Control.Monad.Reader
-import           Control.Monad.State.Strict          hiding ((>=>), forM_)
-import           Data.Foldable                       (Foldable, foldMap)
-import           Data.List                           ( nub, foldl', sortBy, (\\))
-import           Data.Map                            ( Map )
-import           Data.Maybe                          ( fromJust )
+import           Control.Monad.State.Lazy            hiding ((>=>), forM_)
+import           Data.Foldable                       (toList)
+import           Data.List                           (sortBy)
 import           Data.Hashable
 import           Data.Monoid
+import           Data.Sequence                       ( Seq, (<|) )
 import           Data.Set                            ( Set )
-import           Data.Traversable                    (Traversable, traverse)
-import           Math.SMT.Yices.Parser
 import           Math.SMT.Yices.Syntax
 import           Math.SMT.Yices.Pipe
 import           Narradar.Types.Term
-import           Narradar.Utils                      (debug, on, withTempFile, readProcessWithExitCodeBS)
+import           Narradar.Utils                      (on)
 import           Text.PrettyPrint.HughesPJClass
 import           System.IO
 import Prelude hiding( not, and, or, (>) )
@@ -43,17 +38,12 @@ import Prelude hiding( not, and, or, (>) )
 import qualified Data.HashMap                        as HashMap
 import qualified Data.Set                            as Set
 import qualified Data.Map                            as Map
-import qualified Funsat.Circuit                      as Circuit
-import qualified Funsat.ECircuit                     as ECircuit
-import qualified Funsat.RPOCircuit                   as RPOCircuit
 import qualified Narradar.Types                      as Narradar
-import qualified Prelude                             as Prelude
 import qualified Data.Term.Family                    as Family
 
 import           Funsat.ECircuit                     (Circuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
-import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..)
-                                                     , HasPrecedence(..), HasFiltering(..), HasStatus(..)
+import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), AssertCircuit(..)
                                                      , oneExist, termGt_, termGe_, termEq_)
 
 deriving instance Eq  ExpY
@@ -65,31 +55,36 @@ type k :->: v = HashMap.HashMap k v
 
 newtype YicesSource id var = YicesSource { unYicesSource :: State (YMaps id var) ExpY}
 
-type instance Family.Id1 (YicesSource id) = id
+type instance Family.TermF (YicesSource id) = TermF id
+type instance Family.Id (YicesSource id)    = id
+type instance Family.Var (YicesSource id)   = Narradar.Var
 
 newtype YVar = YV Int deriving (Enum, Eq, Ord)
 
 instance Show YVar where show (YV i) = 'y' : 'v' : show i
 instance Pretty YVar where pPrint = text . show
-instance Hashable YVar where hash (YV i) = i
+instance Hashable YVar where hashWithSalt s (YV i) = hashWithSalt s i
 
 data YMaps id var = YMaps
     { internal  :: !([YVar])
     , variables :: !(Set (var, TypY))
+    , assertions :: !(Seq ExpY)
     , termGtMap :: !((TermN id, TermN id) :->: (YVar, ExpY))
     , termGeMap :: !((TermN id, TermN id) :->: (YVar, ExpY))
     , termEqMap :: !((TermN id, TermN id) :->: (YVar, ExpY))
     }
   deriving Show
 
-emptyYMaps = YMaps [YV 2..] mempty mempty mempty mempty
+emptyYMaps = YMaps [YV 2..] mempty mempty mempty mempty mempty
 
 solveYices :: (Hashable id, Ord id, Read var, Ord var, Show var) => YicesSource id var -> IO (Maybe (BIEnv var))
 solveYices = solveDeclarations Nothing . runYices
 
 runYices :: (Hashable id, Ord id, Ord var, Show var) => YicesSource id var -> [CmdY]
 runYices y = let (me,stY) = runYices' emptyYMaps y
-             in generateDeclarations stY ++ [ASSERT me]
+             in generateDeclarations stY ++
+                [ ASSERT x | x <- me : toList(assertions stY)]
+
 
 runYices' stY (YicesSource y) = runState y stY
 
@@ -112,7 +107,7 @@ solveDeclarations mb_timeout cmds = do
   let opts = maybe [] (\tm -> ["-tm", show tm]) mb_timeout
 --  debug (unlines $ map show cmds)
   res <- quickCheckY' "yices" opts (cmds ++ [MAXSAT])
-         `catch` \e -> error ("An error ocurred calling Yices: " ++ show e)
+         `catch` \(e :: SomeException) -> error ("An error ocurred calling Yices: " ++ show e)
   case res of
     Sat values -> do
 --       debug (show values)
@@ -188,15 +183,24 @@ instance OneCircuit (YicesSource id) where
   one = oneExist
 
 instance ExistCircuit (YicesSource id) where
-  exists f = YicesSource $ do
+  existsBool f = YicesSource $ do
               v   <- freshV
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "bool")] exp
+  existsNat  f = YicesSource $ do
+              v   <- freshV
+              exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
+              return $ EXISTS [(show v, VarT "nat")] exp
 
-instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) (TermN id)) =>
-   RPOCircuit (YicesSource id) (TermN id) where
- type CoRPO_ (YicesSource id) (TermN id) v =
-    (HasPrecedence v id, HasFiltering v id, HasStatus v id)
+instance AssertCircuit (YicesSource id) where
+  assertCircuit this then_ = YicesSource $ do
+      exp <- unYicesSource this
+      modify $ \env -> env{ assertions = exp <| assertions env }
+      unYicesSource then_
+
+instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id) =>
+   RPOCircuit (YicesSource id) where
+ type CoRPO_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = YicesSource $ do
       env <- get

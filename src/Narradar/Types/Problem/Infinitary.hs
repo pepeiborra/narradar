@@ -126,7 +126,7 @@ instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
 
 instance (v ~ Family.Var trs
          ,id ~ Family.Id trs
-         ,id ~ Family.Id1 t
+         ,id ~ Family.Id t
          ,t ~ Family.TermF trs
          ,Rule t v ~ Family.Rule trs
          ,Enum v, Ord v

@@ -17,7 +17,7 @@ module Narradar.Constraints.SAT.MonadSAT
     , Status(..), mkStatus
     , Circuit, ECircuit, NatCircuit, OneCircuit, RPOCircuit
     , RPOExtCircuit(..), ExistCircuit(..)
-    , AssertCircuit(..), assertCircuits
+    , AssertCircuit(..) -- , assertCircuits
     , castCircuit, Clause
     , Tree, printTree, mapTreeTerms
     , Eval, evalB, evalN, BIEnv, EvalM
@@ -32,19 +32,27 @@ import           Control.Arrow                       (first,second)
 import           Control.Monad.Reader                (MonadReader(..),liftM)
 import           Data.Hashable
 import           Data.List                           (foldl')
-import           Funsat.ECircuit                     (BEnv, BIEnv, Eval, EvalF(..), runEval)
-import           Funsat.Types                        (Clause,Solution(..))
+import           Data.Term                           (Term, HasId)
+import qualified Data.Term                           as Family
 import           Prelude                             hiding (and, not, or, any, all, lex, (>))
 
 import           Narradar.Utils
 import           Narradar.Framework.Ppr              as Ppr
 import           Narradar.Constraints.RPO            (Status(..), mkStatus)
-import           Funsat.RPOCircuit                   hiding (and,or, nat)
 
+import           Funsat.ECircuit                     (BEnv, BIEnv, Eval, EvalF(..), runEval)
+import           Funsat.Types                        (Clause,Solution(..))
+import           Funsat.ECircuit                     (Co, Circuit(true,false,input,not,andL,orL), ECircuit(..), NatCircuit(..), ExistCircuit(..), castCircuit)
+import qualified Funsat.ECircuit                     as Funsat
+import           Funsat.RPOCircuit
+import           Funsat.RPOCircuit.Internal
+import           Funsat.RPOCircuit.Symbols           (Natural(..))
 import qualified Funsat.ECircuit                     as ECircuit
 import qualified Funsat.Types                        as Funsat
 import qualified Funsat.RPOCircuit                   as Funsat
+
 import qualified Prelude                             as P
+import Data.Foldable (Foldable)
 
 -- --------
 -- MonadSAT
@@ -66,16 +74,12 @@ instance Read Var where
   readsPrec p ('v':rest) = [(V i, rest) | (i,rest) <- readsPrec 0 rest]
   readsPrec _ _ = []
 instance Bounded Var where minBound = V 0; maxBound = V maxBound
-instance Hashable Var where hash (V i) = i
-
-newtype Natural v = Natural {encodeNatural::v} deriving (Eq,Ord,Show)
+instance Hashable Var where hashWithSalt s (V i) = hashWithSalt s i
 
 lit (V i) = Funsat.L i
 
 instance Pretty Var where pPrint (V i) = text "v" <> i
-
-nat :: (Co repr v) => NatCircuit repr => Natural v -> repr v
-nat (Natural n) = ECircuit.nat n
+type instance Family.Var Var = Var
 
 type Weight = Int
 
@@ -83,45 +87,28 @@ type Weight = Int
 -- Interpreting booleans
 -- ---------------------
 newtype Flip t a b = Flip {unFlip::t b a}
-type EvalM = Flip EvalF
-
-runEvalM :: BIEnv e -> EvalM e a -> a
-runEvalM env = flip unEval env . unFlip
-
-instance Functor (EvalM v) where fmap f (Flip (Eval m)) = Flip $ Eval $ \env -> f(m env)
-instance Monad (EvalM v) where
-  return x = Flip $ Eval $ \_ -> x
-  m >>= f  = Flip $ Eval $ \env -> runEvalM env $ f $ runEvalM env m
-
-instance MonadReader (BIEnv v) (EvalM v) where
-  ask       = Flip $ Eval $ \env -> env
-  local f m = Flip $ Eval $ \env -> runEvalM (f env) m
-
-evalB :: Eval v -> EvalM v Bool
-evalN :: Eval v -> EvalM v Int
-evalB c = liftM (fromRight :: Either Int Bool -> Bool) (eval c)
-evalN c = liftM (fromLeft  :: Either Int Bool -> Int)  (eval c)
-eval  c = do {env <- ask; return (runEval env c)}
 
 --type Precedence = [Integer]
 
-class Decode a b var | a b -> var where decode :: a -> EvalM var b
+class Decode a b where decode :: a -> EvalM (Family.Var a) b
 
-instance Decode (Eval var) Bool var where decode = evalB
-instance Decode (Eval var) Int var  where decode = evalN
+instance Decode (Eval var) Bool where decode = evalB
+instance Decode (Eval var) Int  where decode = evalN
 --instance (Ord var, Show var, CastCircuit repr Eval) => Decode (repr var) Int var where decode = decode . (castCircuit :: repr var -> Eval var)
-instance Decode a b var => Decode [a] [b] var where decode = mapM decode
-instance (Decode a a' var, Decode b b' var ) => Decode (a, b) (a',b') var where
-  decode (a, b) = do {va <- decode a; vb <- decode b; return (va,vb)}
+instance Decode a b => Decode [a] [b] where decode = mapM decode
+--instance (Decode a a', Decode b b', Family.Var a ~ Family.Var b) => Decode (a, b) (a',b') where
+--  decode (a, b) = do {va <- decode a; vb <- decode b; return (va,vb)}
 
 --instance Decode var Bool var where decode = evalB . input
-instance Decode Var Bool Var where decode = evalB . input
-instance Decode Var Int Var  where decode = evalN . input
-instance (Ord v, Hashable v, Show v) => Decode (Natural v) Int v where decode = evalN . nat
+instance Decode Var Bool where decode = evalB . input
+instance Decode Var Int  where decode = evalN . input
+instance (Ord v, Show v) => Decode (Natural v) Int where decode = evalN . nat
 
-evalDecode :: (Ord var, Hashable var, Show var, Decode (Eval var) b var) => Eval var -> EvalM var b
-evalDecode x = decode x
+evalDecode :: (Ord var, Hashable var, Show var, Decode (Eval var) b) => WrapEval (Term termF var) var -> EvalM var b
+evalDecode = decode . unwrapEval
 
+type instance Family.Var (Eval var) = var
+type instance Family.Var (Natural v) = Natural v
 -- ------------
 -- Combinators
 -- ------------
@@ -140,6 +127,15 @@ infix 6 <-->
 constant True  = true
 constant False = false
 
+(>), (>~), (~~) ::
+        ( id    ~ Family.Id termF
+        , v     ~ Family.Var id
+        , termF ~ Family.TermF repr
+        , CoRPO repr termF tv v, RPOCircuit repr
+        , HasFiltering id, HasStatus id, HasPrecedence id
+        , HasId termF, Foldable termF
+        , Eq (Term termF tv)
+        ) => Term termF tv -> Term termF tv -> repr v
 (>)  = Funsat.termGt
 (~~) = Funsat.termEq
 (>~) = Funsat.termGe

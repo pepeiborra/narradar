@@ -72,7 +72,7 @@ instance ( trs ~ NarradarTRS t Var
 
 
 instance ( t ~ f (DPIdentifier id0), MapId f
-         , Id1 t ~ DPIdentifier id0, Ord id0
+         , Family.Id t ~ DPIdentifier id0, Ord id0
          , trs ~ NarradarTRS t Var
          , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
          , IsDPProblem typ0

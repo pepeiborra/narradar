@@ -89,7 +89,9 @@ type k :->: v = Trie.HashMap k v
 
 newtype YicesSource id var = YicesSource { unYicesSource :: RWST Context () (YMaps id var) IO Expr}
 
-type instance Family.Id1 (YicesSource id) = id
+type instance Family.Id    (YicesSource id) = id
+type instance Family.TermF (YicesSource id) = TermF id
+type instance Family.Var   (YicesSource id) = Narradar.Var
 
 data VarType = Bool | Nat deriving (Eq, Ord, Show)
 
@@ -103,7 +105,7 @@ data YMaps id var = YMaps
 
 emptyYMaps = YMaps Bimap.empty mempty mempty mempty
 
-runYicesSource  ctx stY (YicesSource y) = do
+runYicesSource ctx stY (YicesSource y) = do
   (a, stY',()) <- runRWST y ctx stY
   return (a,stY')
 
@@ -217,11 +219,16 @@ instance OneCircuit (YicesSource id) where
 -}
 
 instance ExistCircuit (YicesSource id) where
-  exists f = YicesSource $ do
+  existsBool f = YicesSource $ do
       ctx <- ask
       v   <- liftIO $ mkFreshBoolVar ctx
       unYicesSource $ f (YicesSource $ return v)
-
+{-
+  existsNat f = YicesSource $ do
+      ctx <- ask
+      v   <- liftIO $ mkFreshNatVar ctx
+      unYicesSource $ f (YicesSource $ return v)
+-}
 instance AssertCircuit (YicesSource id) where
   assertCircuit assC c = YicesSource $ do
       ctx <- ask
@@ -229,10 +236,10 @@ instance AssertCircuit (YicesSource id) where
       liftIO $ Yices.assert ctx ass
       unYicesSource c
 
-instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) (TermN id)) =>
-    RPOCircuit (YicesSource id) (TermN id) where
- type CoRPO_ (YicesSource id) (TermN id) v =
-    ( HasStatus v id, HasPrecedence v id, HasFiltering v id)
+instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id
+         ) =>
+    RPOCircuit (YicesSource id) where
+ type CoRPO_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = YicesSource $ do
       env <- gets termGtMap

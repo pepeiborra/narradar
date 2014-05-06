@@ -69,8 +69,8 @@ data TermF id f = Term id [f] deriving (Eq,Ord,Show)
 type TermN id = Term (TermF id) Var
 type RuleN id = RuleF(TermN id)
 
-type instance Family.Id1 (TermF id) = id
-type instance Family.Id (Term   f v) = Family.Id1 f
+type instance Family.Id (TermF id) = id
+type instance Family.Id (Term f v) = Family.Id f
 type instance Family.TermF (TermF id f) = TermF id
 
 term :: id -> [Term (TermF id) a] -> Term (TermF id) a
@@ -181,12 +181,13 @@ instance Pretty a => Pretty (TermF String a) where
 -- Hashing
 -- -------
 instance (Hashable id, Hashable a) => Hashable (TermF id a) where
-  hash (Term id tt) = Prelude.foldr combine (hash id) (map hash tt)
+  hashWithSalt s (Term id tt) =
+    Prelude.foldr (hashWithSalt) (hashWithSalt s id) (map (hashWithSalt s) tt)
 
 instance (Functor f, Hashable a, Hashable (f Int)) => Hashable (Free f a) where
-  hash = foldFree hash hash
+  hashWithSalt s = foldFree (hashWithSalt s) (hashWithSalt s)
 
-instance Hashable a => Hashable (ArityId a) where hash (ArityId id a)  = combine a (hash id)
+instance Hashable a => Hashable (ArityId a) where hashWithSalt s (ArityId id a)  = hashWithSalt a (hashWithSalt s id)
 
 -- ----------------
 -- NFData instances

@@ -88,12 +88,12 @@ pair2|_____|_____|
 data NarradarTRSF a where
     TRS       :: (HasId t, Ord (Term t v)) =>
                  { rulesS :: Set (Rule t v)
-                 , sig    :: Signature (Family.Id1 t)
+                 , sig    :: Signature (Family.Id t)
                  } -> NarradarTRSF (Rule t v)
 
-    PrologTRS :: (HasId t, RemovePrologId (Family.Id1 t), Ord (Term t v)) =>
-                 { rulesByClause :: Map (WithoutPrologId (Family.Id1 t)) (Set (Rule t v))
-                 , sig           :: Signature (Family.Id1 t)
+    PrologTRS :: (HasId t, RemovePrologId (Family.Id t), Ord (Term t v)) =>
+                 { rulesByClause :: Map (WithoutPrologId (Family.Id t)) (Set (Rule t v))
+                 , sig           :: Signature (Family.Id t)
                  } -> NarradarTRSF (Rule t v)
 
     DPTRS     :: (HasId t, Ord (Term t v)) =>
@@ -101,11 +101,11 @@ data NarradarTRSF a where
                  , rulesUsed :: NarradarTRSF (Rule t v)
                  , depGraph  :: Graph
                  , unifiers  :: (Unifiers t v :!: Unifiers t v)
-                 , sig       :: Signature (Family.Id1 t)
+                 , sig       :: Signature (Family.Id t)
                  } -> NarradarTRSF (Rule t v)
 
       -- | Used in very few places instead of TRS, when the order of the rules is important
-    ListTRS :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (Family.Id1 t) -> NarradarTRSF (Rule t v)
+    ListTRS :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (Family.Id t) -> NarradarTRSF (Rule t v)
 
 type instance Family.Id     (NarradarTRSF a) = Family.Id a
 type instance Family.Rule   (NarradarTRSF a) = Family.Rule a
@@ -155,7 +155,7 @@ instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
     pPrint trs@PrologTRS{} = vcat $ map pPrint $ rules trs
     pPrint (ListTRS  rr _) = vcat $ map pPrint rr
 
-instance (NFData (t(Term t v)), NFData (Family.Id1 t), NFData v) => NFData (NarradarTRS t v) where
+instance (NFData (t(Term t v)), NFData (Family.Id t), NFData v) => NFData (NarradarTRS t v) where
     rnf (TRS rr sig) = rnf rr `seq` rnf sig `seq` ()
     rnf (DPTRS dps rr g unif sig) = rnf dps `seq` rnf rr `seq` rnf sig `seq` rnf unif `seq` rnf sig
 --    rnf (PrologTRS rr sig)    = rnf rr
@@ -193,7 +193,7 @@ instance HasRules (NarradarTRS t v) where
   rules(DPTRS     rr _ _ _ _) = elems rr
   rules(ListTRS   rr _)       = rr
 
-instance Ord (Family.Id1 t) => HasSignature (NarradarTRS t v) where
+instance Ord (Family.Id t) => HasSignature (NarradarTRS t v) where
     getSignature (TRS           _ sig) = sig
     getSignature (PrologTRS     _ sig) = sig
     getSignature (DPTRS   _ _ _ _ sig) = sig
@@ -253,19 +253,19 @@ mkTRS = tRS
 
 tRS' rr sig  = TRS (Set.fromList rr) sig
 
-prologTRS ::  (Ord (Term t v), RemovePrologId (Family.Id1 t), Foldable t, HasId t) =>
-              [(WithoutPrologId (Family.Id1 t), Rule t v)] -> NarradarTRS t v
+prologTRS ::  (Ord (Term t v), RemovePrologId (Family.Id t), Foldable t, HasId t) =>
+              [(WithoutPrologId (Family.Id t), Rule t v)] -> NarradarTRS t v
 prologTRS rr = prologTRS' (Map.fromListWith mappend $ map (second Set.singleton) rr)
 
-prologTRS' :: (Ord (Term t v), RemovePrologId (Family.Id1 t), Foldable t, HasId t) =>
-              Map (WithoutPrologId (Family.Id1 t)) (Set(Rule t v)) -> NarradarTRS t v
+prologTRS' :: (Ord (Term t v), RemovePrologId (Family.Id t), Foldable t, HasId t) =>
+              Map (WithoutPrologId (Family.Id t)) (Set(Rule t v)) -> NarradarTRS t v
 prologTRS' rr = PrologTRS rr (getSignature rr)
 
 narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 
 
 -- | Assumes that the rules have already been renamed apart
-dpTRS :: ( Family.Id trs ~ Family.Id1 t
+dpTRS :: ( Family.Id trs ~ Family.Id t
          , trs ~ NarradarTRS t v
          , Rule t v ~ Family.Rule trs
          , Ord (Term t v), HasId t, Unify t
@@ -360,7 +360,7 @@ computeDPUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
                      , t ~ Family.TermF trs
-                     , v ~ VarM m
+                     , v ~ Family.Var m
                      , v ~ Family.Var trs
                      , Rule t v ~ Family.Rule trs
                      , Ord v, Unify t
@@ -384,7 +384,7 @@ computeDirectUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
                      , t ~ Family.TermF trs
-                     , v ~ VarM m
+                     , v ~ Family.Var m
                      , v ~ Family.Var trs
                      , Rule t v ~ Family.Rule trs
                      , Ord v, Unify t
@@ -409,7 +409,7 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
 computeInverseUnifiers :: forall unif typ trs t v term m.
                      ( unif ~ Unifiers t v
                      , term ~ Term t v
-                     , v ~ VarM m
+                     , v ~ Family.Var m
                      , v ~ Family.Var trs
                      , t ~ Family.TermF trs
                      , Rule t v ~ Family.Rule trs

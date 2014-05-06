@@ -12,7 +12,7 @@ module Narradar.Interface.Cli
         ) where
 
 import Control.Concurrent
-import Control.Exception (evaluate)
+import Control.Exception (evaluate, SomeException, catch)
 import qualified Control.Exception as CE
 import Control.Monad.Free
 import Data.Foldable (Foldable)
@@ -238,11 +238,11 @@ setVerbosity Nothing opts@Options{..} = P.return opts{verbose=1}
 
 setVerbosity (Just "2") opts@Options{..}
     = do {P.return opts{verbose=2, pdfFile = pdfFile `mplus` Just (problemFile <.> "pdf")}}
-         `catch` (\e -> error "cannot parse the verbosity level")
+         `CE.catch` (\(e :: SomeException) -> error "cannot parse the verbosity level")
 
 setVerbosity (Just i) opts@Options{..}
     = do {i <- readIO i; P.return opts{verbose=i}}
-         `catch` (\e -> error "cannot parse the verbosity level")
+         `CE.catch` (\(e :: SomeException) -> error "cannot parse the verbosity level")
 
 setPdfPath Nothing  opts = P.return opts{ pdfFile = Just (problemFile opts <.> "pdf") }
 setPdfPath (Just f) opts = P.return opts{ pdfFile = Just f }

@@ -1,4 +1,5 @@
 
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -10,9 +11,10 @@
 module ICLP08 where
 
 import Control.Monad
+import Data.Maybe
 import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
-import Narradar hiding (heuristic)
+import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
@@ -20,6 +22,16 @@ import Narradar.Processor.LOPSTR09
 import Narradar.Processor.NarrowingProblem
 import Narradar.Framework.GraphViz
 import Lattice
+
+#ifndef WEB
+import Narradar.Interface.Cli
+main = narradarMain listToMaybe
+#else
+import Narradar.Interface.Cgi
+main = narradarCgi listToMaybe
+#endif
+
+
 
 -- Missing dispatcher cases
 instance (IsProblem typ, Pretty typ) => Dispatch (Problem typ trs) where
@@ -36,7 +48,7 @@ instance Dispatch PrologProblem where
 instance () => Dispatch (NProblem Rewriting Id) where
   dispatch = sc >=> rpoPlusTransforms >=> final
 
-instance (id ~ DPIdentifier a, Pretty id, HasTrie a, Ord a) => Dispatch (NProblem IRewriting id) where
+instance (id ~ DPIdentifier a, Pretty id, Hashable a, Ord a) => Dispatch (NProblem IRewriting id) where
   dispatch = sc >=> rpoPlusTransformsPar >=> final
 
 -- Narrowing
@@ -57,11 +69,11 @@ sc = dg >=> try SubtermCriterion
 rpoPlusTransforms
    = repeatSolver 5 ((lpo .|. rpos .|. graphTransform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  None SMTFFI)
-    mpo  = apply (RPOProc MPOAF  None SMTFFI)
-    lpos = apply (RPOProc LPOSAF None SMTFFI)
-    rpo  = apply (RPOProc RPOAF  None SMTFFI)
-    rpos = apply (RPOProc RPOSAF None SMTFFI)
+    lpo  = apply (RPOProc LPOAF  None SMTSerial)
+    mpo  = apply (RPOProc MPOAF  None SMTSerial)
+    lpos = apply (RPOProc LPOSAF None SMTSerial)
+    rpo  = apply (RPOProc RPOAF  None SMTSerial)
+    rpos = apply (RPOProc RPOSAF None SMTSerial)
 
 
 rpoPlusTransformsPar = parallelize f where

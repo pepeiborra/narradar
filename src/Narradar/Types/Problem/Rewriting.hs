@@ -172,7 +172,7 @@ instance (v ~ Family.Var trs
          ,Rule t v ~ Family.Rule trs
          ,Pretty v, Ord v
          ,HasRules trs, GetVars trs, Pretty (t(Term t v))
-         ,HasId t, Pretty (Id1 t), Functor t, Foldable t
+         ,HasId t, Pretty (Id t), Functor t, Foldable t
          ) => PprTPDB (Problem (MkRewriting st) trs) where
   pprTPDB prob@(RewritingProblem r p st m) = vcat
      [parens( text "VAR" <+> (hsep $ map pPrint $ toList $ getVars prob))

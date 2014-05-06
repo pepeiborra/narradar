@@ -1141,7 +1141,7 @@ prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0
 newtype PrologM id v a = PrologM {unPrologM:: RWST String [String] (PrologMState id v) (MVariantT v Identity) a}
   deriving (Functor, Monad, MonadWriter [String])
 
-type instance VarM (PrologM id v) = v
+type instance Family.Var (PrologM id v) = v
 
 deriving instance (Enum v, Rename v) => MonadVariant (PrologM id v)
 --evalPrologM (PrologM m) st0 = m `evalRWST` st0 `evalStateT` ([toEnum 0..] \\ Set.toList(getVars $ prologM_rr st0))
@@ -1315,11 +1315,11 @@ addMissingPredicates cc0
            where rename f' (Pred f tt) | f == f' = Pred f' tt
                  rename _ x = x
 
-         vars = [Prolog.var ("X" ++ show i) | i <- [0..]]
+         vars = [Prolog.var ("X" ++ show i) | i <- [(0::Int) ..]]
 
          findFreeSymbol sig pre@ArityId{..}
              = fromJust $ find (`Set.notMember` getAllSymbols sig)
-                               (pre : [pre{the_id = the_id `mappend` pack(show i)} | i <- [0..]])
+                               (pre : [pre{the_id = the_id `mappend` pack(show i)} | i <- [(0::Int) ..]])
 
 -- ----------
 -- Auxiliary

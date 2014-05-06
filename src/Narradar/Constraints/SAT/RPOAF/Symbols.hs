@@ -7,264 +7,170 @@
 {-# LANGUAGE PatternGuards, ViewPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ConstraintKinds #-}
-
+{-# LANGUAGE DeriveFunctor #-}
 
 module Narradar.Constraints.SAT.RPOAF.Symbols where
 
-import           Control.Applicative
-import qualified Control.Exception                 as CE
-import           Control.Monad
-import           Control.DeepSeq
-import           Control.Monad.Identity
-import           Control.Monad.List
-import qualified Control.RMonad                    as R
-import qualified Data.Array                        as A
-import           Data.Foldable                     (Foldable, foldMap, toList)
-import           Data.List                         ((\\), transpose, inits, zip4)
-import           Data.Maybe
-import           Data.Monoid                       ( Monoid(..) )
+
 import           Data.Hashable
-import           Data.Typeable
-import qualified Data.Map                          as Map
-import qualified Data.Set                          as Set
-import           Data.Traversable                  (Traversable)
+import qualified Data.Term                         as Family
 import           Funsat.Circuit                    (Co)
-import           Narradar.Framework.Ppr            as Ppr
+import           Funsat.RPOCircuit.Symbols         (SymbolRes, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
+import qualified Funsat.RPOCircuit.Symbols         as Funsat
 
 import           Narradar.Constraints.SAT.MonadSAT
-import qualified Narradar.Types                    as Narradar
-import           Narradar.Types                    hiding (symbol, fresh, constant, Var)
-import           Narradar.Utils                    (fmap2)
-
-import qualified Prelude                           as P
-import           Prelude                           hiding (catch, lex, not, and, or, any, all, quot, (>))
+import           Narradar.Framework.Ppr            as Ppr
+import           Narradar.Types                    (DPSymbol(..), HasArity(..), GenSymbol(..))
+import           Control.Monad (liftM)
 
 -- ------------------------------------
 -- Symbol classes for AF + Usable rules
 -- ------------------------------------
 
-class UsableSymbol v a | a -> v where usable :: a -> v
+class UsableSymbol a where usable :: a -> Family.Var a
 
 iusable = input . usable
 
--- ----------------------------------------------
--- Symbol type carrying the result of a solution
--- ----------------------------------------------
-
-data SymbolRes a = SymbolRes { theSymbolR:: a
-                             , precedence :: Int
-                             , isUsable   :: Bool
-                             , status     :: Status
-                             , filtering  :: Either Int [Int] }
-  deriving (Eq, Ord, Show, Typeable)
-
-instance Functor SymbolRes where fmap f SymbolRes{..} = SymbolRes{theSymbolR = f theSymbolR, ..}
-
-instance Pretty a => Pretty (SymbolRes a) where
-    pPrint SymbolRes{theSymbolR} = pPrint theSymbolR
-
-instance NFData a => NFData (SymbolRes a) where
-  rnf (SymbolRes s p u st af) = rnf s `seq` rnf p `seq` rnf u `seq` rnf st `seq` rnf af
-
 -- -------------------------------------------------
--- Encoding of RPO symbols with AF and usable rules
+-- Encoding of RPO symbols with usable rules
 -- -------------------------------------------------
 
-data RPOSsymbol v a = Symbol { theSymbol    :: a
-                             , encodePrec   :: v
-                             , encodeUsable :: v
-                             , encodeAFlist :: v
-                             , encodeAFpos  :: [v]
-                             , encodePerm   :: [[v]]
-                             , encodeUseMset:: v
-                             , decodeSymbol :: EvalM v (SymbolRes a)}
-   deriving Show
+data Usable s = Usable { usableSymbol :: s
+                       , encodeUsable :: (Family.Var s)
+                       , decodeUsableSymbol :: EvalM (Family.Var s) (UsableSymbolRes (Family.Id s))}
 
-instance Show (EvalM v a) where show _ = "evalM computation"
+data UsableSymbolRes a = UsableSymbolRes { isUsable :: Bool
+                                         , symbolRes :: SymbolRes a }
+                       deriving (Eq, Ord, Show)
 
-instance Pretty a => Pretty (RPOSsymbol v a) where
-    pPrint Symbol{theSymbol} = pPrint theSymbol
+theSymbolR = Funsat.theSymbolR . symbolRes
+prec = Funsat.prec . symbolRes
+filtering = Funsat.filtering . symbolRes
+status = Funsat.status . symbolRes
 
-instance Eq   a => Eq   (RPOSsymbol v a) where
-    a@Symbol{} == b@Symbol{} = theSymbol a == theSymbol b
+mkUsableSymbolDecoder :: (Show v, Ord v) => v -> EvalM v (SymbolRes a) -> EvalM v (UsableSymbolRes a)
+mkUsableSymbolDecoder usable_b evalres = do
+  isUsable <- evalB (input usable_b)
+  res <- evalres
+  return UsableSymbolRes { isUsable = isUsable, symbolRes = res }
 
-instance Ord a => Ord (RPOSsymbol v a) where
-   compare a b = theSymbol a `compare` theSymbol b
+type instance Family.Var (Usable s) = Family.Var s
+type instance Family.Id  (Usable s) = Family.Id s
 
-instance Functor (RPOSsymbol v) where
-    fmap f Symbol{..} = Symbol{theSymbol = f theSymbol,
-                               decodeSymbol = fmap2 f decodeSymbol, ..}
-instance Foldable (RPOSsymbol v) where foldMap f Symbol{..} = f theSymbol
+deriving instance (Show s, Show(Family.Var s)) => Show (Usable s)
 
-instance Hashable a => Hashable (RPOSsymbol v a) where hash = hash . theSymbol
+instance HasPrecedence s => HasPrecedence (Usable s) where precedence_v = precedence_v . usableSymbol
+instance HasFiltering s => HasFiltering (Usable s) where listAF_v = listAF_v . usableSymbol ; filtering_vv = filtering_vv . usableSymbol
+instance HasStatus s => HasStatus (Usable s) where useMul_v = useMul_v . usableSymbol ; lexPerm_vv = lexPerm_vv . usableSymbol
+instance Eq s => Eq (Usable s) where a == b = usableSymbol a == usableSymbol b
+instance Ord s => Ord (Usable s) where compare a b = compare (usableSymbol a) (usableSymbol b)
+instance Pretty s => Pretty (Usable s) where pPrint = pPrint . usableSymbol
+instance Pretty s => Pretty (UsableSymbolRes s) where pPrint = pPrint . symbolRes
+instance Hashable s => Hashable(Usable s) where hashWithSalt s = hashWithSalt s . usableSymbol
+instance DPSymbol s => DPSymbol(Usable s) where
+  markDPSymbol me = me{usableSymbol = markDPSymbol (usableSymbol me)}
+  unmarkDPSymbol me = me{usableSymbol = unmarkDPSymbol (usableSymbol me)}
+  isDPSymbol me = isDPSymbol(usableSymbol me)
+
+instance UsableSymbol (Usable s) where usable = encodeUsable
+
+makeUsableSymbol :: (Co repr v, ECircuit repr, OneCircuit repr
+                    ,MonadSAT repr v m
+                    ,Show id
+                    ,id ~ Family.Id s
+                    ,v  ~ Family.Var s
+                    ,Decode s (SymbolRes id)
+                    ) => (m v -> m (Natural v) -> (id,Int) -> m (s, repr v)) ->
+                   (id, Int) -> m (Usable s, repr v)
+makeUsableSymbol makeSymbol x = do
+  encodeUsable <- boolean
+  (s, constraints) <- makeSymbol boolean natural x
+  let evalres = mkUsableSymbolDecoder encodeUsable (decode s)
+  return (Usable s encodeUsable evalres, constraints)
+
+rpos = makeUsableSymbol Funsat.rpos
+rpo = makeUsableSymbol Funsat.rpo
+lpos = makeUsableSymbol Funsat.lpos
+lpo = makeUsableSymbol Funsat.lpo
+mpo = makeUsableSymbol Funsat.mpo
+
+type UsableRPOSsymbol v id = Usable (RPOSsymbol v id)
+
+-- ----------------------------------
+-- Narradar instances for RPO symbols
+-- ----------------------------------
+
+instance Hashable a => Hashable (RPOSsymbol v a) where hashWithSalt s = hashWithSalt s . theSymbol
+deriving instance Hashable a => Hashable (RPOsymbol v a)
+deriving instance Hashable a => Hashable (LPOsymbol v a)
+deriving instance Hashable a => Hashable (MPOsymbol v a)
+deriving instance Hashable a => Hashable (LPOSsymbol v a)
 
 instance DPSymbol a => DPSymbol (RPOSsymbol v a) where
    markDPSymbol   = fmap markDPSymbol
    unmarkDPSymbol = fmap unmarkDPSymbol
    isDPSymbol     = isDPSymbol . theSymbol
 
+deriving instance DPSymbol a => DPSymbol (RPOsymbol v a)
+deriving instance DPSymbol a => DPSymbol (LPOsymbol v a)
+deriving instance DPSymbol a => DPSymbol (MPOsymbol v a)
+deriving instance DPSymbol a => DPSymbol (LPOSsymbol v a)
+
 instance HasArity a => HasArity (RPOSsymbol v a) where getIdArity = getIdArity . theSymbol
 
-instance UsableSymbol v (RPOSsymbol v a) where usable = encodeUsable
+deriving instance HasArity a => HasArity (RPOsymbol v a)
+deriving instance HasArity a => HasArity (MPOsymbol v a)
+deriving instance HasArity a => HasArity (LPOsymbol v a)
+deriving instance HasArity a => HasArity (LPOSsymbol v a)
 
-instance HasPrecedence v (RPOSsymbol v a) where precedence_v = encodePrec
-instance HasStatus     v (RPOSsymbol v a) where
-    useMul_v   = encodeUseMset
-    lexPerm_vv = Just . encodePerm
-
-instance HasFiltering v (RPOSsymbol v a) where
-    listAF_v   = encodeAFlist
-    filtering_vv = encodeAFpos
-
-instance Decode (RPOSsymbol v a) (SymbolRes a) v where decode = decodeSymbol
-
-
-type SymbolFactory s = forall id symb m repr . (Show id, Pretty id, DPSymbol id, MonadSAT repr Var m ) => (id, Int, Bool) -> m (s Var id)
-
---rpos :: SymbolFactory RPOSsymbol
-rpos :: (MonadSAT repr v m, Co repr v, Show id, Decode v Bool v) =>
-        (id, Int, Bool) -> m (RPOSsymbol v id)
-rpos (x, ar, defined) = do
-  n_b      <- natural
-  perm_bb  <- replicateM ar (replicateM ar boolean)
-  mset     <- boolean
-  (list_b:pos_bb) <- case ar of
-                       0 -> do {lb <- boolean; assert [input lb]; return [lb]}
-                       _ -> replicateM (ar + 1) boolean
-  usable_b <- boolean
-
---  when (P.not defined || isDPSymbol x) $ assert [not $ input usable_b]
-
-  let perm_ee = fmap2 input perm_bb
-      pos_ee  = fmap  input pos_bb
-
-  -- Filtering invariant
-  assertAll [not(input list_b) --> one pos_ee]
-
-  -- Permutation invariants
-  -- -----------------------
-
-  -- There is one or zero arguments considered at the k'th perm position,
-  assertAll [ or perm_k --> one perm_k
-              | perm_k <- transpose perm_ee]
---  assertAllM [ not p ==> and (not <$> perm_i) | (p, perm_i) <- zip pos_ee perm_ee]
-  -- Non filtered arguments are considered at exactly one position in the permutation
-  -- Filtered arguments may not be used in the permutation
-  assertAll [ ite p (one perm_i) (not $ or perm_i)
-                  | (p, perm_i) <- zip pos_ee perm_ee]
-  -- All non-filtered arguments are permuted 'to the left'
-  assertAll [ or perm_k1 --> or perm_k
-                  | (perm_k, perm_k1) <- zip (transpose perm_ee) (tail $transpose perm_ee)]
-
-  return $ Symbol
-             { theSymbol    = x
-             , encodePrec   = encodeNatural n_b
-             , encodeUsable = usable_b
-             , encodeAFlist = list_b
-             , encodeAFpos  = pos_bb
-             , encodePerm   = perm_bb
-             , encodeUseMset= mset
-             , decodeSymbol = mkSymbolDecoder x n_b usable_b list_b pos_bb perm_bb mset}
-
-mkSymbolDecoder :: (Decode v Bool v, Ord v, Hashable v, Show v, Show id
-                   )=> id -> Natural v -> v -> v -> [v] -> [[v]] -> v -> EvalM v (SymbolRes id)
-mkSymbolDecoder id n_b usable_b list_b pos_bb perm_bb mset = do
-                 n          <- decode n_b
-                 isList     <- decode list_b
-                 pos        <- decode pos_bb
-                 isUsable   <- decode usable_b
-                 status     <- decode mset
-                 perm_bools <- decode perm_bb
-                 let the_positions = [fromInteger i | (i,True) <- zip [1..] pos]
-                     statusMsg   = mkStatus status perm_bools
-                 return$
-                  if P.not isList
-                   then CE.assert (length the_positions == 1)
-                        (SymbolRes id n isUsable statusMsg (Left $ headS the_positions))
-                   else (SymbolRes id n isUsable statusMsg (Right the_positions))
-  where
-   headS [] = error ("mkSymbolDecoder: invalid null collapsing AF for  (" ++ show id ++ ")")
-   headS (x:_) = x
-
--- --------
--- Variants
--- --------
-
--- LPO with status
-
-newtype LPOSsymbol v a = LPOS{unLPOS::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, Hashable, HasArity
-             ,HasPrecedence v, HasStatus v, HasFiltering v
-             ,UsableSymbol v, DPSymbol, Functor, Foldable)
-
-instance Decode (LPOSsymbol v a) (SymbolRes a) v where decode = decode . unLPOS
-
---lpo :: SymbolFactory LPOsymbol
-lpos x = do
-  s <- rpos x
-  assert [not $ useMul s]
-  return (LPOS s)
-
-instance Pretty a => Pretty (LPOSsymbol v a) where
-    pPrint = pPrint . unLPOS
-
--- LPO
-
-newtype LPOsymbol v a = LPO{unLPO::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity, Hashable
-             ,HasPrecedence v, HasFiltering v
-             ,UsableSymbol v, DPSymbol, Functor, Foldable)
-
-instance Decode (LPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unLPO
-
-removePerm symbolRes@SymbolRes{status=Lex _} = symbolRes{status = Lex Nothing}
+removePerm symbolRes@Funsat.SymbolRes{status=Lex _} = symbolRes{Funsat.status = Lex Nothing}
 removePerm symbolRes = symbolRes
 
---lpo :: SymbolFactory LPOsymbol
-lpo x = do
-  s <- rpos x
-  assert [not $ useMul s]
-  return (LPO s)
+instance Decode (RPOSsymbol v a) (SymbolRes a) where decode = decodeSymbol
+instance Decode (LPOSsymbol v a) (SymbolRes a) where decode = decode . unLPOS
+instance Decode (LPOsymbol v a) (SymbolRes a) where decode = liftM removePerm . decode . unLPO
+instance Decode (MPOsymbol v a) (SymbolRes a) where decode = decode . unMPO
+instance Decode (RPOsymbol v a) (SymbolRes a) where decode = liftM removePerm . decode . unRPO
 
-instance Pretty a => Pretty (LPOsymbol v a) where pPrint = pPrint . unLPO
+instance (id ~ Family.Id s) => Decode (Usable s) (UsableSymbolRes id) where decode = decodeUsableSymbol
 
-instance (Ord v, Show v) => HasStatus v (LPOsymbol v a) where
-    useMul_v     = encodeUseMset . unLPO
-    lexPerm_vv _ = Nothing
 
--- MPO
-newtype MPOsymbol v a = MPO{unMPO::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity, Hashable
-             ,HasPrecedence v, HasStatus v, HasFiltering v
-             ,UsableSymbol v, DPSymbol, Functor, Foldable)
+-- --------------------------------------
+-- Support for Goal-problems identifiers
+-- --------------------------------------
 
-instance Decode (MPOsymbol v a) (SymbolRes a) v where decode = decode . unMPO
+instance (Show a, GenSymbol a) => GenSymbol (RPOSsymbol Var a) where
+    genSymbol = Symbol{ theSymbol    = genSymbol
+                      , encodePrec   = V 10
+                      , encodeAFlist = V 12
+                      , encodeAFpos  = []
+                      , encodePerm   = []
+                      , encodeUseMset= V 13
+                      , decodeSymbol = Funsat.mkSymbolDecoder genSymbol (Funsat.Natural $ V 10) (V 12) [] [] (V 13)
+                      }
+    goalSymbol = Symbol{ theSymbol    = genSymbol
+                       , encodePrec   = error "RPOAF.Symbol : goalSymbol"
+                       , encodeAFlist = error "RPOAF.Symbol : goalSymbol"
+                       , encodeAFpos  = error "RPOAF.Symbol : goalSymbol"
+                       , encodePerm   = []
+                       , encodeUseMset= error "RPOAF.Symbol : goalSymbol"
+                       , decodeSymbol = return (Funsat.SymbolRes genSymbol 0 (Lex Nothing) (Right []))
+                       }
+    isGenSymbol  = isGenSymbol  . theSymbol
+    isGoalSymbol = isGoalSymbol . theSymbol
 
-instance Pretty a => Pretty (MPOsymbol v a) where
-    pPrint = pPrint . unMPO
+deriving instance (Show a, GenSymbol a) => GenSymbol (LPOsymbol  Var a)
+deriving instance (Show a, GenSymbol a) => GenSymbol (LPOSsymbol Var a)
+deriving instance (Show a, GenSymbol a) => GenSymbol (MPOsymbol  Var a)
+deriving instance (Show a, GenSymbol a) => GenSymbol (RPOsymbol  Var a)
 
---mpo :: SymbolFactory MPOsymbol
-mpo x = do
-  s <- rpos x
-  assert [useMul  s]
-  return (MPO s)
 
--- RPO
-newtype RPOsymbol v a = RPO{unRPO::RPOSsymbol v a}
-    deriving (Eq, Ord, Show, HasArity, Hashable
-             ,HasPrecedence v, HasStatus v, HasFiltering v
-             ,UsableSymbol v, DPSymbol, Functor, Foldable)
+instance (Var ~ Family.Var s, GenSymbol s, Decode s (SymbolRes (Family.Id s))) => GenSymbol (Usable s) where
+  genSymbol = let s :: s = genSymbol in Usable s (V 14) (mkUsableSymbolDecoder (V 14) (decode s))
 
-instance Decode (RPOsymbol v a) (SymbolRes a) v where decode = liftM removePerm . decode . unRPO
-
-instance Pretty a => Pretty (RPOsymbol v a) where pPrint = pPrint . unRPO
-
---rpo :: SymbolFactory RPOsymbol
-rpo x = do
-  s <- rpos x
-  return (RPO s)

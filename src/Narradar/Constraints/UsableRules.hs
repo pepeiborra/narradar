@@ -30,15 +30,15 @@ import Narradar.Types.Var
 import Narradar.Types.ArgumentFiltering as AF (AF_, ApplyAF(..))
 
 class Monoid trs => IUsableRules typ trs where
-    iUsableRulesM    :: (v ~ VarM m, v ~ Family.Var trs, t ~ Family.TermF trs, MonadVariant m) => typ -> trs -> trs -> [Term t v] -> m trs
-    iUsableRulesVarM :: (v ~ VarM m, v ~ Family.Var trs, t ~ Family.TermF trs, MonadVariant m) => typ -> trs -> trs -> v -> m(Set (Rule t v))
+    iUsableRulesM    :: (v ~ Family.Var m, v ~ Family.Var trs, t ~ Family.TermF trs, MonadVariant m) => typ -> trs -> trs -> [Term t v] -> m trs
+    iUsableRulesVarM :: (v ~ Family.Var m, v ~ Family.Var trs, t ~ Family.TermF trs, MonadVariant m) => typ -> trs -> trs -> v -> m(Set (Rule t v))
 
 data Proxy a
 proxy = undefined
 
 deriveUsableRulesFromTRS :: forall t v typ trs m.
                             ( IUsableRules typ trs, IsTRS trs
-                            , v ~ Family.VarM m
+                            , v ~ Family.Var m
                             , v ~ Family.Var trs
                             , t ~ Family.TermF trs
                             , Rule t v ~ Family.Rule trs
@@ -48,7 +48,7 @@ deriveUsableRulesFromTRS _ typ r p = liftM rules . iUsableRulesM typ (tRS r :: t
 
 deriveUsableRulesVarFromTRS :: forall t v typ trs m.
                               ( IUsableRules typ trs, IsTRS trs
-                              , v ~ VarM m
+                              , v ~ Family.Var m
                               , v ~ Family.Var trs
                               , t ~ Family.TermF trs
                               , Rule t v ~ Family.Rule trs
@@ -82,7 +82,7 @@ iUsableRulesMp :: ( MkProblem typ trs,
                     IsDPProblem typ,
                     IUsableRules typ trs,
                     MonadVariant m,
-                    v ~ VarM m,
+                    v ~ Family.Var m,
                     v ~ Family.Var trs,
                     t ~ Family.TermF trs ) =>
   Problem typ trs -> [Data.Term.Term t v] -> m (Problem typ trs)
@@ -103,7 +103,7 @@ liftUsableRulesVarM typ trs dps = iUsableRulesVarM (getBaseFramework typ) trs dp
 f_UsableRules :: forall term vk acc t v trs typ problem m.
                  ( Ord (Term t v), Unify t, Ord v
                  , term     ~ Term t v
-                 , v        ~ VarM m
+                 , v        ~ Family.Var m
                  , v        ~ Family.Var trs
                  , t        ~ Family.TermF trs
                  , Rule t v ~ Family.Rule trs
@@ -130,7 +130,7 @@ f_UsableRules p@(_,trs) vk tt = go mempty tt where
 f_UsableRulesAF :: forall term vk acc t id v trs typ problem m.
                  ( term    ~ Term t v
                  , t       ~ Family.TermF trs
-                 , v       ~ VarM m
+                 , v       ~ Family.Var m
                  , v       ~ Family.Var trs
                  , Rule t v~ Family.Rule trs
                  , vk      ~ (v -> m acc)
@@ -166,7 +166,7 @@ f_UsableRulesAF p@(typ,trs) pi vk tt = go mempty tt where
 -- ----------------
 
 class Monoid trs => NeededRules typ trs where
-    neededRulesM :: (v ~ VarM m, t ~ Family.TermF trs, v ~ Family.Var trs, MonadVariant m) => typ -> trs -> trs -> [Term t v] -> m trs
+    neededRulesM :: (v ~ Family.Var m, t ~ Family.TermF trs, v ~ Family.Var trs, MonadVariant m) => typ -> trs -> trs -> [Term t v] -> m trs
 
 -- We lift the needed rules automatically
 instance (FrameworkExtension ext, NeededRules base trs) => NeededRules (ext base) trs

@@ -7,6 +7,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Narradar.Processor.FLOPS08 where
 

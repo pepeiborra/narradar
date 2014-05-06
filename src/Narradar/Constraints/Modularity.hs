@@ -16,7 +16,7 @@ isHierarchicalCombination ex base =
   Set.null(getConstructorSymbols base `Set.intersection` getDefinedSymbols ex)
 
 isRelaxedHierarchicalCombination :: (HasSignature trs, HasRules trs
-                                    ,Id1 t ~ Family.Id trs
+                                    ,Family.Id t ~ Family.Id trs
                                     ,Rule t v ~ Family.Rule trs
                                     ,HasId t, Unify t
                                     ,Ord v
@@ -36,7 +36,7 @@ isRelaxedHierarchicalCombination ex base =
 isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules trs, Ord (Term t v)
                                         , Rule t v ~ Family.Rule trs
                                         , HasId t, Match t, Traversable t, Enum v, Ord v, Rename v
-                                        , Id1 t ~ Family.Id trs
+                                        , Family.Id t ~ Family.Id trs
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =
   isHierarchicalCombination ex' base' &&
@@ -56,7 +56,7 @@ isGeneralizedRelaxedHierarchicalCombination
   :: ( HasSignature trs
      , HasRules trs
      , Rule t v ~ Family.Rule trs
-     , Family.Id trs ~ Family.Id1 t
+     , Family.Id trs ~ Family.Id t
      , Ord (Term t v)
      , HasId t, Unify t, Traversable t
      , Enum v, Ord v, Rename v

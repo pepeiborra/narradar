@@ -68,8 +68,8 @@ instance NFData a => NFData (DPIdentifier a) where
     rnf AnyIdentifier  = ()
 
 instance Hashable a => Hashable (DPIdentifier a) where
-    hash (IdFunction f) = hash f
-    hash (IdDP f) = combine 1 (hash f)
+    hashWithSalt s (IdFunction f) = hashWithSalt s f
+    hashWithSalt s (IdDP f) = hashWithSalt 1 (hashWithSalt s f)
 
 #ifdef HOOD
 instance Observable id => Observable (DPIdentifier id) where

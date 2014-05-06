@@ -1,10 +1,11 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Narradar.Constraints.RPO where
+module Narradar.Constraints.RPO (module Narradar.Constraints.RPO, Status(..), mkStatus) where
 
 import Prelude hiding ((>))
 import qualified Prelude
@@ -14,35 +15,21 @@ import Control.Exception(assert)
 import Control.Monad
 import Data.Foldable (Foldable)
 import Data.List
+import qualified Data.Term as Family
 import Data.Typeable
 import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Narradar.Utils
-
+import Funsat.RPOCircuit.Symbols (Status(..), mkStatus)
 
 class HasPrecedence a where precedence :: a -> Int
 class HasStatus     a where status     :: a -> Status
 class HasFiltering  a where filtering  :: a -> Either Int [Int]
 
-data Status   = Mul | Lex (Maybe [Int]) deriving (Eq, Ord, Show)
-mkStatus mul perm
- | mul       = Mul
- | otherwise = assert (if all oneOrNone perm then True else pprTrace perm False) $
-               assert (all oneOrNone (transpose perm)) $
-               Lex (Just [ head ([i | (i,True) <- zip [1..] perm_i] ++ [-1])
-                          | perm_i <- perm])
-
-  where
-    oneOrNone []         = True
-    oneOrNone (False:xx) = oneOrNone xx
-    oneOrNone (True:xx)  = not $ or xx
-
-instance Pretty Status where pPrint = text.show
-instance NFData Status where rnf Mul = (); rnf (Lex mi) = rnf mi
 
 data RPO m a = RPO {(>), (>~), (~~) :: a -> a -> m Bool}
 
-symbolRPO :: (id ~ Id1 t, HasId t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
+symbolRPO :: (id ~ Family.Id t, HasId t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
              ,Monad m) => RPO m (Term t v)
 symbolRPO = RPO{..} where
 
@@ -144,7 +131,7 @@ symbolRPO = RPO{..} where
   sel = selectSafe "Narradar.Constraints.RPO"
 
 
-symbolRPOAF :: (id ~ Id1 t, HasId t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
+symbolRPOAF :: (id ~ Family.Id t, HasId t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
              ,Monad m) => RPO m (Term t v)
 symbolRPOAF = RPO{..} where
 
@@ -272,7 +259,7 @@ symbolRPOAF = RPO{..} where
 
   (<$>)  = liftM
 
-  sel n ii = selectSafe ("Narradar.Constraints.RPO.symbolRPOAF - " ++ show n) (map pred ii)
+  sel (n :: Int) ii = selectSafe ("Narradar.Constraints.RPO.symbolRPOAF - " ++ show n) (map pred ii)
   sel6 = sel 6
   sel7 = sel 7
   sel8 = sel 8

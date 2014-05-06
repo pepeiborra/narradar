@@ -444,7 +444,7 @@ instance Bifunctor CAGoalF where
 
 -- NFData
 
-instance (NFData (t(Term t Var)), NFData(Term t Mode), NFData (Family.Id1 t), NFData (Problem p trs)) =>
+instance (NFData (t(Term t Var)), NFData(Term t Mode), NFData (Family.Id t), NFData (Problem p trs)) =>
   NFData (Problem (InitialGoal t p) trs)
  where
   rnf (InitialGoalProblem gg g p) = rnf gg `seq` rnf g `seq` rnf p `seq` ()
@@ -574,7 +574,7 @@ instance Pretty (Term t v) => Pretty (DGraph t v) where
                                                       ,text "sccsMap =" <+> pPrint (elems sccsMap)
                                                       ,text "sccGraph =" <+> text (show sccGraph)])
 
-instance (NFData (t(Term t v)), NFData (Family.Id1 t), NFData v) => NFData (DGraph t v) where
+instance (NFData (t(Term t v)), NFData (Family.Id t), NFData v) => NFData (DGraph t v) where
   rnf (DGraph p pm ip rp sccs sccsm sccg)  = rnf p  `seq`
                                              rnf pm `seq`
                                              rnf ip `seq`

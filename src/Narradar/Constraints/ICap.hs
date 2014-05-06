@@ -26,13 +26,13 @@ import Narradar.Framework
 -- -----------------
 -- This should not live here, it does just to make GHC happy (avoid recursive module dependencies)
 
-ren :: (Enum v, Traversable t, VarM m ~ v, MonadVariant m) => Term t v -> m(Term t v)
+ren :: (Enum v, Traversable t, Family.Var m ~ v, MonadVariant m) => Term t v -> m(Term t v)
 ren = foldTermM (\v -> return `liftM` renaming v) (return . Impure)
 
 -- | Use unification instead of just checking if it is a defined symbol
 -- This is the icap defined in Rene Thiemann, i.e. it does integrate the REN function
 class ICap problem where
-    icap :: (Rename v, Family.Var problem ~ v, Family.TermF problem ~ t, VarM m ~ v, MonadVariant m) => problem -> Term t v -> m (Term t v)
+    icap :: (Rename v, Family.Var problem ~ v, Family.TermF problem ~ t, Family.Var m ~ v, MonadVariant m) => problem -> Term t v -> m (Term t v)
 
 -- Default instance for unrestricted rewriting
 instance (Ord v, Rename v, Unify t) => ICap [Rule t v] where

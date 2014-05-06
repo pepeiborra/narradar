@@ -11,6 +11,7 @@
 {-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 module Narradar.Types.ArgumentFiltering where
 
@@ -256,9 +257,9 @@ type HeuFunction id t v = (Foldable t, HasId t) => AF_ id -> Term t v -> Positio
 
 -- | The type of heuristics
 data Heuristic (id :: *) where
-      Heuristic :: (forall t v. id ~ Family.Id1 t => HeuFunction id t v) -> Bool -> Heuristic id
+      Heuristic :: (forall t v. id ~ Family.Id t => HeuFunction id t v) -> Bool -> Heuristic id
 
-runHeu :: (Family.Id1 t ~ id) => Heuristic id -> HeuFunction id t v
+runHeu :: (Family.Id t ~ id) => Heuristic id -> HeuFunction id t v
 runHeu (Heuristic f _) = f
 
 isSafeOnDPs :: Heuristic id -> Bool
@@ -268,7 +269,9 @@ isSafeOnDPs (Heuristic _ b) = b
 class PolyHeuristic tag id where runPolyHeu :: tag id -> Heuristic id
 
 -- | Wrapper for heuristics which depend on the problem signature
-data MkHeu tag = MkHeu { mkTag :: (HasSignature sig, id ~ Family.Id sig, PolyHeuristic tag id) => sig -> tag id }
+data MkHeu tag =
+   MkHeu { mkTag :: (HasSignature sig, id ~ Family.Id sig, PolyHeuristic tag id) =>
+                    sig -> tag id }
 
 -- | Wrapper around a non-overloaded heuristic
 data WrapHeu id = WrapHeu ((Ord id) => Heuristic id)
@@ -294,12 +297,12 @@ bestHeu = simpleHeu (Heuristic (((Set.fromList .).) . allInner) False)
 innermost, outermost :: forall id . Ord id => Heuristic id
 
 innermost = Heuristic f True where
-   f :: HeuFunction (Family.Id1 t) t v
+   f :: HeuFunction (Family.Id t) t v
    f _ _ [] = mempty
    f _ t pos | Just root <- getId (t ! Prelude.init pos) = Set.singleton (root, last pos)
 
 outermost = Heuristic f False where
-   f :: HeuFunction (Family.Id1 t) t v
+   f :: HeuFunction (Family.Id t) t v
    f _ _ [] = mempty
    f _ t pos | Just root <- getId t = Set.singleton (root, head pos)
 
@@ -322,8 +325,8 @@ allOuter _ t pos =  [(root, last sub_p)
                                     , Just root <- [rootSymbol (t ! Prelude.init sub_p)]]
 
 
-
-typeHeu assig = MkHeu $ \_ -> (TypeHeu assig')
+typeHeu :: SharingAssignment String -> MkHeu TypeHeu
+typeHeu assig = MkHeu (\_ -> (TypeHeu assig'))
  where
   assig' = fmap (Set.map (first (show.pPrint))) assig
 
@@ -355,7 +358,7 @@ typeHeu_f assig isUnbounded = Heuristic (predHeuOne allInner (const f) `or` runH
         getArity g | Just i <- Map.lookup g arities = i
         arities = Map.fromListWith max (concatMap F.toList assig) -- :: Map Ident Int
 
-
+typeHeu2 :: SharingAssignment String -> MkHeu TypeHeu2
 typeHeu2 assig = MkHeu $ \_ -> TypeHeu2 assig'
  where
   assig' = fmap (Set.map (first (show.pPrint))) assig

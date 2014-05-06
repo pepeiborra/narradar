@@ -13,19 +13,12 @@
 module Narradar.Types.Problem.NarrowingGen where
 
 import           Control.Applicative
-import           Control.Arrow                    (first)
 import           Control.DeepSeq
-import           Control.Exception                (assert)
 import           Control.Monad.Free
-import           Data.Char
-import           Data.Foldable                    (Foldable(..), toList)
-import           Data.List                        (nub)
+import           Data.Data
+import           Data.Foldable                    (Foldable(..))
 import           Data.Hashable
-import           Data.Traversable                 as T (Traversable(..), mapM)
-import           Data.Maybe
-import           Data.Monoid
-import           Data.Typeable
-import           Data.Set                         (Set)
+import           Data.Traversable                 as T (Traversable(..))
 import qualified Data.Set                         as Set
 import           Text.XHtml                       (theclass)
 
@@ -34,7 +27,6 @@ import qualified Data.Term.Family                 as Family
 import           Data.Term.Rules
 
 import           MuTerm.Framework.Problem
-import           MuTerm.Framework.Proof
 
 import           Narradar.Types.DPIdentifiers
 import           Narradar.Types.Problem
@@ -43,7 +35,6 @@ import           Narradar.Types.Term
 import           Narradar.Types.TRS
 import           Narradar.Framework
 import           Narradar.Framework.Ppr
-import           Narradar.Utils
 
 import           Prelude                          hiding (pi)
 
@@ -64,9 +55,9 @@ instance Pretty (GenId String) where
   pPrint (AnId id) = text id
 
 instance Hashable a => Hashable (GenId a) where
-  hash GenId  = 1
-  hash GoalId = 2
-  hash (AnId id) = combine 3 (hash id)
+  hashWithSalt s GenId  = hashWithSalt s (1::Int)
+  hashWithSalt s GoalId = hashWithSalt s (2::Int)
+  hashWithSalt s (AnId id) = hashWithSalt (3::Int) (hashWithSalt s id)
 
 instance NFData a => NFData (GenId a) where
   rnf GenId = ()
@@ -168,8 +159,8 @@ instance HTMLClass (MkNarrowingGen Rewriting) where htmlClass _ = theclass "GenN
 instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "GenCNarr"
 
 instance (t ~ Family.TermF trs
-         ,HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
-         ,HasId t, Pretty (Id1 t), Foldable t
+         ,HasRules trs, GetVars trs
+         ,HasId t, Pretty (Family.Id t), Foldable t
          ,IsDPProblem base, PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (MkNarrowingGen base) trs) where
   pprTPDB p@NarrowingGenProblem{..} = pprTPDB baseProblem
