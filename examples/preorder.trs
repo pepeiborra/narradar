@@ -1,0 +1,15 @@
+(VAR X L T R Xs Ys Zs)
+(RULES
+ goal(X) -> preorder_in(X,gen)
+ preorder_in(T,Xs) -> u_1(preorder_dl_in(T, -(Xs, nil),T,Xs))
+ u_1(preorder_dl_out(T, -(Xs, nil)),T,Xs) -> preorder_out(T,Xs)
+ preorder_dl_in(nil, -(X, X)) -> preorder_dl_out(nil,-(X, X))
+ preorder_dl_in(tree(L,X,R),-(cons(X,Xs), Zs)) -> u_2(preorder_dl_in(L,-(Xs, Ys)),Xs,X,L,R,Zs)
+ u_2(preorder_dl_out(L,-(Xs, Ys)),Xs,X,L,R,Zs) -> u_3(preorder_dl_in(R,-(Ys, Zs)),Xs,X,L,R,Zs,Ys)
+ u_3(preorder_dl_out(R,-(Ys, Zs)),Xs,X,L,R,Zs,Ys) -> preorder_dl_out(tree(L,X,R),-(cons(X,Xs), Zs))
+ gen ->= -(gen, gen)
+ gen ->= nil
+ gen ->= preorder_out(gen,gen)
+ gen ->= preorder_dl_out(gen,gen)
+)
+(GOAL goal(X))

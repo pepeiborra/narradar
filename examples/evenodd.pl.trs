@@ -1,0 +1,5 @@
+(VAR X)
+(RULES
+  even_in(s(s(s(X)))) -> odd_in(X)
+  odd_in(s(X)) -> even_in(s(s(X)))
+)

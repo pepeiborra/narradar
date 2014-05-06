@@ -1,0 +1,19 @@
+(VAR x y)
+(PAIRS
+F(s(0)) -> INC(dec,min)
+INC(0,y) -> F(y)
+)
+(RULES
+f(s(0)) -> inc(dec,min)
+min -> 0
+dec -> gen
+inc(0,y) -> f(y)
+inc(x,y) -> g(x,y)
+g(x,x) -> x
+gen -> 0
+gen -> s(0)
+gen -> gennf
+gennf -> g(0,s(0))
+gennf -> f(0)
+gennf
+)

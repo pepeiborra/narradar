@@ -1,0 +1,27 @@
+%query: goal(f)
+goal(X) :- f([],L), pl(L), insert(s(0), [0,s(s(0))|X], L1), g(L1).f(Y,L) :- insert(s(0), [0|Y], L).pl([]).pl([0|Y]) :- pl(Y).pl([s(X)|Y]) :- pl([X|Y]).g(X) :- f(Y,_), g(X).insert(X,[],[X]).insert(X,[X1|Y],[X1,X|Y]).
+
+
+
+goal_in(X) -> u_1(f_in(nil,L),X)
+u_1(f_out(nil,L),X) -> u_2(pl_in(L),X,L)
+u_2(pl_out(L),X,L) -> u_3(insert_in(s(0),cons(cons(0,s(s(0))),X),L1),X,L)
+u_3(insert_out(s(0),cons(cons(0,s(s(0))),X),L1),X,L) -> u_4(g_in(L1),X,L,L1)
+u_4(g_out(L1),X,L,L1) -> goal_out(X)
+
+f_in(Y,L) -> u_5(insert_in(s(0),cons(0,Y),L),L,Y)
+u_5(insert_out(s(0),cons(0,Y),L),L,Y) -> f_out(Y,L)
+
+g_in(X) -> u_8(f_in(Y,v4),X)
+u_8(f_out(Y,v4),X) -> u_9(g_in(X),X,Y,v4)
+u_9(g_out(X),X,Y,v4) -> g_out(X)
+
+insert_in(X,cons(X1,Y),cons(cons(X1,X),Y)) -> insert_out(X,cons(X1,Y),cons(cons(X1,X),Y))
+insert_in(X,nil,cons(X,nil)) -> insert_out(X,nil,cons(X,nil))
+
+pl_in(nil) -> pl_out(nil)
+pl_in(cons(0,Y)) -> u_6(pl_in(Y),Y)
+u_6(pl_out(Y),Y) -> pl_out(cons(0,Y))
+
+pl_in(cons(s(X),Y)) -> u_7(pl_in(cons(X,Y)),X,Y)
+u_7(pl_out(cons(X,Y)),X,Y) -> pl_out(cons(s(X),Y))

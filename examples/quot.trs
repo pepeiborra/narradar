@@ -1,0 +1,9 @@
+(VAR X Y Z)
+(RULES 
+ quot(X) -> quot(X)
+)
+(PAIRS
+ quot(s(X)) -> quot(X)
+ quot(X) -> quot(X)
+)
+(STRATEGY INNERMOST)

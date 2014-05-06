@@ -1,0 +1,28 @@
+(VAR X Y Msu M R Rs C Cs SR SRs E)
+(RULES
+  GOAL(X,Y) -> goal_in(X,Y,gen_mat)
+  goal_in(X,Y,Msu) -> u_1(s2m_in(X,Y,M),X,Y,Msu)
+  s2l_in(0,nil) -> s2l_out(0,nil)
+  s2l_in(s(Y),cons(C,Cs)) -> u_5(s2l_in(Y,Cs),Y,C,Cs)
+  s2m_in(0,Y,nil) -> s2m_out(0,Y,nil)
+  s2m_in(s(X),Y,cons(R,Rs)) -> u_3(s2l_in(Y,R),X,Y,R,Rs)
+  subs_mat_in(cons(R,Rs),cons(SR,SRs)) -> u_6(subs_row_in(R,SR),R,Rs,SR,SRs)
+  subs_mat_in(nil,nil) -> subs_mat_out(nil,nil)
+  subs_row_in(cons(E,R),cons(a,SR)) -> u_8(subs_row_in(R,SR),R,SR,E)
+  subs_row_in(nil,nil) -> subs_row_out(nil,nil)
+  u_1(s2m_out(X,Y,M),X,Y,Msu) -> u_2(subs_mat_in(M,Msu),X,Y,Msu,M)
+  u_2(subs_mat_out(M,Msu),X,Y,Msu,M) -> goal_out(X,Y,Msu)
+  u_3(s2l_out(Y,R),X,Y,R,Rs) -> u_4(s2m_in(X,Y,Rs),X,Y,R,Rs)
+  u_4(s2m_out(X,Y,Rs),X,Y,R,Rs) -> s2m_out(s(X),Y,cons(R,Rs))
+  u_5(s2l_out(Y,Cs),Y,C,Cs) -> s2l_out(s(Y),cons(C,Cs))
+  u_6(subs_row_out(R,SR),R,Rs,SR,SRs) -> u_7(subs_mat_in(Rs,SRs),R,Rs,SR,SRs)
+  u_7(subs_mat_out(Rs,SRs),R,Rs,SR,SRs) -> subs_mat_out(cons(R,Rs),cons(SR,SRs))
+  u_8(subs_row_out(R,SR),R,SR,E) -> subs_row_out(cons(E,R),cons(a,SR))
+
+  genMat ->= nil
+  genMat ->= cons(genList, genMat)
+  genList ->= nil
+  genList ->= cons(genNull, genList)
+  genNull ->= null
+)
+(STRATEGY GOAL GOAL(X,Y))

@@ -1,0 +1,11 @@
+(VAR X Y)
+(RULES
+  p_in(g(X)) -> u_3(p_in(X),X)
+  p_in(X) -> u_1(q_in(f(gen)),X)
+  q_in(g(Y)) -> q_out(g(Y))
+  u_1(q_out(f(Y)),X) -> u_2(p_in(Y),X,Y)
+  u_2(p_out(Y),X,Y) -> p_out(X)
+  u_3(p_out(X),X) -> p_out(g(X))
+)
+(STRATEGY GOAL p_in(g))
+(STRATEGY NARROWING)

@@ -1,0 +1,17 @@
+(VAR X Y XX Z) 
+(RULES
+ goal(X) -> subs_row(s2l(X))
+ len(Cons(X,XX)) -> s(len(XX))
+ len(Nil) -> 0
+ s2l(0) -> Nil
+ s2l(s(X)) -> Cons(Z, s2l(X))
+ s2r(0,Y) -> Nil
+ s2r(s(X),Y) -> Cons(s2r(X,Y), s2l(X))
+ subs_mat(Cons(X,XX)) -> Cons(subs_row(X),subs_mat(XX))
+ subs_mat(Nil) -> Nil
+ subs_row(Cons(X,XX)) -> Cons(0,subs_row(XX))
+ subs_row(Nil) -> Nil
+)
+(STRATEGY NARROWING)
+(STRATEGY GOAL goal(b))
+

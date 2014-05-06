@@ -1,0 +1,9 @@
+(VAR x y)
+(RULES
+ f(s(z),y) -> inc(dec(s(z),min,y))
+ dec(s(y)) -> y
+ min -> z
+ inc(z,x,y) -> f(x,y)
+ goal -> f(dec,x)
+)
+(STRATEGY NARROWING goal)

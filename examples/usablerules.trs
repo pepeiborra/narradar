@@ -1,0 +1,9 @@
+(VAR x y)
+(RULES
+
+f(a(x),x) -> f(b(x),x)
+b(x) -> c
+h(b(x)) -> x
+
+)
+(STRATEGY NARROWING)

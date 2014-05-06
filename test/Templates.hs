@@ -1,7 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
@@ -10,7 +12,7 @@ module Templates where
 
 import Control.Monad.Reader (ask)
 import Data.Foldable (toList)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust,isJust)
 import System.IO.Unsafe
 import Test.QuickCheck
 import Test.QuickCheck.Arbitrary
@@ -20,7 +22,7 @@ import qualified Data.Map as Map
 
 import Narradar.Types as Narradar
 import Narradar.Constraints.SAT.MonadSAT as SAT
-import Narradar.Constraints.SAT.RPOAF (SymbolRes, SymbolFactory)
+import Narradar.Constraints.SAT.RPOAF (SymbolRes)
 import Narradar.Constraints.SAT.Solve
 import Narradar.Constraints.SAT.YicesCircuit (YicesSource)
 import qualified Narradar.Constraints.SAT.YicesFFICircuit as FFI (YicesSource)
@@ -33,6 +35,7 @@ import Narradar.Constraints.SAT.RPOAF.Symbols
 import Control.Monad(liftM)
 
 import Generators
+import Types
 
 --instance AssertCircuit (Shared term) where assertCircuit = (/\)
 -- prop_ecircuitToCnf_direct_yices = mkYicesDirectProp (undefined :: Proxy LDPId) (sizedECircuit :: SizedGen (EC.Tree SAT.Var))
@@ -41,74 +44,24 @@ import Generators
 --prop_rposrulesEqToCNF_simp1_yices :: [RuleN RandId] -> Property
 --prop_rposrulesEqToCNF_simp1_yices   = mkRuleEqProp  satYicesSimpSolverRPOS
 --prop_lpocircuitToCnf_direct_yices = mkYicesDirectRPOProp (undefined :: Proxy LDPId) (liftM fst . sizedLPOCircuit :: SizedGen (Tree (TermN LDPId) SAT.Var))
+
 -- --------------------------
 -- Correctness of SAT solvers
 -- --------------------------
 
-mkYicesDirectProp :: forall id v repr.
-                     (
-                      Enum v, Ord v, Show v, Hashable v
-                     ,Ord id, Hashable id, Show id
-                     ,Show (repr v)
-                     ,CastCircuit repr (Shared (TermN id))
-                     ,CastCircuit repr Eval
-                     ,CastCo repr (Shared (TermN id)) v
-                     ,CastCo repr Eval v
-                     ,HasStatus v id, HasPrecedence v id, HasFiltering v id
---                     ,RPOExtCircuit (Shared (TermN id)) (TermN id)
-                     ) => Proxy id -> SizedGen (repr v) -> Property
-mkYicesDirectProp _ gen = forAll (sized gen) $ \c ->
-    let correct = unsafePerformIO $
-                  satYices defaultYicesOpts
-                    ((assert [castCircuit c]  :: SAT (TermN id) v ()) >>
-                     return (evalB (castCircuit c)))
-    in case correct of
-         Nothing -> label "Unsat" True
-         Just x  -> label "Sat" x
+yicesOpts = YicesOpts 0 (Just 5)
 
+mkTypeCheckProp :: forall repr term id v .
+                       (Enum v, Ord v, Show v, Hashable v
+                       ,Show term, Show (repr  v)
+                       ,CastCircuit repr (Tree term)
+                       ,CastCo repr (Tree term) v
+                       ,HasPrecedence v id, HasFiltering v id, HasStatus v id
+                       ) => Proxy id -> ShrinkableSizedGen (repr v, Int) -> Property
+mkTypeCheckProp _ (shrink,gen) = forAllShrink (sized gen) shrink $ \(c,pool) ->
+                                 isJust(typeCheckTree (castCircuit c :: Tree term v))
 
-mkYicesSimp1Prop :: forall id v repr .
-                    (Ord id, Hashable id, Show id
-                    ,Enum v, Ord v, Show v, Hashable v
-                     ,Show (repr v)
-                     ,CastCircuit repr (Shared (TermN id))
-                     ,CastCircuit repr Eval
-                     ,CastCo repr (Shared (TermN id)) v
-                     ,CastCo repr Eval v
-                    ,HasStatus v id, HasPrecedence v id, HasFiltering v id
-                    ,RPOExtCircuit (Shared (TermN id)) (TermN id)
-                    ) => Proxy id -> SizedGen (repr v) -> Property
-mkYicesSimp1Prop _ gen = forAll (sized gen) $ \c ->
-    let correct = unsafePerformIO $
-                  satYicesSimp' [toEnum 1000..] defaultYicesOpts
-                    ((assert [castCircuit c]  :: SAT (TermN id) v ()) >>
-                     return (evalB (castCircuit c)))
-    in case correct of
-         Nothing -> label "Unsat" True
-         Just x  -> label "Sat" x
-
-
-mkYicesDirectRPOProp :: forall id v repr .
-                        ( Ord id, Show id, Hashable id
-                        , Enum v, Ord v, Show v, Hashable v
-                     ,Show (repr v)
-                     ,CastCircuit repr (Shared (TermN id))
-                     ,CastCircuit repr Eval
-                     ,CastCo repr (Shared (TermN id)) v
-                     ,CastCo repr Eval v
-                        , HasPrecedence v id, HasFiltering v id, HasStatus v id
-                        , RPOExtCircuit (Shared (TermN id)) (TermN id)
-                        ) => Proxy id -> SizedGen (repr v) -> Property
-mkYicesDirectRPOProp _ gen = forAll (sized gen) $ \c ->
-    let correct = unsafePerformIO $
-                  satYices defaultYicesOpts
-                    (assert [castCircuit c :: Shared (TermN id) v]  >>
-                     return (evalB (castCircuit c)))
-    in case correct of
-         Nothing -> label "Unsat" True
-         Just x  -> label "Sat" x
-
-mkYicesSimp1RPOProp :: forall id v repr .
+mkYicesProp :: forall id v repr .
                        (Ord id, Show id, Hashable id
                        ,Enum v, Ord v, Show v, Hashable v
                      ,Show (repr v)
@@ -118,10 +71,30 @@ mkYicesSimp1RPOProp :: forall id v repr .
                      ,CastCo repr Eval v
                        ,HasPrecedence v id, HasFiltering v id, HasStatus v id
                        ,RPOExtCircuit (Shared (TermN id)) (TermN id)
-                       ) => Proxy id -> SizedGen (repr v, [v]) -> Property
-mkYicesSimp1RPOProp _ gen = forAll (sized gen) $ \(c , pool) ->
+                       ) => Proxy id -> ShrinkableSizedGen (repr v, Int) -> Property
+mkYicesProp _ (shrink,gen) = forAllShrink (sized gen) shrink $ \(c , pool) ->
     let correct = unsafePerformIO $
-                  satYicesSimp' pool defaultYicesOpts
+                  satYices' pool yicesOpts
+                    (assert [castCircuit c :: Shared (TermN id) v] >>
+                     return (evalB (castCircuit c)))
+    in case correct of
+         Nothing -> label "Unsat" True
+         Just x  -> label "Sat" x
+
+mkYicesSimpProp :: forall id v repr .
+                       (Ord id, Show id, Hashable id
+                       ,Enum v, Ord v, Show v, Hashable v
+                     ,Show (repr v)
+                     ,CastCircuit repr (Shared (TermN id))
+                     ,CastCircuit repr Eval
+                     ,CastCo repr (Shared (TermN id)) v
+                     ,CastCo repr Eval v
+                       ,HasPrecedence v id, HasFiltering v id, HasStatus v id
+                       ,RPOExtCircuit (Shared (TermN id)) (TermN id)
+                       ) => Proxy id -> SizedGen (repr v, Int) -> Property
+mkYicesSimpProp _ gen = forAll (sized gen) $ \(c , pool) ->
+    let correct = unsafePerformIO $
+                  satYicesSimp' pool yicesOpts
                     (assert [castCircuit c :: Shared (TermN id) v] >>
                      return (evalB (castCircuit c)))
     in case correct of
@@ -129,7 +102,7 @@ mkYicesSimp1RPOProp _ gen = forAll (sized gen) $ \(c , pool) ->
          Just x  -> label "Sat" x
 
 
-mkSMTDirectRPOProp :: forall id v repr.
+mkSMTProp :: forall id v repr.
                       ( Ord id, Show id, Pretty id, Hashable id
                       , Enum v, Ord v, Show v, Hashable v
                       , Show (repr v)
@@ -139,10 +112,10 @@ mkSMTDirectRPOProp :: forall id v repr.
                       , CastCo repr Eval v
                       , HasPrecedence v id, HasFiltering v id, HasStatus v id
                       , RPOExtCircuit (FFI.YicesSource id) (TermN id)
-                      ) => Proxy id -> SizedGen (repr v) -> Property
-mkSMTDirectRPOProp _ gen = forAll (sized gen) $ \c ->
+                      ) => Proxy id -> ShrinkableSizedGen (repr v, Int) -> Property
+mkSMTProp _ (shrink,gen) = forAllShrink (sized gen) shrink $ \(c,pool) ->
     let correct = unsafePerformIO $
-                  smtFFI
+                  smtFFI' pool
                   (assert [castCircuit c :: FFI.YicesSource id v]  >>
                      return (evalB (castCircuit c)))
     in case correct of
@@ -175,7 +148,7 @@ mkSymbolRules ext rr = do
 mkRuleGtProp, mkRuleEqProp
              :: forall id symb repr .
                 ( id ~ symb SAT.Var DPRandId
-                , Ord id
+                , Ord id, Pretty id, Show id
                 , RPOExtCircuit repr (TermN id)
                 , CoRPO repr (TermN id) SAT.Var
                 , HasPrecedence SAT.Var id, HasStatus SAT.Var id, HasFiltering SAT.Var id
@@ -208,36 +181,36 @@ smtFFISolverLPO = ExistSolver lpo (unsafePerformIO . smtFFI)
 satYicesSimpSolverLPO, satYicesSolverLPO ::
     (Ord id, Pretty id, Show id, Hashable id, AssertCircuit (Shared (TermN (LPOsymbol SAT.Var id)))
     ) => ExistSolver LPOsymbol (Shared (TermN (LPOsymbol SAT.Var id)))
-satYicesSimpSolverLPO = ExistSolver lpo (unsafePerformIO . satYicesSimp' [toEnum 100..] (YicesOpts 20 Nothing))
-satYicesSolverLPO = ExistSolver lpo (unsafePerformIO . satYices' [toEnum 100..] (YicesOpts 20 Nothing))
+satYicesSimpSolverLPO = ExistSolver lpo (unsafePerformIO . satYicesSimp' 100 (YicesOpts 20 Nothing))
+satYicesSolverLPO = ExistSolver lpo (unsafePerformIO . satYices' 100 (YicesOpts 20 Nothing))
 
 smtFFISolverLPOS = ExistSolver lpos (unsafePerformIO . smtFFI)
 satYicesSimpSolverLPOS, satYicesSolverLPOS ::
     (Ord id, Pretty id, Show id, Hashable id, AssertCircuit (Shared (TermN (LPOSsymbol SAT.Var id)))
     ) => ExistSolver LPOSsymbol (Shared (TermN (LPOSsymbol SAT.Var id)))
-satYicesSimpSolverLPOS = ExistSolver lpos (unsafePerformIO . satYicesSimp' [toEnum 100..] (YicesOpts 20 Nothing))
-satYicesSolverLPOS = ExistSolver lpos (unsafePerformIO . satYices' [toEnum 100..] (YicesOpts 20 Nothing))
+satYicesSimpSolverLPOS = ExistSolver lpos (unsafePerformIO . satYicesSimp' 100 (YicesOpts 20 Nothing))
+satYicesSolverLPOS = ExistSolver lpos (unsafePerformIO . satYices' 100 (YicesOpts 20 Nothing))
 
 smtFFISolverMPO = ExistSolver mpo (unsafePerformIO . smtFFI)
 satYicesSimpSolverMPO, satYicesSolverMPO ::
     (Ord id, Pretty id, Show id, Hashable id, AssertCircuit (Shared (TermN (MPOsymbol SAT.Var id)))
     ) => ExistSolver MPOsymbol (Shared (TermN (MPOsymbol SAT.Var id)))
-satYicesSimpSolverMPO = ExistSolver mpo (unsafePerformIO . satYicesSimp' [toEnum 100..] (YicesOpts 20 Nothing))
-satYicesSolverMPO = ExistSolver mpo (unsafePerformIO . satYices' [toEnum 100..] (YicesOpts 20 Nothing))
+satYicesSimpSolverMPO = ExistSolver mpo (unsafePerformIO . satYicesSimp' 100 (YicesOpts 20 Nothing))
+satYicesSolverMPO = ExistSolver mpo (unsafePerformIO . satYices' 100 (YicesOpts 20 Nothing))
 
 smtFFISolverRPO = ExistSolver rpo (unsafePerformIO . smtFFI)
 satYicesSimpSolverRPO, satYicesSolverRPO ::
     (Ord id, Pretty id, Show id, Hashable id, AssertCircuit (Shared (TermN (RPOsymbol SAT.Var id)))
     ) => ExistSolver RPOsymbol (Shared (TermN (RPOsymbol SAT.Var id)))
-satYicesSimpSolverRPO = ExistSolver rpo (unsafePerformIO . satYicesSimp' [toEnum 100..] (YicesOpts 20 Nothing))
-satYicesSolverRPO = ExistSolver rpo (unsafePerformIO . satYices' [toEnum 100..] (YicesOpts 20 Nothing))
+satYicesSimpSolverRPO = ExistSolver rpo (unsafePerformIO . satYicesSimp' 100 (YicesOpts 20 Nothing))
+satYicesSolverRPO = ExistSolver rpo (unsafePerformIO . satYices' 100 (YicesOpts 20 Nothing))
 
 smtFFISolverRPOS = ExistSolver rpos (unsafePerformIO . smtFFI)
 satYicesSimpSolverRPOS, satYicesSolverRPOS ::
     (Ord id, Pretty id, Show id, Hashable id, AssertCircuit (Shared (TermN (RPOSsymbol SAT.Var id)))
     ) => ExistSolver RPOSsymbol (Shared (TermN (RPOSsymbol SAT.Var id)))
-satYicesSimpSolverRPOS = ExistSolver rpos (unsafePerformIO . satYicesSimp' [toEnum 100..] (YicesOpts 20 Nothing))
-satYicesSolverRPOS = ExistSolver rpos (unsafePerformIO . satYices' [toEnum 100..] (YicesOpts 20 Nothing))
+satYicesSimpSolverRPOS = ExistSolver rpos (unsafePerformIO . satYicesSimp' 100 (YicesOpts 20 Nothing))
+satYicesSolverRPOS = ExistSolver rpos (unsafePerformIO . satYices' 100 (YicesOpts 20 Nothing))
 
 
 {-
@@ -279,3 +252,21 @@ testRuleEqProp (ExistSolver ext solve) rules = solve $ do
                  () <- Debug.Trace.trace (show bienv) (return ())
                  return (correct, symbolsres)
 -}
+
+
+-- Some other stuff
+--eqRule, gtRule :: RuleN LDPId -> SAT LDPId Var (EvalM Var (Bool, Bool))
+gtRule (l:->r) = assert [l `termGt` r] >> return correct
+  where
+--   coherent= evalB (ECircuit.removeComplex $ ECircuit.runShared $ removeComplex $ runShared $ (l `termGt` r))
+   correct = evalB (l`termGt`r) :: EvalM SAT.Var Bool
+eqRule (l:->r) = assert [l `termEq` r] >> return correct
+  where
+--   coherent= evalB (ECircuit.removeComplex $ ECircuit.runShared $ removeComplex $ runShared $ (l `termEq` r))
+   correct = evalB (l`termEq`r)
+geRule (l:->r) = assert [l `termGt` r, l `termEq` r] >> return correct
+  where
+--   coherent= evalB (ECircuit.removeComplex $ ECircuit.runShared $ removeComplex $ runShared $ (l `termEq` r))
+   correct = evalB (l`termEq`r)
+
+

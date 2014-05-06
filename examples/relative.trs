@@ -1,0 +1,9 @@
+(VAR x y) 
+(RULES
+f(a,x) -> g(x,x)
+g(b,x) -> f(x,x)
+gen ->= a
+gen ->= b
+goal(x,y) -> f(x,y)
+)
+(STRATEGY GOAL goal(x,y))

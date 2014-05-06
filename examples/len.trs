@@ -1,0 +1,15 @@
+
+(VAR A B X)
+(RULES
+    lenIn(Nil,0) -> lenOut(Nil,0)
+    lenIn(Cons(A,B), s(X)) -> u1(lenIn(B,X), A, B, X)
+    u1(lenOut(B,X), A, B, X) -> lenOut(Cons(A,B), s(X))
+    goal(X) -> lenIn(X,GEN)
+    GEN ->= 0
+    GEN ->= s(GEN)
+)
+(PAIRS
+  goal(X) -> LenIn(X,GEN)
+  LenIn(Cons(A,B), s(X)) -> LenIn(B,X)
+)
+(STRATEGY GOAL goal(X))

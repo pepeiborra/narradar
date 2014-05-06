@@ -1,0 +1,7 @@
+(VAR X)
+(RULES
+  f_in(0,s(0),X) -> u_1(f_in(X,X,X),X)
+  u_1(f_out(X,X,X),X) -> f_out(0,s(0),X)
+)
+(STRATEGY NARROWING)
+(STRATEGY GOAL f_in(v,v,g))

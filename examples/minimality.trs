@@ -1,0 +1,6 @@
+(VAR x y)
+(PAIRS F(g(b)) -> F(g(a)))
+(RULES
+ g(a) -> g(b)
+)
+(MINIMALITY)

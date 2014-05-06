@@ -1,0 +1,15 @@
+(VAR X XS YS Y ZS)
+(RULES
+  int_in(0,0) -> int_out(0,0)
+  int_in(0,s(Y)) -> u_2(int_in(s(0),s(Y)),Y)
+  int_in(s(X),0) -> int_out(s(X),0,nil)
+  int_in(s(X),s(Y)) -> u_3(int_in(X,Y),X,Y)
+  intlist_in(cons(X,XS)) -> u_1(intlist_in(XS),X,XS)
+  u_1(intlist_out(XS,YS),X,XS) -> intlist_out(cons(X,XS),cons(s(X),YS))
+  u_2(int_out(s(0),s(Y),XS),Y) -> int_out(0,s(Y),cons(0,XS))
+  u_3(int_out(X,Y,ZS),X,Y) -> u_4(intlist_in(ZS),X,Y,ZS)
+  u_4(intlist_out(ZS,XS),X,Y,ZS) -> int_out(s(X),s(Y),XS)
+)
+(PAIRS
+  int_in(cons(X,XS)) -> int_in(XS)
+)

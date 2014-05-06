@@ -1,0 +1,7 @@
+(VAR x y)
+(RULES
+
+p(0, y) -> y
+p(s(x),y) -> s(p(x,y)))
+(STRATEGY NARROWING)
+(STRATEGY GOAL  p(b,v)))

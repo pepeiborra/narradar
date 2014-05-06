@@ -1,0 +1,13 @@
+(VAR x y)
+(PAIRS 
+ F(s(s(z))) -> INC(dec,min)
+ INC(z,y) -> F(y)
+)
+(RULES
+ f(s(s(z))) -> inc(dec,min)
+ min -> s(z)
+ dec -> bot
+ inc(z,y) -> f(y)
+ bot -> z
+ bot -> s(bot)
+)

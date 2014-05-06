@@ -21,6 +21,7 @@ import Data.Hashable (Hashable(..))
 import Data.Map (Map)
 import Data.Foldable(toList)
 import Data.Traversable(traverse)
+import Text.PrettyPrint.HughesPJClass
 import Test.QuickCheck
 
 import qualified Data.Map as Map
@@ -29,84 +30,28 @@ import Funsat.Circuit      as C
 import Funsat.ECircuit     as EC
 import Funsat.RPOCircuit   as RPOC
 
-import Narradar hiding (G, V)
+import Narradar.Types as Narradar hiding (G,V)
 import Narradar.Constraints.SAT.MonadSAT as SAT
 import Narradar.Constraints.SAT.Solve
 import Narradar.Constraints.SAT.RPOAF hiding (mkSATSymbol)
+import Narradar.Constraints.SAT.RPOAF.Symbols
 
--- -------------------------
--- Our boolean Variable type
--- -------------------------
+import Types
 
-data NVar = VN Int | VB Int deriving (Eq, Ord)
-instance Hashable NVar where
-    hash (VN i) = hash (0::Int,i)
-    hash (VB i) = hash (1::Int,i)
-
-vb i     = input $ VB i
-
-instance Show NVar where
-  show (VN i) = "vn" ++ show i
-  show (VB i) = "vb" ++ show i
-
-instance Read NVar where
-  readsPrec p ('v':'n':rest) = [(VN i, rest) | (i,rest) <- readsPrec 0 rest]
-  readsPrec p ('v':'b':rest) = [(VB i, rest) | (i,rest) <- readsPrec 0 rest]
-  readsPrec _ _ = []
-
-instance Bounded NVar where minBound = VN 0; maxBound = VB maxBound
-instance Enum NVar where
---  fromEnum (VN i) = i * 2
---  fromEnum (VB i) = (i * 2) + 1
---  toEnum i = (if odd i then VB else VN) (i `div` 2)
-  toEnum i = VB i
-  fromEnum (VB i) = i
+-- -----------------------
+-- Generating Vars and Ids
+-- -----------------------
 
 instance Arbitrary NVar where
   arbitrary = do {con <- elements [VB,VN]; (con . abs) `liftM` arbitrary}
 
 instance Decode NVar Bool NVar where decode v@VB{} = evalB (input v)
 
--- Our SAT monad
--- -------------
-
-type SAT' id lpoid v = StateT (Map id (lpoid v (DPIdentifier id))  )
-                              (SAT    (TermN (lpoid v (DPIdentifier id))) v)
-
-runSAT' = (`runState` st0{pool=[V 1000..]}) . unSAT . (`evalStateT` Map.empty)
-
--- -----------------
--- Generation of Ids
--- -----------------
-
-type DPRandId = DPIdentifier RandId
-
-data RandId = F | F2 | G | G2 | S | Z deriving (Eq, Enum, Ord, Show)
-instance Pretty RandId where pPrint = text . show
-instance Hashable RandId where hash = fromEnum
-
 instance Arbitrary RandId where
   arbitrary = elements [ F,G,F2,G2,S,Z]
   shrink F2 = [F]
   shrink G2 = [G]
   shrink _  = []
-
-class IsDefined id where isDefined :: id -> Bool
-
-instance IsDefined RandId where
-  isDefined F = True
-  isDefined G = True
-  isDefined F2 = True
-  isDefined G2 = True
-  isDefined _  = False
-
-instance HasArity RandId where
-  getIdArity F = 1
-  getIdArity G = 1
-  getIdArity F2 = 2
-  getIdArity G2 = 2
-  getIdArity S = 1
-  getIdArity Z = 0
 
 
 -- ----------------
@@ -133,7 +78,10 @@ mkSATSymbol mk G2 = mk (IdFunction G2, 2, True)
 mkSATSymbol mk S  = mk (IdFunction S, 1, False)
 mkSATSymbol mk Z  = mk (IdFunction Z, 0,False)
 
-mkSATSymbol' :: (MonadState (Map RandId id') (t m), Monad m, MonadTrans t) => ((DPRandId, Int, Bool) -> m id') -> RandId -> t m id'
+-- * Construction of symbols with fresh variables from a monadic supply
+
+mkSATSymbol' :: (MonadState (Map RandId id') (t m), Monad m, MonadTrans t) =>
+                ((DPRandId, Int, Bool) -> m id') -> RandId -> t m id'
 mkSATSymbol' mk s = do
   dict <- get
   case Map.lookup s dict of
@@ -143,7 +91,7 @@ mkSATSymbol' mk s = do
                modify (Map.insert s s')
                return s'
 
-
+-- * Hardcoded construction of symbols
 mkSymbol F = createSymbol 0 0 F 1
 mkSymbol G = createSymbol 5 2 G 1
 mkSymbol S = createSymbol 10 4 S 1
@@ -201,6 +149,16 @@ createSymbol b0 n0 id 0
   vn i = VN (n0 + i)
   prec = Natural (vn 1)
 
+
+-- manual testing using the hardcoded construction of symbols
+f x = term (mkSymbol F) [x]
+g x = term (mkSymbol G) [x]
+s x = term (mkSymbol S) [x]
+z   = term (mkSymbol Z) []
+f2 x y = term (mkSymbol F2) [x,y]
+g2 x y = term (mkSymbol G2) [x,y]
+v0 = var 0
+v1 = var 1
 
 sizedTerm, sizedDefTerm :: (HasArity id, IsDefined id, Arbitrary id) => Int -> Gen (TermN id)
 sizedTerm size = oneof [return $ Narradar.var 0
@@ -363,11 +321,11 @@ sizedxPOCircuit :: forall c (lpoid :: * -> * -> *) id.
                    ,ECircuit c, OneCircuit c, NatCircuit c, RPOCircuit c (TermN id)
                    ,Co c SAT.Var, CoRPO c (TermN id) SAT.Var
                    ,Arbitrary (SAT' RandId lpoid SAT.Var (RuleN id))
-                   ) => Proxy id -> Int -> Gen (c SAT.Var, [SAT.Var])
+                   ) => Proxy id -> Int -> Gen (c SAT.Var, Int)
 sizedxPOCircuit _ size = do
   c <- go size
   let (circuit, St pool constraints _) = runSAT' c
-  return (circuit /\ removeExist (RPOC.runShared constraints), pool)
+  return (circuit /\ removeExist (RPOC.runShared constraints), fromEnum (head pool))
  where
   go :: Int -> Gen (SAT' RandId lpoid SAT.Var (c SAT.Var))
   go 0 = return . return . input . V $ 1
@@ -389,19 +347,20 @@ sizedxPOCircuit _ size = do
           return $ liftM (\(l:->r) -> cmp l r) rule
 
 type SizedGen a = Int -> Gen a
+type ShrinkableSizedGen a = (a->[a], SizedGen a)
 
-sizedLPOCircuit :: forall c. (Co c SAT.Var, CoRPO c (TermN (LDPId)) SAT.Var, ECircuit c, OneCircuit c, RPOCircuit c (TermN LDPId)) => SizedGen (c SAT.Var, [SAT.Var])
+sizedLPOCircuit :: forall c. (Co c SAT.Var, CoRPO c (TermN (LDPId)) SAT.Var, ECircuit c, OneCircuit c, NatCircuit c, RPOCircuit c (TermN LDPId)) => SizedGen (c SAT.Var, Int)
 sizedLPOCircuit = sizedxPOCircuit undefined -- :: LPOsymbol Var DPId)
 
-sizedMPOCircuit :: forall c. (Co c SAT.Var, CoRPO c (TermN (MPOsymbol SAT.Var DPRandId)) SAT.Var, ECircuit c, OneCircuit c, RPOCircuit c (TermN MDPId)) => SizedGen (c SAT.Var, [SAT.Var])
+sizedMPOCircuit :: forall c. (Co c SAT.Var, CoRPO c (TermN (MPOsymbol SAT.Var DPRandId)) SAT.Var, ECircuit c, OneCircuit c, NatCircuit c, RPOCircuit c (TermN MDPId)) => SizedGen (c SAT.Var, Int)
 sizedMPOCircuit = sizedxPOCircuit undefined
 
 sizedLPOsCircuit :: forall c.
                     ( Co c SAT.Var
                     , CoRPO c (TermN (LPOSsymbol SAT.Var DPRandId)) SAT.Var
-                    , ECircuit c, OneCircuit c
+                    , ECircuit c, OneCircuit c, NatCircuit c
                     , RPOCircuit c (TermN LSDPId)
-                    ) => SizedGen (c SAT.Var, [SAT.Var])
+                    ) => SizedGen (c SAT.Var, Int)
 sizedLPOsCircuit = sizedxPOCircuit undefined -- :: LPOSsymbol Var DPId)
 
 instance OneCircuit EC.Tree
@@ -421,60 +380,60 @@ instance Arbitrary (RPOC.Tree id NVar) where
 
 shrinkTree (RPOC.TFix(RPOC.TAnd a b)) =
     [a, b] ++ tail[RPOC.tAnd a' b'
-                   | a' <- a:shrink a
-                   , b' <- b:shrink b]
+                   | a' <- a:shrinkTree a
+                   , b' <- b:shrinkTree b]
 
 shrinkTree (RPOC.TFix(RPOC.TOr a b))  =
     [a,b] ++ tail[RPOC.tOr a' b'
-                  | a' <- a:shrink a
-                  , b' <- b:shrink b]
+                  | a' <- a:shrinkTree a
+                  , b' <- b:shrinkTree b]
 shrinkTree (RPOC.TFix(RPOC.TIff a b)) =
     [a,b] ++ tail [RPOC.tIff a' b'
-                   | a' <- a:shrink a
-                   , b' <- b:shrink b]
+                   | a' <- a:shrinkTree a
+                   , b' <- b:shrinkTree b]
 
 shrinkTree (RPOC.TFix(RPOC.TOnlyIf a b)) =
     [a,b] ++ tail [RPOC.tOnlyIf a' b'
-                   | a' <- a:shrink a
-                   , b' <- b:shrink b]
+                   | a' <- a:shrinkTree a
+                   , b' <- b:shrinkTree b]
 shrinkTree (RPOC.TFix(RPOC.TXor a b)) =
     [a,b] ++ tail[RPOC.tXor a' b'
-                  | a' <- a:shrink a
-                  , b' <- b:shrink b]
-shrinkTree (RPOC.TFix(RPOC.TNot a))   = [a] ++ tail[RPOC.tNot a' | a' <- shrink a]
+                  | a' <- a:shrinkTree a
+                  , b' <- b:shrinkTree b]
+shrinkTree (RPOC.TFix(RPOC.TNot a))   = [a] ++ tail[RPOC.tNot a' | a' <- shrinkTree a]
 shrinkTree (RPOC.TFix(RPOC.TIte a b c)) =
     [a,b,c] ++ tail[RPOC.tIte a b c
-                   | a' <- a:shrink a
-                   , b' <- b:shrink b
-                   , c' <- c:shrink c]
+                   | a' <- a:shrinkTree a
+                   , b' <- b:shrinkTree b
+                   , c' <- c:shrinkTree c]
 shrinkTree (RPOC.TFix(RPOC.TEq uu vv)) =
     [RPOC.tEq uu' vv'
-    | uu' <- shrink uu
-    , vv' <- shrink vv]
+    | uu' <- shrinkTree uu
+    , vv' <- shrinkTree vv]
 shrinkTree (RPOC.TFix(RPOC.TLt uu vv)) =
     [RPOC.tLt uu' vv'
-     | uu' <- shrink uu
-     , vv' <- shrink vv]
+     | uu' <- shrinkTree uu
+     , vv' <- shrinkTree vv]
 shrinkTree (RPOC.TFix(RPOC.TOne (_:vv))) = [RPOC.tOne vv]
 shrinkTree t = []
 
 
 
 
-shrinkETree (EC.TIff a b) = [a,b] ++ tail [EC.TIff a' b' | a' <- a:shrink a
-                                                         , b' <- b:shrink b]
+shrinkETree (EC.TIff a b) = [a,b] ++ tail [EC.TIff a' b' | a' <- a:shrinkETree a
+                                                         , b' <- b:shrinkETree b]
 shrinkETree (EC.TOnlyIf a b) = [a,b] ++ tail [EC.TOnlyIf a' b'
-                                              | a' <- a:shrink a
-                                              , b' <- b:shrink b]
-shrinkETree (EC.TXor a b) = [a,b] ++ tail[EC.TXor a' b' | a' <- a:shrink a
-                                                 , b' <- b:shrink b]
-shrinkETree (EC.TNot a)   = [a] ++ tail[EC.TNot a' | a' <- shrink a]
+                                              | a' <- a:shrinkETree a
+                                              , b' <- b:shrinkETree b]
+shrinkETree (EC.TXor a b) = [a,b] ++ tail[EC.TXor a' b' | a' <- a:shrinkETree a
+                                                 , b' <- b:shrinkETree b]
+shrinkETree (EC.TNot a)   = [a] ++ tail[EC.TNot a' | a' <- shrinkETree a]
 shrinkETree (EC.TIte a b c) = [a,b,c] ++ tail[EC.TIte a b c
-                                              | a' <- a:shrink a
-                                              , b' <- b:shrink b
-                                              , c' <- c:shrink c]
-shrinkETree (EC.TEq uu vv) = [EC.TEq uu' vv' | uu' <- shrink uu
-                                      , vv' <- shrink vv]
-shrinkETree (EC.TLt uu vv) = [EC.TLt uu' vv' | uu' <- shrink uu
-                                      , vv' <- shrink vv]
+                                              | a' <- a:shrinkETree a
+                                              , b' <- b:shrinkETree b
+                                              , c' <- c:shrinkETree c]
+shrinkETree (EC.TEq uu vv) = [EC.TEq uu' vv' | uu' <- shrinkETree uu
+                                      , vv' <- shrinkETree vv]
+shrinkETree (EC.TLt uu vv) = [EC.TLt uu' vv' | uu' <- shrinkETree uu
+                                      , vv' <- shrinkETree vv]
 shrinkETree t = []

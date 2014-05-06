@@ -1,0 +1,16 @@
+(VAR X XS YS Y ZS)
+(RULES
+  int_in(0,0,cons(0,nil)) -> int_out(0,0,cons(0,nil))
+  int_in(0,s(Y),cons(0,XS)) -> u_2(int_in(s(0),s(Y),XS),XS,Y)
+  int_in(s(X),0,nil) -> int_out(s(X),0,nil)
+  int_in(s(X),s(Y),XS) -> u_3(int_in(X,Y,ZS),X,XS,Y)
+  intlist_in(cons(X,XS),cons(s(X),YS)) -> u_1(intlist_in(XS,YS),X,XS,YS)
+  intlist_in(nil,nil) -> intlist_out(nil,nil)
+  u_1(intlist_out(XS,YS),X,XS,YS) -> intlist_out(cons(X,XS),cons(s(X),YS))
+  u_2(int_out(s(0),s(Y),XS),XS,Y) -> int_out(0,s(Y),cons(0,XS))
+  u_3(int_out(X,Y,ZS),X,XS,Y) -> u_4(intlist_in(ZS,XS),X,XS,Y,ZS)
+  u_4(intlist_out(ZS,XS),X,XS,Y,ZS) -> int_out(s(X),s(Y),XS))
+  gen_nat -> 0
+  gen_nat -> s(gen_nat)
+(STRATEGY NARROWING)
+(STRATEGY GOAL int_in(b, b, f))

@@ -1,0 +1,17 @@
+digraph G {
+size="100,100";
+compound=True;
+n0[label="(VAR x)\l(RULES\l  b(x) -> c\l  f(a(x),x) -> f(b(x),x)\l  h(b(x)) -> x)\l(PAIRS\l  f#(a(x),x) -> b#(x)\l  f#(a(x),x) -> f#(b(x),x)\l  h#(b(x)) -> b#(x))\l(MINIMALITY)\l(STRATEGY NARROWING)\l",color="#4488C9",shape=box,style=bold,fontname=monospace,fontsize=10.0,margin="0.2,0.2"];
+subgraph cluster_1 {
+n2[label="0\l"];
+n3[label="1\l",labelfontcolor="darkorange",color="darkorange"];
+n4[label="2\l"];
+n3 -> n2;
+n3 -> n3[color="darkorange"];
+
+}
+n0 -> n2[lhead=cluster_1,color="red",color="red"];
+n5[label=" \l"];
+n2 -> n5[ltail=cluster_1,color="red",color="red",color="red"];
+
+}

@@ -1,0 +1,5 @@
+(VAR x y)
+(RULES
+p(0) -> 0
+p(p(x)) -> p(x)
+)

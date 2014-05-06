@@ -1,0 +1,7 @@
+(VAR src dst x y port s)
+(RULES
+
+f(g(x)) -> x
+g(x) -> x
+)
+(STRATEGY NARROWING)

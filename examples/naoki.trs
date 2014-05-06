@@ -1,0 +1,9 @@
+(VAR x y)
+(RULES
+ or(true,y) -> true
+ or(false,y) -> y
+ not(true) -> false
+ not(false) -> true
+ and(x,y) -> not(or(x,y))
+)
+(STRATEGY NARROWING)

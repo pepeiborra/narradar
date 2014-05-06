@@ -1,0 +1,7 @@
+(VAR n x) 
+(RULES
+ f(s(n),x,x) -> f(n,g(0),x)
+ g(1) -> 1
+)
+(STRATEGY NARROWING)
+(STRATEGY GOAL f(v,v,v))
