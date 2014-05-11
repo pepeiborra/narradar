@@ -7,7 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Narradar.Interface.Cli
-        (narradarMain, prologMain
+        (narradarMain, narradarMain', prologMain
         , Options(..), defOpts
         ) where
 
@@ -87,7 +87,29 @@ narradarMain :: forall mp.
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 narradarMain run = catchTimeout $ do
-  (flags@Options{..}, _, _errors) <- getOptions
+  (options, _, _errors) <- getOptions
+  narradarMain' run options
+  where
+    catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
+
+narradarMain' :: forall mp.
+                 (IsMZero mp, Traversable mp
+                 ,Dispatch (Problem Rewriting  (NTRS Id))
+                 ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) IRewriting))  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) Rewriting)  (NTRS Id))
+                 ,Dispatch (Problem (Relative  (NTRS Id) IRewriting)  (NTRS Id))
+                 ,Dispatch (Problem Narrowing  (NTRS Id))
+                 ,Dispatch (Problem CNarrowing (NTRS Id))
+                 ,Dispatch PrologProblem
+                 ) => (forall a. mp a -> Maybe a) -> Options -> IO ()
+
+narradarMain' run flags@Options{..} = do
   tmp <- getTemporaryDirectory
 
   a_problem <- eitherM $ narradarParse problemFile input
@@ -108,8 +130,6 @@ narradarMain run = catchTimeout $ do
              let proof' = unsafeSliceProof proof
              when (verbose > 1) $ print $ pprProofFailures proof'
 --             when (verbose > 1 && diagrams) (printDiagram tmp flags proof') `const` proof
-  where
-    catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
 
 
 withTimeout t m = do
