@@ -109,13 +109,13 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
                       hPutStrLn h dotsol
                       hClose h
                       system (printf "dot -Tpdf %s -o %s" fp (tmp </> fn))
-                      pdfsrc <- (Base64.encode . BS.unpack) `liftM` BS.readFile (tmp </> fn)
+--                      pdfsrc <- (Base64.encode . BS.unpack) `liftM` BS.readFile (tmp </> fn)
                       return (False
                              ,p << [ toHtml "See a visual log of the proof "
-                                   , anchor ! [href ("data:application/pdf;base64," ++ pdfsrc)] << "here"
-                                   , toHtml " (or "
+--                                   , anchor ! [href ("data:application/pdf;base64," ++ pdfsrc)] << "here"
+--                                   , toHtml " (or "
                                    , anchor ! [href (mypath ++ "?action=getPDF&file=" ++ fn)] << "here"
-                                   , toHtml " if you have an underpowered web browser)"
+--                                   , toHtml " if you have an underpowered web browser)"
                                    ]
                              )
        case sol of
