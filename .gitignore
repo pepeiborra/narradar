@@ -3,6 +3,7 @@
 repo/
 dist/
 wordpress-theme/
+yackage/
 *.hi
 *.o
 *.p_o
@@ -10,3 +11,8 @@ wordpress-theme/
 *.*-boot
 *.*~
 *.DS_Store
+*.dot
+*.pdf
+*.config
+*.aes
+
