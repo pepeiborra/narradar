@@ -32,13 +32,9 @@
 <textarea cols="80" rows="30" name="TRS">
 (VAR x y) 
 (RULES
- add(s(x),y) -> s(add(x,y))
- add(zero,y) -> y
- goal(x) -> add(x,gen)
- gen ->= s(gen)
- gen ->= zero
+ a -> b
+ f(b,x) ->= f(x,x)
 )
-(STRATEGY GOAL goal(x))
 </textarea>
 </p>
 <input type="hidden" name="action" id="action" value="solve" />
