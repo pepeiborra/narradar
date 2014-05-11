@@ -33,8 +33,10 @@
 (VAR x y) 
 (RULES
  a -> b
+ main -> f(a,a)
  f(b,x) ->= f(x,x)
 )
+(STRATEGY GOAL main)
 </textarea>
 </p>
 <input type="hidden" name="action" id="action" value="solve" />
