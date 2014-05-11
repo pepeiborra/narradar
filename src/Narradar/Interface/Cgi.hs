@@ -128,12 +128,12 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
                               ,pre  << sol]
                     _ -> do
                           proof_txt <- liftIO $ evaluate (pprProofFailures proof)
---                          proof_log <- mkProofLog
+                          proof_log <- mkProofLog
                           output$ renderHtml $
                             thediv ! [identifier "title"]
                              << [h3 << "Termination could not be proved."
---                                ,p  << proof_log
---                                ,pre << proof_txt
+                                ,p  << proof_log
+                                ,pre << proof_txt
                                 ]
                          `catchCGI` \TimeoutException -> output $ renderHtml $
                                                       h3 << "Termination could not be proved"
