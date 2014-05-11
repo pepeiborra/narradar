@@ -53,7 +53,8 @@ echoV str = do
   (flags@Options{..}, _, _errors) <- getOptions
   when (verbose>1) $ hPutStrLn stderr str
 
---printDiagram :: String -> Options -> Proof PrettyDotF mp a -> IO ()
+printDiagram :: (IsMZero mp, Traversable mp) =>
+                String -> Options -> Proof PrettyDotF mp a -> IO ()
 printDiagram tmp Options{..} proof
        | isNothing pdfFile = return ()
        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
@@ -99,7 +100,7 @@ narradarMain run = catchTimeout $ do
 
   case join sol of
     Just sol -> do putStrLn "YES"
---                   when diagrams $ printDiagram tmp flags sol
+                   when diagrams $ printDiagram tmp flags sol
                    when (verbose>0) $ print $ pPrint sol
 
     Nothing  -> do

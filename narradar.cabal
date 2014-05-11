@@ -112,7 +112,7 @@ Library
                   narradar-trsparser >= 0.4.3, 
                   narradar-prolog >= 0.3,
                   narradar-prolog-tools >= 0.3,
-                  muterm-framework >= 1.5.1,
+                  muterm-framework >= 1.5.3,
                   muterm-framework-charts >= 0.3.1,
                   hashable,
                   hashmap,
@@ -126,11 +126,10 @@ Library
     exposed-modules:
      Narradar.Processor.Aprove
 --   Narradar.Processor.ReductionPair,
-    other-modules:
      Text.ParserCombinators.Parsec.Tag
 
   if flag(cgi)
-    build-depends:   safe-failure, cgi, file-embed, dataenc
+    build-depends:   safe-failure, cgi >= 3001.1.8.6, file-embed, dataenc
     exposed-modules: Narradar.Interface.Cgi
 
   exposed-modules:

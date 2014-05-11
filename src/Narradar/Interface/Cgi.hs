@@ -92,7 +92,7 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
 
        let proof   = dispatchAProblem a_problem
        sol <- liftIO $ liftM Control.Monad.join $ withTimeout timeout $
-              evaluate (run (runProof proof) :: Maybe(Proof PrettyDotF mp ()))
+              evaluate (run (runProof proof))
 
        let dotsol = case sol of
                        Just sol -> dotProof' DotProof{showFailedPaths = False} sol
