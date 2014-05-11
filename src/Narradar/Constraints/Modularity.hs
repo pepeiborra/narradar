@@ -3,14 +3,18 @@
 
 module Narradar.Constraints.Modularity where
 
+import Data.Foldable (Foldable,toList)
 import Data.List ((\\))
+import qualified Data.Map as Map
 import Data.Traversable (Traversable)
 import qualified Data.Set as Set
 import Narradar.Types
 
 import qualified Data.Term.Family as Family
 
-isHierarchicalCombination :: HasSignature trs => trs -> trs -> Bool
+--isHierarchicalCombination :: (HasSignature trs1, HasSignature trs2) => trs1 -> trs2 -> Bool
+isHierarchicalCombination :: ( HasSignature ex, HasSignature base
+                             , Family.Id ex ~ Family.Id base) => ex -> base -> Bool
 isHierarchicalCombination ex base =
   Set.null(getDefinedSymbols base `Set.intersection` getDefinedSymbols ex) &&
   Set.null(getConstructorSymbols base `Set.intersection` getDefinedSymbols ex)
@@ -39,7 +43,9 @@ isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules trs, Ord (T
                                         , Family.Id t ~ Family.Id trs
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =
+-- A generalized hierarchical combination is an HC with shared rules
   isHierarchicalCombination ex' base' &&
+  -- All the rules for a shared symbol must exist on both systems
   all (\rE -> any (equiv2' rE) baseShared) exShared &&
   all (\rB -> any (equiv2' rB) exShared) baseShared
  where
@@ -74,3 +80,28 @@ isGeneralizedRelaxedHierarchicalCombination ex base =
     rulesFor ids trs = [ r | r <- rules trs
                                  , Just id <- [rootSymbol (lhs r)]
                                  , id `Set.member` ids]
+
+isHTtrs ex base = all (\(_ :-> r) -> isHT_ r) (rules ex)
+  where
+      isHT_ = isHT (getSignature ex) (getSignature base)
+
+
+isHT :: (HasId f, Foldable f
+        ) => Signature (Family.Id f) -> Signature (Family.Id f) -> Term f v -> Bool
+isHT exsig basesig = go
+ where
+  go t
+    | Just f <- rootSymbol t
+    , f `Set.member` d_ex
+    = t `notFrom` d_b && all go (directSubterms t)
+    | Just f <- rootSymbol t
+    , f `Set.member` d_b
+    = t `notFrom` d_ex && all go (directSubterms t)
+    | Just _ <- rootSymbol t
+    = all go (directSubterms t)
+    | otherwise = True
+
+  d_ex = Map.keysSet $ definedSymbols exsig
+  d_b  = Map.keysSet $ definedSymbols basesig
+  term `notFrom` symbols =
+    Set.null (Set.fromList(toList(getSignature term)) `Set.intersection` symbols)

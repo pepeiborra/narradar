@@ -2,7 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances, FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
-module Narradar.Processor.RelativeProblem where
+module Narradar.Processor.RelativeProblem (RelativeToRegular(..)) where
 
 import Data.Monoid
 

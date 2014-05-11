@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE FlexibleContexts #-}
 
 module Narradar.Constraints.Syntactic where
@@ -24,13 +25,16 @@ isAlmostOrthogonal :: ( HasRules trs
 isAlmostOrthogonal p = isLeftLinear p && all isOverlay cps && and[ r1==r2 | (p,r1,r2) <- cps]
     where cps = criticalPairs p
 
-
 isOverlayTRS p = (all isOverlay . criticalPairs) p
 
 isOverlay ([],r1,r2) = True
 isOverlay _ = False
 
 isNonOverlapping p = (null . criticalPairs) p
+
+isNonDuplicatingTRS = null . duplicatingRules
+
+duplicatingRules = filter isDuplicating . rules
 
 nonLeftLinearRules :: (Ord v, Foldable t, Functor t, HasRules trs, Rule t v ~ Family.Rule trs) => trs -> [Rule t v]
 nonLeftLinearRules trs = [ l:->r | l:->r <- rules trs, not (isLinear l)]

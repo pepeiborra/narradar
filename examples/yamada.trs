@@ -2,4 +2,6 @@
 (RULES
    a -> b
    f(b,x) ->= f(x,x)
+   goal -> a
 )
+(STRATEGY GOAL goal)
