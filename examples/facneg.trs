@@ -1,0 +1,21 @@
+(VAR x y) 
+(RULES
+fac(0) -> s(0)
+fac(s(x)) -> mul(s(x), fac(x))
+fac(n(x)) -> mul(n(x), fac(n(s(x))))
+mul(x,0) -> 0
+mul(0,y) -> 0
+mul (x, s(y)) -> add (mul (x, y), x)
+mul (s(x), n(y)) -> n(mul (s(x), y)) 
+mul (n(x), n(y)) -> mul (x, y)
+add(x,0) -> x
+add(0,y) -> y
+add (x, s(y)) -> s(add (x, y))
+add (s(x), n(s(y))) -> add (x, n(y)) 
+add (s(x), n(0)) -> s(x)
+add (n(x), n(y)) -> n(add (x, y))
+gen ->= s(gen)
+gen ->= 0
+goal -> fac(gen)
+)
+(STRATEGY GOAL goal)

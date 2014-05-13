@@ -1,0 +1,6 @@
+(VAR x)
+(RULES
+   a -> b
+   f(b,x) -> f(x,x)
+   goal -> a
+)

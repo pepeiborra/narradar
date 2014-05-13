@@ -1,0 +1,11 @@
+(VAR x y) 
+(RULES
+fac(0) -> s(0)
+fac(s(x)) -> mul(s(x), fac(x))
+mul(x,0) -> 0
+mul(0,y) -> 0
+mul (x, s(y)) -> add (mul (x, y), x)
+add(x,0) -> x
+add(0,y) -> y
+add (x, s(y)) -> s(add (x, y))
+)
