@@ -180,7 +180,7 @@ instance NatCircuit (YicesSource id) where
   lt = liftYices2 (:<)
 
 instance OneCircuit (YicesSource id) where
-  one = oneExist
+--  one = oneExist
 
 instance ExistCircuit (YicesSource id) where
   existsBool f = YicesSource $ do
