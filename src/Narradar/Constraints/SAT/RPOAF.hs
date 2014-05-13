@@ -371,14 +371,14 @@ instance (RPOCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, E
          ,Ord a, Pretty a) =>
   RPOExtCircuit repr (Usable(LPOSsymbol v a)) where
   exEq s t = lexpeq s t
-  exGt s t = lexpgt_existA s t
+  exGt s t = lexpgt s t
 --  exGe = lexpge_exist
 
 instance (RPOCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
          ,Pretty a, Ord a) =>
   RPOExtCircuit repr (Usable(LPOsymbol v a)) where
-  exEq s t = lexeq_existA s t
-  exGt s t = lexgt_existA s t
+  exEq s t = lexeq s t
+  exGt s t = lexgt s t
 
 instance (RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          ,Pretty a, Ord a) =>
@@ -423,6 +423,7 @@ variableCondition rule@(_ :-> r)
 lexgt id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
                            (zip (map input $ filtering_vv id_g) gg)
  where
+  go :: [(repr var,Term termF tvar)] -> [(repr var,Term termF tvar)] -> repr var
   go []     _      = false
   go ff      []    = or [ af_f | (af_f,_) <- ff]
   go ((af_f,f):ff) ((af_g,g):gg)
@@ -435,6 +436,7 @@ lexgt id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
 lexeq id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
                            (zip (map input $ filtering_vv id_g) gg)
  where
+  go :: [(repr var,Term termF tvar)] -> [(repr var,Term termF tvar)] -> repr var
   go []     []     = true
   go ff      []    = not $ or [ af_f | (af_f,_) <- ff]
   go []      gg    = not $ or [ af_g | (af_g,_) <- gg]
@@ -583,7 +585,8 @@ lexeq_existA id_f id_g ff gg = (`runCont` id) $ do
                          (m!!0!!1))
                     (m!!1!!0)
 
-lexpeq, muleq,mulgt,mulge ::
+lexpeq, lexpgt, lexeq, lexgt, muleq,mulgt,mulge ::
+         forall id termF repr tvar var .
          ( var   ~ Family.Var id
          , id    ~ Family.Id termF
          , termF ~ Family.TermF repr
