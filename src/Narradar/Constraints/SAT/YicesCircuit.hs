@@ -92,7 +92,7 @@ generateDeclarations :: (Hashable id, Ord var, Show var) => YMaps id var -> [Cmd
 generateDeclarations YMaps{..} =
    [DEFINE (show v, typ) Nothing | (v,typ) <- Set.toList variables] ++
    [DEFINE (show v, VarT "bool")  (Just c)
-        | (v, c) <- sortBy (compare `on` fst) (HashMap.elems termEqMap ++ HashMap.elems termGtMap)]
+        | (v, c) <- sortBy (compare `on` fst) (HashMap.elems termEqMap ++ HashMap.elems termGtMap ++ HashMap.elems termGeMap)]
 
 solveDeclarations :: (Ord v, Read v) => Maybe Int -> [CmdY] -> IO (Maybe (BIEnv v))
 solveDeclarations mb_timeout cmds = do
