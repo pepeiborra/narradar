@@ -354,12 +354,12 @@ instance ( RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit re
      exGt s t ss tt =
        and [useMul s, useMul t, mulgt s t ss tt]
        \/
-       and [not$ useMul s, not$ useMul t, lexpgt_existA s t ss tt]
+       and [not$ useMul s, not$ useMul t, lexpgt s t ss tt]
 
      exGe s t ss tt =
        and [useMul s, useMul t, mulgt s t ss tt \/ muleq s t ss tt]
        \/
-       and [not$ useMul s, not$ useMul t, lexpgt_existA s t ss tt \/ lexpeq s t ss tt]
+       and [not$ useMul s, not$ useMul t, lexpgt s t ss tt \/ lexpeq s t ss tt]
 {-
      exGe s t ss tt =
        and [useMul s, useMul t, mulge s t ss tt]
@@ -392,12 +392,12 @@ instance (RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit rep
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]
       \/
-      and [not$ useMul s, not$ useMul t, lexeq_existA s t ss tt]
+      and [not$ useMul s, not$ useMul t, lexeq s t ss tt]
 
   exGt s t ss tt =
       and [useMul s, useMul t, mulgt s t ss tt]
       \/
-      and [not$ useMul s, not$ useMul t, lexgt_existA s t ss tt]
+      and [not$ useMul s, not$ useMul t, lexgt s t ss tt]
 
 -- -------------------------
 -- Narrowing related stuff
