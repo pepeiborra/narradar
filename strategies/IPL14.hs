@@ -46,7 +46,7 @@ instance () => Dispatch (NProblem Rewriting Id) where
   dispatch = ev >=> (inn .|. (dg >=> rpoPlus gt2 >=> final))
 
 instance (Pretty (DPIdentifier a), Hashable a, Ord a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
-  dispatch = ev >=> sc >=> dg >=> rpoPlus gt1 >=> final
+  dispatch = ev >=> sc >=> dg >=> sc >=> dg >=> rpoPlus gt1 >=> final
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
