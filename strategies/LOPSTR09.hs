@@ -9,7 +9,7 @@
 {-# LANGUAGE CPP #-}
 
 
---module LOPSTR09 where
+module LOPSTR09 where
 
 import Control.Monad
 import Data.Maybe
@@ -107,17 +107,17 @@ inn = apply ToInnermost >=> dispatch
 rpoPlus transform
    = repeatSolver 10 ((lpo .|. rpos .|. transform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  Needed SMTFFI)
-    mpo  = apply (RPOProc MPOAF  Needed SMTFFI)
-    lpos = apply (RPOProc LPOSAF Needed SMTFFI)
-    rpo  = apply (RPOProc RPOAF  Needed SMTFFI)
-    rpos = apply (RPOProc RPOSAF Needed SMTFFI)
+    lpo  = apply (RPOProc LPOAF  Needed SMTFFI True)
+    mpo  = apply (RPOProc MPOAF  Needed SMTFFI True)
+    lpos = apply (RPOProc LPOSAF Needed SMTFFI True)
+    rpo  = apply (RPOProc RPOAF  Needed SMTFFI True)
+    rpos = apply (RPOProc RPOSAF Needed SMTFFI True)
 
 rpoPlusPar transform = parallelize f where
  f = repeatSolver 5 ( (lpo.||. rpos .||. transform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  Needed SMTSerial)
-    rpos = apply (RPOProc RPOSAF Needed SMTSerial)
+    lpo  = apply (RPOProc LPOAF  Needed SMTSerial True)
+    rpos = apply (RPOProc RPOSAF Needed SMTSerial True)
 
 
 gt1 = apply RewritingP .||. apply NarrowingP .||. apply FInstantiation .||. apply Instantiation
