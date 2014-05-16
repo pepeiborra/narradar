@@ -79,7 +79,7 @@ ev = apply ExtraVarsP
 inn = apply ToInnermost >=> dispatch
 
 rpoPlus transform
-   = repeatSolver 10 ((lpo .|. rpos .|. transform) >=> dg)
+   = repeatSolver 5 ((lpo .|. rpos .|. transform) >=> dg)
   where
     lpo  = apply (RPOProc LPOAF  Needed SMTFFI True)
     mpo  = apply (RPOProc MPOAF  Needed SMTFFI True)
