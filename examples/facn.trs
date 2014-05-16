@@ -1,0 +1,4 @@
+(VAR x)
+(RULES
+ fac(n(x)) -> fac(n(s(x)))
+)
