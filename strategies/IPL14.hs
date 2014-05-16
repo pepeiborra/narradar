@@ -81,11 +81,11 @@ inn = apply ToInnermost >=> dispatch
 rpoPlus transform
    = repeatSolver 10 ((lpo .|. rpos .|. transform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  Needed SMTFFI False)
-    mpo  = apply (RPOProc MPOAF  Needed SMTFFI False)
-    lpos = apply (RPOProc LPOSAF Needed SMTFFI False)
-    rpo  = apply (RPOProc RPOAF  Needed SMTFFI False)
-    rpos = apply (RPOProc RPOSAF Needed SMTFFI False)
+    lpo  = apply (RPOProc LPOAF  Needed SMTFFI True)
+    mpo  = apply (RPOProc MPOAF  Needed SMTFFI True)
+    lpos = apply (RPOProc LPOSAF Needed SMTFFI True)
+    rpo  = apply (RPOProc RPOAF  Needed SMTFFI True)
+    rpos = apply (RPOProc RPOSAF Needed SMTFFI True)
 
 rpoPlusPar transform = parallelize f where
  f = repeatSolver 5 ( (lpo.||. rpos .||. transform) >=> dg)
