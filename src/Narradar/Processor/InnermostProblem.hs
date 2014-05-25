@@ -51,6 +51,22 @@ instance (HasRules trs
        cps = criticalPairs p
        MkRewriting st0 min = getFramework p
 
+instance (HasRules trs
+         ,Family.Rule trs ~ Rule t v
+         ,v ~ Family.Var trs
+         ,Ord v, Rename v, Enum v, Unify t
+         ,Eq (t(Term t v))
+         ,MkDPProblem IRewriting trs
+         ,Info info ToInnermostProof
+         ,Info info (Problem Rewriting trs)
+         ,Info info (Problem IRewriting trs)
+         ) =>
+    Processor (ToInnermost info) (Problem (InitialGoal (TermF id) Rewriting) trs)
+  where
+   type Typ (ToInnermost info) (Problem (InitialGoal (TermF id) Rewriting) trs) = InitialGoal (TermF id) IRewriting
+   type Trs (ToInnermost info) (Problem (InitialGoal (TermF id) Rewriting) trs) = trs
+   apply ToInnermost = liftProcessor ToInnermost
+
 -- instance (Info info (Problem base trs)
 --          ,FrameworkExtension ext
 --          ,Info info (Res (ToInnermost info) (Problem base trs))
