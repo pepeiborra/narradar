@@ -107,7 +107,7 @@ Library
                   bindings-yices >= 0.2,
                   narradar-alacarte >= 0.6,
                   narradar-funsat-lang >= 0.8, 
-                  narradar-funsat-rpo >= 0.3.1,
+                  narradar-funsat-rpo >= 0.3.2,
                   narradar-term >= 0.3.1,
                   narradar-trsparser >= 0.4.3, 
                   narradar-prolog >= 0.3,

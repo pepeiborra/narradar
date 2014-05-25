@@ -60,25 +60,51 @@ import Data.Foldable (Foldable)
 
 class (Monad m, Functor m, ECircuit repr, OneCircuit repr, Hashable v, Ord v, Show v) =>
  MonadSAT repr v m | m -> repr v where
-  boolean :: m v
-  natural :: m (Natural v)
-  assert  :: [repr v] -> m ()
-  assertW :: Weight -> [repr v] -> m ()
+  boolean_ :: String -> m v
+  natural_ :: String -> m (Natural v)
+  assert_  :: String -> [repr v] -> m ()
+  assertW  :: Weight -> [repr v] -> m ()
   assertW _ = assert
 
+boolean = boolean_ ""
+natural = natural_ ""
+assert = assert_ ""
+
 -- Ints with the following soft invariant: the first 1000 values are reserved
-newtype Var = V Int deriving (Eq, Ord, Num, Enum)
+data Var = V (Maybe String) Int
 
-instance Show Var where show (V i) = "v" ++ show i
+instance Eq Var where
+  V _ a == V _ b = a == b
+
+instance Ord Var where
+  compare (V _ a) (V _ b) = compare a b
+
+instance Show Var where
+  show (V Nothing  i) = "v" ++ show i
+  show (V (Just s) i) = "v" ++ show i ++ escape s
+   where escape = concatMap escapeChar
+         escapeChar '#' = "hash"
+         escapeChar c   = [c]
+
 instance Read Var where
-  readsPrec p ('v':rest) = [(V i, rest) | (i,rest) <- readsPrec 0 rest]
+  readsPrec _p ('v':rest) =
+    [(V Nothing  i, rest') | (i,rest') <- readsPrec 0 rest] ++
+    [(V (Just more) i, []) | (i,more) <- readsPrec 0 rest, more /= "" ]
   readsPrec _ _ = []
-instance Bounded Var where minBound = V 0; maxBound = V maxBound
-instance Hashable Var where hashWithSalt s (V i) = hashWithSalt s i
+  
+instance Bounded Var where minBound = V Nothing 0; maxBound = V Nothing maxBound
+instance Hashable Var where hashWithSalt s (V _ i) = hashWithSalt s i
 
-lit (V i) = Funsat.L i
+instance Enum Var where
+    fromEnum (V _ i) = i
+    toEnum = V Nothing
 
-instance Pretty Var where pPrint (V i) = text "v" <> i
+--lit (V _ i) = Funsat.L i
+
+instance Pretty Var where
+  pPrint (V Nothing  i) = text "v" <> i
+  pPrint (V (Just s) i) = text "v" <> i <> text s
+
 type instance Family.Var Var = Var
 
 type Weight = Int

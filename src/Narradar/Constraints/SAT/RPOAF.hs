@@ -60,12 +60,13 @@ import qualified Data.Term.Family as Family
 import qualified Narradar.Types.ArgumentFiltering as AF
 import qualified Prelude as P
 import Prelude hiding (lex, not, and, or, any, all, quot, (>))
+import qualified Debug.Trace as Debug
 
 class SATSymbol sid where
   mkSATSymbol :: (v  ~ Family.Var sid
                  ,id ~ Family.Id sid
                  ,Decode v Bool, Show id, Co repr v, MonadSAT repr v m) =>
-                 (id, Int) -> m (sid, repr v)
+                 (id, Int) -> m (sid, [(String,repr v)])
 
 instance SATSymbol (Usable(RPOSsymbol v id)) where mkSATSymbol = rpos
 instance SATSymbol (Usable(RPOsymbol  v id)) where mkSATSymbol = rpo
@@ -184,6 +185,7 @@ rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid s
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,Pretty sid
          ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
          ,UsableSymbol sid
          ,MkDPProblem initialgoal' trs'
@@ -322,20 +324,21 @@ rpoAF_NDP allowCol omega p
 
 runRPOAF allowCol sig f = do
   let ids  = arities sig
-      bits = calcBitWidth $ Map.size ids
+     -- bits = calcBitWidth $ Map.size ids
 
   (symbols, constraints) <- unzip <$> mapM mkSATSymbol (Map.toList ids)
 
-  assertAll constraints
+  forM_ (concat constraints) $ \(name, c) -> assert_ name [c]
 
   if allowCol
+        -- do we need the then clause? surely mkSATSymbol is already demanding this?
     then assertAll [not(listAF s) --> one [inAF i s | i <- [1..a]]
                     | (s,a) <- zip symbols (Map.elems ids)]
     else assertAll (map listAF symbols)
 
   let dict       = Map.fromList (zip (Map.keys ids) symbols)
   mkRes <- f dict
-  return $ do -- Debug.trace ("The symbols are:\n" ++ show symbols) $ do
+  return $ Debug.trace ("The symbols are:\n" ++ show(pPrint symbols)) $ do
     env <- ask
     res <- mkRes
     return (res, env, symbols)

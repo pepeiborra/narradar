@@ -7,6 +7,7 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Narradar.Processor.RPO where
 
@@ -38,7 +39,9 @@ import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO (Status(..))
 import Narradar.Constraints.SAT.Solve ( SAT, EvalM, BIEnv, runEvalM, Var
-                                      , smtSerial, smtFFI, satYices, YicesOpts(..))
+                                      , smtFFI, satYices, YicesOpts(..))
+import qualified Narradar.Constraints.SAT.Solve as Solve
+import qualified Narradar.Constraints.SAT.MonadSAT as MonadSAT
 import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms )
 import Narradar.Constraints.SAT.RPOAF ( SATSymbol, UsableSymbol(..)
                                       , RPOSsymbol(..), RPOsymbol(..), LPOSsymbol, LPOsymbol, MPOsymbol
@@ -53,7 +56,6 @@ import Narradar.Utils
 import System.IO.Unsafe
 import qualified Debug.Trace
 import qualified Funsat.RPOCircuit as RPOAF
-
 -- -------------------
 -- RPO SAT Processor
 -- -------------------
@@ -72,6 +74,15 @@ runSAT Yices = satYices YicesOpts{maxWeight = 20, timeout = Nothing}
 type AllowCol = Bool
 data RPOProc (info :: * -> *) where RPOProc :: SATSymbol e => Extension e -> UsableRules -> Solver -> AllowCol -> RPOProc info
 type instance InfoConstraint (RPOProc info) = info
+
+{-
+  Some combinations are not safe. The ones I am aware of right now:
+   - Existentials are only safe in the SMTFFI backed. Therefore:
+   - SMTSerial cannot do MPO because the MPO encoding uses existentials
+   - Some of the LPOS encodings have existentials disabled. Ideally we
+   - would enable them only in the FFI encoding
+
+ -}
 data Extension a where
     RPOSAF :: Extension (RPOAF.Usable(RPOSsymbol v id))
     RPOAF  :: Extension (RPOAF.Usable(RPOsymbol  v id))
@@ -82,6 +93,7 @@ data UsableRules = None | Usable | Needed
 data Solver    = SMTFFI | SMTSerial -- | SAT SATSolver
 data SATSolver = Yices | Minisat | Funsat
 
+smtSerial = Solve.smtSerial MonadSAT.V
 
 instance (Ord id, Pretty id, DPSymbol id, Show id, Hashable id
          ,Info info (RPOProof id)

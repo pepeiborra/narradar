@@ -75,16 +75,18 @@ import qualified Prelude                                  as P
 
 -- *** serialized
 
-data StY id v = StY { poolY :: [v]
+data StY id v = StY { poolY :: [Int]
+                    , mkV   :: Maybe String -> Int -> v
                     , cmdY  :: [CmdY]
                     , stY   :: Serial.YMaps id v
                     }
 
 newtype SMTY id v a = SMTY {unSMTY :: State (StY id v) a} deriving (Functor, Monad, MonadState (StY id v))
 
-smtSerial :: (Hashable id, Ord id, Show id, Pretty id, Enum v, Ord v, Read v, Show v) => SMTY id v (EvalM v a) -> IO (Maybe a)
-smtSerial (SMTY my) = do
-  let (me, StY{..}) = runState my (StY [toEnum 1000 ..] [] Serial.emptyYMaps)
+smtSerial :: (Hashable id, Ord id, Show id, Pretty id, Enum v, Ord v, Read v, Show v) =>
+             (Maybe String -> Int -> v) -> SMTY id v (EvalM v a) -> IO (Maybe a)
+smtSerial mkVar (SMTY my) = do
+  let (me, StY{..}) = runState my (StY [toEnum 1000 ..] mkVar [] Serial.emptyYMaps)
 --  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
   bienv <- solveDeclarations Nothing (generateDeclarations stY ++ cmdY)
 --  debug (unlines $ map show $ Set.toList symbols)
@@ -96,18 +98,20 @@ smtSerial (SMTY my) = do
   printGt (t,u) v = v <> colon <+> t <+> text ">" <+> u
 
 instance (Hashable v, Ord v, Show v) => MonadSAT (Serial.YicesSource id) v (SMTY id v) where
-  boolean = do {st@StY{poolY = h:t} <- get; put st{poolY=t}; return h}
-  natural = do {b <- boolean; return (Natural b)}
-  assert [] = return ()
-  assert a  = do
+  boolean_ "" = do {st@StY{poolY = h:t, mkV} <- get; put st{poolY=t}; return (mkV Nothing h)}
+  boolean_ s = do {st@StY{poolY = h:t, mkV} <- get; put st{poolY=t}; return (mkV (Just s) h)}
+  natural_ s = do {b <- boolean_ s; return (Natural b)}
+  assert_ _ [] = return ()
+  assert_ msg a = do
       st <- gets stY
       let (me, stY') = runYices' st $ foldr or false a
       modify $ \st -> st{cmdY = ASSERT me : cmdY st, stY = stY'}
+
   assertW w a = do
       st <- gets stY
       let (me, st') = runYices' st $ foldr or false a
       modify $ \st -> st{cmdY = ASSERT_P me (Just $ fromIntegral w) : cmdY st, stY = st'}
-
+      return ()
 -- *** FFI
 
 data StY' id v = StY' { poolY' :: ![v]
@@ -125,7 +129,7 @@ smtFFI' start (SMTY' my) = do
   ctx <- mkContext
 #ifdef DEBUG
 --  setVerbosity 10
---  setLogFile "yices.log"
+  setLogFile "yices.log"
 #endif
   (me, StY'{stY'}, _) <- runRWST my ctx (StY' [toEnum start ..] FFI.emptyYMaps)
 --  let symbols = getAllSymbols $ mconcat
@@ -150,10 +154,10 @@ smtFFI' start (SMTY' my) = do
 
 
 instance (Enum v, Ord v, Show v, Hashable v) => MonadSAT (FFI.YicesSource id) v (SMTY' id v) where
-  boolean = do {st@StY'{poolY' = h:t} <- get; put st{poolY'=t}; return h}
-  natural = do {b <- boolean; return (Natural b)}
-  assert [] = return ()
-  assert a  = do
+  boolean_ _ = do {st@StY'{poolY' = h:t} <- get; put st{poolY'=t}; return h}
+  natural_ _ = do {b <- boolean; return (Natural b)}
+  assert_ _ [] = return ()
+  assert_ _ a  = do
       st  <- gets stY'
       ctx <- ask
       (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
@@ -176,11 +180,11 @@ data St term v = St { pool     :: [v]
 newtype SAT term v a = SAT {unSAT :: State (St term v) a} deriving (Functor, Monad, MonadState (St term v))
 
 instance (Ord v, Hashable v, Show v) => MonadSAT (Shared term Narradar.Var) v (SAT term v) where
-  boolean = do {st@St{pool = h:t} <- get; put st{pool=t}; return h}
-  natural = do {b <- boolean; return (Natural b)}
-  assert   [] = return ()
-  assert    a = do {st <- get; put st{circuit = orL a `and` circuit st}}
-  assertW w a = return () -- = do {st <- get; put st{weightedClauses = ( w, a) : weightedClauses st}}
+  boolean_ _ = do {st@St{pool = h:t} <- get; put st{pool=t}; return h}
+  natural_ _ = do {b <- boolean; return (Natural b)}
+  assert_ _ [] = return ()
+  assert_ _  a = do {st <- get; put st{circuit = orL a `and` circuit st}}
+  assertW  w a = return () -- = do {st <- get; put st{weightedClauses = ( w, a) : weightedClauses st}}
 
 st0 = St [minBound..] true []
 

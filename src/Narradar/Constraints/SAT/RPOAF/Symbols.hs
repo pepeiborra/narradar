@@ -21,7 +21,7 @@ module Narradar.Constraints.SAT.RPOAF.Symbols where
 import           Data.Hashable
 import qualified Data.Term                         as Family
 import           Funsat.Circuit                    (Co)
-import           Funsat.RPOCircuit.Symbols         (SymbolRes, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
+import           Funsat.RPOCircuit.Symbols         (SymbolRes, SymbolFactory, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
 import qualified Funsat.RPOCircuit.Symbols         as Funsat
 
 import           Narradar.Constraints.SAT.MonadSAT
@@ -80,25 +80,25 @@ instance DPSymbol s => DPSymbol(Usable s) where
 
 instance UsableSymbol (Usable s) where usable = encodeUsable
 
-makeUsableSymbol :: (Co repr v, ECircuit repr, OneCircuit repr
-                    ,MonadSAT repr v m
-                    ,Show id
-                    ,id ~ Family.Id s
-                    ,v  ~ Family.Var s
-                    ,Decode s (SymbolRes id)
-                    ) => (m v -> m (Natural v) -> (id,Int) -> m (s, repr v)) ->
-                   (id, Int) -> m (Usable s, repr v)
+makeUsableSymbol :: ( MonadSAT repr v m
+                    , v ~ Family.Var s
+                    , Decode s (SymbolRes (Family.Id s))
+                    ) => ((String -> m v) -> (String -> m (Natural v)) -> t -> m (s, constraints))
+                       -> t -> m (Usable s, constraints)
 makeUsableSymbol makeSymbol x = do
   encodeUsable <- boolean
-  (s, constraints) <- makeSymbol boolean natural x
+  (s, constraints) <- makeSymbol boolean_ natural_ x
   let evalres = mkUsableSymbolDecoder encodeUsable (decode s)
   return (Usable s encodeUsable evalres, constraints)
 
+rpo ::
+ (Co repr v, MonadSAT repr v m, OneCircuit repr, ECircuit repr, Show id) =>
+ (id, Int) -> m (Usable (RPOsymbol v id), [(String, repr v)])
 rpos = makeUsableSymbol Funsat.rpos
-rpo = makeUsableSymbol Funsat.rpo
+rpo = makeUsableSymbol  Funsat.rpo
 lpos = makeUsableSymbol Funsat.lpos
-lpo = makeUsableSymbol Funsat.lpo
-mpo = makeUsableSymbol Funsat.mpo
+lpo = makeUsableSymbol  Funsat.lpo
+mpo = makeUsableSymbol  Funsat.mpo
 
 type UsableRPOSsymbol v id = Usable (RPOSsymbol v id)
 
@@ -147,12 +147,12 @@ instance (id ~ Family.Id s) => Decode (Usable s) (UsableSymbolRes id) where deco
 
 instance (Show a, GenSymbol a) => GenSymbol (RPOSsymbol Var a) where
     genSymbol = Symbol{ theSymbol    = genSymbol
-                      , encodePrec   = V 10
-                      , encodeAFlist = V 12
+                      , encodePrec   = V Nothing 10
+                      , encodeAFlist = V Nothing 12
                       , encodeAFpos  = []
                       , encodePerm   = []
-                      , encodeUseMset= V 13
-                      , decodeSymbol = Funsat.mkSymbolDecoder genSymbol (Funsat.Natural $ V 10) (V 12) [] [] (V 13)
+                      , encodeUseMset= V Nothing 13
+                      , decodeSymbol = Funsat.mkSymbolDecoder genSymbol (Funsat.Natural $ V Nothing 10) (V Nothing 12) [] [] (V Nothing 13)
                       }
     goalSymbol = Symbol{ theSymbol    = genSymbol
                        , encodePrec   = error "RPOAF.Symbol : goalSymbol"
@@ -172,5 +172,5 @@ deriving instance (Show a, GenSymbol a) => GenSymbol (RPOsymbol  Var a)
 
 
 instance (Var ~ Family.Var s, GenSymbol s, Decode s (SymbolRes (Family.Id s))) => GenSymbol (Usable s) where
-  genSymbol = let s :: s = genSymbol in Usable s (V 14) (mkUsableSymbolDecoder (V 14) (decode s))
+  genSymbol = let s :: s = genSymbol in Usable s (V Nothing 14) (mkUsableSymbolDecoder (V Nothing 14) (decode s))
 

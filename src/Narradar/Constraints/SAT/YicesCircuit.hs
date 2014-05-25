@@ -30,7 +30,7 @@ import           Data.Set                            ( Set )
 import           Math.SMT.Yices.Syntax
 import           Math.SMT.Yices.Pipe
 import           Narradar.Types.Term
-import           Narradar.Utils                      (on)
+import           Narradar.Utils                      (on,debug,debug',withTempFile)
 import           Text.PrettyPrint.HughesPJClass
 import           System.IO
 import Prelude hiding( not, and, or, (>) )
@@ -44,7 +44,7 @@ import qualified Data.Term.Family                    as Family
 import           Funsat.ECircuit                     (Circuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
 import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), AssertCircuit(..)
-                                                     , oneExist, termGt_, termGe_, termEq_)
+                                                     , termGt_, termGe_, termEq_)
 
 deriving instance Eq  ExpY
 deriving instance Ord ExpY
@@ -59,11 +59,19 @@ type instance Family.TermF (YicesSource id) = TermF id
 type instance Family.Id (YicesSource id)    = id
 type instance Family.Var (YicesSource id)   = Narradar.Var
 
-newtype YVar = YV Int deriving (Enum, Eq, Ord)
+data YVar = YV Int String
 
-instance Show YVar where show (YV i) = 'y' : 'v' : show i
+instance Eq YVar where
+  YV a _ == YV b _ = a == b
+instance Ord YVar where
+  compare (YV a _) (YV b _) = compare a b
+
+instance Show YVar where show (YV i msg) = 'y' : 'v' : show i ++ msg
 instance Pretty YVar where pPrint = text . show
-instance Hashable YVar where hashWithSalt s (YV i) = hashWithSalt s i
+instance Hashable YVar where hashWithSalt s (YV i _) = hashWithSalt s i
+instance Enum YVar where
+  toEnum          i = YV i "fromEnum"
+  fromEnum (YV i _) = i
 
 data YMaps id var = YMaps
     { internal  :: !([YVar])
@@ -75,7 +83,7 @@ data YMaps id var = YMaps
     }
   deriving Show
 
-emptyYMaps = YMaps [YV 2..] mempty mempty mempty mempty mempty
+emptyYMaps = YMaps [YV 2 "" ..] mempty mempty mempty mempty mempty
 
 solveYices :: (Hashable id, Ord id, Read var, Ord var, Show var) => YicesSource id var -> IO (Maybe (BIEnv var))
 solveYices = solveDeclarations Nothing . runYices
@@ -97,25 +105,25 @@ generateDeclarations YMaps{..} =
 solveDeclarations :: (Ord v, Read v) => Maybe Int -> [CmdY] -> IO (Maybe (BIEnv v))
 solveDeclarations mb_timeout cmds = do
 #ifdef DEBUG
---   withTempFile "/tmp" "narradar.yices" $ \fp h -> do
---        mapM_ (hPutStrLn h . show) cmds
---        hPutStrLn h "(max-sat)"
---        hPutStrLn stderr ("Yices problem written to " ++ fp)
---        hClose h
---        return (False, ())
+  withTempFile "/tmp" "narradar.yices" $ \fp h -> do
+       mapM_ (hPutStrLn h . show) cmds
+       hPutStrLn h "(max-sat)"
+       hPutStrLn stderr ("Yices problem written to " ++ fp)
+       hClose h
+       return (False, ())
 #endif
   let opts = maybe [] (\tm -> ["-tm", show tm]) mb_timeout
---  debug (unlines $ map show cmds)
+  debug (unlines $ map show cmds)
   res <- quickCheckY' "yices" opts (cmds ++ [MAXSAT])
          `catch` \(e :: SomeException) -> error ("An error ocurred calling Yices: " ++ show e)
   case res of
     Sat values -> do
---       debug (show values)
+       debug ("\n***** Yices returned Sat, the solutions are:\n" ++ show values)
        return . Just . Map.fromList $
                    [ (read v, Right val) | (VarE v := LitB val) <- values] ++
                    [ (read v, Left (fromInteger val)) | (VarE v := LitI val) <- values]
     Unknown values -> do -- FIXME Needs checking !
---       debug (show values)
+       debug ("\n***** Yices returned Unknown, and some results:\n" ++ show values)
        return . Just . Map.fromList $
                    [ (read v, Right val) | (VarE v := LitB val) <- values] ++
                    [ (read v, Left (fromInteger val)) | (VarE v := LitI val) <- values]
@@ -138,14 +146,16 @@ instance Circuit (YicesSource id) where
 
   or    = liftYices2 f where
      f (LitB False) y = y
-     f (LitB True)  y = LitB True
-     f x (LitB True)  = LitB True
+     f (LitB True)  _ = LitB True
+     f _ (LitB True)  = LitB True
      f x (LitB False) = x
      f x y = OR [x, y]
 
   andL [] = true
+  andL [x] = x
   andL xx = YicesSource . fmap AND . sequence . map unYicesSource $ xx
   orL [] = false
+  orL [x] = x
   orL xx = YicesSource . fmap OR . sequence . map unYicesSource $ xx
 
 instance ECircuit (YicesSource id) where
@@ -184,11 +194,11 @@ instance OneCircuit (YicesSource id) where
 
 instance ExistCircuit (YicesSource id) where
   existsBool f = YicesSource $ do
-              v   <- freshV
+              v   <- freshV "existBool"
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "bool")] exp
   existsNat  f = YicesSource $ do
-              v   <- freshV
+              v   <- freshV "existsNat"
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "nat")] exp
 
@@ -208,7 +218,7 @@ instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id) =>
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termGt_ s t
-           meVar        <- freshV
+           meVar        <- freshV "termGt"
            modify $ \env -> env{termGtMap = HashMap.insert (s,t) (meVar, meConstraint) (termGtMap env)}
            return (VarE (show meVar))
  termEq s t = YicesSource $ do
@@ -217,19 +227,20 @@ instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id) =>
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termEq_ s t
-           meVar        <- freshV
+           meVar        <- freshV "termEq"
            modify $ \env -> env{termEqMap = HashMap.insert (s,t) (meVar, meConstraint) (termEqMap env)}
            return (VarE (show meVar))
+{-
  termGe s t = YicesSource $ do
       env <- get
       case HashMap.lookup (s,t) (termGeMap env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termGe_ s t
-           meVar        <- freshV
+           meVar        <- freshV "termGe"
            modify $ \env -> env{termGeMap = HashMap.insert (s,t) (meVar, meConstraint) (termGeMap env)}
            return (VarE (show meVar))
-
+-}
 
 {-# INLINE liftYices #-}
 {-# INLINE liftYices2 #-}
@@ -247,7 +258,8 @@ liftYices3 f a b c = YicesSource $ do
   vc <- unYicesSource c
   return $ f va vb vc
 
-freshV = do
-  v:vv <- gets internal
+freshV msg = do
+  YV v _ : vv <- gets internal
   modify $ \y -> y{internal = vv}
-  return v
+--  debug(show v ++ ": " ++ msg)
+  return (YV v msg)
