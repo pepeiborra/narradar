@@ -127,9 +127,9 @@ narradarMain' run flags@Options{..} = do
 
     Nothing  -> do
              putStrLn "MAYBE"
-             let proof' = unsafeSliceProof proof
+             let proof' = simplifyProof proof
              when (verbose > 1) $ print $ pprProofFailures proof'
---             when (verbose > 1 && diagrams) (printDiagram tmp flags proof') `const` proof
+             when (verbose > 1 && diagrams) (printDiagram tmp flags proof') `const` proof
 
 
 withTimeout t m = do

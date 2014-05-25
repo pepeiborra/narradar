@@ -142,6 +142,9 @@ instance DotRep (SomeInfo PrettyDotF) where
   dot (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dot p
   dotSimple (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dotSimple p
 
+instance Show (SomeInfo PrettyDotF) where
+  show = show . pPrint
+
 class Dispatch thing where
     dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyDotF) m Final
 

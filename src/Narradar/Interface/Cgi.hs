@@ -96,7 +96,7 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
 
        let dotsol = case sol of
                        Just sol -> dotProof' DotProof{showFailedPaths = False} sol
-                       Nothing  -> dotProof' DotProof{showFailedPaths = True} (sliceProof proof)
+                       Nothing  -> dotProof' DotProof{showFailedPaths = True} (simplifyProof  proof)
 
        tmp       <- liftIO$ getTemporaryDirectory
        let mkProofLog = do

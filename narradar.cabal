@@ -112,7 +112,7 @@ Library
                   narradar-trsparser >= 0.4.3, 
                   narradar-prolog >= 0.3,
                   narradar-prolog-tools >= 0.3,
-                  muterm-framework >= 1.5.3,
+                  muterm-framework >= 1.6,
                   muterm-framework-charts >= 0.3.1,
                   hashable,
                   hashmap,
