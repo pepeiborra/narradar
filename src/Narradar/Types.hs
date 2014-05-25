@@ -146,7 +146,7 @@ instance Show (SomeInfo PrettyDotF) where
   show = show . pPrint
 
 class Dispatch thing where
-    dispatch :: (Traversable m, MonadPlus m) => thing -> Proof (PrettyDotF) m Final
+    dispatch :: (Traversable m, MonadPlus m, IsMZero m) => thing -> Proof (PrettyDotF) m Final
 
 mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
 mkDispatcher f =  f >=> final
@@ -170,7 +170,7 @@ data AProblem t trs where
 --    AGoalNarrowingRelativeRewritingProblem :: Problem (Relative trs NarrowingGoal (TermId t)) trs -> AProblem t trs
 
 
-dispatchAProblem :: (Traversable m, MonadPlus m
+dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m
                     ,Dispatch (Problem Rewriting  trs)
                     ,Dispatch (Problem IRewriting trs)
                     ,Dispatch (Problem (InitialGoal t Rewriting) trs)
