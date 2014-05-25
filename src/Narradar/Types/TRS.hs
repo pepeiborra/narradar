@@ -399,8 +399,9 @@ computeDirectUnifiers p_f (rules -> the_dps) = do
                 (x, r',r)    <- liftL $ zip3 [0..] rhss' (map rhs the_dps)
                 (y, l :-> _) <- liftL $ zip [0..] the_dps
                 let unifier = unify l r'
-                pprTrace (text "unify" <+> l <+> text "with" <+>
-                          r' <+> parens (text "icap" <+> rules(snd p_f) <+> r) <+> equals <+> unifier) (return ())
+                pprTrace (vcat [text "unify" <+> (l <+> text "with" <+> r')
+                               ,parens (text "icap" <+> (rules(snd p_f) $$ r))
+                               ,equals <+> unifier]) (return ())
                 return ((x,y), unifier)
    return $ array ( (0,0), (ldps, ldps) ) unif
  where
