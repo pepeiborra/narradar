@@ -97,6 +97,9 @@ instance (IsProblem p, HasId t, Foldable t) => IsProblem (InitialGoal t p) where
   getFramework (InitialGoalProblem goals g p) = InitialGoal goals (Just g) (getFramework p)
   getR   (InitialGoalProblem _     _ p) = getR p
 
+instance (Eq (Problem p a)) => Eq (Problem (InitialGoal t p) a) where
+  p1 == p2 = baseProblem p1 == baseProblem p2
+
 instance (IsDPProblem p, HasId t, Foldable t) => IsDPProblem (InitialGoal t p) where
   getP   (InitialGoalProblem _     _ p) = getP p
 
