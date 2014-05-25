@@ -103,7 +103,7 @@ Library
                   suitable >= 0.1.2,
                   split,
 --                  parse-dimacs,
-                  yices > 0.0.0.8,
+                  yices >= 0.0.0.12.1,
                   bindings-yices >= 0.2,
                   narradar-alacarte >= 0.6,
                   narradar-funsat-lang >= 0.8, 
