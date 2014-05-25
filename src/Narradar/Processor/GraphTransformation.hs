@@ -202,7 +202,6 @@ instance (trs ~ NarradarTRS t v
   type Typ (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id)) = InitialGoal (f id) typ
   type Trs (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id)) = NarradarTRS (f id) Var
   applySearch Instantiation p@InitialGoalProblem{dgraph}
-   | null currentPairs      = [return p]
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p0 p1
                      | (i,olddp, newdps) <- dpss
@@ -275,7 +274,6 @@ instance (v ~ Var
  type Typ (FInstantiation info) (NarradarProblem (InitialGoal t typ) t) = InitialGoal t typ
  type Trs (FInstantiation info) (NarradarProblem (InitialGoal t typ) t) = NarradarTRS t Var
  applySearch FInstantiation p@InitialGoalProblem{dgraph}
-  | null currentPairs      = [return p]
   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
   | isCollapsing (getR p)  = mzero  -- no point in instantiating everything around
   | otherwise = [ singleP (FInstantiationProof olddp newdps) p p'
@@ -468,7 +466,6 @@ narrowingIG, narrowing_innermostIG
              ) =>
              Problem (InitialGoal t typ) trs -> [Proof info mp (Problem (InitialGoal t typ) trs)]
 narrowingIG p0@InitialGoalProblem{dgraph}
-  | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingIG Processor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof olddp newdps) p0 p'
                      | (i, olddp, newdps) <- dpss
@@ -510,7 +507,6 @@ narrowingIG p0@InitialGoalProblem{dgraph}
                                 else foldl1' Set.intersection (Set.fromList . positions <$> uu)
 
 narrowing_innermostIG p0@InitialGoalProblem{dgraph}
-  | null currentPairs       = [return p0]
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
   | otherwise = [ singleP (NarrowingProof olddp newdps) p0 p'
                      | (i, olddp, newdps) <- dpss
@@ -646,7 +642,6 @@ rewriting p0
                 , [t'] <- [rewrite1p (rules urp) t p]
                 ]
 rewritingI p0
-    | null problems = mzero
     | otherwise     = problems
     where
      redexes t = [ p | p <- positions t, isJust (rewrite1 (rules $ getR p0) t)]
@@ -675,7 +670,6 @@ rewritingGoal p0
     redexes t = [ p | p <- positions t, isJust (rewrite1 (rules $ getR p0) t)]
 
 rewritingGoalI p0
-    | null problems = mzero
     | otherwise = problems
    where
     problems = [ singleP (RewritingProof olddp newdp) p0 p'
