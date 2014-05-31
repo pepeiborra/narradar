@@ -32,7 +32,7 @@ import Text.XHtml (HTML)
 
 import Narradar.Types hiding (narrowing, rewriting)
 import Narradar.Types.TRS
-import Narradar.Constraints.Syntactic
+import Narradar.Constraints.Confluence
 import Narradar.Framework
 import Narradar.Framework.GraphViz
 import Narradar.Framework.Ppr

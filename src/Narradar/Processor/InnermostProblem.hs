@@ -10,7 +10,7 @@ import Data.Foldable (Foldable)
 import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Types
-import Narradar.Constraints.Syntactic
+import Narradar.Constraints.Confluence
 
 import qualified Data.Term.Family as Family
 

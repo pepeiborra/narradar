@@ -148,6 +148,7 @@ Library
      Narradar.Constraints.SAT.YicesFFICircuit,
      Narradar.Constraints.SAT.RPOAF,
      Narradar.Constraints.SAT.RPOAF.Symbols,
+     Narradar.Constraints.Confluence,
      Narradar.Constraints.Syntactic,
      Narradar.Examples,
      Narradar.Framework,
