@@ -1,0 +1,12 @@
+(VAR x y z)
+(RULES 
+isZero(0) -> true 
+isZero(s(x)) -> false
+plus(plus(x, y), z) → plus(x, plus(y, z)) 
+plus(0, y) -> y 
+plus(s(x), y) -> s(plus(x, y)) 
+)
+(PAIRS
+  F(0, s(0), x) -> F(x, x, x)
+)
+(STRATEGY Q isZero(0) isZero(s(x)) plus(plus(x,y),z) plus(0,y) plus(s(x),y))

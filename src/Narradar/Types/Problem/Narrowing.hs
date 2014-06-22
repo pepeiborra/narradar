@@ -5,6 +5,8 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Narradar.Types.Problem.Narrowing where
 
@@ -16,6 +18,7 @@ import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Typeable
 import Text.XHtml (HTML(..), theclass)
 
 import Data.Term
@@ -34,8 +37,9 @@ import Narradar.Utils
 import Narradar.Framework
 import Narradar.Framework.Ppr
 
+import Debug.Hoed.Observe
 
-data MkNarrowing base = MkNarrowing base deriving (Eq, Ord, Show)
+data MkNarrowing base = MkNarrowing base deriving (Eq, Ord, Show, Typeable)
 
 type Narrowing  = MkNarrowing Rewriting
 type CNarrowing = MkNarrowing IRewriting
@@ -94,7 +98,7 @@ instance Pretty INarrowing where
   pPrint (MkNarrowing (MkRewriting Innermost A)) = text "Narrowing (innermost strategy, no minimality)"
 
 instance (Monoid trs, HasRules trs, GetVars trs
-         ,Pretty v, Pretty (t(Term t v)), Pretty (Family.Id t)
+         ,Pretty v, PprTPDB v, Pretty (t(Term t v)), Pretty (Family.Id t)
          ,Ord v
          ,t ~ Family.TermF trs
          ,v ~ Family.Var trs
@@ -105,7 +109,7 @@ instance (Monoid trs, HasRules trs, GetVars trs
 
 
 instance (Monoid trs, HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
-         ,Ord v
+         ,PprTPDB v, Ord v
          ,t ~ Family.TermF trs
          ,v ~ Family.Var trs
          ,Rule t v ~ Family.Rule trs
@@ -125,7 +129,8 @@ instance FrameworkExtension MkNarrowing where
 
 -- ICap
 
-instance ICap (st, NarradarTRS t v) => ICap (MkNarrowing st, NarradarTRS t v) where icap = liftIcap
+instance ICap (st, NarradarTRS t v) => ICap (MkNarrowing st, NarradarTRS t v) where
+  icapO = liftIcapO
 
 -- Usable Rules
 
@@ -135,10 +140,10 @@ instance (IUsableRules base trs) => IUsableRules (MkNarrowing base) trs where
 
 -- Insert Pairs
 
-instance (Pretty  id, Ord id) =>InsertDPairs Narrowing (NTRS id) where
+instance (FrameworkId id) =>InsertDPairs Narrowing (NTRS id) where
   insertDPairs = insertDPairsDefault
 
-instance (Pretty id, Ord id) =>InsertDPairs CNarrowing (NTRS id) where
+instance (FrameworkId id) =>InsertDPairs CNarrowing (NTRS id) where
   insertDPairs = insertDPairsDefault
 
 -- Get Pairs
@@ -147,3 +152,7 @@ instance GetPairs Narrowing where getPairs _ = getNPairs
 
 getNPairs trs = getPairs rewriting trs ++ getLPairs trs
 getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
+
+-- Observe
+
+instance Observable st => Observable (MkNarrowing st) where observer (MkNarrowing x) = send "MkNarrowing"  (return MkNarrowing << x)

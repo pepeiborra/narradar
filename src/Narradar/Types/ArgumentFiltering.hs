@@ -8,7 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving, DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving, DeriveDataTypeable, DeriveGeneric #-}
 {-# LANGUAGE Rank2Types, KindSignatures #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -45,14 +45,13 @@ import Narradar.Utils hiding (fromRight)
 import Lattice
 import Language.Prolog.SharingAnalysis (SharingAssignment)
 
-#ifdef HOOD
-import Debug.Hood.Observe
-#endif
+import GHC.Generics (Generic)
+import Debug.Hoed.Observe
 
 extendToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
 
-newtype AF_ id = AF {fromAF:: Map id (Either Int (Set Int))} deriving (Eq, Ord, Show)
+newtype AF_ id = AF {fromAF:: Map id (Either Int (Set Int))} deriving (Eq, Ord, Show, Generic)
 type AF = AF_ Id
 type LabelledAF = AF_ LId
 
@@ -413,7 +412,6 @@ mapRight f = bimap id f
 -- debug stuff
 -- ------------
 
-#ifdef HOOD
 --instance Observable id => Observable (AF_ id) where observer (AF m) = observer m
-deriving instance (Pretty id, Observable id) => Observable (AF_ id)
-#endif
+instance Observable1 AF_
+

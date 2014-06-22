@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -36,6 +37,8 @@ import Lattice
 
 import qualified Data.Term.Family as Family
 
+import Debug.Hoed.Observe
+
 data NarrowingToRewritingICLP08 heu (info :: * -> *) =
           NarrowingToRewritingICLP08 (MkHeu heu)
         | NarrowingToRewritingICLP08_SCC (MkHeu heu)
@@ -43,15 +46,12 @@ data NarrowingToRewritingICLP08 heu (info :: * -> *) =
 type instance InfoConstraint (NarrowingToRewritingICLP08 heu info) = info
 
 
-instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (TermN id)
+instance ( PolyHeuristic heu id, Lattice (AF_ id)
          , Info info (Problem Narrowing (NTRS id))
          , Info info (Problem Rewriting (NTRS id))
-         , Info info UsableRulesProof
+         , Info info (UsableRulesProof (TermN id))
          , Info info (NarrowingToRewritingProof id)
-         , MkDPProblem base (NTRS id)
-         , Traversable (Problem base)
-         , NCap base id
-         , NUsableRules base id
+         , FrameworkProblemN base id
          ) =>
     Processor (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id) ) where
   type Typ (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id)) = base
@@ -61,9 +61,9 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
-          u_p        = iUsableRules p (rhs <$> rules dps)
+          u_p        = iUsableRules p
           afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
-          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
+          orProblems = [ usableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
                                 AF.apply af (getBaseProblem p')
                         | af <- Set.toList afs]
@@ -73,9 +73,9 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id, Pretty (Te
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
-          u_p        = iUsableRules p (rhs <$> rules dps)
+          u_p        = iUsableRules p
           afs        = R.foldM (\af -> findGroundAF heu af u_p) (AF.init u_p) (rules dps)
-          orProblems = [ singleP UsableRulesProof p u_p >>= \ p' ->
+          orProblems = [ usableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p' $
                                 AF.apply af (getBaseProblem p')
                         | af <- Set.toList afs]
@@ -91,6 +91,8 @@ instance ( HasSignature (NProblem base id)
          , MkDPProblem base (NTRS id), Traversable (Problem base)
          , NUsableRules base id
          , NCap base id
+         , Eq base
+         , Observable base, Observable id
          ) =>
     Processor (NarrowingToRewritingICLP08 heu info)
               (NProblem (MkNarrowingGoal id base) id)
@@ -100,17 +102,12 @@ instance ( HasSignature (NProblem base id)
 
 bad :: forall id base info heu m .
        (Monad m
-       ,Ord id, Pretty id
-       ,ICap (base, NTRS id)
-       ,IUsableRules base (NTRS id)
        ,Info info (NarrowingToRewritingProof id)
        ,Info info (NProblem (MkNarrowingGoal id base) id)
-       ,Foldable (Problem base)
-       ,Ord (TermN id)
-       ,ApplyAF (TermN id)
        ,Lattice (AF_ id)
        ,PolyHeuristic heu id
-       ,MkDPProblem base (NTRS id)) =>
+       ,FrameworkProblemN base id
+       ) =>
     NarrowingToRewritingICLP08 heu info -> NProblem (MkNarrowingGoal id base) id -> [Proof info m (NProblem base id)]
 bad (NarrowingToRewritingICLP08 mk) p@(getFramework -> NarrowingGoal _ pi_groundInfo0 _ base)
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
@@ -151,6 +148,7 @@ findGroundAF :: ( Ord id, Pretty id, Lattice (AF_ id)
                 , MkDPProblem typ (NTRS id)
                 , ICap (typ, NTRS id)
                 , IUsableRules typ (NTRS id)
+                , HasSignature (NProblem typ id)
                 ) => Heuristic id -> AF_ id -> NProblem typ id -> RuleN id -> Set (AF_ id)
 findGroundAF heu af0 p (_:->r)
   | isVar r = Set.empty
@@ -164,11 +162,12 @@ findGroundAF heu af0 p (_:->r)
 findGroundAF' :: ( IsDPProblem typ
                  , Ord id, Pretty id, Lattice (AF_ id)
                  , Foldable (Problem typ)
+                 , HasSignature (NProblem typ id)
                  ) =>
                 Heuristic id
              -> AF_ id         -- ^ Groundness information
              -> AF_ id         -- ^ the argument filtering to constrain
-             -> Problem typ (NTRS id)
+             -> NProblem typ id
              -> RuleN id     -- ^ the rule to make ground
              -> Set (AF_ id)
 findGroundAF' heu pi_groundInfo af0 p (_:->r)

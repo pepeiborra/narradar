@@ -42,6 +42,8 @@ import Narradar.Utils
 import Narradar.Types (PrettyDotF)
 import MuTerm.Framework.Output
 
+import Debug.Hoed.Observe
+
 #ifdef TESTING
 import Properties (properties)
 import Test.Framework.Runners.Console
@@ -71,11 +73,13 @@ printDiagram tmp Options{..} proof
                                return (dotOk == ExitSuccess, ())
 
 narradarMain :: forall mp.
-                 (IsMZero mp, Traversable mp
+                 (IsMZero mp, Traversable mp, Observable1 mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (QRewriting (TermN Id)) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermN Id))) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
@@ -93,11 +97,13 @@ narradarMain run = catchTimeout $ do
     catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
 
 narradarMain' :: forall mp.
-                 (IsMZero mp, Traversable mp
+                 (IsMZero mp, Traversable mp, Observable1 mp
+                 ,Dispatch (Problem (QRewriting (TermN Id)) (NTRS Id))
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermN Id))) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
@@ -150,7 +156,7 @@ withTimeout t m = do
   takeMVar res
 
 prologMain :: forall mp.
-                 (IsMZero mp, Traversable mp
+                 (IsMZero mp, Traversable mp, Observable1 mp
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 prologMain run = catchTimeout $ do

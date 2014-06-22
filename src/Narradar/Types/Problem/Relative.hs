@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving, DeriveDataTypeable #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Narradar.Types.Problem.Relative where
@@ -16,6 +16,7 @@ import Data.Foldable as F (Foldable(..), toList)
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Monoid
 import qualified Data.Set as Set
+import Data.Typeable
 
 import Data.Term hiding (TermF)
 import Data.Term.Rules
@@ -32,7 +33,7 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
-data Relative trs p = Relative {relativeTRS_PType::trs, baseFramework::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+data Relative trs p = Relative {relativeTRS_PType::trs, baseFramework::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable)
 
 --instance GetPairs p => GetPairs (Relative trs p) where getPairs = getPairs . baseProblem
 
@@ -104,7 +105,8 @@ instance ( IsTRS trs
          , MkProblem base trs
          , Pretty (t(Term t v))
          , Ord (Term t v)
-         , HasId t, Functor t, Foldable t, Pretty (Family.Id t), Pretty v
+         , HasId t, Functor t, Foldable t, Pretty (Family.Id t)
+         , PprTPDB v
          , PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (Relative trs base) trs) where
   pprTPDB RelativeProblem{..} =
@@ -123,11 +125,11 @@ instance ( IsTRS trs
 instance (HasRules trs, Unify (TermF trs), GetVars trs, ICap (p,trs')) =>
          ICap (Relative trs p, trs')
  where
-         icap (Relative _ p,trs) = icap (p,trs)
+         icapO o (Relative _ p,trs) = icapO o (p,trs)
 
 -- Usable Rules
 instance (Monoid trs, IUsableRules b trs) => IUsableRules (Relative trs b) trs where
-  iUsableRulesM _ trs _ _ = return trs
+  iUsableRulesM _ trs _ _ _ = return trs
   iUsableRulesVarM = liftUsableRulesVarM
 {-
 instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v typ trs) =>

@@ -25,6 +25,8 @@ import           Data.Typeable
 import           Narradar.Types.DPIdentifiers
 import           Narradar.Framework.Ppr
 
+import Debug.Hoed.Observe
+
 -- -------------------
 -- Prolog Identifiers
 -- -------------------
@@ -115,3 +117,10 @@ instance NFData a => NFData (PrologId a) where
   rnf (OutId a) = rnf a
   rnf (UId   i) = rnf i
   rnf (FunctorId f) = rnf f
+
+-- Hood
+instance Observable1 PrologId where
+  observer1 (InId  a) = send "InId"  (return InId << a)
+  observer1 (OutId a) = send "OutId" (return OutId << a)
+  observer1 (UId   i) = send "UId"   (return UId << i)
+  observer1 (FunctorId f) = send "FunctorId" (return FunctorId << f)

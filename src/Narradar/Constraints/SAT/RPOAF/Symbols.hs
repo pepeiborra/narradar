@@ -13,13 +13,14 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, DeriveGeneric #-}
 
 module Narradar.Constraints.SAT.RPOAF.Symbols where
 
 
 import           Data.Hashable
 import qualified Data.Term                         as Family
+import           Data.Typeable
 import           Funsat.Circuit                    (Co)
 import           Funsat.RPOCircuit.Symbols         (SymbolRes, SymbolFactory, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
 import qualified Funsat.RPOCircuit.Symbols         as Funsat
@@ -28,6 +29,9 @@ import           Narradar.Constraints.SAT.MonadSAT
 import           Narradar.Framework.Ppr            as Ppr
 import           Narradar.Types                    (DPSymbol(..), HasArity(..), GenSymbol(..))
 import           Control.Monad (liftM)
+
+import Debug.Hoed.Observe
+import GHC.Generics (Generic)
 
 -- ------------------------------------
 -- Symbol classes for AF + Usable rules
@@ -44,10 +48,11 @@ iusable = input . usable
 data Usable s = Usable { usableSymbol :: s
                        , encodeUsable :: (Family.Var s)
                        , decodeUsableSymbol :: EvalM (Family.Var s) (UsableSymbolRes (Family.Id s))}
+                deriving (Generic, Typeable)
 
 data UsableSymbolRes a = UsableSymbolRes { isUsable :: Bool
                                          , symbolRes :: SymbolRes a }
-                       deriving (Eq, Ord, Show)
+                       deriving (Eq, Ord, Show, Generic)
 
 theSymbolR = Funsat.theSymbolR . symbolRes
 prec = Funsat.prec . symbolRes
@@ -170,7 +175,8 @@ deriving instance (Show a, GenSymbol a) => GenSymbol (LPOSsymbol Var a)
 deriving instance (Show a, GenSymbol a) => GenSymbol (MPOsymbol  Var a)
 deriving instance (Show a, GenSymbol a) => GenSymbol (RPOsymbol  Var a)
 
-
 instance (Var ~ Family.Var s, GenSymbol s, Decode s (SymbolRes (Family.Id s))) => GenSymbol (Usable s) where
   genSymbol = let s :: s = genSymbol in Usable s (V Nothing 14) (mkUsableSymbolDecoder (V Nothing 14) (decode s))
 
+
+instance Observable (Usable a) where observer = observeOpaque "usable-symbol"

@@ -18,6 +18,7 @@ module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Types.TRS
                       , module Narradar.Types.Problem
                       , module Narradar.Types.Problem.Rewriting
+                      , module Narradar.Types.Problem.QRewriting
                       , module Narradar.Types.Problem.Narrowing
                       , module Narradar.Types.Problem.NarrowingGen
                       , module Narradar.Types.Problem.Prolog
@@ -76,6 +77,7 @@ import           Narradar.Types.Labellings
 import           Narradar.Types.Goal
 import           Narradar.Types.Problem
 import           Narradar.Types.Problem.Rewriting
+import           Narradar.Types.Problem.QRewriting
 import           Narradar.Types.Problem.Narrowing     hiding (baseProblem)
 import           Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, baseFramework)
 import           Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
@@ -88,14 +90,13 @@ import           Narradar.Types.Term
 import           Narradar.Types.Var
 import           Narradar.Utils
 import           Narradar.Framework
+import           Narradar.Framework.Constraints
 import           Narradar.Framework.Ppr               as Ppr
 
 import qualified Language.Prolog.Syntax               as Prolog hiding (ident)
 import qualified Language.Prolog.Parser               as Prolog hiding (term)
 
-#ifdef HOOD
-import           Debug.Hood.Observe
-#endif
+import           Debug.Hoed.Observe
 
 import           Prelude                              as P hiding (sum, pi, mapM)
 
@@ -146,7 +147,7 @@ instance Show (SomeInfo PrettyDotF) where
   show = show . pPrint
 
 class Dispatch thing where
-    dispatch :: (Traversable m, MonadPlus m, IsMZero m) => thing -> Proof (PrettyDotF) m Final
+    dispatch :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m) => thing -> Proof (PrettyDotF) m Final
 
 mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
 mkDispatcher f =  f >=> final
@@ -154,6 +155,7 @@ mkDispatcher f =  f >=> final
 data AProblem t trs where
     ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
     AIRewritingProblem        :: Problem IRewriting trs -> AProblem t trs
+    AQRewritingProblem        :: Problem (QRewriting (TermFor trs)) trs -> AProblem t trs
     ANarrowingProblem         :: Problem Narrowing trs  -> AProblem t trs
     ACNarrowingProblem        :: Problem CNarrowing trs -> AProblem t trs
     ARelativeRewritingProblem :: Problem (Relative trs Rewriting) trs -> AProblem t trs
@@ -170,8 +172,10 @@ data AProblem t trs where
 --    AGoalNarrowingRelativeRewritingProblem :: Problem (Relative trs NarrowingGoal (TermId t)) trs -> AProblem t trs
 
 
-dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m
+
+dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
                     ,Dispatch (Problem Rewriting  trs)
+                    ,Dispatch (Problem (QRewriting (TermFor trs))  trs)
                     ,Dispatch (Problem IRewriting trs)
                     ,Dispatch (Problem (InitialGoal t Rewriting) trs)
                     ,Dispatch (Problem (InitialGoal t IRewriting) trs)
@@ -188,6 +192,7 @@ dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m
 
 dispatchAProblem (ARewritingProblem p)         = dispatch p
 dispatchAProblem (AIRewritingProblem p)        = dispatch p
+dispatchAProblem (AQRewritingProblem p)        = dispatch p
 dispatchAProblem (ANarrowingProblem p)         = dispatch p
 dispatchAProblem (ACNarrowingProblem p)        = dispatch p
 dispatchAProblem (ARelativeRewritingProblem p) = dispatch p
@@ -270,6 +275,10 @@ trsParser = do
         -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (initialGoal [g'] cnarrowing) r)}
     ([], Nothing, (GoalStrategy g : InnerMost : _))
         -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] irewriting) r)
+    ([], Nothing, (TRS.Q q : _))
+        -> return $ AQRewritingProblem (mkNewProblem (QRewriting (QSet (mapTermSymbols IdFunction <$> q)) minimality) r)
+    ([], Just dps, (TRS.Q q : _))
+        -> return $ AQRewritingProblem (mkDPProblem (QRewriting (QSet (mapTermSymbols IdFunction <$> q)) minimality) r' (mkTRS dps))
     ([], Just dps, [])
         -> return $ ARewritingProblem (setMinimality minimality $ mkDPProblem rewriting r' (mkTRS dps))
 

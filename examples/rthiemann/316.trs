@@ -1,0 +1,3 @@
+(VAR x)
+(PAIRS F(a) -> F(a))
+(RULES a -> b)

@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Narradar.Constraints.SAT.MonadSAT
     ( module Narradar.Constraints.SAT.MonadSAT
@@ -34,6 +35,7 @@ import           Data.Hashable
 import           Data.List                           (foldl')
 import           Data.Term                           (Term, HasId)
 import qualified Data.Term                           as Family
+import           Data.Typeable
 import           Prelude                             hiding (and, not, or, any, all, lex, (>))
 
 import           Narradar.Utils
@@ -71,7 +73,7 @@ natural = natural_ ""
 assert = assert_ ""
 
 -- Ints with the following soft invariant: the first 1000 values are reserved
-data Var = V (Maybe String) Int
+data Var = V (Maybe String) Int deriving Typeable
 
 instance Eq Var where
   V _ a == V _ b = a == b

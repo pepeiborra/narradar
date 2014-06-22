@@ -1,0 +1,6 @@
+(VAR x y)
+(RULES
+c(x,y) -> x
+c(x,y) -> y
+)
+(PAIRS F(0,1,x) -> F(x,x,x))

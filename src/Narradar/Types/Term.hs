@@ -3,8 +3,9 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Term
@@ -26,7 +27,7 @@ import           Data.Foldable as F (Foldable(..),sum,msum)
 import           Data.Hashable
 import qualified Data.Set               as Set
 import           Data.Traversable
-import           Data.Term              hiding (unify, unifies, applySubst, find, Id, TermF, Var)
+import           Data.Term              hiding (unify, unifies, applySubst, find, Id, TermF, Var )
 import qualified Data.Term.Simple       as Simple
 import           Data.Term.Rules        hiding (unifies', matches')
 import qualified Data.Id.Family         as Family
@@ -40,15 +41,14 @@ import qualified Data.Map               as Map
 import           Narradar.Framework.Ppr
 import           Narradar.Types.Var
 
-#ifdef HOOD
-import           Debug.Hood.Observe
-#endif
+import           GHC.Generics          (Generic)
+import           Debug.Hoed.Observe
 
 -- ---------------------
 -- Basic Identifiers
 -- ---------------------
 type StringId = ArityId ByteString
-data ArityId a = ArityId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable)
+data ArityId a = ArityId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable, Generic)
 
 instance Pretty StringId where pPrint ArityId{..} = text (BS.unpack the_id)
 instance Pretty a => Pretty (ArityId a) where pPrint ArityId{..} = pPrint the_id
@@ -56,16 +56,11 @@ instance Pretty a => Pretty (ArityId a) where pPrint ArityId{..} = pPrint the_id
 class    HasArity id where getIdArity :: id -> Int
 instance HasArity (ArityId a) where getIdArity = the_arity
 
-#ifdef HOOD
-instance Observable a => Observable (ArityId a) where
-  observer (ArityId f a) = send "ArityId" (return ArityId << f << a)
-#endif
-
 -- -------
 -- Terms
 -- -------
 
-data TermF id f = Term id [f] deriving (Eq,Ord,Show)
+data TermF id f = Term id [f] deriving (Eq,Ord,Show,Generic,Typeable)
 type TermN id = Term (TermF id) Var
 type RuleN id = RuleF(TermN id)
 
@@ -210,15 +205,3 @@ instance NFData id => NFData (ArityId id) where
 
 instance (NFData k, NFData a) => NFData (SubstitutionF k a) where
   rnf = rnf . unSubst
-
-
--- -----------------
--- Observe instances
--- -----------------
-#ifdef HOOD
-instance (Observable a, Observable id) => Observable (TermF id a) where
-  observer (Term _ id a) = send "Term" (return Term << id << a)
-
-instance Observable a => Observable (RuleF a) where
-  observer (l :-> r) = send "(:->)" (return (:->) << l << r)
-#endif

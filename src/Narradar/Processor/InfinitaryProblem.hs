@@ -4,6 +4,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 
@@ -39,13 +40,10 @@ narrowingGoalToInfinitary heu = apply(NarrowingGoalToInfinitary heu False)
 
 -- | This is the infinitary constructor rewriting AF processor described in
 --   "Termination of Logic Programs ..." (Schneider-Kamp et al)
-instance (HasSignature (NProblem typ id)
-         ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
-         ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
-         ,ApplyAF (NProblem typ id)
+instance (PolyHeuristic heu id, Lattice (AF_ id)
          ,Info info (InfinitaryToRewritingProof id)
-         ,ICap (typ, NTRS id)
-         ,IUsableRules typ (NTRS id)
+         ,FrameworkProblemN (Infinitary id typ) id
+         ,FrameworkProblemN typ id
          ) =>
     Processor (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id)
   where
@@ -58,7 +56,7 @@ instance (HasSignature (NProblem typ id)
      orProblems = do
        let heu    = mkHeu mk p
            base_p = getFramework (Infinitary.baseProblem p)
-       let p' = if usable then iUsableRules p (rhs <$> rules (getP p)) else p
+       let p' = if usable then iUsableRules p else p
        af' <-  Set.toList $ invariantEV heu (rules p') (Infinitary.pi p')
        return $ singleP (InfinitaryToRewritingProof af') p
                         (AF.apply af' . mkDerivedDPProblem base_p $ p')

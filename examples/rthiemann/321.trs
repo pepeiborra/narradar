@@ -1,0 +1,6 @@
+(VAR x)
+(RULES
+ f(x) -> c
+ a -> b
+ )
+(STRATEGY Q b)

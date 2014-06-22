@@ -8,7 +8,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable, DeriveGeneric #-}
 
 module Narradar.Types.Problem.NarrowingGen where
 
@@ -20,6 +20,7 @@ import           Data.Foldable                    (Foldable(..))
 import           Data.Hashable
 import           Data.Traversable                 as T (Traversable(..))
 import qualified Data.Set                         as Set
+import           Data.Typeable
 import           Text.XHtml                       (theclass)
 
 import           Data.Term                        hiding (TermF)
@@ -38,11 +39,14 @@ import           Narradar.Framework.Ppr
 
 import           Prelude                          hiding (pi)
 
+import GHC.Generics (Generic)
+import Debug.Hoed.Observe
+
 -- -----------------------
 -- Terms with Gen and Goal
 -- -----------------------
 
-data GenId id = AnId id | GenId | GoalId deriving (Eq, Ord, Show, Typeable)
+data GenId id = AnId id | GenId | GoalId deriving (Eq, Ord, Show, Typeable, Generic)
 
 instance Pretty id => Pretty (GenId id) where
   pPrint GenId  = text "GEN"
@@ -93,7 +97,7 @@ type INarrowingGen = MkNarrowingGen IRewriting
 --instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
 data MkNarrowingGen p = NarrowingGen {baseFramework :: p}
-          deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+          deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic)
 
 instance FrameworkExtension MkNarrowingGen where
   getBaseFramework = baseFramework
@@ -167,7 +171,8 @@ instance (t ~ Family.TermF trs
 
 
 -- ICap
-instance ICap (st, NarradarTRS t v) => ICap (MkNarrowingGen st, NarradarTRS t v) where icap = liftIcap
+instance ICap (st, NarradarTRS t v) => ICap (MkNarrowingGen st, NarradarTRS t v) where
+  icapO = liftIcapO
 
 -- Usable Rules
 
@@ -180,7 +185,9 @@ instance (IUsableRules base trs) => IUsableRules (MkNarrowingGen base) trs where
 instance (MkDPProblem (MkNarrowingGen base) trs, InsertDPairs base trs) => InsertDPairs (MkNarrowingGen base) trs where
   insertDPairs NarrowingGenProblem{..} = NarrowingGenProblem . insertDPairs baseProblem
 
-
+-- Hood
+instance Observable a => Observable (MkNarrowingGen a)
+instance Observable a => Observable (GenId a)
 -- -------------------
 -- Support functions
 -- -------------------

@@ -16,6 +16,7 @@ module Narradar ( module Narradar.Processor.Graph
                 , module Narradar.Processor.RelativeProblemIPL14
                 , module Narradar.Processor.InnermostProblem
                 , module Narradar.Processor.SubtermCriterion
+                , module Narradar.Processor.QRewriting
                 , module Narradar.Types
                 ) where
 
@@ -33,4 +34,5 @@ import Narradar.Processor.InnermostProblem
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem
 import Narradar.Processor.RelativeProblemIPL14
+import Narradar.Processor.QRewriting
 import Narradar.Processor.SubtermCriterion

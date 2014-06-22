@@ -1,4 +1,5 @@
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances, FlexibleInstances #-}
 
 module Narradar.Framework.Ppr ( module Narradar.Framework.Ppr
@@ -8,6 +9,8 @@ module Narradar.Framework.Ppr ( module Narradar.Framework.Ppr
 import Data.AlaCarte.Ppr
 import Data.Array
 
+import Data.Foldable (toList)
+import Data.Term (foldTerm, getId)
 import Data.Term.Rules ()
 import Data.Term.Ppr ()
 import Data.Strict(Pair(..), (:!:))
@@ -84,3 +87,16 @@ nest i = Ppr.nest i . pPrint
 
 punctuate :: (Pretty a, Pretty b) => a -> [b] -> [Doc]
 punctuate c xx = Ppr.punctuate (pPrint c) (map pPrint xx)
+
+-- -------------------------
+-- printing TPDB problems --
+-- -------------------------
+
+class PprTPDB p where pprTPDB :: p -> Doc
+
+
+pprTermTPDB t = foldTerm pprTPDB f t where
+        f t@(getId -> Just id)
+            | null tt = pPrint id
+            | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
+         where tt = toList t

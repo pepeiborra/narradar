@@ -6,6 +6,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Processor.Graph
@@ -19,11 +20,13 @@ import Control.Applicative
 import Control.Monad
 import Control.Exception (assert)
 import Data.Array as A
+import Data.Foldable (Foldable, foldMap, toList)
+import Data.Functor.Two
 import Data.Graph as G
 import Data.Graph.SCC as GSCC
 import qualified Data.Graph.Inductive as FGL
-import Data.Foldable (Foldable, foldMap, toList)
 import Data.List (find, sort)
+import Data.Strict.Tuple (Pair(..))
 import Data.Traversable (Traversable)
 import Data.Tree  as Tree
 import Data.Maybe
@@ -39,10 +42,13 @@ import Narradar.Framework.GraphViz
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types hiding ((!))
 import Narradar.Types.Problem.InitialGoal
+import Narradar.Types.Problem.QRewriting
 import Narradar.Utils
 import Narradar.Framework.Ppr
 
 import qualified Data.Term.Family as Family
+
+import Debug.Hoed.Observe as Hood
 
 -- -------------------------------------
 -- DP Processors estimating the graph
@@ -57,6 +63,7 @@ type instance InfoConstraint (DependencyGraph info) = info
 dependencyGraphSCC = DependencyGraphSCC True
 dependencyGraphCycles = DependencyGraphCycles True
 
+-- Implements Theorem 3.4 of Rene's thesis
 instance ( trs ~ NarradarTRS t Var
          , problem ~ Problem typ trs, Info info problem
          , MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
@@ -69,6 +76,52 @@ instance ( trs ~ NarradarTRS t Var
   type Trs (DependencyGraph info) (Problem typ (NarradarTRS t Var)) = NarradarTRS t Var
   apply (DependencyGraphSCC useInverse) = sccProcessor useInverse
   apply (DependencyGraphCycles useInverse) = cycleProcessor useInverse
+
+
+instance ( FrameworkId id
+         , Info info DependencyGraphProof
+         , Pretty (SomeInfo info)
+         ) =>
+    Processor (DependencyGraph info) (Problem (QRewritingN id) (NarradarTRS (TermF id) Var)) where
+  type Typ (DependencyGraph info) (Problem (QRewritingN id) (NTRS id)) = QRewritingN id
+  type Trs (DependencyGraph info) (Problem (QRewritingN id) (NTRS id)) = NTRS id
+  apply (DependencyGraphSCC useInverse) =
+--      observers "dependency graph SCC" $ \(Hood.O gdmobserve) ->
+        let gdmobserve _ = id in
+        \problem@(QRewritingProblem __ dps@(DPTRS _ dd _ gr unifs sig) q _ qC) ->
+             let graph = (if useInverse then getIEDGfromUnifiers else getEDGfromUnifiers) unif'
+                 unif' = fmap (gdmobserve "filtering" filterNonQNF) unifs
+                 cc  = [vv | CyclicSCC vv <- GSCC.sccList graph]
+
+                 both f (a :!: b) = f a :!: f b
+
+                 inQNF_ = gdmobserve "inQNF" inQNF
+
+                 filterNonQNF = imap (\ (x,y) -> ensure(\(Two sigma1 sigma2) ->
+                                     --pprTrace sigma2 $
+                                     (applySubst (sigma1) (lhs(dd ! x)) `inQNF_` q)
+                                   &&
+                                      applySubst (gdmobserve "sigma2" sigma2) (lhs(dd ! y)) `inQNF_` q
+                                     ))
+
+                 imap f a = listArray (bounds a) (map (uncurry f) (assocs a)) `asTypeOf` a
+
+                 ensure p m = do
+                    x <- m
+                    when (not$ p x) $ pprTrace (text "Dropping unifier" <+> pPrint x) $ return ()
+                    guard (p x)
+                    return x
+             in if null cc then success (NoCycles graph) problem else
+
+-- The case below removes 'identity' applications of this processor from the proof log
+-- Generally you want to do this for clarity, but there is one exception.
+-- In the first step of a termination proof this processor is always applied, and you want to show it in the proof log.
+-- However the case below will prevent that from happening,
+-- in cases where there is one big scc that includes all the pairs in the problem
+--  | [c] <- cc, sort c == sort (vertices graph) = return problem
+
+                 andP (SCCs graph (map Set.fromList cc)) problem
+                   [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
 
 
 instance ( t ~ f (DPIdentifier id0), MapId f
@@ -92,7 +145,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
   apply DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
   apply (DependencyGraphSCC useInverse)
         p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
-                            , baseProblem = (getP -> dps@(DPTRS dd _ igr unif sig))}
+                            , baseProblem = (getP -> dps@(DPTRS _ dd _ igr unif sig))}
    = do
     let gr            = if useInverse then igr else getEDGfromUnifiers unif
         reachable     = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
@@ -269,7 +322,7 @@ type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 
-sccProcessor useInverse problem@(getP -> dps@(DPTRS dd _ gr unif sig))
+sccProcessor useInverse problem@(getP -> dps@(DPTRS _ dd _ gr unif sig))
   | null cc   = success (NoCycles graph) problem
 
 -- The case below removes 'identity' applications of this processor from the proof log
@@ -285,7 +338,7 @@ sccProcessor useInverse problem@(getP -> dps@(DPTRS dd _ gr unif sig))
       graph = if useInverse then gr else getEDGfromUnifiers unif
       cc  = [vv | CyclicSCC vv <- GSCC.sccList graph]
 
-cycleProcessor useInverse problem@(getP -> dps@(DPTRS dd _ gr unif sig))
+cycleProcessor useInverse problem@(getP -> dps@(DPTRS _ dd _ gr unif sig))
   | null cc   = success (NoCycles graph) problem
   | [c] <- cc, sort c == sort (vertices graph) = return problem
   | otherwise = andP (Cycles graph) problem

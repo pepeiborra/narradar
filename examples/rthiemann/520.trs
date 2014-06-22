@@ -1,0 +1,9 @@
+(VAR x)
+(RULES 
+ b -> a
+ h(a) -> a
+)
+(PAIRS
+ F(g(x),a) -> F(g(b),h(x))
+)
+(STRATEGY Q g(a))

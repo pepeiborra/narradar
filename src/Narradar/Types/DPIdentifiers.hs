@@ -8,7 +8,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveGeneric #-}
 {-# LANGUAGE CPP #-}
 
 
@@ -19,6 +19,7 @@ module Narradar.Types.DPIdentifiers
 import Control.Applicative
 import Control.Arrow (first)
 import Control.DeepSeq
+import qualified Data.ByteString.Char8 as BS
 import Data.Foldable (Foldable(..))
 import Data.Hashable
 import Data.Traversable (Traversable(..))
@@ -28,9 +29,8 @@ import Prelude
 import Narradar.Types.Term
 import Narradar.Framework.Ppr
 
-#ifdef HOOD
-import Debug.Hood.Observe
-#endif
+import GHC.Generics (Generic)
+import Debug.Hoed.Observe
 
 type Id = DPIdentifier StringId
 type DP a = RuleN (DPIdentifier a)
@@ -39,7 +39,7 @@ type DP a = RuleN (DPIdentifier a)
 -- Concrete DP Identifiers
 -- -----------------------
 data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier
-                    deriving (Ord, Typeable, Functor, Foldable, Traversable)
+                    deriving (Ord, Typeable, Functor, Foldable, Traversable, Generic)
 instance Eq a => Eq (DPIdentifier a) where
     IdFunction f1 == IdFunction f2 = f1 == f2
     IdDP f1       == IdDP f2       = f1 == f2
@@ -71,11 +71,10 @@ instance Hashable a => Hashable (DPIdentifier a) where
     hashWithSalt s (IdFunction f) = hashWithSalt s f
     hashWithSalt s (IdDP f) = hashWithSalt 1 (hashWithSalt s f)
 
-#ifdef HOOD
-instance Observable id => Observable (DPIdentifier id) where
-  observer (IdFunction a) = send "IdFunction" (return IdFunction << a)
-  observer (IdDP a)       = send "IdDP"       (return IdDP << a)
-#endif
+instance Observable (DPIdentifier String)   where observer  x = send (show x) (return x)
+instance Observable (DPIdentifier StringId) where observer  x = send (show x) (return x)
+instance Observable1 DPIdentifier           -- where observer1 x = send "NO WAY" (return x)
+
 -- ------------
 -- DP Symbols
 -- ------------

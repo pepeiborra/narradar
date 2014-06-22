@@ -43,16 +43,20 @@ import Narradar.Framework.GraphViz (dotProof', DotProof(..))
 import Narradar.Utils
 import MuTerm.Framework.Output
 
+import Debug.Hoed.Observe (Observable1)
+
 web_pdf_folder   = "/~pepe/logs"
 defPage :: MonadCGI m => m CGIResult
 defPage = outputFPS (LBS.fromChunks [defaultForm])
 
 narradarCgi :: forall mp.
-                 (IsMZero mp, Traversable mp
+                 (IsMZero mp, Traversable mp, Observable1 mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (QRewriting (TermN Id)) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)IRewriting) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermN Id))) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))

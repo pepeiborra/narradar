@@ -1,0 +1,11 @@
+(VAR x y)
+(RULES
+s(p(x)) → x
+p(s(x)) → x 
+isPositive(s(x)) → true
+isPositive(0) → false 
+isPositive(p(x)) → isPositive(x)
+f(p(x), true) → f(p(x), isPositive(x))
+)
+(PAIRS F(p(x), true) → F(p(x), isPositive(x)))
+(STRATEGY INNERMOST)

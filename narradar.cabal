@@ -51,9 +51,6 @@ Library
      -- ghc-options: -fhpc
   if flag(hood)
      cpp-options: -DHOOD
-     build-depends: hood
-  else
-     build-depends: hood-off
 
   buildable: True
 --  cpp-options: -DGHCI
@@ -76,6 +73,7 @@ Library
   extra-libraries: yices
 
   build-Depends:  base,
+                  transformers >= 0.3,
                   mtl >= 2.1.3.1,
                   failure ,
                   prettyclass,
@@ -118,7 +116,8 @@ Library
                   hashmap,
                   suitable,
                   bifunctors,
-                  singletons
+                  Hoed
+--                  uglymemo
 
 
   if flag(aprove)
@@ -163,6 +162,7 @@ Library
      Narradar.Types.Problem,
      Narradar.Types.Problem.Prolog,
      Narradar.Types.Problem.Rewriting,
+     Narradar.Types.Problem.QRewriting,
      Narradar.Types.Problem.Narrowing,
      Narradar.Types.Problem.NarrowingGen,
      Narradar.Types.Problem.NarrowingGoal,
@@ -178,7 +178,8 @@ Library
      Narradar.Processor.NarrowingProblem,
 --     Narradar.Processor.InitialGoalNarrowingProblem,
      Narradar.Processor.InfinitaryProblem,
-     Narradar.Processor.RPO
+     Narradar.Processor.QRewriting,
+     Narradar.Processor.RPO,
 --     Narradar.Processor.RPOFunsat
      Narradar.Processor.UsableRules,
      Narradar.Processor.InnermostProblem,
@@ -189,10 +190,13 @@ Library
      Narradar.Processor.FLOPS08,
      Narradar.Processor.LOPSTR09,
      Narradar.Utils,
+     Narradar.Utils.Memo,
+     Narradar.Utils.Observe,
      Narradar.Utils.Html,
      Narradar.Utils.Parse,
 --     Data.NarradarTrie,
      Control.Monad.Supply,
+     Data.Functor.Two
      Lattice
   other-modules:
      Data.UniqueList,

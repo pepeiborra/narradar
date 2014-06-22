@@ -18,6 +18,8 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework.Ppr hiding (char)
 import Narradar.Types.Term
 
+import Debug.Hoed.Observe
+
 data GoalF id a = Goal {goalId::id, goalArgs::[a]} deriving (Eq, Ord, Show)
 type Goal id = GoalF id Mode
 data Mode = G | V deriving (Eq, Ord, Bounded, Show)
@@ -57,3 +59,7 @@ pPrintGoalAF :: (String ~ id, Ord id, Show id) => Signature id -> AF_ id -> Doc
 pPrintGoalAF sig pi = vcat [ pPrint (Goal f mm) | (f,pp) <- AF.toList pi
                                            , f `Set.member` getDefinedSymbols sig
                                            , let mm = [if i `elem` pp then G else V | i <- [1..getArity sig f] ]]
+
+instance Observable Mode where observer = observeBase
+
+instance Observable id => Observable (Goal id) where observer (Goal id args) = send "Goal" (return Goal << id << args)

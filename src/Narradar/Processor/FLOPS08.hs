@@ -7,7 +7,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Narradar.Processor.FLOPS08 where
 
@@ -38,7 +38,7 @@ import qualified Data.Map as Map
 import qualified Data.Term.Family as Family
 import qualified Narradar.Types.ArgumentFiltering as AF
 
-import Debug.Hood.Observe
+import Debug.Hoed.Observe
 
 import Prelude hiding (pi)
 
@@ -58,7 +58,7 @@ instance Pretty id => Pretty (NarrowingGoalToRewritingProof id) where
 
 data ComputeSafeAF heu (info :: * -> *) = ComputeSafeAF (MkHeu heu)
 type instance InfoConstraint (ComputeSafeAF heu info) = info
-instance (DPSymbol id, Ord id, Pretty id
+instance (FrameworkId id
          ,PolyHeuristic heu id, Lattice (AF_ id)
          ,Info info (NarrowingGoalToRewritingProof id)
          ) =>
@@ -80,7 +80,7 @@ instance (DPSymbol id, Ord id, Pretty id
 data InferAF (info :: * -> *) = InferAF
 type instance InfoConstraint (InferAF info) = info
 
-instance (Observable id, Ord id, Pretty id, Show id, DPSymbol id
+instance (FrameworkId id, DPSymbol id
          ) => Processor (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id)
  where
   type Typ (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NarrowingGoal id
@@ -93,8 +93,8 @@ instance (Observable id, Ord id, Pretty id, Show id, DPSymbol id
 data NarrowingGoalToRewriting heu (info :: * -> *) = NarrowingGoalToRewriting (MkHeu heu)
 type instance InfoConstraint (NarrowingGoalToRewriting heu info) = info
 instance (HasSignature (NProblem typ id)
-         ,ICap (typ, trs), IUsableRules typ trs
-         ,PolyHeuristic heu id, Lattice (AF_ id), Ord id, Pretty id
+         ,PolyHeuristic heu id, Lattice (AF_ id)
+         ,FrameworkId id
          ,MkDPProblem typ (NTRS id), Traversable (Problem typ)
          ,ApplyAF (NProblem typ id)
          ,Info info (NarrowingGoalToRewritingProof id)
@@ -152,7 +152,7 @@ instance Lattice DivEnv where
     top    = Map.empty
 
 
-inferAF :: (Observable id, Ord id, Show id) => NTRS id -> Goal id -> AF_ id
+inferAF :: (Observable id, Ord id, Pretty id, Show id) => NTRS id -> Goal id -> AF_ id
 inferAF trs = divisionToAF . computeDivision trs
   where
    divisionToAF div = AF.fromList
@@ -162,7 +162,7 @@ inferAF trs = divisionToAF . computeDivision trs
 
 -- | Receives an initial goal (its modes) and a TRS and returns a Division
 --computeDivision,computeDivisionL :: (Identifier ~ id, TRSC f, T id :<: f, DPMark f id) => NarradarTRS id f -> Goal -> Division id
-computeDivision :: (Observable id, Ord id, Show id) =>
+computeDivision :: (Observable id, Pretty id, Ord id, Show id) =>
                    NTRS id -> Goal id -> Division id
 computeDivision  = computeDivision_ e
 
@@ -180,7 +180,7 @@ computeDivision_ e trs (Goal id mm)
                   | (f,ar) <- Map.toList (Map.delete id $ definedSymbols sig)]
 
 --    go :: Division Identifier -> Division Identifier
-    go = observe "iteration" go'
+    go = gdmobserve "iteration" go'
     go' div = Map.mapWithKey (\f b ->
              lub (b : [ bv trs f (e f rule div) div r
                        | rule@(l:->r) <- rules trs])) div
@@ -198,7 +198,7 @@ e _g (l :-> r) div
 bv,bv' :: (HasSignature trs, id ~ Family.Id trs
           ,Observable trs, Observable id, Ord id, Show id
           ) => trs -> id -> DivEnv -> Division id -> TermN id -> [Mode]
-bv = bv' -- observe "bv" bv'
+bv = bv' -- gdmobserve "bv" bv'
 bv' trs g rho div t@(rootSymbol -> Just f)
   = if f /= g then bt else bt `join` (be <$> tt)
      where

@@ -1,8 +1,11 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Narradar.Constraints.Confluence where
 
 import Data.Foldable (Foldable)
-import Data.Maybe (catMaybes, maybeToList)
+import Data.Maybe (catMaybes, maybeToList, listToMaybe)
+import Data.Term (equiv)
+import Data.Term.Rewriting
 
 import Narradar.Constraints.Syntactic
 import Narradar.Types
@@ -27,6 +30,17 @@ isOverlay ([],r1,r2) = True
 isOverlay _ = False
 
 isNonOverlapping p = (null . criticalPairs) p
+
+locallyConfluent :: ( HasRules trs, Unify t, Ord (Term t v)
+                    , Enum v, Ord v, Rename v
+                    , Family.Rule trs ~ RuleF (Term t v)
+                    ) => trs -> Bool
+locallyConfluent p = (all joinable . criticalPairs) p
+  where
+    joinable (_, s, t) = s == t ||
+                         rewritesQuickly s == rewritesQuickly t
+
+    rewritesQuickly t = fmap EqModulo $ listToMaybe $ take 100 $ rewrites (rules p) t
 
 criticalPairs :: (HasRules trs, Rule t v ~ Family.Rule trs, Enum v, Ord v, Rename v, Unify t) =>
                  trs -> [(Position, Term t v, Term t v)]

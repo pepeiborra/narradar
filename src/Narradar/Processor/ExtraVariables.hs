@@ -3,6 +3,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleInstances, UndecidableInstances #-}
 
 module Narradar.Processor.ExtraVariables where
@@ -26,6 +27,15 @@ instance Pretty ExtraVarsProof where
     pPrint EVFail   = text "The TRS contains extra variables."
     pPrint EVAFFail = text "Failed to find an argument filtering which filters out the extra variables"
 
+
+instance (ExtraVars trs, Ord(Family.Var trs), Info info ExtraVarsProof) =>
+          Processor (ExtraVarsP info) (Problem (QRewriting id) trs)
+  where
+    type Typ (ExtraVarsP info) (Problem (QRewriting id) trs) = QRewriting id
+    type Trs (ExtraVarsP info) (Problem (QRewriting id) trs) = trs
+    apply _ p
+       | null (extraVars p) = return p
+       | otherwise  = refuted EVFail p
 
 instance (ExtraVars trs, Ord (Family.Var trs), Info info ExtraVarsProof) =>
           Processor (ExtraVarsP info) (Problem Rewriting trs)

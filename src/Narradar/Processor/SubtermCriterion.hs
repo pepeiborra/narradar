@@ -5,6 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Narradar.Processor.SubtermCriterion where
 
@@ -23,6 +24,8 @@ import Narradar.Types.ArgumentFiltering (AF_)
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Utils (on)
 
+import Debug.Hoed.Observe
+
 data SubtermCriterion (info :: * -> *) = SubtermCriterion deriving (Eq, Show, Ord)
 data SubtermCriterionProof id = SubtermCriterionProof (Proj id)
                               | SubtermCriterionFailMinimality
@@ -37,7 +40,7 @@ instance (Pretty (DPIdentifier id), Ord id) => Pretty (SubtermCriterionProof (DP
     pPrint (SubtermCriterionProof pi) = text "Subterm Criterion with the projection:" $$
                                         nest 2 pi
 
-instance (Info info (SubtermCriterionProof id), Ord id, Pretty id) =>
+instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
          Processor (SubtermCriterion info) (Problem Rewriting (NTRS id))
   where
    type Typ (SubtermCriterion info) (Problem Rewriting (NTRS id)) = Rewriting
@@ -48,7 +51,7 @@ instance (Info info (SubtermCriterionProof id), Ord id, Pretty id) =>
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP (SubtermCriterionProof prj) p0 (setP pTRS' p0)
 
-instance (Info info (SubtermCriterionProof id),Ord id, Pretty id) =>
+instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
          Processor (SubtermCriterion info) (Problem IRewriting (NTRS id))
   where
    type Typ (SubtermCriterion info) (Problem IRewriting (NTRS id)) = IRewriting
@@ -56,6 +59,18 @@ instance (Info info (SubtermCriterionProof id),Ord id, Pretty id) =>
    apply SubtermCriterion p0 = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP  (SubtermCriterionProof prj) p0 (setP pTRS' p0)
+
+-- | Implementation of Theorem 4.41 in Rene Thiemann's thesis
+instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
+         Processor (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id))
+  where
+   type Typ (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id)) = QRewritingN id
+   type Trs (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id)) = NTRS id
+   apply SubtermCriterion p0
+     | isQInnermost p0 = case subtermCriterion (getP p0) of
+                                Nothing          -> mzero
+                                Just (pTRS',prj) -> singleP  (SubtermCriterionProof prj) p0 (setP pTRS' p0)
+     | otherwise = dontKnow (SubtermCriterionFailMinimality :: SubtermCriterionProof id) p0
 
 instance(Info info (Problem base (NTRS id))
         ,Processor (SubtermCriterion info) (Problem base (NTRS id))
@@ -69,7 +84,7 @@ instance(Info info (Problem base (NTRS id))
 
 instance (Info info (Problem base (NTRS id))
          ,Processor (SubtermCriterion info) (Problem base (NTRS id))
-         ,Problem base (NTRS id) ~ Res (SubtermCriterion info) (Problem base (NTRS id))) =>
+         ,Problem base (NTRS id) ~ Res (SubtermCriterion info) (Problem base (NTRS id)), Observable id) =>
          Processor (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id))
   where
    type Typ (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id)) = InitialGoal (TermF id) base

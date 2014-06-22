@@ -128,7 +128,7 @@ instance (HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
 instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
     ICap (MkNarrowingGoal id p, trs)
   where
-    icap (NarrowingGoal _ _ _ p,trs) = icap (p,trs)
+    icapO o (NarrowingGoal _ _ _ p,trs) = icapO o (p,trs)
 
 -- Usable Rules
 
@@ -140,6 +140,6 @@ instance (Enum v, Unify t, Ord (Term t v), IsTRS trs, GetVars trs
          ,IUsableRules p trs, ICap (p,trs)) =>
    IUsableRules (MkNarrowingGoal id p) trs
  where
-   iUsableRulesM (NarrowingGoal _ pi _ b) trs dps tt = return trs
+   iUsableRulesM (NarrowingGoal _ pi _ b) trs dps s tt = return trs
    iUsableRulesVarM (NarrowingGoal _ _ _ b) = iUsableRulesVarM b
 

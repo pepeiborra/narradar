@@ -15,6 +15,7 @@
 module Narradar.Constraints.SAT.RPOAF (
    SATSymbol(..), UsableSymbolRes(..), prec, filtering, status, theSymbolR
   ,RPOSsymbol(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
+  ,RPOProblemN, RPOId
   ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
   ,rpo, rpos, lpo, lpos, mpo
   ,verifyRPOAF, isCorrect
@@ -34,10 +35,10 @@ import Data.List ((\\), find, transpose, inits, tails)
 import Data.Maybe
 import Data.Monoid
 import Data.Hashable
-import Data.Traversable (traverse)
+import Data.Traversable (Traversable, traverse)
+import Data.Typeable (Typeable)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Traversable (Traversable)
 import qualified Funsat.RPOCircuit.Symbols as Funsat
 import Funsat.RPOCircuit (Co, CoRPO, assertCircuits)
 import Funsat.RPOCircuit.Symbols (Natural(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), RPOSsymbol(..), RPOsymbol(..), mkSymbolDecoder)
@@ -54,13 +55,15 @@ import Narradar.Types.Problem
 import Narradar.Types.Problem.InitialGoal
 import Narradar.Types.Problem.NarrowingGen
 import qualified Narradar.Types as Narradar
-import Narradar.Utils
+import Narradar.Utils hiding (none)
 
 import qualified Data.Term.Family as Family
 import qualified Narradar.Types.ArgumentFiltering as AF
 import qualified Prelude as P
 import Prelude hiding (lex, not, and, or, any, all, quot, (>))
 import qualified Debug.Trace as Debug
+
+import Debug.Hoed.Observe
 
 class SATSymbol sid where
   mkSATSymbol :: (v  ~ Family.Var sid
@@ -73,6 +76,10 @@ instance SATSymbol (Usable(RPOsymbol  v id)) where mkSATSymbol = rpo
 instance SATSymbol (Usable(LPOSsymbol v id)) where mkSATSymbol = lpos
 instance SATSymbol (Usable(LPOsymbol  v id)) where mkSATSymbol = lpo
 instance SATSymbol (Usable(MPOsymbol  v id)) where mkSATSymbol = mpo
+
+-- TODO apply these constraint synonyms consistently across this file
+type RPOId id = (FrameworkId id, UsableSymbol id, HasPrecedence id, HasStatus id, HasFiltering id, DPSymbol id, GenSymbol id)
+type RPOProblemN typ id = (FrameworkProblemN typ id, RPOId id, NNeededRules typ id)
 
 -- | RPO + AF
 
@@ -112,30 +119,36 @@ rpoAF_DP ::
 --         ,v    ~ Family.Var repr
          ,v    ~ Family.Var sid
 --         ,v    ~ Family.Var v
+         ,term ~ Term (TermF id) tv
+         ,term' ~ Term (TermF sid) tv
          ,TermF sid ~ Family.TermF repr
          ,Ord id, Show id
          ,Ord tv
-         ,MkDPProblem typ trs'
+         ,Functor typ
+         ,IsDPProblem (typ term)
+         ,MkDPProblem (typ term') trs'
          ,SATSymbol sid
          ,Ord sid, Pretty sid
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,HasSignature (Problem (typ term) trs)
          ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
          ,UsableSymbol sid
          ,Decode v Bool
          ,MonadSAT repr v m
          ,v ~ Var) =>
-         Bool -> (Problem typ trs' -> repr v) -> Problem typ trs
+         Bool -> (Problem (typ term') trs' -> repr v) -> Problem (typ term) trs
          -> m (EvalM v ([Int], BIEnv v, [sid]))
 
 rpoAF_DP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
-  let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
+  let convert = mapTermSymbols (\f -> fromMaybe (error ("rpoAF_DP: Symbol not found " ++ show( f))) $ Map.lookup f dict)
       trs'    = mapNarradarTRS convert (getR p)
       dps'    = mapNarradarTRS convert (getP p)
-      p'      = mkDPProblem (getFramework p) trs' dps'
+      typ'    = fmap convert $ getFramework p
+      p'      = mkDPProblem typ' trs' dps'
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
 
@@ -275,6 +288,7 @@ rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,HasSignature (Problem typ trs)
          ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
          ,UsableSymbol sid
          ,SATSymbol sid
@@ -782,9 +796,8 @@ omegaUsable p = -- pprTrace ("Solving P=" <> getP p $$ "where dd = " <> dd) $
    where
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
-    dd = getDefinedSymbols $ getR (iUsableRules p (rhs <$> dps))
-
-    go (Pure x) _ = and $ map iusable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
+    dd = getDefinedSymbols $ getR (iUsableRules p)
+    go (Pure x) _ = and $ map iusable $ toList $ getDefinedSymbols (iUsableRulesVar p [] x)
 
     go t trs
       | id_t `Set.notMember` dd
@@ -814,11 +827,10 @@ omegaNeeded p = pprTrace (text "Solving P=" <+> getP p $$ text "where dd = " <+>
     sig = getSignature (getR p)
     dd
        | getMinimalityFromProblem p == M = getDefinedSymbols $ getR (neededRules p (rhs <$> dps))
-       | otherwise                       = getDefinedSymbols $ getR (iUsableRules p (rhs <$> dps))
-
+       | otherwise                       = getDefinedSymbols $ getR (iUsableRules p)
     go (Pure x) _
        | getMinimalityFromProblem p == M = true
-       | otherwise                       = and $ map iusable $ toList $ getDefinedSymbols (iUsableRulesVar p x)
+       | otherwise                       = and $ map iusable $ toList $ getDefinedSymbols (iUsableRulesVar p [] x)
 
     go t trs
       | id_t `Set.notMember` dd
@@ -884,16 +896,9 @@ omegaIGgen :: forall problem initialgoal id base repr v.
               (problem ~ NProblem initialgoal id
               ,initialgoal ~ InitialGoal (TermF id) base
               ,Var ~ Family.Var id
-              ,Traversable (Problem base), MkDPProblem base (NTRS id), HasMinimality base
-              ,NCap base id
-              ,NUsableRules base id
-              ,NNeededRules base id
-              ,Pretty base
-              ,Ord id, Pretty id, Show id, Hashable id, DPSymbol id, GenSymbol id
-              ,HasStatus id
-              ,HasFiltering id
-              ,HasPrecedence id
-              ,UsableSymbol id
+              ,RPOProblemN initialgoal id
+              ,RPOProblemN base id
+              ,Eq base
               ) => problem -> (Tree (TermN id) Var, EvalM Var [Tree (TermN id) Var])
 omegaIGgen p
   | isLeftLinear (getR p) = pprTrace ("omegaIGgen: partial = " <+> partial)
@@ -940,11 +945,8 @@ verifyRPOAF :: ( rule ~ RuleF term
 --               , Narradar.Var ~ var
                , Enum var, Ord var, GetVars var, Hashable var, Show var, Rename var
                , Decode var Bool
-               , AF.ApplyAF term
-               , HasRules trs, HasSignature trs, AF.ApplyAF trs, GetVars trs
-               , Ord id, UsableSymbol id, Pretty id, Show id
-               , HasPrecedence id, HasStatus id, HasFiltering id
-               , IUsableRules typ trs
+               , FrameworkProblem typ trs
+               , RPOId id
                ) =>
                typ -> trs -> trs -> [Int] -> EvalM var (VerifyRPOAF rule)
 verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
@@ -966,7 +968,7 @@ verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
         Set.fromList
          [ rule
          | let urAf = Set.fromList $
-                      rules(iUsableRules3 typ the_rules the_pairs (rhs <$> theFilteredPairs))
+                      rules(iUsableRules3 typ the_rules the_pairs [] (rhs <$> theFilteredPairs))
          , rule <- rules the_rules
          , AF.apply theAf rule `Set.member` urAf]
 

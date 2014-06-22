@@ -34,6 +34,8 @@ import Narradar.Utils
 
 import qualified Language.Prolog.Syntax as Prolog
 
+import Debug.Hoed.Observe
+
 -- -----------------
 -- Prolog Problems
 -- -----------------
@@ -99,3 +101,6 @@ parsePrologGoal :: String -> Either ParseError [Goal String]
 parsePrologGoal = parse (Prolog.whiteSpace >> many (goalP <* Prolog.whiteSpace)) "(when parsing the query)"
  where
    goalP  = Goal <$> Prolog.identifier <*> modesP <* dot
+
+-- Hood
+instance Observable id => Observable (Prolog id) where observer (Prolog gg) = send "Prolog" (return Prolog << gg)

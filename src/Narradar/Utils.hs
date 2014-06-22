@@ -10,6 +10,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving #-}
 
 module Narradar.Utils where
 
@@ -37,6 +39,7 @@ import qualified Data.ByteString                      as BS
 import qualified Data.ByteString.Lazy                 as LBS
 import           Data.Int
 import           Data.List                            (group, sort, nubBy)
+import qualified Data.List                            as List
 import           Data.List.Split                      (chunk)
 import           Data.Hashable
 import           Data.Maybe
@@ -52,13 +55,17 @@ import qualified Data.Sequence                        as Seq
 import           Data.Strict                          (Pair(..), (:!:))
 import           Data.Suitable
 import           Data.Traversable
+import           Data.Typeable
 import           Language.Prolog.Representation       as Prolog
+import           Funsat.RPOCircuit.Symbols
+
 import           System.IO
 import           System.Directory
 import           System.Process
 
 import           Data.Term.Rules                      as Term
 import           Narradar.Framework.Ppr
+import           Narradar.Utils.Observe()
 --import TRS.Utils hiding (size, parens, brackets, trace)
 
 import           Prelude                              hiding (mapM)
@@ -69,8 +76,12 @@ import           Prelude                              hiding (mapM)
 #endif
 
 #ifdef HOOD
-import           Debug.Hood.Observe                   hiding (O)
+import           Debug.Hoed.Observe                   hiding (O)
 #endif
+
+-- ----------------
+-- Debugging stuff
+-- ----------------
 
 #ifdef DEBUG
 import qualified Debug.Trace
@@ -88,6 +99,8 @@ pprTrace = trace . render . pPrint
 pprError = error . render . pPrint
 echo = hPutStrLn stderr
 echo' = hPutStr stderr
+
+
 -- ----------
 -- Type hints
 -- ----------
@@ -95,6 +108,8 @@ echo' = hPutStr stderr
 isTerm1 :: Term (f id) v -> Term (f id) v
 isTerm1 = id
 
+data Proxy a
+proxy = undefined
 
 -- ----------------------------
 -- Type Constructor Composition
@@ -111,6 +126,7 @@ liftL = msum . map return
 fmap2 = fmap . fmap
 fmap3 = fmap . fmap . fmap
 fmap4 = fmap . fmap . fmap . fmap
+fmap5 = fmap . fmap . fmap . fmap . fmap
 (<$$>)   = fmap2
 (<$$$>)  = fmap3
 (<$$$$>) = fmap4
@@ -161,8 +177,12 @@ safeAtL msg (_:xx) i = safeAtL msg xx (pred i)
 -- --------------
 -- Miscellanea
 -- --------------
+none f = not . Prelude.any f
+
 subsetOf :: Ord a => [a] -> Set a -> Bool
 subsetOf s1 s2 = all (`Set.member` s2) s1
+
+intersections = List.foldl' Set.intersection Set.empty
 
 ignore :: Monad m => m a -> m ()
 ignore m = m >> return ()
@@ -415,20 +435,23 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
   mempty = mempty :!: mempty
   mappend (a :!: b) (a' :!: b') = mappend a a' :!: mappend b b'
 
+-- --------------------------------
+-- Missing Typeable instances
+-- --------------------------------
 
--- ---------------
--- Hood instances
--- ---------------
-#ifdef HOOD
+deriving instance Typeable Free
+deriving instance Typeable Expr
+deriving instance Typeable RuleF
+deriving instance Typeable RPOSsymbol
+deriving instance Typeable RPOsymbol
+deriving instance Typeable LPOSsymbol
+deriving instance Typeable LPOsymbol
+deriving instance Typeable MPOsymbol
+--deriving instance Typeable Constant
 
-instance (Observable k, Observable v) => Observable (Map k v) where
-  observer x p = Map.fromDistinctAscList (observer (Map.toList x) p)
-instance (Observable a) => Observable (Set a) where
-  observer x p = Set.fromDistinctAscList (observer (Set.toList x) p)
+-- ----------------------
+-- Ord instance for Doc
+-- ----------------------
+instance Eq Doc where a == b = show a == show b
 
-instance (Observable (f(Free f a)), Observable a) => Observable (Free f a) where
-  observer (Pure v) = send "Pure" (return Pure << v)
-  observer (Impure t) = send "Impure" (return Impure << t)
-
-instance Observable BS.ByteString where observer = observeBase
-#endif
+instance Ord Doc where compare a b = compare (show a) (show b)

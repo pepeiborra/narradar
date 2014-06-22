@@ -5,7 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE KindSignatures, ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Processor.LOPSTR09 where
@@ -38,6 +38,8 @@ import Narradar.Processor.PrologProblem hiding (SKTransformProof)
 import qualified Narradar.Types as Narradar
 import qualified Narradar.Types.ArgumentFiltering as AF
 
+import Debug.Hoed.Observe
+
 -- ------------------------------------------------------------
 -- | This is the processor described at the LOPSTR'09 paper
 -- ------------------------------------------------------------
@@ -65,6 +67,7 @@ instance (gid ~ DPIdentifier (GenId id)
 --         ,InsertDPairs (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) (NTRS gid)
          ,InsertDPairs base (NTRS gid)
          ,Info info NarrowingGoalToRelativeRewritingProof
+         ,Observable base, Observable id
          ) =>
          Processor (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
   where
@@ -93,6 +96,8 @@ instance (gid ~ DPIdentifier (GenId id)
          ,HasSignature (NProblem base (DPIdentifier id))
          ,InsertDPairs (MkNarrowing base) (NTRS gid)
          ,Info info NarrowingGoalToRelativeRewritingProof
+         ,FrameworkProblemN base gid
+         ,FrameworkProblemN base (DPIdentifier id)
          ) =>
          Processor (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id))
   where
@@ -122,7 +127,8 @@ instance (gid ~ DPIdentifier (GenId id)
                                , rootSymbol l == Just (IdDP GoalId)]
                r' = mapNarradarTRS convert (getR prob) `mappend` tRS [goalRule]
                p1 = mapNarradarTRS convert (getP prob)
-               p' = DPTRS{dpsA      = dpsA p1
+               p' = DPTRS{typ       = Comparable newFramework
+                         ,dpsA      = dpsA p1
                          ,rulesUsed = rulesUsed p1 `mappend` tRS [goalRule]
                          ,depGraph  = depGraph p1
                          ,unifiers  = unifiers p1
@@ -159,6 +165,7 @@ procLOPSTR09 :: (gid ~ DPIdentifier (GenId id)
                 ,NUsableRules base gid
                 ,HasSignature (NProblem base (DPIdentifier id))
                 ,InsertDPairs base (NTRS gid)
+                ,Observable base, Observable id
                 ) =>
                 NTRS (DPIdentifier id) -> NTRS (DPIdentifier id) -> DPIdentifier id -> [Mode] -> base ->
                 NProblem (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) gid

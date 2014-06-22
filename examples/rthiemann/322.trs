@@ -1,0 +1,16 @@
+(VAR x y z)
+(RULES 
+isZero(0) -> true 
+isZero(s(x)) -> false
+plus(plus(x, y), z) → plus(x, plus(y, z)) 
+plus(0, y) -> y 
+plus(s(x), y) -> s(plus(x, y)) 
+)
+(PAIRS
+ PLUS(s(x), y) -> PLUS(x, y) 
+ PLUS(plus(x, y), z) -> PLUS(x, plus(y, z)) 
+ PLUS(plus(x, y), z) -> PLUS(y, z) 
+ MUL(x, y, z) -> IF(isZero(x), x, y, z) 
+ IF(false, s(x), y, z) -> MUL(x, y, plus(y, z))  
+ F(0, s(0), x) -> F(x, x, x)
+)

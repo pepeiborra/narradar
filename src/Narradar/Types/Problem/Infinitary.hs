@@ -4,6 +4,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
@@ -120,7 +121,7 @@ pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.i
 instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
     ICap (Infinitary id p, trs)
   where
-    icap (Infinitary{..},trs) = icap (baseFramework,trs)
+    icapO o (Infinitary{..},trs) = icapO o (baseFramework,trs)
 
 -- Usable Rules
 
@@ -129,18 +130,15 @@ instance (v ~ Family.Var trs
          ,id ~ Family.Id t
          ,t ~ Family.TermF trs
          ,Rule t v ~ Family.Rule trs
-         ,Enum v, Ord v
-         ,Ord id
-         ,Unify t, Ord (Term t v)
-         ,IsTRS trs, GetVars trs, ApplyAF trs
-         ,ApplyAF (Term t v)
-         ,IUsableRules p trs, ICap (p,trs)) =>
+         ,FrameworkProblem (Infinitary id p) trs
+         ,FrameworkProblem p trs
+         ) =>
    IUsableRules (Infinitary id p) trs
  where
-   iUsableRulesM Infinitary{..} trs dps tt = do
+   iUsableRulesM Infinitary{..} trs dps tt s = do
       pi_tt <- getFresh (AF.apply pi_PType tt)
       let it = (baseFramework, trs)
-      trs'  <- f_UsableRulesAF it pi_PType (iUsableRulesVarM baseFramework trs dps) pi_tt
+      trs'  <- f_UsableRulesAF it pi_PType (iUsableRulesVarM baseFramework trs dps) s pi_tt
       return (tRS $ rules trs')
 
    iUsableRulesVarM Infinitary{..} = iUsableRulesVarM baseFramework

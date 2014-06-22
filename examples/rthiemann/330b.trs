@@ -1,0 +1,10 @@
+(VAR x y z c)
+(RULES
+plus(0, y) -> y 
+plus(s(x), y) -> s(plus(x, y)) 
+plus(plus(x, y), z) -> plus(x, plus(y, z)) 
+)
+(PAIRS 
+  IF(false,s(x), y, z) -> MUL(x, y, plus(y, z)) 
+  MUL(c,x, y, z) -> IF(c, x, y, z) 
+  )

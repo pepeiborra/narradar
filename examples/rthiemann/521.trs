@@ -1,0 +1,8 @@
+(VAR x)
+(PAIRS
+ F(a,b,x) -> F(g(x),x,x)
+)
+(RULES
+ b -> a
+ g(a) -> a
+)
