@@ -28,7 +28,7 @@ import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Framework.GraphViz
 import Lattice ()
-import Narradar.Utils (pprTrace, Comparable(..))
+import Narradar.Utils (pprTrace)
 import Text.Printf
 
 import Debug.Hoed.Observe
@@ -39,7 +39,7 @@ import System.IO.Unsafe
 #ifndef WEB
 import Narradar.Interface.Cli
 main = do
-  narradarMain listToMaybe
+  runO $ narradarMain listToMaybe
   lpos <- readIORef lpoCounter
   let lpoUnique = length (nub lpos)
   printf "Counted %d calls to lpo, %d unique" (length lpos) lpoUnique
@@ -64,22 +64,32 @@ instance () => Dispatch (NProblem IRewriting Id) where
   dispatch p = apply RewritingToQRewriting p >>= dispatch
 
 -- Rewriting
-instance (Eq(EqModulo(NProblem (QRewritingN Id) Id))
-         ) => Dispatch (NProblem (QRewritingN Id) Id) where
+instance () => Dispatch (NProblem (QRewritingN Id) Id) where
   dispatch = ev
-             >=> lfpBounded 5 (lfp dgi >=> (sc `orElse` lpo `orElse` (rew .|. inst .|. finst .|. narr )))
---             >=> lfp dgi >=> ((inst >=> ur >=> dg >=> lpoO >=> dg) .|.
---                              (finst >=> lfp dgi >=> (lpo .|. narrP [[1]]) >=> lfp dgi >=> narrP [[2]] >=> lfp dgi >=> (rew .|. narrP [[3]]) >=> lfp dgi >=> lpo >=> lfp dgi))
+             >=> lfp dgi >=> inst >=> dg >=> try ur >=> rew >=> dg >=> sc >=> dg
              >=> final
     where
-      dgi    = inn `orElse` ur `orElse` dg
+      dgi = inn `orElse` ur `orElse` dg
       inn    = apply ToInnermost
       innO p = gdmobservers "Innermost" applyO ToInnermost p
---      lpo  = apply (RPOProc LPOAF Needed SMTFFI True)
+
+instance (Pretty (DPIdentifier a), FrameworkId a
+         ) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
+  dispatch = ev >=> rpoPlus gt1 >=> final
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
 
+instance Dispatch (NProblem (InitialGoal (TermF Id) IRewriting) Id) where
+  dispatch = ev >=> rpoPlus gt1 >=> final
+{-
+instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
+  dispatch = apply RewritingToQRewriting >=> dispatch
+
+instance Dispatch (NProblem (InitialGoal (TermF Id) (QRewritingN Id)) Id) where
+  dispatch = ev >=> ( inn .|.
+                      (rpoPlus gt2 >=> final))
+-}
 -- Relative
 instance Dispatch (NProblem (Relative (NTRS Id) (InitialGoal (TermF Id) Rewriting)) Id) where
   dispatch = apply RelativeToRegularIPL14 >=> dispatch
@@ -114,7 +124,7 @@ dgO p = gdmobservers "Graph" applyO (DependencyGraphSCC False) p
 rpoPlus transform
    = repeatSolver 2 (dgsc >=> (lpo .|. rpos .|. transform))
 
-lpoCounter :: IORef [Comparable]
+lpoCounter :: IORef [Doc]
 lpoCounter = unsafePerformIO $ do
   c <- newIORef []
   return c
@@ -122,7 +132,7 @@ lpoCounter = unsafePerformIO $ do
 lpo = lpoO' nilObserver
 lpoO = gdmobservers "LPO" lpoO'
 lpoO' o p  = unsafePerformIO$ do
-  modifyIORef lpoCounter $ (Comparable (EqModulo p) :)
+  modifyIORef lpoCounter $ (pPrint p :)
   return $ applyO o (RPOProc LPOAF  Needed SMTFFI True) p
 mpo  = apply (RPOProc MPOAF  Needed SMTFFI True)
 lpos = apply (RPOProc LPOSAF Needed SMTFFI True)
