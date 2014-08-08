@@ -4,13 +4,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ConstraintKinds #-}
 
 module Narradar.Types.Problem.Narrowing where
 
 import Control.Applicative
+import Control.DeepSeq
 import Control.Exception (assert)
 import Control.Monad.Free
 import Data.Foldable as F (Foldable(..), toList)
@@ -39,7 +41,8 @@ import Narradar.Framework.Ppr
 
 import Debug.Hoed.Observe
 
-data MkNarrowing base = MkNarrowing base deriving (Eq, Ord, Show, Typeable)
+newtype MkNarrowing base = MkNarrowing base
+                         deriving (Eq, Ord, Show, Typeable, NFData)
 
 type Narrowing  = MkNarrowing Rewriting
 type CNarrowing = MkNarrowing IRewriting
@@ -49,7 +52,7 @@ narrowing  = MkNarrowing rewriting
 cnarrowing = MkNarrowing irewriting
 
 instance IsProblem b => IsProblem (MkNarrowing b) where
-  newtype Problem (MkNarrowing b) a = NarrowingProblem {baseProblem::Problem b a}
+  newtype Problem (MkNarrowing b) a = NarrowingProblem {baseProblem::Problem b a} deriving (Generic)
   getFramework (NarrowingProblem p) = MkNarrowing (getFramework p)
   getR (NarrowingProblem b) = getR b
 
@@ -58,12 +61,12 @@ instance IsDPProblem b => IsDPProblem (MkNarrowing b) where
 
 instance MkProblem b trs => MkProblem (MkNarrowing b) trs where
   mkProblem (MkNarrowing b)   = NarrowingProblem . mkProblem b
-  mapR f (NarrowingProblem b) = NarrowingProblem (mapR f b)
+  mapRO o f (NarrowingProblem b) = NarrowingProblem (mapRO o f b)
 
 
 instance (MkProblem (MkNarrowing b) trs, MkDPProblem b trs) => MkDPProblem (MkNarrowing b) trs where
-  mkDPProblem (MkNarrowing b) r p = NarrowingProblem $ mkDPProblem b r p
-  mapP f (NarrowingProblem b) = NarrowingProblem (mapP f b)
+  mkDPProblemO o (MkNarrowing b) r p = NarrowingProblem $ mkDPProblemO o b r p
+  mapPO o f (NarrowingProblem b) = NarrowingProblem (mapPO o f b)
 
 deriving instance (Eq (Problem p trs)) => Eq (Problem (MkNarrowing p) trs)
 deriving instance (Ord (Problem p trs)) => Ord (Problem (MkNarrowing p) trs)
@@ -72,9 +75,9 @@ deriving instance (Show (Problem p trs)) => Show (Problem (MkNarrowing p) trs)
 
 -- Functor
 
-instance Functor (Problem p) => Functor (Problem (MkNarrowing p)) where fmap f (NarrowingProblem p) = NarrowingProblem (fmap f p)
-instance Foldable (Problem p) => Foldable (Problem (MkNarrowing p)) where foldMap f (NarrowingProblem p) = foldMap f p
-instance Traversable (Problem p) => Traversable (Problem (MkNarrowing p)) where traverse f (NarrowingProblem p) = NarrowingProblem <$> traverse f p
+deriving instance Functor (Problem p) => Functor (Problem (MkNarrowing p))
+deriving instance Foldable (Problem p) => Foldable (Problem (MkNarrowing p))
+deriving instance Traversable (Problem p) => Traversable (Problem (MkNarrowing p))
 
 
 -- Data.Term instances
@@ -103,7 +106,7 @@ instance (Monoid trs, HasRules trs, GetVars trs
          ,t ~ Family.TermF trs
          ,v ~ Family.Var trs
          ,Rule t v ~ Family.Rule trs
-         ,HasId t, Functor t, Foldable t, MkDPProblem Rewriting trs
+         ,HasId1 t, Functor t, Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem Narrowing trs) where
   pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY NARROWING)"
 
@@ -113,7 +116,7 @@ instance (Monoid trs, HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
          ,t ~ Family.TermF trs
          ,v ~ Family.Var trs
          ,Rule t v ~ Family.Rule trs
-         ,HasId t, Pretty (Family.Id t), Functor t, Foldable t, MkDPProblem Rewriting trs
+         ,HasId1 t, Pretty (Family.Id t), Functor t, Foldable t, MkDPProblem Rewriting trs
          ) => PprTPDB (Problem CNarrowing trs) where
   pprTPDB p = pprTPDB (getBaseProblem p) $$ text "(STRATEGY CNARROWING)"
 
@@ -129,22 +132,28 @@ instance FrameworkExtension MkNarrowing where
 
 -- ICap
 
-instance ICap (st, NarradarTRS t v) => ICap (MkNarrowing st, NarradarTRS t v) where
+instance ICap (Problem p (NarradarTRS t v))
+              => ICap (Problem (MkNarrowing p) (NarradarTRS t v)) where
   icapO = liftIcapO
 
 -- Usable Rules
 
-instance (IUsableRules base trs) => IUsableRules (MkNarrowing base) trs where
+instance ( IUsableRules (Problem base trs)
+         , FrameworkProblem (MkNarrowing base) trs
+         , IsProblem base
+         ) => IUsableRules (Problem (MkNarrowing base) trs) where
    iUsableRulesM    = liftUsableRulesM
    iUsableRulesVarM = liftUsableRulesVarM
 
 -- Insert Pairs
 
-instance (FrameworkId id) =>InsertDPairs Narrowing (NTRS id) where
-  insertDPairs = insertDPairsDefault
+instance (FrameworkProblemN (MkNarrowing base) id
+         ) =>InsertDPairs (MkNarrowing base) (NTRS id) where
+  insertDPairsO = insertDPairsDefault
 
-instance (FrameworkId id) =>InsertDPairs CNarrowing (NTRS id) where
-  insertDPairs = insertDPairsDefault
+instance (FrameworkProblemN (MkNarrowing base) id
+         ) => ExpandDPair (MkNarrowing base) (NTRS id) where
+  expandDPairO = expandDPairOdefault
 
 -- Get Pairs
 
@@ -156,3 +165,4 @@ getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSub
 -- Observe
 
 instance Observable st => Observable (MkNarrowing st) where observer (MkNarrowing x) = send "MkNarrowing"  (return MkNarrowing << x)
+instance (Observable1 (Problem p)) => Observable1 (Problem (MkNarrowing p))

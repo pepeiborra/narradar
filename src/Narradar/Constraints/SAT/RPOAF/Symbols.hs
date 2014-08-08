@@ -17,7 +17,7 @@
 
 module Narradar.Constraints.SAT.RPOAF.Symbols where
 
-
+import           Control.DeepSeq
 import           Data.Hashable
 import qualified Data.Term                         as Family
 import           Data.Typeable
@@ -84,6 +84,9 @@ instance DPSymbol s => DPSymbol(Usable s) where
   isDPSymbol me = isDPSymbol(usableSymbol me)
 
 instance UsableSymbol (Usable s) where usable = encodeUsable
+
+instance (NFData a, NFData (Family.Var a)
+         ) => NFData(Usable a) where rnf (Usable u enc dec) = rnf u `seq` rnf enc `seq` dec `seq` ()
 
 makeUsableSymbol :: ( MonadSAT repr v m
                     , v ~ Family.Var s
@@ -179,4 +182,9 @@ instance (Var ~ Family.Var s, GenSymbol s, Decode s (SymbolRes (Family.Id s))) =
   genSymbol = let s :: s = genSymbol in Usable s (V Nothing 14) (mkUsableSymbolDecoder (V Nothing 14) (decode s))
 
 
-instance Observable (Usable a) where observer = observeOpaque "usable-symbol"
+instance Observable1 Usable where observer1 = observeOpaque "usable-symbol"
+instance Observable1 (RPOSsymbol v) where observer1 = observeOpaque "rpos-symbol"
+instance Observable1 (RPOsymbol v)  where observer1 = observeOpaque "rpo-symbol"
+instance Observable1 (LPOSsymbol v) where observer1 = observeOpaque "lpos-symbol"
+instance Observable1 (LPOsymbol v)  where observer1 = observeOpaque "lpo-symbol"
+instance Observable1 (MPOsymbol v)  where observer1 = observeOpaque "mpo-symbol"

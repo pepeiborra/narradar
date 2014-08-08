@@ -6,6 +6,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving, DeriveDataTypeable #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Narradar.Types.Problem.Relative where
 
@@ -33,29 +35,33 @@ import Narradar.Framework
 import Narradar.Framework.Ppr
 import Narradar.Utils
 
+import Debug.Hoed.Observe
+
 data Relative trs p = Relative {relativeTRS_PType::trs, baseFramework::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable)
 
 --instance GetPairs p => GetPairs (Relative trs p) where getPairs = getPairs . baseProblem
 
 instance IsProblem p => IsProblem (Relative trs0 p) where
-  data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs}
+  data Problem (Relative trs0 p) trs = RelativeProblem {relativeTRS::trs0, baseProblem::Problem p trs} deriving Generic
   getFramework (RelativeProblem r0 p) = Relative r0 (getFramework p)
   getR (RelativeProblem _ p) = getR p
+
+instance (Observable trs, Observable1 (Problem p)) => Observable1 (Problem (Relative trs p))
 
 instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
   getP (RelativeProblem _ p) = getP p
 
 instance (Monoid trs, MkProblem p trs) => MkProblem (Relative trs p) trs where
   mkProblem (Relative r0 p) rr = RelativeProblem r0 $ mkProblem p (rr `mappend` r0)
-  mapR f (RelativeProblem r0 p) = RelativeProblem r0 (mapR f p)
+  mapRO o f (RelativeProblem r0 p) = RelativeProblem r0 (mapRO o f p)
 
 --instance (Monoid trs, MkDPProblem p trs) => MkDPProblem (Relative trs p) trs where
-instance (Foldable t, HasId t, Ord v, Ord (Term t v), MkDPProblem p (NarradarTRS t v)) =>
+instance (FrameworkN p t v) =>
     MkDPProblem (Relative (NarradarTRS t v) p) (NarradarTRS t v)
  where
-  mapP f (RelativeProblem r0 p) = RelativeProblem r0 (mapP f p)
-  mkDPProblem (Relative trs0 p) rr dps = RelativeProblem trs0 $
-                                         mkDPProblem p (rr `mappend` trs0) dps
+  mapPO o f (RelativeProblem r0 p) = RelativeProblem r0 (mapPO o f p)
+  mkDPProblemO o (Relative trs0 p) rr dps = RelativeProblem trs0 $
+                                             mkDPProblemO o p (rr `mappend` trs0) dps
 
 instance FrameworkExtension (Relative id) where
   getBaseFramework  = baseFramework
@@ -84,12 +90,9 @@ instance Pretty p => Pretty (Relative trs p)
          pPrint (Relative _ p) = text "Relative termination of" <+> pPrint p
 
 
-instance ( trs ~ NarradarTRS t v
-         , Ord v, Foldable t
-         , MkProblem base trs
-         , Ord (Term t v), Pretty (Term t v)
-         , Pretty (Problem base trs)) =>
-    Pretty (Problem (Relative trs base) trs)
+instance ( FrameworkN base t v
+         ) =>
+    Pretty (Problem (Relative (NarradarTRS t v) base) (NarradarTRS t v))
  where
   pPrint RelativeProblem{..}
     = pPrint p0' $$
@@ -105,14 +108,14 @@ instance ( IsTRS trs
          , MkProblem base trs
          , Pretty (t(Term t v))
          , Ord (Term t v)
-         , HasId t, Functor t, Foldable t, Pretty (Family.Id t)
+         , HasId1 t, Functor t, Foldable t, Pretty (Family.Id t)
          , PprTPDB v
          , PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (Relative trs base) trs) where
   pprTPDB RelativeProblem{..} =
       pprTPDB p0' $$
       parens(text "RULES" $$
-             nest 1 (vcat [ pprTermTPDB l <+> text "->=" <+> pprTermTPDB r
+             nest 1 (vcat [ pprTPDB l <+> text "->=" <+> pprTPDB r
                             | l :-> r <- rules relativeTRS]))
    where
       p0' = mapR ( tRS . Set.toList
@@ -122,15 +125,17 @@ instance ( IsTRS trs
 
 -- ICap
 
-instance (HasRules trs, Unify (TermF trs), GetVars trs, ICap (p,trs')) =>
-         ICap (Relative trs p, trs')
+instance (HasRules trs, Unify (TermF trs), GetVars trs, ICap (Problem p trs')) =>
+         ICap (Problem (Relative trs p) trs')
  where
-         icapO o (Relative _ p,trs) = icapO o (p,trs)
+         icapO = liftIcapO
 
 -- Usable Rules
-instance (Monoid trs, IUsableRules b trs) => IUsableRules (Relative trs b) trs where
-  iUsableRulesM _ trs _ _ _ = return trs
-  iUsableRulesVarM = liftUsableRulesVarM
+instance (Monoid trs, IsProblem b, IUsableRules (Problem b trs)
+         ,FrameworkProblem (Relative trs b) trs
+         ) => IUsableRules (Problem (Relative trs b) trs) where
+  iUsableRulesM p _ _ = return p
+  iUsableRulesVarM    = liftUsableRulesVarM
 {-
 instance (Ord v, Ord (Term t v), IsTRS t v trs, Monoid trs, IsDPProblem typ, IUsableRules t v typ trs) =>
    IUsableRules t v (Relative trs typ) trs

@@ -30,10 +30,11 @@ module Narradar.Constraints.SAT.MonadSAT
     ) where
 
 import           Control.Arrow                       (first,second)
+import           Control.DeepSeq
 import           Control.Monad.Reader                (MonadReader(..),liftM)
 import           Data.Hashable
 import           Data.List                           (foldl')
-import           Data.Term                           (Term, HasId)
+import           Data.Term                           (Term, HasId1)
 import qualified Data.Term                           as Family
 import           Data.Typeable
 import           Prelude                             hiding (and, not, or, any, all, lex, (>))
@@ -107,6 +108,8 @@ instance Pretty Var where
   pPrint (V Nothing  i) = text "v" <> i
   pPrint (V (Just s) i) = text "v" <> i <> text s
 
+instance NFData Var where rnf (V n i) = rnf n `seq` rnf i
+
 type instance Family.Var Var = Var
 
 type Weight = Int
@@ -161,7 +164,7 @@ constant False = false
         , termF ~ Family.TermF repr
         , CoRPO repr termF tv v, RPOCircuit repr
         , HasFiltering id, HasStatus id, HasPrecedence id
-        , HasId termF, Foldable termF
+        , HasId1 termF, Foldable termF
         , Eq (Term termF tv)
         ) => Term termF tv -> Term termF tv -> repr v
 (>)  = Funsat.termGt

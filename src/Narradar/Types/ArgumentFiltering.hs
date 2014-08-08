@@ -18,6 +18,7 @@ module Narradar.Types.ArgumentFiltering where
 import Control.Applicative
 import Control.Arrow (first,second)
 import Control.Monad.Fix (fix)
+import Control.Monad.Free
 import Control.Failure
 import Data.Bifunctor (bimap)
 import Data.List (partition, find, inits, unfoldr, sortBy)
@@ -38,6 +39,7 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Labellings
 import Narradar.Types.Term
+import Narradar.Framework.Observe
 import Narradar.Framework.Ppr
 import Narradar.Utils hiding (fromRight)
 
@@ -47,6 +49,8 @@ import Language.Prolog.SharingAnalysis (SharingAssignment)
 
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
+import Data.Term (WithNote1(..))
+import Data.Term (Position)
 
 extendToTupleSymbols pi = mapSymbols functionSymbol pi `mappend`
                             mapSymbols dpSymbol pi
@@ -252,7 +256,7 @@ isSoundAF     af trs = null (extraVars $ apply af trs)
 -- -----------
 -- * Heuristics
 -- -----------
-type HeuFunction id t v = (Foldable t, HasId t) => AF_ id -> Term t v -> Position -> Set (id, Int)
+type HeuFunction id t v = (Foldable t, HasId1 t, Ord(Family.Id t)) => AF_ id -> Term t v -> Position -> Set (id, Int)
 
 -- | The type of heuristics
 data Heuristic (id :: *) where

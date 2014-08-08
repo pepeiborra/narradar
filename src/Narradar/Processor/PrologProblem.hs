@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
@@ -23,6 +24,7 @@ module Narradar.Processor.PrologProblem (
 import           Control.Applicative
 import           Control.Arrow                        (first, second, (***))
 import           Control.Exception                    (assert)
+import           Control.Monad.Free                   (Free(..))
 import           Control.Monad.Free.Zip               (zipFree)
 import           Control.Monad.Identity               (Identity(..))
 import           Control.Monad.List                   (ListT(..))
@@ -32,6 +34,7 @@ import           Control.Monad.State
 import           Control.Monad.Variant
 import           Control.Monad.Writer                 (MonadWriter(..), Writer(..), WriterT(..), Any(..))
 import           Control.Monad.Supply
+import           Control.DeepSeq
 import qualified Control.RMonad                       as R
 import           Control.RMonad.AsMonad
 import           Data.AlaCarte                        as Al hiding (Note)
@@ -57,7 +60,6 @@ import           Text.ParserCombinators.Parsec        (parse)
 import           System.IO.Unsafe
 import           GHC.Exts                             (the)
 
-import           Data.Term                            hiding (find, Id, Var, TermF)
 import qualified Data.Term.Family                     as Family
 import           Data.Term.Rules
 import Data.Term.Var as Prolog (Var(VName, VAuto))
@@ -123,9 +125,9 @@ instance (Info info SKTransformProof
   type Typ (SKTransformNarrowing info) PrologProblem = CNarrowingGoal DRP
   type Trs (SKTransformNarrowing info) PrologProblem = NTRS DRP
 
-  apply SKTransformNarrowing p0@PrologProblem{..} =
+  applyO _ SKTransformNarrowing p0@PrologProblem{..} =
    andP SKTransformNarrowingProof p0
-     [ mkNewProblem (cnarrowingGoal ngoal) sk_p :: NProblem (CNarrowingGoal DRP) DRP
+   [ mkNewProblem (cnarrowingGoal ngoal) sk_p :: NProblem (CNarrowingGoal DRP) DRP
          | let sk_p  = prologTRS'' rr (getSignature rr) :: NarradarTRS (TermF RP) Narradar.Var
                rr    = skTransformWith id (prepareProgram $ addMissingPredicates program) :: PrologRules RP Narradar.Var
          , goal     <- goals
@@ -156,7 +158,7 @@ instance (Info info SKTransformProof
          Processor info (SKTransformInfinitary heu)
                    PrologProblem {- ==> -} (NProblem (Infinitary DRP IRewriting) DRP)
  where
-  apply (SKTransformInfinitary heu) p0@PrologProblem{..} =
+  applyO _ (SKTransformInfinitary heu) p0@PrologProblem{..} =
    andP SKTransformInfinitaryProof p0 =<< sequence
      [  msum (map return probs)
          | goal    <- goals
@@ -269,11 +271,11 @@ updateAnswers uis f ccrr =
 
 instance HasRules (ClauseRules (Rule f v)) where rules = toList
 
-instance (Foldable f, HasId f) => HasSignature (ClauseRules (Rule f v))
+instance (Foldable f, HasId1 f, Ord(Family.Id f)) => HasSignature (ClauseRules (Rule f v))
  where
     getSignature = getSignature . rules
 
-instance (Foldable f, HasId f) => HasSignature [ClauseRules (Rule f v)]
+instance (Foldable f, HasId1 f, Ord(Family.Id f)) => HasSignature [ClauseRules (Rule f v)]
   where
     getSignature = getSignature . foldMap rules
 
@@ -288,8 +290,9 @@ instance (Pretty id, Pretty v) => Pretty (ClauseRules (Rule (TermF id) v)) where
 type PrologRules id v = Map (Prolog.Clause'' (WithoutPrologId id) (Term (TermF (WithoutPrologId id)) v))
                             (ClauseRules (Rule (TermF id) v))
 
-prologTRS'' :: (RemovePrologId id, Ord id, Ord v) => PrologRules id v -> Signature id -> NarradarTRS (TermF id) v
-prologTRS'' pr sig = PrologTRS pr' sig where
+prologTRS'' :: ( NTRSLift(Term (TermF id) v)
+               ) => PrologRules id v -> Signature id -> NarradarTRS (TermF id) v
+prologTRS'' pr sig = liftNF $ PrologTRS pr' sig where
     pr' = (Map.mapKeysWith mappend (\(Pred h _:-_) -> h) . Map.map (Set.fromList . toList)) pr
 
 -- --------------

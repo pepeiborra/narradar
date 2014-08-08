@@ -14,6 +14,7 @@ module Narradar.Processor.FLOPS08 where
 import Control.Applicative
 import Control.Exception (assert)
 import Control.Monad hiding (join)
+import Control.Monad.Free (Free(..))
 import Data.Bifunctor
 import Data.Maybe
 import Data.Monoid
@@ -66,7 +67,7 @@ instance (FrameworkId id
   where
   type Typ (ComputeSafeAF heu info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NarrowingGoal id
   type Trs (ComputeSafeAF heu info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NTRS id
-  applySearch (ComputeSafeAF mk) p
+  applySearchO o (ComputeSafeAF mk) p
     | null orProblems = [dontKnow (NarrowingGoalToRewritingFail :: NarrowingGoalToRewritingProof id) p]
     | otherwise = map return orProblems
    where
@@ -85,7 +86,7 @@ instance (FrameworkId id, DPSymbol id
  where
   type Typ (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NarrowingGoal id
   type Trs (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NTRS id
-  apply InferAF p = mprod [return (mkDerivedDPProblem (narrowingGoal' g piDP) p)
+  applyO _ InferAF p = mprod [return (mkDerivedDPProblem (narrowingGoal' g piDP) p)
                              | Abstract g <- fmap2 termToGoal (IG.goals p)
                              , let pi = inferAF (getR p) (bimap unmarkDPSymbol id g)
                                    piDP = AF.mapSymbols markDPSymbol pi `mappend` pi ]
@@ -103,7 +104,7 @@ instance (HasSignature (NProblem typ id)
   where
   type Typ (NarrowingGoalToRewriting heu info) (NProblem (MkNarrowingGoal id typ) id) = typ
   type Trs (NarrowingGoalToRewriting heu info) (NProblem (MkNarrowingGoal id typ) id) = NTRS id
-  applySearch (NarrowingGoalToRewriting mk) p
+  applySearchO o (NarrowingGoalToRewriting mk) p
     | null orProblems = [dontKnow (NarrowingGoalToRewritingFail :: NarrowingGoalToRewritingProof id) p]
     | otherwise = orProblems
    where
@@ -152,7 +153,7 @@ instance Lattice DivEnv where
     top    = Map.empty
 
 
-inferAF :: (Observable id, Ord id, Pretty id, Show id) => NTRS id -> Goal id -> AF_ id
+inferAF :: (FrameworkId id) => NTRS id -> Goal id -> AF_ id
 inferAF trs = divisionToAF . computeDivision trs
   where
    divisionToAF div = AF.fromList
@@ -162,7 +163,7 @@ inferAF trs = divisionToAF . computeDivision trs
 
 -- | Receives an initial goal (its modes) and a TRS and returns a Division
 --computeDivision,computeDivisionL :: (Identifier ~ id, TRSC f, T id :<: f, DPMark f id) => NarradarTRS id f -> Goal -> Division id
-computeDivision :: (Observable id, Pretty id, Ord id, Show id) =>
+computeDivision :: (FrameworkId id) =>
                    NTRS id -> Goal id -> Division id
 computeDivision  = computeDivision_ e
 

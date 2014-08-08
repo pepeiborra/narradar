@@ -1,9 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeOperators #-}
@@ -23,7 +24,6 @@ import qualified Data.Set                         as Set
 import           Data.Typeable
 import           Text.XHtml                       (theclass)
 
-import           Data.Term                        hiding (TermF)
 import qualified Data.Term.Family                 as Family
 import           Data.Term.Rules
 
@@ -96,8 +96,8 @@ type CNarrowingGen = MkNarrowingGen IRewriting
 type INarrowingGen = MkNarrowingGen IRewriting
 --instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
-data MkNarrowingGen p = NarrowingGen {baseFramework :: p}
-          deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic)
+newtype MkNarrowingGen p = NarrowingGen {baseFramework :: p}
+          deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic, NFData)
 
 instance FrameworkExtension MkNarrowingGen where
   getBaseFramework = baseFramework
@@ -109,26 +109,27 @@ instance FrameworkExtension MkNarrowingGen where
 
 instance IsProblem p => IsProblem (MkNarrowingGen p) where
   newtype Problem (MkNarrowingGen p) a      = NarrowingGenProblem {baseProblem::Problem p a}
+                                              deriving (Generic)
   getFramework (NarrowingGenProblem p) = NarrowingGen (getFramework p)
   getR   (NarrowingGenProblem p)         = getR p
 
 instance MkProblem p trs => MkProblem (MkNarrowingGen p) trs where
   mkProblem (NarrowingGen p) rr = NarrowingGenProblem (mkProblem p rr)
-  mapR f (NarrowingGenProblem p) = NarrowingGenProblem (mapR f p)
+  mapRO o f (NarrowingGenProblem p) = NarrowingGenProblem (mapRO o f p)
 
 instance IsDPProblem p => IsDPProblem (MkNarrowingGen p) where
   getP   (NarrowingGenProblem p) = getP p
 
 
-instance (Ord id, GenSymbol id, MkDPProblem p (NTRS id)) =>
+instance (FrameworkProblemN p id, GenSymbol id) =>
   MkDPProblem (MkNarrowingGen p) (NTRS id)
  where
-  mapP f (NarrowingGenProblem p) = NarrowingGenProblem (mapP f p)
-  mkDPProblem (NarrowingGen typ) trs dps
-         = NarrowingGenProblem $ mkDPProblem typ trs' dps'
+  mapPO o f (NarrowingGenProblem p) = NarrowingGenProblem (mapPO o f p)
+  mkDPProblemO o (NarrowingGen typ) trs dps
+         = NarrowingGenProblem $ mkDPProblemO o typ trs' dps'
    where
-    trs' = mapNarradarTRS' id extraVarsToGen trs
-    dps' = mapNarradarTRS' id extraVarsToGen dps
+    trs' = mapNarradarRules extraVarsToGen trs
+    dps' = mapNarradarRules extraVarsToGen dps
 
 narrowingGen  = NarrowingGen  rewriting
 cnarrowingGen = NarrowingGen  irewriting
@@ -164,19 +165,23 @@ instance HTMLClass (MkNarrowingGen IRewriting) where htmlClass _ = theclass "Gen
 
 instance (t ~ Family.TermF trs
          ,HasRules trs, GetVars trs
-         ,HasId t, Pretty (Family.Id t), Foldable t
+         ,HasId1 t, Pretty (Family.Id t), Foldable t
          ,IsDPProblem base, PprTPDB (Problem base trs)
          ) => PprTPDB (Problem (MkNarrowingGen base) trs) where
   pprTPDB p@NarrowingGenProblem{..} = pprTPDB baseProblem
 
 
 -- ICap
-instance ICap (st, NarradarTRS t v) => ICap (MkNarrowingGen st, NarradarTRS t v) where
+instance ICap (Problem p (NarradarTRS t v)) =>
+         ICap (Problem (MkNarrowingGen p) (NarradarTRS t v)) where
   icapO = liftIcapO
 
 -- Usable Rules
 
-instance (IUsableRules base trs) => IUsableRules (MkNarrowingGen base) trs where
+instance (IsProblem base
+         ,FrameworkProblem (MkNarrowingGen base) trs
+         ,IUsableRules (Problem base trs)
+         ) => IUsableRules (Problem (MkNarrowingGen base) trs) where
    iUsableRulesM    = liftUsableRulesM
    iUsableRulesVarM = liftUsableRulesVarM
 
@@ -185,14 +190,24 @@ instance (IUsableRules base trs) => IUsableRules (MkNarrowingGen base) trs where
 instance (MkDPProblem (MkNarrowingGen base) trs, InsertDPairs base trs) => InsertDPairs (MkNarrowingGen base) trs where
   insertDPairs NarrowingGenProblem{..} = NarrowingGenProblem . insertDPairs baseProblem
 
+instance (FrameworkProblem (MkNarrowingGen base) trs
+         ,InsertDPairs base trs
+         ,ExpandDPair  base trs
+         ) => ExpandDPair (MkNarrowingGen base) trs where
+  expandDPairO o NarrowingGenProblem{..} i pp =
+    NarrowingGenProblem $ expandDPairO o baseProblem i pp
+
 -- Hood
 instance Observable a => Observable (MkNarrowingGen a)
 instance Observable a => Observable (GenId a)
+instance Observable1 (Problem p) => Observable1 (Problem (MkNarrowingGen p))
+
 -- -------------------
 -- Support functions
 -- -------------------
 
-extraVarsToGen :: (Ord v, GenSymbol id) => Rule (TermF id) v -> Rule (TermF id) v
+extraVarsToGen :: (Ord v, GenSymbol id, Observable(Term(TermF id) v), Observable v
+                  ) => Rule (TermF id) v -> Rule (TermF id) v
 extraVarsToGen (l :-> r) = l :-> applySubst sigma r
      where
       sigma = fromListSubst (evars `zip` repeat genTerm)

@@ -7,6 +7,7 @@
 module Narradar.Constraints.ICap where
 
 import Control.Exception
+import Control.Monad.Free
 import Control.Monad.State
 import Control.Monad.Variant
 import Data.Set (Set)
@@ -20,7 +21,6 @@ import Narradar.Constraints.Unify
 import Narradar.Types.Term
 import Narradar.Types.Var
 import Narradar.Framework
-import Narradar.Utils.Observe
 
 import Debug.Hoed.Observe
 
@@ -56,7 +56,7 @@ class ICap problem where
     icapO _ = icap
 
 -- Default instance for unrestricted rewriting
-instance (Ord v, Rename v, Unify t) => ICap [Rule t v] where
+instance (Ord v, Rename v, Unify t, Observable(Term t v), Observable v) => ICap [Rule t v] where
   icapO (O o oo) trs s t = do
 #ifdef DEBUG
     when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
@@ -65,8 +65,8 @@ instance (Ord v, Rename v, Unify t) => ICap [Rule t v] where
     assert (Set.null (getVars trs `Set.intersection` getVars t)) (return ())
 #endif
     rr <- {-getFresh-} return (rules trs)
-    let go t = if any (unifies (Impure t) . lhs) rr
-                then return `liftM` freshVar else return (Impure t)
+    let go t = if any (unifies (wrap t) . lhs) rr
+                then return `liftM` freshVar else return (wrap t)
         doVar v = return `liftM` renaming v
     foldTermM doVar go t
 
@@ -77,7 +77,7 @@ type instance Family.Var (typ, trs, trs) = Family.Var trs
 type instance Family.TermF (typ, trs) = Family.TermF trs
 type instance Family.Var (typ, trs) = Family.Var trs
 
-instance (IsDPProblem typ, ICap (typ, trs, trs)) => ICap (Problem typ trs) where icapO o p t = icapO o (getFramework p, getR p, getP p) t
+--instance (IsDPProblem typ, ICap (typ, trs, trs)) => ICap (Problem typ trs) where icapO o p t = icapO o (getFramework p, getR p, getP p) t
 instance (IsDPProblem typ, ICap (typ, trs)) => ICap (typ, trs, trs) where icapO o (typ, trs, _dps) t = icapO o (typ, trs) t
 
 
@@ -85,4 +85,4 @@ instance (IsDPProblem typ, ICap (typ, trs)) => ICap (typ, trs, trs) where icapO 
 runIcap t m = runVariant' freshVars m where
     freshVars = map toEnum [1+maximum (0 : map fromEnum (Set.toList $ getVars t)).. ]
 
-liftIcapO o (typ,trs) = icapO o (getBaseFramework typ,trs)
+liftIcapO o p = icapO o (getBaseProblem p)

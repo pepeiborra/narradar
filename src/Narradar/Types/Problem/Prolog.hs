@@ -5,11 +5,14 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, OverlappingInstances, TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveGeneric, DeriveDataTypeable #-}
 
 module Narradar.Types.Problem.Prolog where
 
 import Control.Applicative hiding (many)
 import Control.Monad.Error
+import Control.Monad.Free
 import Data.Bifunctor
 import Data.ByteString.Char8 (ByteString, pack)
 import Data.Char (isSpace)
@@ -17,6 +20,7 @@ import Data.Foldable as F (Foldable(..), toList)
 import Data.Maybe (catMaybes)
 import Data.Term
 import Data.Traversable (Traversable)
+import Data.Typeable
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Narradar.Utils.Parse
@@ -43,12 +47,14 @@ import Debug.Hoed.Observe
 type PrologProblem = Problem (Prolog StringId) (Prolog.Program StringId)
 
 data Prolog id = Prolog {goals_Ptype :: [Goal id]} deriving (Eq,Show,Ord)
-instance IsProblem (Prolog id) where
+instance Typeable id => IsProblem (Prolog id) where
   data Problem (Prolog id) trs = PrologProblem {goals::[Goal id], program :: trs}
+                               deriving (Generic)
   getFramework = Prolog . goals
   getR = program
 
-instance MkProblem (Prolog id) (Prolog.Program id) where mkProblem (Prolog gg) pgm = PrologProblem gg pgm
+
+instance Typeable id => MkProblem (Prolog id) (Prolog.Program id) where mkProblem (Prolog gg) pgm = PrologProblem gg pgm
 
 prologProblem      = PrologProblem
 

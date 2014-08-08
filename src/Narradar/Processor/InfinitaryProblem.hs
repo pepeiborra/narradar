@@ -49,7 +49,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id)
   where
   type Typ (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id) = typ
   type Trs (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id) = NTRS id
-  applySearch (InfinitaryToRewriting mk usable) p
+  applySearchO o (InfinitaryToRewriting mk usable) p
     | null orProblems = [dontKnow (InfinitaryToRewritingFail :: InfinitaryToRewritingProof id) p]
     | otherwise = orProblems
    where

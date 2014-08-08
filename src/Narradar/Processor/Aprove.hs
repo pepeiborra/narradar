@@ -83,9 +83,9 @@ instance ( p ~ Problem Rewriting trs
          ) =>
     Processor info Aprove (Problem Rewriting trs) (Problem Rewriting trs)
   where
-    apply AproveWeb{..}    = unsafePerformIO . aproveWebProc
-    apply AproveBinary{..} = unsafePerformIO . aproveProc path
-    apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
+    applyO _ AproveWeb{..}    = unsafePerformIO . aproveWebProc
+    applyO _ AproveBinary{..} = unsafePerformIO . aproveProc path
+    applyO _ AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
 instance ( p ~ Problem IRewriting trs
          , PprTPDB p, Eq trs, Pretty trs, HasRules t v trs, Pretty (t(Term t v))
@@ -93,15 +93,15 @@ instance ( p ~ Problem IRewriting trs
          ) =>
     Processor info Aprove (Problem IRewriting trs) (Problem IRewriting trs)
   where
-    apply AproveWeb{..} = unsafePerformIO . aproveWebProc
-    apply AproveBinary{..} = unsafePerformIO . aproveProc path
-    apply AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
+    applyO _ AproveWeb{..} = unsafePerformIO . aproveWebProc
+    applyO _ AproveBinary{..} = unsafePerformIO . aproveProc path
+    applyO _ AproveServer{..} = unsafePerformIO . aproveSrvProc2 strategy timeout
 
 instance ( Info info (Problem i trs)
          , Processor info Aprove (Problem i trs) o
          ) =>
     Processor info Aprove (Problem (InitialGoal t i) trs) o where
-    apply mode InitialGoalProblem{..} = apply mode baseProblem
+    applyO _ mode InitialGoalProblem{..} = apply mode baseProblem
 
 -- ------------------
 -- Implementation

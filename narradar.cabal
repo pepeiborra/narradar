@@ -54,8 +54,8 @@ Library
 
   buildable: True
 --  cpp-options: -DGHCI
-  ghc-options:  -O2
-  ghc-prof-options: -auto-all
+  ghc-options: 
+  ghc-prof-options: -fprof-auto-calls
   hs-source-dirs: src
   extensions:   FlexibleContexts,
                 FlexibleInstances,
@@ -68,7 +68,11 @@ Library
                 NamedFieldPuns,
                 TypeOperators,
                 MultiParamTypeClasses,
-                DeriveFunctor
+                DeriveFunctor,
+                DeriveDataTypeable,
+                DeriveGeneric,
+                ConstraintKinds
+                
 
   extra-libraries: yices
 
@@ -116,7 +120,11 @@ Library
                   hashmap,
                   suitable,
                   bifunctors,
-                  Hoed
+                  Hoed,
+                  prelude-extras,
+                  constrained-normal,
+                  constraints,
+                  reflection
 --                  uglymemo
 
 
@@ -152,6 +160,8 @@ Library
      Narradar.Examples,
      Narradar.Framework,
      Narradar.Framework.GraphViz
+     Narradar.Framework.Observe,
+     Narradar.Framework.Constraints,
      Narradar.Framework.Ppr,
      Narradar.Types,
      Narradar.Types.ArgumentFiltering,
@@ -188,10 +198,9 @@ Library
      Narradar.Processor.RelativeProblemIPL14,
      Narradar.Processor.SubtermCriterion,
      Narradar.Processor.FLOPS08,
-     Narradar.Processor.LOPSTR09,
+--     Narradar.Processor.LOPSTR09,
      Narradar.Utils,
      Narradar.Utils.Memo,
-     Narradar.Utils.Observe,
      Narradar.Utils.Html,
      Narradar.Utils.Parse,
 --     Data.NarradarTrie,

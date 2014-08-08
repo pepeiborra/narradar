@@ -22,7 +22,7 @@ duplicatingRules = filter isDuplicating . rules
 nonLeftLinearRules :: (Ord v, Foldable t, Functor t, HasRules trs, Rule t v ~ Family.Rule trs) => trs -> [Rule t v]
 nonLeftLinearRules trs = [ l:->r | l:->r <- rules trs, not (isLinear l)]
 
-isConstructorBased :: (HasRules trs, Rule t v ~ Family.Rule trs, HasSignature trs, HasId t, Foldable t, Family.Id trs ~ Family.Id t) => trs -> Bool
+isConstructorBased :: (HasRules trs, Rule t v ~ Family.Rule trs, HasSignature trs, HasId1 t, Foldable t, Family.Id trs ~ Family.Id t) => trs -> Bool
 isConstructorBased trs = all (isConstructorRule trs) (rules trs)
 
 isConstructorRule sig = Set.null

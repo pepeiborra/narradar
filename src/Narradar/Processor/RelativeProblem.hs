@@ -2,9 +2,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances, FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
+
 module Narradar.Processor.RelativeProblem (RelativeToRegular(..)) where
 
 import Data.Monoid
+import Data.Typeable
 
 import Narradar.Constraints.Modularity
 import Narradar.Framework
@@ -13,6 +17,8 @@ import Narradar.Types
 
 import qualified Data.Term.Family as Family
 
+import Debug.Hoed.Observe
+
 -- --------------------------------------------------------------------
 -- Convert a relative DP problem into a vanilla DP problem (LOPSTR09)
 -- --------------------------------------------------------------------
@@ -20,7 +26,9 @@ data RelativeToRegular (info :: * -> *) = RelativeToRegular
 type instance InfoConstraint (RelativeToRegular info) = info
 
 data RelativeToRegularProof = RelativeToRegularProof | RelativeToRegularProofFail
-          deriving (Eq, Ord, Show)
+          deriving (Eq, Ord, Show, Typeable, Generic)
+
+instance Observable RelativeToRegularProof
 
 instance Pretty RelativeToRegularProof where
     pPrint RelativeToRegularProof = text "The two systems form a  Hierarchical Combination" $$
@@ -30,18 +38,14 @@ instance Pretty RelativeToRegularProof where
                                         text "Hierarchical Combination so" $$
                                         text "the result from LOPSTR09 does not apply."
 
-instance ( MkProblem base trs
+instance ( FrameworkProblem base trs
          , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
-         , Ord (t(Term t v)), Ord v, Enum v, Rename v
-         , HasId t, Unify t
-         , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProof
-         , HasMinimality base
          ) => Processor (RelativeToRegular info) (Problem (Relative trs base) trs) where
   type Typ (RelativeToRegular info) (Problem (Relative trs base) trs) = base
   type Trs (RelativeToRegular info) (Problem (Relative trs base) trs) = trs
-  apply RelativeToRegular p@RelativeProblem{relativeTRS}
+  applyO _ RelativeToRegular p@RelativeProblem{relativeTRS}
     | isGeneralizedRelaxedHierarchicalCombination (getR p) relativeTRS
     = let p' = setMinimality A (getBaseProblem p)
       in singleP RelativeToRegularProof p p'

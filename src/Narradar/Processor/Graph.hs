@@ -2,11 +2,13 @@
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns, DisambiguateRecordFields, ViewPatterns #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveGeneric, DeriveDataTypeable #-}
 {-# LANGUAGE GADTs #-}
 
 module Narradar.Processor.Graph
@@ -19,6 +21,7 @@ module Narradar.Processor.Graph
 import Control.Applicative
 import Control.Monad
 import Control.Exception (assert)
+import Control.DeepSeq
 import Data.Array as A
 import Data.Foldable (Foldable, foldMap, toList)
 import Data.Functor.Two
@@ -29,6 +32,7 @@ import Data.List (find, sort)
 import Data.Strict.Tuple (Pair(..))
 import Data.Traversable (Traversable)
 import Data.Tree  as Tree
+import Data.Typeable
 import Data.Maybe
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -43,7 +47,7 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types hiding ((!))
 import Narradar.Types.Problem.InitialGoal
 import Narradar.Types.Problem.QRewriting
-import Narradar.Utils
+import Narradar.Utils hiding (O)
 import Narradar.Framework.Ppr
 
 import qualified Data.Term.Family as Family
@@ -56,26 +60,25 @@ import Debug.Hoed.Observe as Hood
 
 data DependencyGraph (info :: * -> *) = DependencyGraphSCC {useInverse::Bool}
                                       | DependencyGraphCycles {useInverse::Bool}
-        deriving (Eq, Ord, Show)
+        deriving (Eq, Ord, Show, Generic)
 
 type instance InfoConstraint (DependencyGraph info) = info
+
+instance Observable1 info => Observable (DependencyGraph info)
 
 dependencyGraphSCC = DependencyGraphSCC True
 dependencyGraphCycles = DependencyGraphCycles True
 
 -- Implements Theorem 3.4 of Rene's thesis
-instance ( trs ~ NarradarTRS t Var
-         , problem ~ Problem typ trs, Info info problem
-         , MkDPProblem typ (NarradarTRS t Var), Traversable (Problem typ)
-         , Unify t, ICap (typ,trs)
-         , Pretty (Term t Var), Pretty typ
+instance ( Info info (NarradarProblem typ t)
+         , FrameworkN typ t Var
          , Info info DependencyGraphProof
          ) =>
     Processor (DependencyGraph info) (Problem typ (NarradarTRS t Var)) where
   type Typ (DependencyGraph info) (Problem typ (NarradarTRS t Var)) = typ
   type Trs (DependencyGraph info) (Problem typ (NarradarTRS t Var)) = NarradarTRS t Var
-  apply (DependencyGraphSCC useInverse) = sccProcessor useInverse
-  apply (DependencyGraphCycles useInverse) = cycleProcessor useInverse
+  applyO _ (DependencyGraphSCC useInverse) = sccProcessor useInverse
+  applyO _ (DependencyGraphCycles useInverse) = cycleProcessor useInverse
 
 
 instance ( FrameworkId id
@@ -85,23 +88,18 @@ instance ( FrameworkId id
     Processor (DependencyGraph info) (Problem (QRewritingN id) (NarradarTRS (TermF id) Var)) where
   type Typ (DependencyGraph info) (Problem (QRewritingN id) (NTRS id)) = QRewritingN id
   type Trs (DependencyGraph info) (Problem (QRewritingN id) (NTRS id)) = NTRS id
-  apply (DependencyGraphSCC useInverse) =
---      observers "dependency graph SCC" $ \(Hood.O gdmobserve) ->
-        let gdmobserve _ = id in
-        \problem@(QRewritingProblem __ dps@(DPTRS _ dd _ gr unifs sig) q _ qC) ->
-             let graph = (if useInverse then getIEDGfromUnifiers else getEDGfromUnifiers) unif'
-                 unif' = fmap (gdmobserve "filtering" filterNonQNF) unifs
-                 cc  = [vv | CyclicSCC vv <- GSCC.sccList graph]
+  applyO (O o oo) (DependencyGraphSCC useInverse) problem@(QRewritingProblem rr dps@(lowerNTRS -> DPTRS _ dd _ gr unifs sig) q m qC) =
+             let graph = o "graph" $  (if useInverse then getIEDGfromUnifiers else oo "getEDG" getEDGfromUnifiersO) (o "unif'" unif')
+                 unif' =  fmap filterNonQNF unifs
+                 cc  = o "cc" [vv | CyclicSCC vv <- o "sccList" GSCC.sccList graph]
 
-                 both f (a :!: b) = f a :!: f b
-
-                 inQNF_ = gdmobserve "inQNF" inQNF
+                 inQNF_ = o "inQNF" inQNF
 
                  filterNonQNF = imap (\ (x,y) -> ensure(\(Two sigma1 sigma2) ->
                                      --pprTrace sigma2 $
                                      (applySubst (sigma1) (lhs(dd ! x)) `inQNF_` q)
                                    &&
-                                      applySubst (gdmobserve "sigma2" sigma2) (lhs(dd ! y)) `inQNF_` q
+                                      applySubst (sigma2) (lhs(dd ! y)) `inQNF_` q
                                      ))
 
                  imap f a = listArray (bounds a) (map (uncurry f) (assocs a)) `asTypeOf` a
@@ -121,31 +119,28 @@ instance ( FrameworkId id
 --  | [c] <- cc, sort c == sort (vertices graph) = return problem
 
                  andP (SCCs graph (map Set.fromList cc)) problem
-                   [setP (restrictTRS dps ciclo) problem | ciclo <- cc]
+                     -- we don't call setP below to avoid recalculating the dps unifiers
+                   [ QRewritingProblem rr dps' q m qC
+                     | ciclo <- cc
+                     , let dps' = oo "restrict" restrictTRSO dps ciclo]
 
 
 instance ( t ~ f (DPIdentifier id0), MapId f
          , Family.Id t ~ DPIdentifier id0, Ord id0
          , trs ~ NarradarTRS t Var
          , problem ~ Problem (InitialGoal t typ0) trs, Info info problem
-         , IsDPProblem typ0
-         , MkDPProblem (InitialGoal t typ0) (NarradarTRS t Var)
-         , Traversable (Problem typ0)
-         , HasId t, Unify t, Ord (Term t Var)
-         , Pretty (t(Term t Var)), Pretty typ0
-         , ICap (typ0,trs)
-         , IUsableRules typ0 trs
-         , ProblemColor problem, PprTPDB problem
+         , FrameworkN typ0 t Var
+         , FrameworkN (InitialGoal t typ0) t Var
          , Info info DependencyGraphProof
          ) =>
     Processor (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var))
  where
   type Typ (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var)) = InitialGoal t typ0
   type Trs (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var)) = NarradarTRS t Var
-  apply DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
-  apply (DependencyGraphSCC useInverse)
+  applyO _ DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
+  applyO _ (DependencyGraphSCC useInverse)
         p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
-                            , baseProblem = (getP -> dps@(DPTRS _ dd _ igr unif sig))}
+                            , baseProblem = (getP -> dps@(lowerNTRS -> DPTRS _ dd _ igr unif sig))}
    = do
     let gr            = if useInverse then igr else getEDGfromUnifiers unif
         reachable     = Set.fromList [ i | (i,dp) <- assocs dd, isReachable dp]
@@ -194,6 +189,13 @@ data DependencyGraphProof = SCCs   Graph [Set Vertex]
                             NoUsableSCCs { gr :: Graph
                                          , initial, outOfScope, inPath :: Set Vertex
                                          , the_pairs :: [a]}
+
+  deriving (Typeable)
+
+instance Eq  DependencyGraphProof where a == b = pPrint a == pPrint b
+instance Ord DependencyGraphProof where compare a b = compare (pPrint a) (pPrint b)
+instance Observable DependencyGraphProof where
+  observer = observeOpaque "DependencyGraphProof"
 
 instance Pretty DependencyGraphProof where
   pPrint UsableSCCs{} = text "Dependency Graph Processor (SCCs)"
@@ -309,20 +311,16 @@ colors = cycle $ map mkColor ["darkorange", "hotpink", "hotpink4", "purple", "br
 -- ---------------
 -- Implementation
 -- ---------------
-type GraphProcessor typ t mp =   (problem ~ Problem typ trs, Info info problem
-                                 ,trs     ~ NarradarTRS t Var
-                                 ,MkDPProblem typ (NarradarTRS t Var)
-                                 ,Traversable (Problem typ)
-                                 ,Pretty (Term t Var), Pretty typ
-                                 ,Unify t, ICap (typ, trs)
+type GraphProcessor typ t mp =   (Info info (NarradarProblem typ t)
+                                 ,FrameworkProblem typ (NarradarTRS t Var)
                                  ,Info info DependencyGraphProof
                                  ,Monad mp
                                  ) => Bool ->
-                                    Problem typ (NarradarTRS t Var) -> Proof info mp problem
+                                    NarradarProblem typ t -> Proof info mp (NarradarProblem typ t)
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 
-sccProcessor useInverse problem@(getP -> dps@(DPTRS _ dd _ gr unif sig))
+sccProcessor useInverse problem@(getP -> dps@(lowerNTRS -> DPTRS _ dd _ gr unif sig))
   | null cc   = success (NoCycles graph) problem
 
 -- The case below removes 'identity' applications of this processor from the proof log
@@ -338,7 +336,7 @@ sccProcessor useInverse problem@(getP -> dps@(DPTRS _ dd _ gr unif sig))
       graph = if useInverse then gr else getEDGfromUnifiers unif
       cc  = [vv | CyclicSCC vv <- GSCC.sccList graph]
 
-cycleProcessor useInverse problem@(getP -> dps@(DPTRS _ dd _ gr unif sig))
+cycleProcessor useInverse problem@(getP -> dps@(lowerNTRS -> DPTRS _ dd _ gr unif sig))
   | null cc   = success (NoCycles graph) problem
   | [c] <- cc, sort c == sort (vertices graph) = return problem
   | otherwise = andP (Cycles graph) problem

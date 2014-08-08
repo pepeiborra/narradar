@@ -11,7 +11,8 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE DeriveDataTypeable, StandaloneDeriving #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric, StandaloneDeriving #-}
 
 module Narradar.Utils where
 
@@ -20,7 +21,8 @@ import           Control.Applicative
 import           Control.Concurrent
 import           Control.Exception                    (bracket)
 import           Control.Monad                        (liftM, liftM2, ap, when, MonadPlus, msum)
-import           Control.Monad.Identity(Identity(..))
+import           Control.Monad.Identity               (Identity(..))
+import           Control.Monad.ConstrainedNormal      (NF(..))
 import           Control.Monad.Free                   (Free(..))
 import           Control.Failure
 import           Control.Monad.List                   (lift, ListT(..))
@@ -37,6 +39,7 @@ import           Data.Foldable                        (toList, foldMap, Foldable
 import qualified Data.Graph                           as G
 import qualified Data.ByteString                      as BS
 import qualified Data.ByteString.Lazy                 as LBS
+import           Data.Functor.Constant
 import           Data.Int
 import           Data.List                            (group, sort, nubBy)
 import qualified Data.List                            as List
@@ -46,7 +49,7 @@ import           Data.Maybe
 import           Data.Map                             (Map)
 import           Data.Set                             (Set)
 import           Data.String
-import           Data.Term                            (Term)
+import           Data.Term                            (Term, HasId, EqModulo(..))
 import           Data.Monoid
 import qualified Data.Map                             as Map
 import qualified Data.Set                             as Set
@@ -64,20 +67,15 @@ import           System.Directory
 import           System.Process
 
 import           Data.Term.Rules                      as Term
+import           Narradar.Framework.Observe
 import           Narradar.Framework.Ppr
-import           Narradar.Utils.Observe()
+--import           Narradar.Utils.Observe()
 --import TRS.Utils hiding (size, parens, brackets, trace)
 
 import           Prelude                              hiding (mapM)
 
--- Debugging
--- ---------
-#ifdef DEBUG
-#endif
-
-#ifdef HOOD
 import           Debug.Hoed.Observe                   hiding (O)
-#endif
+import qualified Debug.Hoed.Observe                   as Observe
 
 -- ----------------
 -- Debugging stuff
@@ -110,6 +108,22 @@ isTerm1 = id
 
 data Proxy a
 proxy = undefined
+
+-- ---------------
+-- Type wrappers
+-- ---------------
+
+data Comparable where
+  Comparable :: (Typeable a, Eq a, NFData a, Observable a
+                ) => a -> Comparable deriving (Typeable)
+instance Eq Comparable where (==) = comparableEq
+comparableEq = comparableEqO nilObserver
+comparableEqO (Observe.O o oo) (Comparable a) (Comparable b) =
+  let types = (o "a ::" (show $ typeOf a), o "b ::" (show $ typeOf b))
+      res = o "cast" (cast (o "a" a)) == Just (o "b" b)
+  in if res then res else deepseq types res
+instance Observable Comparable where observer (Comparable a) = send "Comparable" (return Comparable << a)
+instance NFData Comparable where rnf (Comparable a) = rnf a
 
 -- ----------------------------
 -- Type Constructor Composition
@@ -182,7 +196,8 @@ none f = not . Prelude.any f
 subsetOf :: Ord a => [a] -> Set a -> Bool
 subsetOf s1 s2 = all (`Set.member` s2) s1
 
-intersections = List.foldl' Set.intersection Set.empty
+intersections [] = Set.empty
+intersections xx = List.foldl1' Set.intersection xx
 
 ignore :: Monad m => m a -> m ()
 ignore m = m >> return ()
@@ -438,7 +453,7 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
 -- --------------------------------
 -- Missing Typeable instances
 -- --------------------------------
-
+deriving instance Typeable NF
 deriving instance Typeable Free
 deriving instance Typeable Expr
 deriving instance Typeable RuleF
@@ -447,11 +462,20 @@ deriving instance Typeable RPOsymbol
 deriving instance Typeable LPOSsymbol
 deriving instance Typeable LPOsymbol
 deriving instance Typeable MPOsymbol
---deriving instance Typeable Constant
+deriving instance Typeable Constant
+deriving instance Typeable NFData
+deriving instance Typeable Observable
+deriving instance Typeable HasId
+deriving instance Typeable EqModulo
 
+-- -------------------------
+-- Missing NFData instances
+-- -------------------------
+-- bogus instance for NF, as we cannot possibly force it
+instance NFData (t a) => NFData (NF c t a) where rnf (FMap f t) = ()
+deriving instance NFData a => NFData (EqModulo a)
 -- ----------------------
 -- Ord instance for Doc
 -- ----------------------
 instance Eq Doc where a == b = show a == show b
-
 instance Ord Doc where compare a b = compare (show a) (show b)

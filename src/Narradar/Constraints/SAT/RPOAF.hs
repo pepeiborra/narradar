@@ -27,6 +27,7 @@ import Control.Applicative
 import qualified Control.Exception as CE
 import Control.Monad
 import Control.Monad.Cont
+import Control.Monad.Free (Free(..))
 import Control.Monad.List
 import Control.Monad.Reader
 import Data.Bifunctor
@@ -64,6 +65,7 @@ import Prelude hiding (lex, not, and, or, any, all, quot, (>))
 import qualified Debug.Trace as Debug
 
 import Debug.Hoed.Observe
+import Control.DeepSeq (NFData)
 
 class SATSymbol sid where
   mkSATSymbol :: (v  ~ Family.Var sid
@@ -79,7 +81,7 @@ instance SATSymbol (Usable(MPOsymbol  v id)) where mkSATSymbol = mpo
 
 -- TODO apply these constraint synonyms consistently across this file
 type RPOId id = (FrameworkId id, UsableSymbol id, HasPrecedence id, HasStatus id, HasFiltering id, DPSymbol id, GenSymbol id)
-type RPOProblemN typ id = (FrameworkProblemN typ id, RPOId id, NNeededRules typ id)
+type RPOProblemN typ id = (FrameworkProblemN typ id, RPOId id, NeededRules (NProblem typ id))
 
 -- | RPO + AF
 
@@ -123,12 +125,12 @@ rpoAF_DP ::
          ,term' ~ Term (TermF sid) tv
          ,TermF sid ~ Family.TermF repr
          ,Ord id, Show id
-         ,Ord tv
+         ,Ord tv, Observable tv
          ,Functor typ
          ,IsDPProblem (typ term)
          ,MkDPProblem (typ term') trs'
          ,SATSymbol sid
-         ,Ord sid, Pretty sid
+         ,FrameworkId sid
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
@@ -145,8 +147,8 @@ rpoAF_DP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromMaybe (error ("rpoAF_DP: Symbol not found " ++ show( f))) $ Map.lookup f dict)
-      trs'    = mapNarradarTRS convert (getR p)
-      dps'    = mapNarradarTRS convert (getP p)
+      trs'    = fmap convert (getR p)
+      dps'    = fmap convert (getP p)
       typ'    = fmap convert $ getFramework p
       p'      = mkDPProblem typ' trs' dps'
 
@@ -188,22 +190,22 @@ rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid s
          ,v        ~ Family.Var sid
          ,v        ~ Family.Var v
          ,TermF sid~ Family.TermF repr
-         ,Ord sid
-         ,Ord id, Show id
-         ,Ord tv
-         ,Traversable (Problem base), Pretty base
-         ,MkDPProblem initialgoal' (NTRS sid)
-         ,IsDPProblem base
+         ,FrameworkId id
+         ,FrameworkId sid
          ,SATSymbol sid
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
-         ,Pretty sid
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
          ,UsableSymbol sid
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,Ord tv, Observable tv, NFData tv
+         ,Traversable (Problem base), Pretty base
+         ,MkDPProblem initialgoal' (NTRS sid)
+         ,IsDPProblem base
          ,MkDPProblem initialgoal' trs'
 --         ,Decode sid (SymbolRes id) v
          ,MonadSAT repr v m
+         ,Observable (Term (TermF id) tv)
          ,v ~ Var
          ) =>
             Bool
@@ -215,8 +217,8 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
   = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
   let convert :: forall v. Term (TermF id) v -> Term (TermF sid) v
       convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
-      trs' = mapNarradarTRS convert (getR p)
-      dps' = mapNarradarTRS convert (getP p)
+      trs' = fmap convert (getR p)
+      dps' = fmap convert (getP p)
       typ' = InitialGoal (map (bimap convert convert) goals)
                          (Just $ mapDGraph convert dgraph)
                          (getFramework baseProblem)
@@ -281,9 +283,9 @@ rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
          ,v        ~ Family.Var sid
          ,v        ~ Family.Var v
          ,TermF sid~ Family.TermF repr
-         ,Ord tv
+         ,Ord tv, Observable tv
          ,Ord id, Show id, Pretty id
-         ,Ord sid, Pretty sid
+         ,FrameworkId sid
          ,MkDPProblem typ (NTRS sid)
          ,HasStatus sid
          ,HasFiltering sid
@@ -304,8 +306,8 @@ rpoAF_NDP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
-      trs' = mapNarradarTRS convert (getR p)
-      dps' = mapNarradarTRS convert (getP p)
+      trs' = fmap convert (getR p)
+      dps' = fmap convert (getP p)
       p'   = mkDPProblem (getFramework p) trs' dps'
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
@@ -352,7 +354,7 @@ runRPOAF allowCol sig f = do
 
   let dict       = Map.fromList (zip (Map.keys ids) symbols)
   mkRes <- f dict
-  return $ Debug.trace ("The symbols are:\n" ++ show(pPrint symbols)) $ do
+  return $ do
     env <- ask
     res <- mkRes
     return (res, env, symbols)
@@ -361,7 +363,7 @@ runRPOAF allowCol sig f = do
 -- Symbols set extensions
 -- ----------------------
 
-instance ( RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr) =>
+instance (Eq a, RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr) =>
     RPOExtCircuit repr (Usable (RPOSsymbol v a)) where
      exEq s t ss tt =
        and [useMul s, useMul t, muleq s t ss tt]
@@ -503,7 +505,7 @@ lexgt_existA, lexpgt_existA, lexpge_existA, lexeq_existA ::
                         (HasPrecedence id
                         ,HasFiltering id
                         ,HasStatus id
-                        ,HasId termF
+                        ,HasId1 termF
                         ,Foldable termF
                         ,Eq(Term termF tv)
                         ,id ~ Family.Id termF
@@ -607,7 +609,7 @@ lexpeq, lexpgt, lexeq, lexgt, muleq,mulgt,mulge ::
          ( var   ~ Family.Var id
          , id    ~ Family.Id termF
          , termF ~ Family.TermF repr
-         , HasId termF, Foldable termF
+         , HasId1 termF, Foldable termF
          , HasFiltering id, HasStatus id, HasPrecedence id
          , Eq (Term termF tvar), Eq id
          , RPOCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
@@ -742,7 +744,7 @@ mulgen:: ( var   ~ Family.Var id
          , id    ~ Family.Id termF
          , termF ~ Family.TermF repr
          , HasFiltering id, HasStatus id, HasPrecedence id
-         , HasId termF, Foldable termF, Eq (Term termF tvar), Eq id
+         , HasId1 termF, Foldable termF, Eq (Term termF tvar), Eq id
          , RPOCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          , CoRPO repr termF tvar var
          ) => id -> id -> [Term termF tvar] -> [Term termF tvar] -> ([repr var] -> repr var) ->  repr var
@@ -857,7 +859,7 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
            ,return [])
 
    where
-    ip = forDPProblem involvedPairs p
+    ip = involvedPairs p
     (trs,dps) = (rules $ getR p, rules $ getP p)
     sig = getSignature (getR p)
     dd
@@ -927,7 +929,7 @@ omegaIGgen p
                           , isLinear l && P.all isVar (properSubterms l)
                           , let arity = length (properSubterms l)]
 
-rulesFor :: (HasId t, Family.Id t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
+rulesFor :: (HasId1 t, Family.Id t ~ id, Eq id) => id -> [Rule t v] -> [Rule t v]
 rulesFor f trs = [ l:->r | l:-> r <- trs, rootSymbol l == Just f ]
 
 -- --------
@@ -946,11 +948,14 @@ verifyRPOAF :: ( rule ~ RuleF term
                , Enum var, Ord var, GetVars var, Hashable var, Show var, Rename var
                , Decode var Bool
                , FrameworkProblem typ trs
+               , HasSignature (Problem typ trs)
                , RPOId id
                ) =>
-               typ -> trs -> trs -> [Int] -> EvalM var (VerifyRPOAF rule)
-verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
-
+               Problem typ trs -> [Int] -> EvalM var (VerifyRPOAF rule)
+verifyRPOAF p nonDecPairsIx = do
+  let the_pairs = getP p
+      the_rules = getR p
+      npairs    = length $ rules the_pairs
   theAf <- AF.fromList' `liftM` mapM getFiltering (toList $ getAllSymbols signature)
   let theFilteredPairs = rules $ AF.apply theAf the_pairs
 
@@ -968,7 +973,7 @@ verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
         Set.fromList
          [ rule
          | let urAf = Set.fromList $
-                      rules(iUsableRules3 typ the_rules the_pairs [] (rhs <$> theFilteredPairs))
+                      rules$ getR (iUsableRules' p [] (rhs <$> theFilteredPairs))
          , rule <- rules the_rules
          , AF.apply theAf rule `Set.member` urAf]
 
@@ -993,8 +998,7 @@ verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
   return VerifyRPOAF{thePairs = rules the_pairs, ..}
 
  where
-  signature = getSignature (the_rules `mappend` the_pairs)
-
+  signature = getSignature p
   getFiltering s = do
     isListAF   <- evalDecode $ listAF s
     filterings <- mapM decode (filtering_vv s)
@@ -1005,5 +1009,3 @@ verifyRPOAF typ the_rules the_pairs nonDecPairsIx = do
                      [p] -> (s, Left p)
                      _   -> error ("Invalid collapsing filtering " ++ show positions ++
                                    " for symbol " ++ show (pPrint s))
-
-  npairs    = length (rules the_pairs)

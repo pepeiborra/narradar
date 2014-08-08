@@ -50,10 +50,13 @@ type IRewriting = MkRewriting Innermost
 rewriting  = MkRewriting Standard  M
 irewriting = MkRewriting Innermost M
 
+instance NFData strat => NFData (MkRewriting strat) where rnf (MkRewriting s m) = rnf s `seq` rnf m
+
 instance GetPairs (MkRewriting strat) where getPairs = getPairsDefault
 
 instance IsProblem (MkRewriting st) where
-  data Problem (MkRewriting st) a = RewritingProblem a a (Strategy st) Minimality deriving (Eq, Ord, Show, Generic)
+  data Problem (MkRewriting st) a = RewritingProblem {rr,dd :: a, st :: Strategy st, m :: Minimality}
+                                     deriving (Eq, Ord, Show, Generic)
   getFramework (RewritingProblem _ _ s m) = MkRewriting s m
   getR (RewritingProblem r _ _ _) = r
 
@@ -62,47 +65,31 @@ instance IsDPProblem (MkRewriting st) where
 
 instance (MkDPProblem (MkRewriting st) trs, Monoid trs) => MkProblem (MkRewriting st) trs where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
-  mapR f (RewritingProblem r p s m) = mkDPProblem (MkRewriting s m) (f r) p
+  mapRO o f (RewritingProblem r p s m) = mkDPProblemO o (MkRewriting s m) (f r) p
 
 instance MkProblem (MkRewriting st) trs => MkDPProblem (MkRewriting st) trs where
-  mkDPProblem (MkRewriting s m) r p = RewritingProblem r p s m
-  mapP f (RewritingProblem r p s m) = RewritingProblem r (f p) s m
+  mkDPProblemO o (MkRewriting s m) r p = RewritingProblem r p s m
+  mapPO o f (RewritingProblem r p s m) = RewritingProblem r (f p) s m
 
-instance (FrameworkTerm t v) =>
-  MkProblem Rewriting (NarradarTRS t v)
+instance (FrameworkN0 (MkRewriting st) t v) =>
+  MkProblem (MkRewriting st) (NarradarTRS t v)
  where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
-  mapR f (RewritingProblem rr pp s m) = mkDPProblem (MkRewriting s m) (f rr) pp
+  mapRO o f (RewritingProblem rr pp s m) = mkDPProblemO o (MkRewriting s m) (f rr) pp
 
-instance FrameworkTerm t v =>  MkProblem IRewriting (NarradarTRS t v)
+instance ( FrameworkN0 (MkRewriting st) t v, Observable st ) =>
+  MkDPProblem (MkRewriting st) (NarradarTRS t v)
  where
-  mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
-  mapR f (RewritingProblem rr pp s m) = mkDPProblem (MkRewriting s m) (f rr) pp
-
-instance ( FrameworkTerm t v ) =>
-  MkDPProblem Rewriting (NarradarTRS t v)
- where
-  mkDPProblem it@(MkRewriting s m) rr dd
-    = case dd of
-        pp@DPTRS{rulesUsed} | rr == rulesUsed -> RewritingProblem rr dd s m
-        otherwise -> RewritingProblem rr (dpTRS it rr dd) s m
-  mapP f (RewritingProblem rr pp s m) = case f pp of
-                                          pp'@DPTRS{rulesUsed}
-                                              | rr == rulesUsed -> RewritingProblem rr pp' s m
-                                          pp' -> let typ = MkRewriting s m
-                                                 in RewritingProblem rr (dpTRS typ rr pp') s m
-
-instance FrameworkTerm t v => MkDPProblem IRewriting (NarradarTRS t v)
- where
-  mkDPProblem it@(MkRewriting s m) rr dd
-    = case dd of
-        DPTRS{rulesUsed} | rr == rulesUsed -> RewritingProblem rr dd s m
-        otherwise -> RewritingProblem rr (dpTRS it rr dd) s m
-  mapP f (RewritingProblem rr pp s m) = case f pp of
-                                          pp'@DPTRS{rulesUsed}
-                                               | rr == rulesUsed -> RewritingProblem rr pp' s m
-                                          pp' -> let typ = MkRewriting s m
-                                                 in RewritingProblem rr (dpTRS typ rr pp') s m
+  mkDPProblemO o it@(MkRewriting s m) rr dd
+    = case lowerNTRS dd of
+        pp@DPTRS{rulesUsed} | (Set.fromList $ rules rr) == rulesUsed -> RewritingProblem rr dd s m
+        otherwise -> dpTRSO o (\rr p -> p{rr}) (\dd p -> p{dd}) (RewritingProblem rr dd s m)
+  mapPO o f me@RewritingProblem{rr,dd} =
+    let dd' = f dd in
+    case lowerNTRS dd' of
+      DPTRS{rulesUsed}
+        | Set.fromList(rules rr) == rulesUsed -> me{dd=dd'}
+      _ -> dpTRSO o (\rr p -> p{rr}) (\dd p -> p{dd}) me{dd=dd'}
 
 -- Prelude
 
@@ -173,73 +160,68 @@ instance (v ~ Family.Var trs
          ,Rule t v ~ Family.Rule trs
          ,Pretty v, PprTPDB v, Ord v
          ,HasRules trs, GetVars trs, Pretty (t(Term t v))
-         ,HasId t, Pretty (Id t), Functor t, Foldable t
+         ,HasId1 t, Pretty (Id t), Functor t, Foldable t
          ) => PprTPDB (Problem (MkRewriting st) trs) where
   pprTPDB prob@(RewritingProblem r p st m) = vcat
      [parens( text "VAR" <+> (fsep $ snub $ map pprTPDB $ toList $ getVars prob))
      ,parens( text "RULES" $$
-              nest 1 (vcat $ map pprRule $ rules $ r))
+              nest 1 (vcat $ map pprTPDB $ rules $ r))
      ,if not (null $ rules p)
          then parens( text "PAIRS" $$
-              nest 1 (vcat $ map pprRule $ rules $ p))
+              nest 1 (vcat $ map pprTPDB $ rules $ p))
          else Ppr.empty
      ,if isInnermost st then parens (text "STRATEGY INNERMOST") else Ppr.empty
      ,if m == M then parens (text "MINIMALITY") else Ppr.empty
      ]
-   where
-        pprRule (a:->b) = pprTermTPDB a <+> text "->" <+> pprTermTPDB b
-
 
 -- ICap
 
-instance (Unify t, Rename v, Ord v
-         ) => ICap (MkRewriting st, NarradarTRS t v) where
-  icapO o (typ,trs) = icapO o (typ, rules trs)
-instance (Ord v, Rename v, Unify t) => ICap (MkRewriting st, [Rule t v]) where
-  icapO o (MkRewriting st m, trs) s t
-    | not(isInnermost st) = icapO o trs s t
+instance (FrameworkTerm t v, Ord(Id t)
+         ) => ICap (Problem (MkRewriting st) (NarradarTRS t v)) where
+  icapO o p@RewritingProblem{st} s t
+    | not(isInnermost st) = icapO o (getR p) s t
     | otherwise = do
 #ifdef DEBUG
-    when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
-      error "assertion failed (icap)" `const` t `const` trs
+    when (not $ Set.null (getVars (getR p) `Set.intersection` getVars t)) $ do
+      error "assertion failed (icap)" `const` t `const` p
 #else
-    assert (Set.null (getVars trs `Set.intersection` getVars t)) (return ())
+    assert (Set.null (getVars (getR p) `Set.intersection` getVars t)) (return ())
 #endif
-    rr <- {-getFresh-} return (rules trs)
-    let go t = if any (unifies (Impure t) . lhs) rr
-                then return `liftM` freshVar else return (Impure t)
+    rr <- {-getFresh-} return (rules $ getR p)
+    let go t = if any (unifies (wrap t) . lhs) rr
+                then return `liftM` freshVar else return (wrap t)
         doVar v = return2 v -- Do not rename vars
     foldTermM doVar go t
 
 -- Usable Rules
 
-instance (Ord(Term t v), Ord v, Rename v, Enum v, FrameworkT t
-         ) => IUsableRules (MkRewriting st) (NarradarTRS t v) where
-  iUsableRulesM m trs dps s tt = do
-    trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) s =<< getFresh tt
-    return (tRS $ toList trs')
+instance (FrameworkN0 (MkRewriting st) t v
+         ) => IUsableRules (Problem (MkRewriting st) (NarradarTRS t v)) where
+  iUsableRulesM p s tt = do
+    f_UsableRules p (iUsableRulesVarM p) s =<< getFresh tt
 
-  iUsableRulesVarM m@(MkRewriting st _) trs _ _ _
-    | isInnermost st = return Set.empty
-    | otherwise      = return $ Set.fromList $ rules trs
+  iUsableRulesVarM p@(RewritingProblem trs _ st _) _ _
+    | isInnermost st = return (setR mempty p)
+    | otherwise      = return p
 
-instance (Ord(Term t v), Ord v, Rename v, Enum v,FrameworkT t) => IUsableRules Rewriting [Rule t v] where
-  iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
-  iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
-
-instance (Ord(Term t v), Ord v, Rename v, Enum v, FrameworkT t) => IUsableRules IRewriting [Rule t v] where
-  iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
-  iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
-
-instance (Ord(Term t v), Ord v, Rename v, Enum v, FrameworkT t) => NeededRules (MkRewriting st) (NarradarTRS t v) where
-  neededRulesM _ trs dps = iUsableRulesM irewriting trs dps []
+instance (FrameworkN0 (MkRewriting st) t v
+         ,FrameworkN0 IRewriting t v
+         ) => NeededRules (Problem (MkRewriting st) (NarradarTRS t v)) where
+  neededRulesM p tt = do
+    p' <- iUsableRulesM (mapFramework (const irewriting) p) [] tt
+    return (setR (getR p') p)
 
 -- Insert Pairs
 
-instance (FrameworkId id) => InsertDPairs Rewriting  (NTRS id) where insertDPairs = insertDPairsDefault
-instance (FrameworkId id) => InsertDPairs IRewriting (NTRS id) where insertDPairs = insertDPairsDefault
+instance (FrameworkProblemN (MkRewriting st) id
+         ) => InsertDPairs (MkRewriting st) (NTRS id) where
+  insertDPairsO = insertDPairsDefault
+
+instance (FrameworkProblemN (MkRewriting st) id
+         ) => ExpandDPair (MkRewriting st) (NTRS id) where
+  expandDPairO = expandDPairOdefault
 
 -- Hood
 
 instance Observable1 MkRewriting
-instance Observable1 (Problem Rewriting)
+instance Observable st => Observable1 (Problem (MkRewriting st))

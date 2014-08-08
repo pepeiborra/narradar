@@ -18,6 +18,7 @@ import Control.Monad.Free
 --import Control.OldException
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS
+import Data.Typeable
 import Data.FileEmbed
 import Data.Foldable (Foldable,foldMap)
 import Data.Maybe

@@ -42,7 +42,10 @@ instance Hashable a => Hashable (PrologId a) where
 
 class Ord (WithoutPrologId id) => RemovePrologId id where
   type WithoutPrologId id :: *
-  removePrologId :: id -> Maybe (WithoutPrologId id)
+  removePrologId  :: id -> Maybe (WithoutPrologId id)
+  outId :: WithoutPrologId id -> id
+  inId :: WithoutPrologId id -> id
+  functorId :: WithoutPrologId id -> id
 
 instance Ord a => RemovePrologId (PrologId a) where
   type WithoutPrologId (PrologId a) = a
@@ -50,13 +53,23 @@ instance Ord a => RemovePrologId (PrologId a) where
   removePrologId (OutId x)     = Just x
   removePrologId (FunctorId x) = Just x
   removePrologId (UId _      ) = Nothing
+  outId = OutId
+  inId = InId
+  functorId = FunctorId
 
 instance (RemovePrologId a) => RemovePrologId (DPIdentifier a) where
   type WithoutPrologId (DPIdentifier a) = DPIdentifier (WithoutPrologId a)
   removePrologId = T.mapM removePrologId
+  outId = fmap outId
+  inId  = fmap inId
+  functorId = fmap functorId
 
 instance RemovePrologId StringId where
   type WithoutPrologId StringId = StringId
+  removePrologId = Just
+
+instance RemovePrologId String where
+  type WithoutPrologId String = String
   removePrologId = Just
 
 instance Ord (Expr p) => RemovePrologId (Expr p) where

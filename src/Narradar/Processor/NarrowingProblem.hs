@@ -52,23 +52,26 @@ instance ( PolyHeuristic heu id, Lattice (AF_ id)
          , Info info (UsableRulesProof (TermN id))
          , Info info (NarrowingToRewritingProof id)
          , FrameworkProblemN base id
+         , FrameworkProblemN (MkNarrowing base) id
+         , HasSignature (Problem (MkNarrowing base) (NTRS id))
          ) =>
     Processor (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id) ) where
   type Typ (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id)) = base
   type Trs (NarrowingToRewritingICLP08 heu info) (Problem (MkNarrowing base) (NTRS id)) = NTRS id
-  applySearch (NarrowingToRewritingICLP08 mk) p
+  applySearchO o (NarrowingToRewritingICLP08 mk) p
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
           heu        = mkHeu mk p
           u_p        = iUsableRules p
-          afs        = findGroundAF heu (AF.init u_p) u_p R.=<< Set.fromList(rules dps)
+          af         = AF.init u_p
+          afs        = findGroundAF heu af u_p R.=<< Set.fromList(rules dps)
           orProblems = [ usableRulesProof p u_p >>= \ p' ->
                          singleP (NarrowingToRewritingICLP08Proof af) p $
                                 AF.apply af (getBaseProblem p')
                         | af <- Set.toList afs]
 
-  applySearch (NarrowingToRewritingICLP08_SCC mk) p
+  applySearchO o (NarrowingToRewritingICLP08_SCC mk) p
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems
     where (trs, dps) = (getR p, getP p)
@@ -143,11 +146,9 @@ instance Pretty id => Pretty (NarrowingToRewritingProof id) where
 -- ---------------
 -- building blocks
 -- ---------------
-findGroundAF :: ( Ord id, Pretty id, Lattice (AF_ id)
+findGroundAF :: ( FrameworkId id, Lattice (AF_ id)
                 , Foldable (Problem typ)
                 , MkDPProblem typ (NTRS id)
-                , ICap (typ, NTRS id)
-                , IUsableRules typ (NTRS id)
                 , HasSignature (NProblem typ id)
                 ) => Heuristic id -> AF_ id -> NProblem typ id -> RuleN id -> Set (AF_ id)
 findGroundAF heu af0 p (_:->r)
@@ -160,7 +161,7 @@ findGroundAF heu af0 p (_:->r)
 
 -- | Takes a heuristic, an af with groundness information, an af to use as starting point, a problem and a rule,
 findGroundAF' :: ( IsDPProblem typ
-                 , Ord id, Pretty id, Lattice (AF_ id)
+                 , FrameworkId id, Lattice (AF_ id)
                  , Foldable (Problem typ)
                  , HasSignature (NProblem typ id)
                  ) =>

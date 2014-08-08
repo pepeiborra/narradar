@@ -4,6 +4,7 @@
 
 module Narradar.Types.Var where
 
+import Control.DeepSeq
 import Data.Hashable
 import Data.Term (Rename(..))
 import Data.Term.Rules

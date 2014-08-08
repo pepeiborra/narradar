@@ -11,6 +11,7 @@ import qualified Data.Set as Set
 import Narradar.Types
 
 import qualified Data.Term.Family as Family
+import Debug.Hoed.Observe (Observable)
 
 --isHierarchicalCombination :: (HasSignature trs1, HasSignature trs2) => trs1 -> trs2 -> Bool
 isHierarchicalCombination :: ( HasSignature ex, HasSignature base
@@ -22,7 +23,8 @@ isHierarchicalCombination ex base =
 isRelaxedHierarchicalCombination :: (HasSignature trs, HasRules trs
                                     ,Family.Id t ~ Family.Id trs
                                     ,Rule t v ~ Family.Rule trs
-                                    ,HasId t, Unify t
+                                    ,HasId1 t, Unify t
+                                    ,Observable(Term t v), Observable v
                                     ,Ord v
                                     ) => trs -> trs -> Bool
 isRelaxedHierarchicalCombination ex base =
@@ -39,7 +41,8 @@ isRelaxedHierarchicalCombination ex base =
 
 isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules trs, Ord (Term t v)
                                         , Rule t v ~ Family.Rule trs
-                                        , HasId t, Match t, Traversable t, Enum v, Ord v, Rename v
+                                        , HasId1 t, Match t, Traversable t
+                                        , Enum v, Ord v, Rename v
                                         , Family.Id t ~ Family.Id trs
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =
@@ -64,8 +67,9 @@ isGeneralizedRelaxedHierarchicalCombination
      , Rule t v ~ Family.Rule trs
      , Family.Id trs ~ Family.Id t
      , Ord (Term t v)
-     , HasId t, Unify t, Traversable t
+     , HasId1 t, Unify t, Traversable t
      , Enum v, Ord v, Rename v
+     , Observable v, Observable(Term t v)
      ) => trs -> trs -> Bool
 isGeneralizedRelaxedHierarchicalCombination ex base =
   isRelaxedHierarchicalCombination ex' base' &&
@@ -86,7 +90,7 @@ isHTtrs ex base = all (\(_ :-> r) -> isHT_ r) (rules ex)
       isHT_ = isHT (getSignature ex) (getSignature base)
 
 
-isHT :: (HasId f, Foldable f
+isHT :: (HasId1 f, Foldable f, Ord(Family.Id f)
         ) => Signature (Family.Id f) -> Signature (Family.Id f) -> Term f v -> Bool
 isHT exsig basesig = go
  where

@@ -2,13 +2,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DeriveFunctor #-}
-{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, DeriveGeneric, DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, TypeFamilies #-}
 
@@ -40,6 +39,7 @@ module Narradar.Types ( module Narradar.Framework
 
 import           Control.Applicative                  hiding (Alternative(..), many, optional)
 import           Control.Monad.Error                  (Error(..))
+import           Control.Monad.Free                   (Free(..))
 import           Control.Monad                        (liftM, MonadPlus(..), (>=>))
 import           Data.Bifunctor
 import           Data.ByteString.Char8                (ByteString, unpack)
@@ -54,6 +54,7 @@ import           Data.Suitable
 import qualified Data.Map                             as Map
 import qualified Data.Set                             as Set
 import           Data.Traversable                     as T
+import           Data.Typeable
 import           Lattice                              (Lattice)
 import           Text.ParserCombinators.Parsec
 import qualified TRSParser                            as TRS
@@ -76,8 +77,8 @@ import           Narradar.Types.PrologIdentifiers
 import           Narradar.Types.Labellings
 import           Narradar.Types.Goal
 import           Narradar.Types.Problem
-import           Narradar.Types.Problem.Rewriting
-import           Narradar.Types.Problem.QRewriting
+import           Narradar.Types.Problem.Rewriting     hiding (m,dd,rr)
+import           Narradar.Types.Problem.QRewriting    hiding (m,dd,rr)
 import           Narradar.Types.Problem.Narrowing     hiding (baseProblem)
 import           Narradar.Types.Problem.NarrowingGen  hiding (baseProblem, baseFramework)
 import           Narradar.Types.Problem.NarrowingGoal hiding (baseProblem, goal)
@@ -99,6 +100,7 @@ import qualified Language.Prolog.Parser               as Prolog hiding (term)
 import           Debug.Hoed.Observe
 
 import           Prelude                              as P hiding (sum, pi, mapM)
+import           Prelude.Extras
 
 data Output = OutputXml ByteString | OutputHtml ByteString | OutputTxt ByteString deriving Show
 
@@ -129,22 +131,32 @@ bestError = maximumBy (compare `on` errorPos)
 -- ---------------------------------
 -- Parsing and dispatching TPDB TRSs
 -- ---------------------------------
-newtype PrettyDotF a = PrettyDotF a deriving (Functor, Pretty, DotRep)
+newtype PrettyDotF a = PrettyDotF a deriving (Functor, Pretty, DotRep, Generic, Typeable)
 instance Applicative PrettyDotF where
   pure = PrettyDotF
   PrettyDotF f <*> PrettyDotF a = PrettyDotF (f a)
 
-data instance Constraints PrettyDotF a = (Pretty a, DotRep a) => PrettyDotConstraint
-instance (Pretty a, DotRep a) => Suitable PrettyDotF a where constraints = PrettyDotConstraint
+data instance Constraints PrettyDotF a = (Pretty a, DotRep a, Observable a) => PrettyDotConstraint
+instance (Pretty a, DotRep a, Observable a) => Suitable PrettyDotF a where constraints = PrettyDotConstraint
+
+instance Observable1 PrettyDotF
 
 instance Pretty (SomeInfo PrettyDotF) where
   pPrint (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> pPrint p
 instance DotRep (SomeInfo PrettyDotF) where
   dot (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dot p
   dotSimple (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dotSimple p
+instance Observable(SomeInfo PrettyDotF) where
+  observer (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> SomeInfo . observer p
 
 instance Show (SomeInfo PrettyDotF) where
   show = show . pPrint
+
+instance Eq1 PrettyDotF where
+  PrettyDotF a ==# PrettyDotF b = a == b
+
+instance Ord1 PrettyDotF where
+  PrettyDotF a `compare1` PrettyDotF b = compare a b
 
 class Dispatch thing where
     dispatch :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m) => thing -> Proof (PrettyDotF) m Final
@@ -216,7 +228,7 @@ trsParser = do
   Spec spec <- TRS.trsParser
 
   let allvars = Map.fromList (Set.toList(getVars spec) `zip` [0..])
-      toTerm  = foldTerm toVar (Impure . fromSimple)
+      toTerm  = foldTerm toVar (wrap . fromSimple)
       toVar v = var' (Just v) (fromJust $ Map.lookup v allvars)
 
       spec'   = toTerm <$$> spec
@@ -251,8 +263,7 @@ trsParser = do
       mkMode _                      = fail "parsing the abstract goal"
 
   case (r0, dps, strategies) of
-    ([], Nothing, [])
-        -> return $ ARewritingProblem (mkNewProblem rewriting r)
+    ([], Nothing, [])  -> return $ ARewritingProblem (mkNewProblem rewriting r)
     ([], Nothing, TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem narrowing r)
     ([], Nothing, ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
     ([], Nothing, InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
@@ -262,8 +273,6 @@ trsParser = do
 
     ([], Nothing, InnerMost:_)
         -> return $ AIRewritingProblem (mkNewProblem irewriting r)
-
-
     ([], Nothing, GoalStrategy g:TRS.Narrowing:_)
         -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (initialGoal [g'] narrowing) r)}
 --    (r0, Nothing, GoalStrategy g:TRS.Narrowing:_)
@@ -323,10 +332,3 @@ trsParser = do
                   $ mkDPProblem (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r' (mkTRS dps)
 
     _   -> fail "Invalid combination of rules, pairs and/or goals"
-
--- ------------
--- Debug stuff
--- ------------
-#ifdef HOOD
-instance Observable Mode where observer = observeBase
-#endif

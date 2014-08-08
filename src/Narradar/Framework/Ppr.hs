@@ -1,5 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverlappingInstances, TypeSynonymInstances, FlexibleInstances #-}
 
 module Narradar.Framework.Ppr ( module Narradar.Framework.Ppr
@@ -9,9 +10,10 @@ module Narradar.Framework.Ppr ( module Narradar.Framework.Ppr
 import Data.AlaCarte.Ppr
 import Data.Array
 
-import Data.Foldable (toList)
-import Data.Term (foldTerm, getId)
-import Data.Term.Rules ()
+import Data.Foldable (toList, Foldable)
+import Data.Term (Term, foldTerm, HasId1(..))
+import qualified Data.Term as Family
+import Data.Term.Rules (RuleF(..))
 import Data.Term.Ppr ()
 import Data.Strict(Pair(..), (:!:))
 import Language.Prolog.Syntax ()
@@ -94,9 +96,12 @@ punctuate c xx = Ppr.punctuate (pPrint c) (map pPrint xx)
 
 class PprTPDB p where pprTPDB :: p -> Doc
 
+instance PprTPDB a => PprTPDB (RuleF a) where
+  pprTPDB (a:->b) = pprTPDB a <+> text "->" <+> pprTPDB b
 
-pprTermTPDB t = foldTerm pprTPDB f t where
-        f t@(getId -> Just id)
+instance (Functor t, Foldable t, PprTPDB v, Pretty (Family.Id t), HasId1 t) => PprTPDB (Term t v) where
+  pprTPDB t = foldTerm pprTPDB f t where
+        f t@(getId1 -> Just id)
             | null tt = pPrint id
             | otherwise = pPrint id <> parens (hcat$ punctuate comma tt)
          where tt = toList t

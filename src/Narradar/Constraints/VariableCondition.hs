@@ -31,7 +31,7 @@ import qualified Data.Term.Family as Family
 
 invariantEV :: --forall id t v trs.
                ( id ~ Family.Id t
-               , Traversable t, HasId t
+               , Traversable t, HasId1 t
                , Pretty id, Ord id, Lattice (AF_ id)
                , Ord v
                , ApplyAF (Term t v)
@@ -53,7 +53,8 @@ invariantEV heu trs pi = let pi' = (selectBest . Set.toList . fix subinvariantEV
             = cutWith heu af r orig_poss
 
 
-cutWith :: (id ~ Family.Id t, Pretty id, Ord id, Foldable t, HasId t) => Heuristic id -> AF_ id -> Term t v -> [Position] -> Set (AF_ id)
+cutWith :: (id ~ Family.Id t, Pretty id, Ord id, Foldable t, HasId1 t
+           ) => Heuristic id -> AF_ id -> Term t v -> [Position] -> Set (AF_ id)
 cutWith _   af _ [] = return af
 cutWith heu af t pp = foldM (\af' pos -> (runHeu heu af' t pos >>= \(f,p) ->
 --                           trace ("term: " ++ show(ppr t) ++ ", pos: " ++ show pos ++ ", symbol:" ++ show (ppr f) ++ ", i: " ++ show p) $

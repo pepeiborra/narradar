@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances, UndecidableInstances, OverlappingInstances #-}
 module Narradar.Processor.InnermostProblem (ToInnermost(..)) where
 
@@ -14,6 +15,7 @@ import Data.Foldable (Foldable)
 import Data.List (find, (\\))
 import Data.Maybe (isNothing)
 import Data.Monoid
+import Data.Typeable
 --import Data.Term (Match, Rename, variant, isRenaming, match)
 import Data.Term.Narrowing (isRNF)
 import Data.Term.Rewriting (rewrites)
@@ -30,7 +32,7 @@ import qualified Data.Term.Family as Family
 
 import Debug.Hoed.Observe as Hood
 
-data ToInnermost (info :: * -> *) = ToInnermost
+data ToInnermost (info :: * -> *) = ToInnermost deriving Generic
 type instance InfoConstraint (ToInnermost info) = info
 
 data ToInnermostProof = AlmostOrthogonalProof
@@ -39,7 +41,7 @@ data ToInnermostProof = AlmostOrthogonalProof
                       | QInnermostProof
                       | ToInnermostFail
                       | QInnermostFail String
-         deriving (Eq, Ord, Show)
+         deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance Pretty ToInnermostProof where
    pPrint OverlayProof = text "R is an overlay system, therefore innermost termination implies termination"
@@ -49,21 +51,19 @@ instance Pretty ToInnermostProof where
    pPrint QInnermostProof = text "By theorem 3.14 in [RThiemannThe], Q = lhs(R) "
    pPrint (QInnermostFail reason) = text "Cannot apply theorem 3.14 from [RThiemannThe] because:\n  " <+> text reason
 
+instance Observable1 info => Observable (ToInnermost info)
+instance Observable ToInnermostProof
+
 -- | This processor cannot be applied after we have substracted rules from R.
 --   FIXME: Recast it as a non-DP problem processor only
-instance (HasRules trs
-         ,Family.Rule trs ~ Rule t v
-         ,v ~ Family.Var trs
-         ,Ord v, Rename v, Enum v, Unify t
-         ,Ord (Term t v)
-         ,MkDPProblem IRewriting trs
-         ,Info info ToInnermostProof
+instance (Info info ToInnermostProof
+         ,FrameworkProblem Rewriting trs
          ) =>
     Processor (ToInnermost info) (Problem Rewriting trs)
   where
    type Typ (ToInnermost info) (Problem Rewriting trs) = IRewriting
    type Trs (ToInnermost info) (Problem Rewriting trs) = trs
-   apply ToInnermost p
+   applyO _ ToInnermost p
       | isOrthogonal p = singleP OrthogonalProof p p'
       | isAlmostOrthogonal p = singleP AlmostOrthogonalProof p p'
       | isOverlayTRS p && locallyConfluent p = singleP OverlayProof p p'
@@ -71,17 +71,11 @@ instance (HasRules trs
 
     where
        p' = mkDerivedDPProblem (MkRewriting Innermost min) p
-       cps = criticalPairs p
        MkRewriting st0 min = getFramework p
 
 -- | FIXME This processor cannot be applied after we have substracted rules from R.
 --   FIXME: Recast it as a non-DP problem processor only
-instance (HasRules trs
-         ,Family.Rule trs ~ Rule t v
-         ,v ~ Family.Var trs
-         ,Ord v, Rename v, Enum v, Unify t
-         ,Ord(Term t v)
-         ,MkDPProblem IRewriting trs
+instance (FrameworkProblem Rewriting trs
          ,Info info ToInnermostProof
          ,Info info (Problem Rewriting trs)
          ,Info info (Problem IRewriting trs)
@@ -90,7 +84,7 @@ instance (HasRules trs
   where
    type Typ (ToInnermost info) (Problem (InitialGoal (TermF id) Rewriting) trs) = InitialGoal (TermF id) IRewriting
    type Trs (ToInnermost info) (Problem (InitialGoal (TermF id) Rewriting) trs) = trs
-   apply ToInnermost = liftProcessor ToInnermost
+   applyO o ToInnermost = liftProcessor o ToInnermost
 
 -- instance (Info info (Problem base trs)
 --          ,FrameworkExtension ext
@@ -116,7 +110,7 @@ instance (Family.Rule trs ~ Rule t v
   where
    type Typ (ToInnermost info) (Problem (QRewriting (Term t v)) trs) = QRewriting (Term t v)
    type Trs (ToInnermost info) (Problem (QRewriting (Term t v)) trs) = trs
-   apply ToInnermost p
+   applyO o ToInnermost p
       | isNothing cond1 && isNothing cond2 && cond3 && cond4 && p' /= p = singleP QInnermostProof p p'
       | otherwise = dontKnow (QInnermostFail reason) p
 
@@ -158,4 +152,4 @@ instance (Family.Rule trs ~ Rule t v
   where
    type Typ (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting (Term t v))) trs) = InitialGoal (TermF id) (QRewriting (Term t v))
    type Trs (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting (Term t v))) trs) = trs
-   apply ToInnermost = liftProcessor ToInnermost
+   applyO o ToInnermost = liftProcessor o ToInnermost

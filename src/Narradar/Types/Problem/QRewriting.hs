@@ -12,13 +12,15 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveGeneric, DeriveDataTypeable #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Problem.QRewriting
          ( QRewriting(..), QRewritingN, qrewriting, QSet(..)
          , Problem(..)
          , inQNF, isQInnermost
-         , qCondition, qCondition', isQValid
+         , qCondition, qCondition', isQValid, isQConfluent, mkQCondition
 --         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
 --         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
          ) where
@@ -28,8 +30,6 @@ import Control.DeepSeq
 import Control.Monad
 import Control.Exception (assert)
 import Data.Foldable as F (Foldable(..), toList)
---import Data.MemoUgly
-import Narradar.Utils.Memo
 import Data.Monoid
 import Data.Traversable as T (Traversable(..), mapM)
 import Data.Set (Set)
@@ -40,66 +40,56 @@ import Data.Term.Rewriting (isNF, rewrites)
 import Data.Typeable
 import Text.XHtml (HTML(..), theclass)
 
-import Data.Term
 import Data.Term.Rules
 import qualified Data.Term.Family as Family
 
+import Narradar.Constraints.Unify
 import Narradar.Constraints.UsableRules
+import Narradar.Types.ArgumentFiltering (ApplyAF)
+import Narradar.Types.DPIdentifiers
 import Narradar.Types.Problem
+import Narradar.Types.PrologIdentifiers (RemovePrologId)
 import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
-import Narradar.Utils (return2, snub, pprTrace, none)
-import Narradar.Utils.Observe
+import Narradar.Utils (return2, snub, pprTrace, none, Comparable(..), comparableEqO)
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
 
-newtype QSet term = QSet {qset :: [term]} deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic, Typeable)
+newtype QSet term = QSet {qset :: [term]}
+                  deriving ( Eq, Ord, Show, Functor, Foldable, Traversable
+                           , Generic, Typeable, GetMatcher, GetVars)
 
 instance NFData term => NFData (QSet term) where rnf (QSet tt) = rnf tt
 instance Observable1 QSet
 instance (HasSignature [term], Ord(Family.Id term)) => HasSignature (QSet term) where getSignature (QSet q) = getSignature q
 instance Pretty term => Pretty (QSet term) where pPrint (QSet tt) = "QSet:" <+> fsep tt
+
+instance GetFresh t => GetFresh(QSet t) where getFreshM (QSet tt) = QSet `liftM` getFreshM tt
+
 type instance Family.TermF (QSet term) = Family.TermF term
 type instance Family.Id    (QSet term) = Family.Id    term
 type instance Family.Var   (QSet term) = Family.Var   term
 
-{-
-  The Q-condition to determine whether NF(Q) \subseteq NF(R) is expensive to compute.
-  We can cache it once we construct a (DP) Problem, but that is too late.
-  It comes up mostly when computing the usable rules for the inverse unifiers, in the DPTRS construction,
-  which is a prerequisite step for creating a DP problem.
-
-  I see four options:
-    1. Generalize dpTRS, the constructor for DPTRS, to take problems instead of (typ,trs) pairs
-    2. Have a heavily custom implementation of mkDPProblem for Q-Rewriting
-    3. memoize mkQCondition
-    4. Not use the inverse unifiers in DPTRS, instead compute them fresh in the Graph processor
-
-
-  (1) seems like the most elegant approach but also the most costly
-  (2) seems to involve inlining all the code for constructing a DPTRS, so not great
-  (3) is the cheapest, good for prototyping
-  (4) has a runtime penalty in that the unifiers get recomputed every time we apply the Graph processor. Probably not a big deal in practice.
-      also seems to involve duplicadtion of compute Inverse Unifiers
-
- -}
-
 -- | NF(Q) \subseteq NF(R)
-mkQCondition :: (FrameworkTRS trs, Pretty trs
+mkQCondition :: (FrameworkTerm (Family.TermF trs) (Family.Var trs), Pretty trs
+                ,Family.Rule trs ~ RuleFor trs
+                ,HasRules trs
                 ) => QSet (TermFor trs) -> trs -> Bool
-mkQCondition = curry $ {-memo $-} \ (QSet qt, trs) -> none (isNF [ q :-> q | q <- qt]) (lhs <$> rules trs)
+mkQCondition (QSet qt) trs = none (isNF [ q :-> q | q <- qt]) (lhs <$> rules trs)
 
 -- | NF(R) \subseteq NF(Q)
 qCondition' (QSet qt) trs = none (isNF trs) qt
 
 inQNF :: ( Ord v, Enum v, Rename v, Observable(Term t v)
-         , Match t, Traversable t) =>
+         , Unify t) =>
          Term t v -> QSet (Term t v) -> Bool
-inQNF t (QSet qt) = isNF [ q :-> q | q <- qt] t 
+{-# SPECIALIZE inQNF ::  TermN String -> QSet(TermN String) -> Bool #-}
+{-# SPECIALIZE inQNF ::  TermN Id -> QSet(TermN Id) -> Bool #-}
+inQNF t (QSet qt) = isNF [ q :-> q | q <- qt] t
 
 data QRewriting term = QRewriting (QSet term) Minimality deriving (Eq, Ord, Show, Functor, Generic, Typeable)
 
@@ -107,60 +97,89 @@ type QRewritingN id = QRewriting (TermN id)
 
 qrewriting = QRewriting (QSet []) M
 
+instance NFData term => NFData (QRewriting term) where rnf (QRewriting q m) = rnf q `seq` rnf m
+
 instance GetPairs (QRewriting term) where getPairs = getPairsDefault
 
 instance IsProblem (QRewriting id) where
-  data Problem (QRewriting term) a = QRewritingProblem a a (QSet term) Minimality {-qCondition-} Bool
+  data Problem (QRewriting term) a = QRewritingProblem {rr,dd :: a, q ::QSet term, m :: Minimality, qCondition :: Bool }
                                  deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Generic)
   getFramework (QRewritingProblem _ _ q m _) = QRewriting q m
   getR (QRewritingProblem r _ _ _ _) = r
 
+instance (GetFresh term, GetMatcher term, GetVars term
+         ,v ~ Family.Var term, Enum v, Ord v, Rename v
+         ,Traversable(Family.TermF term)
+         ) => Eq (EqModulo (QRewriting term)) where
+  EqModulo (QRewriting q m) == EqModulo (QRewriting q' m') =
+    m == m' && EqModulo q == EqModulo q'
+
 isQInnermost = qCondition
-qCondition (QRewritingProblem _ _ _ _ qC) = qC
 isQValid   (QRewritingProblem trs _ q _ _) = qCondition' q (rules trs)
+
+
+isQConfluent :: forall t v.
+                (Rename v, Unify t, Ord v, Enum v, Eq (Term t v)
+                , Observable(Term t v), Observable v
+                ) => QSet (Term t v) -> [RuleF (Term t v)] -> Bool
+isQConfluent = isQConfluentO nilObserver
+
+isQConfluentO :: forall t v.
+                (Rename v, Unify t, Ord v, Enum v, Eq (Term t v)
+                , Observable(Term t v), Observable v
+                ) => Observer -> QSet (Term t v) -> [RuleF (Term t v)] -> Bool
+isQConfluentO (O o oo) (QSet q) rr = null $ do
+  r1 <- rr
+  r2 <- rr'
+  oo "go" go r1 r2
+ where
+  go :: Observer -> Rule t v -> Rule t v -> [()]
+  go (O o oo) (l1:->r1) (l2:->r2) = do
+    Just sigma <- o "sigma" [unify l1 l2]
+    guard (o "r1'" (applySubst sigma r1) /= o "r2'" (applySubst sigma r2))
+    return ()
+
+  rr' = getVariant rr rr
 
 instance IsDPProblem (QRewriting id) where
   getP   (QRewritingProblem _ p _ _ _) = p
 
 instance (MkDPProblem (QRewriting term) trs
-         ,FrameworkProblem (QRewriting term) trs
          ,term ~ TermFor trs
          ,Family.Rule trs ~ RuleFor trs
-         ,Pretty trs
+         ,HasRules trs, Monoid trs, Pretty trs
+         ,FrameworkTerm (Family.TermF trs) (Family.Var trs)
          ) => MkProblem (QRewriting term) trs where
   mkProblem (QRewriting q m) rr = QRewritingProblem rr mempty q m (mkQCondition q rr)
-  mapR f (QRewritingProblem r p s m qC) = mkDPProblem (QRewriting s m) (f r) p
-{-
-instance (MkProblem (QRewriting st) trs, Observable trs) => MkDPProblem (QRewriting st) trs where
-  mkDPProblemO (O o oo) (QRewriting s m) r p   = QRewritingProblem (o "r" r) (o "p" p) s m
-  mapP f (QRewritingProblem r p s m) = QRewritingProblem r (f p) s m
--}
+  mapRO o f (QRewritingProblem rr p q m _) = -- mkDPProblemO o (QRewriting q m) (f r) p
+    let rr' = f rr in QRewritingProblem rr' p q m (mkQCondition q rr')
+
 instance (HasSignature trs, HasSignature [term], Family.Id term ~ Family.Id trs) => HasSignature (Problem (QRewriting term) trs) where
   getSignature (QRewritingProblem r p q _ _)  = getSignature r `mappend` getSignature p `mappend` getSignature q
 
-instance (FrameworkTerm t v, Pretty(NarradarTRS t v)) =>
-  MkProblem (QRewriting (Term t v)) (NarradarTRS t v)
- where
-  mkProblem (QRewriting q m) rr = QRewritingProblem rr mempty q m (mkQCondition q rr)
-  mapR f (QRewritingProblem rr pp s m _) = mkDPProblem (QRewriting s m) (f rr) pp
-
-instance (FrameworkTerm t v, Pretty(NarradarTRS t v)) =>
-  MkDPProblem (QRewriting (Term t v)) (NarradarTRS t v)
+instance (FrameworkId id, Pretty(NTRS id)) =>
+  MkDPProblem (QRewriting (TermN id)) (NTRS id)
  where
 --  mkDPProblem it@(QRewriting s m) rr dd | pprTrace (text "mkDPProblem rewriting with rules" $$ nest 2 rr) False = undefined
-  mkDPProblemO (O o oo) it@(QRewriting q m) rr dd
-    = case dd of
-        pp@DPTRS{typ,rulesUsed} | o "typ == typ'" (typ == Comparable it) &&
-                                  o "rules == rules'" (rr == rulesUsed)
+  mkDPProblemO obs@(O o oo) it@(QRewriting q m) rr dd
+    = case lowerNTRS dd of
+        pp@DPTRS{typ,rulesUsed} | (typ == Comparable it) &&
+                                  (Set.fromList(rules rr) == rulesUsed)
                   -> QRewritingProblem rr dd q m (mkQCondition q rr)
-        otherwise -> QRewritingProblem rr (oo "dpTRS" dpTRSO it rr dd) q m (mkQCondition q rr)
-  mapP f (QRewritingProblem rr pp q m qC)
-    = case f pp of
-        pp'@DPTRS{typ,rulesUsed}
-          | Comparable mytyp == typ && rr == rulesUsed
-            -> QRewritingProblem rr pp' q m qC
-        pp' -> QRewritingProblem rr (dpTRS mytyp rr pp') q m qC
-    where mytyp = QRewriting q m
+        otherwise ->
+          dpTRSO obs (\rr p -> p{rr}) (\dd p -> p{dd})
+            (QRewritingProblem rr dd q m (mkQCondition q rr))
+
+  mapPO (O o oo) f me@QRewritingProblem{rr,dd,q,m}
+    | dd' <- f dd
+    = case lowerNTRS dd' of
+        DPTRS{typ,rulesUsed}
+          |    oo "same problem type" (\(O o oo) ->
+                 let new = o "new" $ QRewriting q m
+                 in  o "old" typ == Comparable new)
+            && o "same rules used"   (Set.fromList(rules rr) == rulesUsed)
+            -> me{dd=dd'}
+        _ -> oo "dpTRS" dpTRSO (\rr p -> p{rr}) (\dd p -> p{dd}) me{dd=dd'}
 
 -- Prelude
 
@@ -192,90 +211,81 @@ instance HTMLClass (QRewriting term) where htmlClass (QRewriting tt m) = theclas
 instance (HasRules trs, GetVars trs, Pretty v, PprTPDB v, Pretty (t(Term t v)), Ord v
          , Family.Rule trs ~ Rule t v
          , Family.Var  trs ~ v
-         , Functor t, Foldable t, HasId t, Pretty (Id t)
+         , Functor t, Foldable t, HasId1 t, Pretty (Family.Id t)
          ) => PprTPDB (Problem (QRewriting (Term t v)) trs) where
   pprTPDB prob@(QRewritingProblem r p (QSet q) m _) = vcat
      [parens( text "VAR" <+> (fsep $ snub $ map pprTPDB $ toList $ getVars prob))
      ,parens( text "RULES" $$
-              nest 1 (vcat $ map pprRule $ rules $ r))
+              nest 1 (vcat $ map pprTPDB $ rules $ r))
      ,if not (null $ rules p)
          then parens( text "PAIRS" $$
-              nest 1 (vcat $ map pprRule $ rules $ p))
+              nest 1 (vcat $ map pprTPDB $ rules $ p))
          else Ppr.empty
-     , parens (text "STRATEGY Q" <+> fsep (map pprTermTPDB q))
+     , parens (text "STRATEGY Q" <+> fsep (map pprTPDB q))
      ,if m == M then parens (text "MINIMALITY") else Ppr.empty
      ]
-   where
-        pprRule (a:->b) = pprTermTPDB a <+> text "->" <+> pprTermTPDB b
-
 
 -- ICap
-instance FrameworkTerm t v => ICap (QRewriting (Term t v), NarradarTRS t v) where
-  icapO o (typ,trs) = icapO o (typ, rules trs)
-instance FrameworkTerm t v => ICap (QRewriting (Term t v), [Rule t v]) where
+instance FrameworkTerm t v => ICap (Problem(QRewriting (Term t v)) (NarradarTRS t v)) where
 --  icap (_,rules -> []) s t = return t
-  icapO (O o oo) (QRewriting q m, trs) s t = do
+  icapO (O o oo) (QRewritingProblem r p q m qC) s t = do
 #ifdef DEBUG
-    when (not $ Set.null (getVars trs `Set.intersection` getVars t)) $ do
-      error "assertion failed (icap)" `const` t `const` trs
+    when (not $ Set.null (getVars r `Set.intersection` getVars t)) $ do
+      error "assertion failed (icap)" `const` t `const` p
 #else
-    assert (Set.null (getVars trs `Set.intersection` getVars t)) (return ())
+    assert (Set.null (getVars r `Set.intersection` getVars t)) (return ())
 #endif
-    rr <- {-getFresh-} return (rules trs)
+    rr <- {-getFresh-} return (rules r)
     let goO (O o oo) t =
           if and [ or [ not(o "inQNF" inQNF t q)
-                              | t <- map (applySubst sigma) s ++ directSubterms (applySubst sigma l)]
+                              | t <- map (applySubst sigma) s ++
+                                     directSubterms (applySubst sigma l)]
                   | l :-> r <- rr
-                  , Just sigma <- [o "unify" unify (Impure t) l] ]
-                   then return (Impure t) else return `liftM` freshVar
-        doVar v = if mkQCondition q trs && return v `elem` (concatMap subterms s)
-                    then return2 v
+                  , Just sigma <- [o "unify" unify (wrap t) l] ]
+                   then return (wrap t) else return `liftM` freshVar
+        doVar v = if qC && return v `elem` (concatMap subterms s)
+                    then return2 v 
                     else return `liftM` renaming v
     foldTermM doVar (oo "go" goO) t
 
 -- Usable Rules
-instance (FrameworkTerm t v, Pretty(NarradarTRS t v)
-         ) => IUsableRules (QRewriting (Term t v)) (NarradarTRS t v) where
-  iUsableRulesVarM (QRewriting q _) trs _dps _s _
-    | mkQCondition q trs = return Set.empty
-    | otherwise      = return $ Set.fromList $ rules trs
-  iUsableRulesM = 
-  -- gdmobservers "iUsableRules" $ \(O o oo) ->
-   let o _ = id;
-       oo :: String -> (Observer -> a) -> a
-       oo _ f = f (O o oo) in
-   \m@(QRewriting q _) trs dps s tt ->
+instance (FrameworkId id, Pretty(NTRS id)
+         ) => IUsableRules (Problem (QRewriting (TermN id)) (NTRS id)) where
+  iUsableRulesVarMO (O o oo) p@QRewritingProblem{qCondition,rr} _s _
+    | o "qCondition" qCondition = return (setR mempty p)
+    | otherwise  = return (setR rr p)
+  iUsableRulesMO (O _ oo) p@QRewritingProblem{q,rr,dd} s tt =
 --    pprTrace ("Q-Usable Rules" <+> tt) $
-    let p  = mkDPProblem m trs dps
-
-        go acc [] = return $ Set.map eqModulo acc
+    let go acc [] = return $ setR (tRS $ map eqModulo $ F.toList acc) p
         go acc ((s,t):rest) = do
-           (usable, followUp) <- doOne acc s t
+           (usable, followUp) <- oo "doOne" doOneO acc s t
            go (usable `mappend` acc) (followUp `mappend` rest)
 
-        doOne = oo "doOne" doOneO
---        doOneO _ acc s | pprTrace ("doOne" <+> acc <+> s) False = undefined
-        doOneO (O o _) acc s =
-           evalTerm (iUsableRulesVarM m trs dps s >=> \vacc -> return (Set.map EqModulo vacc, mempty)) $ \in_t -> do
-                   t'  <- wrap `liftM` ({-o "icap"-} icap p s `T.mapM` in_t)
-                   let rr  = [ EqModulo rule
-                                    | rule@(l:->_r) <- rules trs
+        doOneO (O o oo) acc s =
+           evalTerm (oo "iUsableRulesVarMO" iUsableRulesVarMO p s >=> \p' ->
+                       let vacc = Set.fromList $ map EqModulo $ rules $ getR p'
+                       in return (vacc, mempty)
+                     ) $ \in_t -> do
+                   t'  <- wrap `liftM` (oo "icap" icapO p s `T.mapM` in_t)
+                   let checkSigma (O o oo) sigma l =
+                        o "s in qnf" (all ((\s -> o "inQNF" inQNF s q) . applySubst sigma) s) &&
+                        o "l in qnf" (all ((`inQNF` q) . applySubst sigma) (directSubterms l))
+                   let  rr'  = o "rr'"
+                                 [ EqModulo rule
+                                    | rule@(l:->_r) <- rules rr
                                     , not(isVar l)
-                                    , unifies l t'
-                                    , Just sigma <- [{-o "unify"-} unify l t']
-                                    , all ((`inQNF` q) . applySubst sigma) s
-                                    , all ((`inQNF` q) . applySubst sigma) (directSubterms l)
+                                    , Just sigma <- [o "unify" unify l t']
+                                    , oo "checkSigma" checkSigma sigma l
                                     ]
-                   let new = Set.difference (Set.fromList rr) acc
-                   new' <- getFresh (map eqModulo $ F.toList ( o "new" new))
-                   let rhsSubterms = [ (directSubterms l,r)
-                                       | l :-> r <- new' ]
+                   let  new = o "new" $ Set.difference (Set.fromList rr') acc
+                   new' <- getFresh (map eqModulo $ F.toList $ new)
+                   let rhsSubterms = [ (directSubterms l, r) | l :-> r <- new' ]
                    return (new, mconcat [rhsSubterms, map (s,) (F.toList in_t)])
 
     in do
         tt'  <- {-o "getFresh"-} getFresh tt
-        trs' <- go Set.empty $ map (s,) tt'
-        return (tRS $ toList trs')
+        p' <- go Set.empty $ map (s,) tt'
+        return p'
 
 
 --    trs' <- f_UsableRules (m,trs) (iUsableRulesVarM m trs dps) s =<< getFresh tt
@@ -289,13 +299,19 @@ instance (FrameworkTerm t v, Pretty(NarradarTRS t v)
 --   iUsableRulesM    = deriveUsableRulesFromTRS (proxy :: Proxy (NarradarTRS t v))
 --   iUsableRulesVarM = deriveUsableRulesVarFromTRS (proxy :: Proxy (NarradarTRS t v))
 
-instance (FrameworkTerm t v, Pretty(NarradarTRS t v)
-         ) => NeededRules (QRewriting (Term t v)) (NarradarTRS t v) where
-   neededRulesM typ trs dps = iUsableRulesM typ trs dps []
+instance (FrameworkId id, Pretty(NTRS id)
+         ) => NeededRules (Problem (QRewriting (TermN id)) (NTRS id)) where
+   neededRulesM p = iUsableRulesM p []
 
 -- Insert Pairs
 
-instance FrameworkId id =>InsertDPairs (QRewriting (TermN id)) (NTRS id) where insertDPairs = insertDPairsDefault
+instance FrameworkId id => InsertDPairs (QRewriting (TermN id)) (NTRS id) where
+  insertDPairsO = insertDPairsDefault
+
+-- TODO Custom Expand Pair instance with the pair-graph expansion of Thiemann
+instance FrameworkProblem (QRewriting (TermN id)) (NTRS id) =>
+         ExpandDPair (QRewriting (TermN id)) (NTRS id) where
+  expandDPairO o = expandDPairOdefault o
 
 -- Hood
 

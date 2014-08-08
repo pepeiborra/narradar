@@ -7,6 +7,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE DisambiguateRecordFields, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Narradar.Types.Problem.NarrowingGoal where
@@ -58,16 +59,16 @@ instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.
     MkProblem (MkNarrowingGoal id p) trs where
   mkProblem (NarrowingGoal g af _ base) rr
       = NarrowingGoalProblem g (af `mappend` AF.init p) p where p = mkProblem base rr
-  mapR f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapR f p)
+  mapRO o f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapRO o f p)
 
 instance (Ord id, IsDPProblem p) => IsDPProblem (MkNarrowingGoal id p) where
   getP   (NarrowingGoalProblem _ _ p) = getP p
 
 instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
     MkDPProblem (MkNarrowingGoal id p) trs where
-  mapP f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapP f p)
-  mkDPProblem (NarrowingGoal g af _ base) rr dp = NarrowingGoalProblem g (af `mappend` AF.init p) p
-    where p = mkDPProblem base rr dp
+  mapPO o f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapPO o f p)
+  mkDPProblemO o (NarrowingGoal g af _ base) rr dp = NarrowingGoalProblem g (af `mappend` AF.init p) p
+    where p = mkDPProblemO o base rr dp
 
 narrowingGoal  g = narrowingGoal' g (mkGoalAF g)
 cnarrowingGoal g = NarrowingGoal g (mkGoalAF g) bestHeu irewriting
@@ -114,7 +115,7 @@ instance HTMLClass (MkNarrowingGoal id IRewriting) where htmlClass _ = theclass 
 
 instance (HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
          ,Pretty id, Pretty (Goal id)
-         ,Foldable t, HasId t
+         ,Foldable t, HasId1 t
          ,id ~ Family.Id t
          ,PprTPDB (Problem base trs), HasMinimality base
          ) => PprTPDB (Problem (MkNarrowingGoal id base) trs) where
@@ -125,21 +126,20 @@ instance (HasRules trs, GetVars trs, Pretty v, Pretty (t(Term t v))
 
 -- Icap
 
-instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
-    ICap (MkNarrowingGoal id p, trs)
+instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (Problem p trs)) =>
+    ICap (Problem (MkNarrowingGoal id p) trs)
   where
-    icapO o (NarrowingGoal _ _ _ p,trs) = icapO o (p,trs)
+    icapO = liftIcapO
 
 -- Usable Rules
 
-instance (Enum v, Unify t, Ord (Term t v), IsTRS trs, GetVars trs
-         ,ApplyAF (Term t v), ApplyAF trs
-         , id ~ Family.Id trs
+instance ( id ~ Family.Id trs
          , id ~ Family.Id t
-         , Ord id, Ord (t(Term t v))
-         ,IUsableRules p trs, ICap (p,trs)) =>
-   IUsableRules (MkNarrowingGoal id p) trs
+         , FrameworkProblem (MkNarrowingGoal id p) trs
+         , FrameworkProblem p trs
+         ) =>
+   IUsableRules (Problem (MkNarrowingGoal id p) trs)
  where
-   iUsableRulesM (NarrowingGoal _ pi _ b) trs dps s tt = return trs
-   iUsableRulesVarM (NarrowingGoal _ _ _ b) = iUsableRulesVarM b
+   iUsableRulesM p s tt = return p
+   iUsableRulesVarM = liftUsableRulesVarM
 

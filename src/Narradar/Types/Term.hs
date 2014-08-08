@@ -13,23 +13,38 @@ module Narradar.Types.Term
                      ,TermN, RuleN, constant, term, term1
                      ,termIds, Size(..), fromSimple
                      ,ExtraVars(..)
-                     ,module Data.Term, module Data.Term.Rules, MonadFree(..))
+                     ,Substitution, SubstitutionNF, GetVarsObservable
+                     ,module Narradar.Constraints.Unify
+                     ,module Data.Term
+                     ,Free(..)
+                     ,MonadFree(..))
     where
 
 import           Control.Applicative
 import           Control.Arrow          (first)
 import           Control.DeepSeq
+import           Control.Monad.ConstrainedNormal (NF)
 import           Control.Monad.Free
 import           Data.Char
 import           Data.Bifunctor
-import           Data.ByteString.Char8 as BS (ByteString, pack, unpack)
-import           Data.Foldable as F (Foldable(..),sum,msum)
+import           Data.ByteString.Char8  as BS (ByteString, pack, unpack)
+import           Data.Constraint        ( (:-)(..), Dict(..))
+import           Data.Foldable          as F (Foldable(..),sum,msum)
 import           Data.Hashable
 import qualified Data.Set               as Set
 import           Data.Traversable
-import           Data.Term              hiding (unify, unifies, applySubst, find, Id, TermF, Var )
+import           Data.Term
+                  (Term, TermFor, evalTerm, foldTerm, foldTermM
+                  ,Match(..)
+                  ,HasId(..), HasId1(..), MapId(..), mapTermSymbols, mapRootSymbol, collect
+                  ,MonadVariant(..), evalMEnv, execMEnv
+                  ,Position, positions, occurrences, (!), updateAt
+                  ,WithNote(..), WithNote1(..), annotateWithPos, noteV, note, dropNote
+                  ,find', varBind, occursIn
+                  ,isVar, isLinear, Rename(..)
+                  ,rootSymbol, subterms, directSubterms, properSubterms
+                  )
 import qualified Data.Term.Simple       as Simple
-import           Data.Term.Rules        hiding (unifies', matches')
 import qualified Data.Id.Family         as Family
 import qualified Data.Term.Family       as Family
 import qualified Data.Rule.Family       as Family
@@ -38,6 +53,7 @@ import           Data.Typeable
 
 import qualified Data.Map               as Map
 
+import           Narradar.Constraints.Unify hiding (TermF, Var)
 import           Narradar.Framework.Ppr
 import           Narradar.Types.Var
 
@@ -68,6 +84,8 @@ type instance Family.Id (TermF id) = id
 type instance Family.Id (Term f v) = Family.Id f
 type instance Family.TermF (TermF id f) = TermF id
 
+instance Eq id => Match (TermF id) where matchStructure (Term a _) (Term b _) = a == b
+
 term :: id -> [Term (TermF id) a] -> Term (TermF id) a
 term f = Impure . Term f
 
@@ -91,8 +109,9 @@ fromSimple' (Simple.Term id tt) = Term (ArityId id (length tt)) tt
 class ExtraVars thing where extraVars :: thing -> [Family.Var thing]
 instance (Ord (Family.Var trs), Functor (TermF trs), Foldable (TermF trs), HasRules trs, ExtraVars(Family.Rule trs), Family.Var trs ~ Family.Var (Family.Rule trs)) => ExtraVars trs where
     extraVars = concatMap extraVars . rules
-instance (Ord (Family.Var (Rule t v)), Functor t, Foldable t) => ExtraVars (Rule t v) where
-    extraVars (l:->r) = Set.toList (Set.fromList(vars r) `Set.difference` Set.fromList(vars l))
+instance (GetVars a, Ord(Family.Var a)) => ExtraVars (RuleF a) where
+    extraVars (l:->r) =
+      Set.toList (getVars r `Set.difference` getVars l)
 
 
 -- Specific instance for TermF, only for efficiency
@@ -111,8 +130,8 @@ instance Eq id => Unify (TermF id) where
    zipTermM_ f (Term f1 tt1) (Term f2 tt2) | f1 == f2 = zipWithM_ f tt1 tt2
                                            | otherwise = fail "structure mismatch"
 
-instance Ord id => HasId (TermF id) where
-    getId (Term id _) = Just id
+instance Ord id => HasId1 (TermF id) where
+    getId1 (Term id _) = Just id
 
 instance MapId TermF where mapIdM f (Term id tt) = (`Term` tt) <$> f id
 
@@ -123,7 +142,7 @@ class Size t where size :: t -> Int
 instance (Functor f, Foldable f) => Size (Term f v) where
   size = foldTerm (const 1) (\f -> 1 + F.sum f)
 instance Size t  => Size [t] where size = F.sum . fmap size
-instance (Functor f, Foldable f) => Size (Rule f v) where size = F.sum . fmap size
+instance (Size a) => Size (RuleF a) where size = F.sum . fmap size
 
 -- Functor boilerplate
 -- --------------------
@@ -203,5 +222,14 @@ instance NFData id => NFData (Signature id) where
 instance NFData id => NFData (ArityId id) where
   rnf (ArityId a i) = rnf i `seq` rnf a `seq` ()
 
-instance (NFData k, NFData a) => NFData (SubstitutionF k a) where
+instance (NFData a, NFData(Family.Var a)) => NFData (Substitution_ a) where
   rnf = rnf . unSubst
+
+-- --------------------
+-- Observable instances
+-- --------------------
+instance Observable id => Observable1 (TermF id) where observer1 (Term id tt) = send "" (return Term << id .<< tt)
+
+instance Observable1 ArityId
+
+instance (Pretty(TermN id)) => Observable (TermN id) where observer t = t `seq` send (show$ pPrint t) (return t)

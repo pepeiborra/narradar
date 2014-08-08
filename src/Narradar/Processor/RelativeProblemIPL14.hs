@@ -1,11 +1,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverlappingInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances, FlexibleInstances #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 module Narradar.Processor.RelativeProblemIPL14 (RelativeToRegularIPL14(..)) where
 
 import Data.List ((\\))
 import Data.Monoid
+import Data.Typeable
 
 import Narradar.Constraints.Modularity
 import Narradar.Constraints.Syntactic
@@ -15,6 +19,8 @@ import Narradar.Types hiding (goals)
 import Narradar.Types.Problem.InitialGoal
 
 import qualified Data.Term.Family as Family
+
+import Debug.Hoed.Observe
 
 -- --------------------------------------------------------------------
 -- Convert a relative DP problem into a vanilla DP problem (LOPSTR09)
@@ -26,14 +32,17 @@ data RelativeToRegularProofIPL14 =
     RelativeToRegularProof
   | RelativeToGoalDirectedProof
   | RelativeToRegularProofFail RelativeToRegularFailReasonIPL14
-          deriving (Eq, Ord, Show)
+          deriving (Eq, Ord, Show, Typeable, Generic)
 
 data RelativeToRegularFailReasonIPL14 =
     NoHC
   | HCbutNotNonDuplicatingOrHT
   | HTbutNotInitialGoal
   | GoalNotHT
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show, Generic)
+
+instance Observable RelativeToRegularProofIPL14
+instance Observable RelativeToRegularFailReasonIPL14
 
 instance Pretty RelativeToRegularProofIPL14 where
     pPrint RelativeToRegularProof = text "The two systems form a Hierarchical Combination," $$
@@ -65,14 +74,14 @@ instance ( MkProblem base trs
          , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
          , Ord (t(Term t v)), Ord v, Enum v, Rename v
-         , HasId t, Unify t
+         , HasId1 t, Unify t
          , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProofIPL14
          , HasMinimality base
          ) => Processor (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs) where
   type Typ (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs) = base
   type Trs (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs) = trs
-  apply RelativeToRegularIPL14 p@RelativeProblem{relativeTRS}
+  applyO _ RelativeToRegularIPL14 p@RelativeProblem{relativeTRS}
     | isHierarchicalCombination ex relativeTRS
     , isNonDuplicatingTRS relativeTRS
     =  let p' = setMinimality A (getBaseProblem p)
@@ -94,7 +103,7 @@ instance ( MkProblem base trs
          , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
          , Ord (t(Term t v)), Ord v, Enum v, Rename v
-         , HasId t, Unify t
+         , HasId1 t, Unify t
          , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProofIPL14
          , HasMinimality base
@@ -102,7 +111,7 @@ instance ( MkProblem base trs
                         (Problem (Relative trs (InitialGoal t base)) trs) where
   type Typ (RelativeToRegularIPL14 info) (Problem (Relative trs (InitialGoal t base)) trs) = InitialGoal t base
   type Trs (RelativeToRegularIPL14 info) (Problem (Relative trs (InitialGoal t base)) trs) = trs
-  apply RelativeToRegularIPL14 p@RelativeProblem{relativeTRS}
+  applyO _ RelativeToRegularIPL14 p@RelativeProblem{relativeTRS}
     | isHierarchicalCombination ex relativeTRS
     , isNonDuplicatingTRS relativeTRS
     =  let p' = setMinimality A (getBaseProblem p)

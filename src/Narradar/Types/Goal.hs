@@ -5,6 +5,7 @@ module Narradar.Types.Goal where
 
 import Control.Applicative hiding (Alternative(..), many, optional)
 import Control.DeepSeq
+import Control.Monad.Free
 import Data.Bifunctor
 import qualified Data.Set as Set
 import Data.Term.Rules

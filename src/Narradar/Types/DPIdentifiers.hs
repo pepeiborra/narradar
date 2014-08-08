@@ -19,6 +19,7 @@ module Narradar.Types.DPIdentifiers
 import Control.Applicative
 import Control.Arrow (first)
 import Control.DeepSeq
+import Control.Monad.Free
 import qualified Data.ByteString.Char8 as BS
 import Data.Foldable (Foldable(..))
 import Data.Hashable

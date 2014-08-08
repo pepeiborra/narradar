@@ -29,7 +29,7 @@ class HasFiltering  a where filtering  :: a -> Either Int [Int]
 
 data RPO m a = RPO {(>), (>~), (~~) :: a -> a -> m Bool}
 
-symbolRPO :: (id ~ Family.Id t, HasId t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
+symbolRPO :: (id ~ Family.Id t, HasId1 t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
              ,Monad m) => RPO m (Term t v)
 symbolRPO = RPO{..} where
 
@@ -131,7 +131,7 @@ symbolRPO = RPO{..} where
   sel = selectSafe "Narradar.Constraints.RPO"
 
 
-symbolRPOAF :: (id ~ Family.Id t, HasId t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
+symbolRPOAF :: (id ~ Family.Id t, HasId1 t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
              ,Monad m) => RPO m (Term t v)
 symbolRPOAF = RPO{..} where
 

@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveGeneric, DeriveDataTypeable #-}
 module Narradar.Processor.QRewriting where
 
 import Control.Applicative
@@ -9,22 +10,27 @@ import Data.List ((\\))
 import Control.Monad
 import Data.Monoid
 import qualified Data.Term.Family as Family
+import Data.Typeable
 import Narradar.Types
 import Narradar.Framework
 
 import Debug.Hoed.Observe
 
 -- | Transforms a Rewriting Problem into the Q-Rewriting problem with Q the empty set
-data RewritingToQRewriting (info :: * -> *) = RewritingToQRewriting
+data RewritingToQRewriting (info :: * -> *) = RewritingToQRewriting deriving Generic
+instance Observable1 info => Observable (RewritingToQRewriting info)
+
 type instance InfoConstraint (RewritingToQRewriting info) = info
 data RewritingToQRewritingProof =
     RewritingToQRewritingProof
   | IRewritingToQRewritingProof
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance Pretty RewritingToQRewritingProof where
     pPrint RewritingToQRewritingProof  = text "Considering a Q-Rewriting problem with Q empty"
     pPrint IRewritingToQRewritingProof = text "Considering a Q-Rewriting problem with Q = lhs(R)"
+
+instance Observable RewritingToQRewritingProof
 
 instance (FrameworkProblem Rewriting trs
          ,Info info RewritingToQRewritingProof
@@ -32,7 +38,7 @@ instance (FrameworkProblem Rewriting trs
          Processor (RewritingToQRewriting info) (Problem Rewriting trs) where
   type Typ (RewritingToQRewriting info) (Problem Rewriting trs) = QRewriting (TermFor trs)
   type Trs (RewritingToQRewriting info) (Problem Rewriting trs) = trs
-  apply RewritingToQRewriting p =
+  applyO _ RewritingToQRewriting p =
     singleP RewritingToQRewritingProof p $ mapFramework (\_ -> qrewriting) p
 
 instance (FrameworkProblem IRewriting trs
@@ -43,9 +49,9 @@ instance (FrameworkProblem IRewriting trs
          Processor (RewritingToQRewriting info) (Problem IRewriting trs) where
   type Typ (RewritingToQRewriting info) (Problem IRewriting trs) = QRewriting (TermFor trs)
   type Trs (RewritingToQRewriting info) (Problem IRewriting trs) = trs
-  apply RewritingToQRewriting p =
+  applyO (O o oo) RewritingToQRewriting p =
     singleP IRewritingToQRewritingProof p $
-    mapFramework (\m -> QRewriting (QSet $ lhs <$> rules(getR p)) (getMinimality m)) p
+    oo "mapFramework" mapFrameworkO (\m -> QRewriting (QSet $ lhs <$> rules(getR p)) (getMinimality m)) p
 
 instance (FrameworkProblem Rewriting trs
          ,Info info RewritingToQRewritingProof
@@ -59,5 +65,5 @@ instance (FrameworkProblem Rewriting trs
   type Typ (RewritingToQRewriting info) (Problem (InitialGoal t Rewriting) trs) =
     InitialGoal t (QRewriting (Term t (Family.Var trs)))
   type Trs (RewritingToQRewriting info) (Problem (InitialGoal t Rewriting) trs) = trs
-  apply RewritingToQRewriting = liftProcessor RewritingToQRewriting
+  applyO o RewritingToQRewriting = liftProcessor o RewritingToQRewriting
 

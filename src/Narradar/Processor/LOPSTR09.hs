@@ -74,7 +74,7 @@ instance (gid ~ DPIdentifier (GenId id)
     type Typ (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id)) =
         Relative (NTRS (DPIdentifier (GenId id))) (InitialGoal (TermF (DPIdentifier (GenId id))) (MkNarrowingGen base))
     type Trs (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id)) = NTRS (DPIdentifier (GenId id))
-    apply NarrowingGoalToRelativeRewriting prob@NarrowingGoalProblem{goal=Goal goal_f modes}
+    applyO _ NarrowingGoalToRelativeRewriting prob@NarrowingGoalProblem{goal=Goal goal_f modes}
       | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
       = singleP NarrowingGoalToRelativeRewritingProof prob $
         procLOPSTR09 (getR prob) (getP prob) goal_f modes (getBaseProblemFramework prob)
@@ -104,7 +104,7 @@ instance (gid ~ DPIdentifier (GenId id)
  type Typ (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id)) =
      Relative (NTRS (DPIdentifier (GenId id))) (InitialGoal (TermF (DPIdentifier (GenId id))) (MkNarrowingGen base))
  type Trs (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id)) = NTRS (DPIdentifier (GenId id))
- apply NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{..}
+ applyO _ NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{..}
       | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
           = mprod [singleP NarrowingGoalToRelativeRewritingProof prob p | p <- newProblems]
       | otherwise = dontKnow prob NotConstructorBased
@@ -214,7 +214,7 @@ instance Info info SKTransformProof => Processor (SKTransform info) PrologProble
  where
   type Typ (SKTransform info) PrologProblem = InitialGoal (TermF DRP) Narrowing
   type Trs (SKTransform info) PrologProblem = NTRS DRP
-  apply SKTransform p0@PrologProblem{..} =
+  applyO _ SKTransform p0@PrologProblem{..} =
    andP SKTransformProof p0
      [ mkNewProblem (initialGoal [Abstract the_goal] narrowing) sk_rr
          | let sk_rr = prologTRS'' rr (getSignature rr)
@@ -240,7 +240,7 @@ instance (Info info SKTransformProof, PolyHeuristic heu DRP) => Processor (SKTra
  where
   type Typ (SKTransformInf heu info) PrologProblem = Infinitary DRP Rewriting
   type Trs (SKTransformInf heu info) PrologProblem = NTRS DRP
-  apply (SKTransformInf heu) p0@PrologProblem{..} =
+  applyO _ (SKTransformInf heu) p0@PrologProblem{..} =
    andP SKTransformProof p0 =<< sequence
      [  msum (map return probs)
          | goal    <- goals

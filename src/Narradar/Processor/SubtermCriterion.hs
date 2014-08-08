@@ -6,6 +6,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 
 module Narradar.Processor.SubtermCriterion where
 
@@ -14,6 +15,7 @@ import Control.Failure
 import Data.List (insert, maximumBy, sort, sortBy)
 import Data.Maybe (listToMaybe)
 import qualified Data.Set as Set
+import Data.Typeable
 
 import Narradar.Framework
 import Narradar.Framework.GraphViz
@@ -26,10 +28,13 @@ import Narradar.Utils (on)
 
 import Debug.Hoed.Observe
 
-data SubtermCriterion (info :: * -> *) = SubtermCriterion deriving (Eq, Show, Ord)
+data SubtermCriterion (info :: * -> *) = SubtermCriterion deriving (Eq, Show, Ord, Generic)
 data SubtermCriterionProof id = SubtermCriterionProof (Proj id)
                               | SubtermCriterionFailMinimality
-     deriving (Eq, Show, Ord)
+     deriving (Eq, Show, Ord, Generic, Typeable)
+
+instance Observable1 info => Observable (SubtermCriterion info)
+instance Observable1 SubtermCriterionProof
 
 type instance InfoConstraint (SubtermCriterion info) = info
 
@@ -45,7 +50,7 @@ instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
   where
    type Typ (SubtermCriterion info) (Problem Rewriting (NTRS id)) = Rewriting
    type Trs (SubtermCriterion info) (Problem Rewriting (NTRS id)) = NTRS id
-   apply SubtermCriterion p0
+   applyO _ SubtermCriterion p0
      | getMinimalityFromProblem p0 /= M = dontKnow (SubtermCriterionFailMinimality ::SubtermCriterionProof id) p0
      | otherwise = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
@@ -56,7 +61,7 @@ instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
   where
    type Typ (SubtermCriterion info) (Problem IRewriting (NTRS id)) = IRewriting
    type Trs (SubtermCriterion info) (Problem IRewriting (NTRS id)) = NTRS id
-   apply SubtermCriterion p0 = case subtermCriterion (getP p0) of
+   applyO _ SubtermCriterion p0 = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP  (SubtermCriterionProof prj) p0 (setP pTRS' p0)
 
@@ -66,7 +71,7 @@ instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
   where
    type Typ (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id)) = QRewritingN id
    type Trs (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id)) = NTRS id
-   apply SubtermCriterion p0
+   applyO _ SubtermCriterion p0
      | isQInnermost p0 = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP  (SubtermCriterionProof prj) p0 (setP pTRS' p0)
@@ -80,7 +85,7 @@ instance(Info info (Problem base (NTRS id))
   where
    type Typ (SubtermCriterion info) (Problem (MkNarrowingGen base) (NTRS id)) = MkNarrowingGen base
    type Trs (SubtermCriterion info) (Problem (MkNarrowingGen base) (NTRS id)) = NTRS id
-   apply = liftProcessor
+   applyO = liftProcessor
 
 instance (Info info (Problem base (NTRS id))
          ,Processor (SubtermCriterion info) (Problem base (NTRS id))
@@ -89,13 +94,13 @@ instance (Info info (Problem base (NTRS id))
   where
    type Typ (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id)) = InitialGoal (TermF id) base
    type Trs (SubtermCriterion info) (Problem (InitialGoal (TermF id) base) (NTRS id)) = NTRS id
-   apply = liftProcessor
+   applyO = liftProcessor
 
 -- --------------
 -- Implementation
 -- --------------
 
-subtermCriterion :: Ord id => NTRS id -> Maybe (NTRS id, Proj id)
+subtermCriterion :: FrameworkId id => NTRS id -> Maybe (NTRS id, Proj id)
 subtermCriterion pTRS
   | null prjs = Nothing
   | prj <- maximum prjs
@@ -110,8 +115,11 @@ subtermCriterion pTRS
 
 ------------------------
 
-data Kind = Weak | Strict deriving (Eq, Ord, Show)
-data Proj id = Proj {af::AF_ id, kind::[Kind]} deriving Show
+data Kind = Weak | Strict deriving (Eq, Ord, Show, Generic)
+data Proj id = Proj {af::AF_ id, kind::[Kind]} deriving (Generic,Show)
+
+instance Observable Kind
+instance Observable1 Proj
 
 proj af kk = Proj af (sort kk)
 

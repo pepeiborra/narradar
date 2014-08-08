@@ -4,7 +4,7 @@
 {-# LANGUAGE PatternGuards, RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, DeriveGeneric #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -18,14 +18,17 @@ module Narradar.Types.Problem (
 
 import Control.Applicative
 import Control.Arrow (first, second)
+import Control.DeepSeq
 import Control.Exception (assert)
 import Control.Monad.List
 import Control.Monad.State
 import Data.Array as A
+import Data.Coerce
 import Data.Graph as G (Graph, edges, buildG)
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Functor.Constant( Constant(..))
 import Data.Functor.Two
+import GHC.Generics(Generic)
 import Data.Maybe (isJust, isNothing)
 import Data.Monoid
 import qualified Data.Map as Map
@@ -51,27 +54,28 @@ import Narradar.Types.TRS
 import Narradar.Types.Term hiding ((!))
 import Narradar.Framework (FrameworkExtension(..), HasMinimality(..), FrameworkTyp, FrameworkTerm, FrameworkId, FrameworkT, FrameworkVar)
 import Narradar.Framework.Ppr as Ppr
-import Narradar.Utils
+import Narradar.Utils hiding (O)
 import Narradar.Constraints.ICap
 import Narradar.Constraints.Unify
 import Narradar.Constraints.UsableRules
+import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Var
 
 import qualified Data.Term as Family
 import qualified Data.Rule.Family as Family
 import Data.Term.Rules
 
-import Debug.Hoed.Observe (Observable, Observable1)
+import Debug.Hoed.Observe (Observable, Observable1, Observer(..), nilObserver)
 
 type FrameworkProblem p trs =
   ( FrameworkProblem0 p trs
   , InsertDPairs p trs
-  , FrameworkT (Family.TermF trs)
-  , FrameworkVar (Family.Var trs)
-  , FrameworkId (Family.Id trs))
-type FrameworkProblemN typ id = (FrameworkProblem typ (NTRS id), FrameworkId id)
+  , ExpandDPair  p trs
+  , PprTPDB (Problem p trs)
+  )
+type FrameworkProblemN typ id = (FrameworkProblem typ (NTRS id))
+type FrameworkProblemN0 typ id = (FrameworkProblem0 typ (NTRS id))
 type FrameworkN typ t v = FrameworkProblem typ (NarradarTRS t v)
-type FrameworkTRSN typ id = (FrameworkId id, FrameworkN typ (TermF id) Var)
 
 -- -------------------------
 -- Constructing DP problems
@@ -83,9 +87,10 @@ mkNewProblem ::
     ( HasRules trs
     , Family.Rule trs ~ Rule (TermF id) Var
     , Family.Var(Family.Rule trs) ~ Family.Var trs
-    , Ord id
+    , Ord id, NFData id
     , GetPairs typ
     , MkDPProblem typ (NTRS (DPIdentifier id))
+    , RemovePrologId id, Pretty(DPIdentifier id)
     ) => typ -> trs -> NProblem typ (DPIdentifier id)
 mkNewProblem typ trs = mkDPProblem typ  (tRS rr') (tRS pairs) where
 --   rr' :: [Rule (TermF (DPIdentifier id)) Var]
@@ -96,7 +101,7 @@ mkNewProblem typ trs = mkDPProblem typ  (tRS rr') (tRS pairs) where
 -- Mapping over Problem types --
 -- -------------------------- --
 instance IsProblem typ => IsProblem (Constant typ a) where
-  data Problem (Constant typ a) trs = ConstantP {getConstantP :: Problem typ trs}
+  data Problem (Constant typ a) trs = ConstantP {getConstantP :: Problem typ trs} deriving (Generic)
   getFramework = Constant . getFramework . getConstantP
   getR = getR . getConstantP
 instance IsDPProblem typ => IsDPProblem (Constant typ a) where
@@ -104,15 +109,19 @@ instance IsDPProblem typ => IsDPProblem (Constant typ a) where
 instance MkProblem typ trs => MkProblem (Constant typ a) trs where
   mkProblem typ = ConstantP . mkProblem (getConstant typ)
 instance MkDPProblem typ trs => MkDPProblem (Constant typ a) trs where
-  mkDPProblem typ trs = ConstantP . mkDPProblem (getConstant typ) trs
-instance IUsableRules p trs => IUsableRules (Constant p a) trs where
-  iUsableRulesM    typ trs dps s = iUsableRulesM    (getConstant typ) trs dps s
-  iUsableRulesVarM typ trs dps s = iUsableRulesVarM (getConstant typ) trs dps s
-instance NeededRules typ trs => NeededRules (Constant typ a) trs where
-  neededRulesM typ trs dps = neededRulesM (getConstant typ) trs dps
+  mkDPProblemO o typ trs = ConstantP . mkDPProblemO o (getConstant typ) trs
+instance ICap (Problem p trs) => ICap (Problem(Constant p a) trs) where
+  icapO o p s = icapO o (getConstantP p) s
+instance IUsableRules (Problem p trs) => IUsableRules (Problem (Constant p a) trs) where
+  iUsableRulesM    p s = liftM ConstantP . iUsableRulesM    (getConstantP p) s
+  iUsableRulesVarM p s = liftM ConstantP . iUsableRulesVarM (getConstantP p) s
+instance NeededRules (Problem p trs) => NeededRules (Problem (Constant p a) trs) where
+  neededRulesM p = liftM ConstantP . neededRulesM (getConstantP p)
 instance HasMinimality typ => HasMinimality (Constant typ a) where
   getMinimality = getMinimality . getConstant
   setMinimality m = ConstantP . setMinimality m . getConstantP
+instance ( Observable a, ExpandDPair typ trs, Typeable a) => ExpandDPair (Constant typ a) trs where expandDPairO o p i = ConstantP . expandDPairO o (getConstantP p) i
+instance (MkDPProblem typ trs, InsertDPairs typ trs) => InsertDPairs (Constant typ a) trs where insertDPairsO o p = ConstantP . insertDPairsO o (getConstantP p)
 instance Suitable info (Problem typ trs) => Suitable info (Problem (Constant typ a) trs)
 --instance Info info (Problem typ trs) => Info info (Problem (Constant typ a) trs)
 instance Functor(Problem typ) => Functor (Problem(Constant typ a)) where
@@ -121,8 +130,31 @@ instance Traversable (Problem typ) => Foldable (Problem (Constant typ a)) where
   foldMap f = foldMapDefault f
 instance Traversable (Problem typ) => Traversable (Problem (Constant typ a)) where
   traverse f = fmap ConstantP . traverse f . getConstantP
+instance Observable1 (Problem typ) => Observable1 (Problem (Constant typ a))
+instance NFData a => NFData (Constant a x) where rnf (Constant a) = rnf a
+instance PprTPDB (Problem a trs) => PprTPDB (Problem(Constant a x) trs) where pprTPDB = pprTPDB . getConstantP
+deriving instance Eq a => Eq (Constant a x)
+deriving instance Eq (Problem typ trs) => Eq (Problem(Constant typ a) trs)
+deriving instance Ord a => Ord (Constant a x)
+deriving instance Ord (Problem typ trs) => Ord (Problem(Constant typ a) trs)
+deriving instance Pretty a => Pretty(Constant a x)
 
 withPhantomProblemType f = mapFramework getConstant . f . mapFramework Constant
+
+-- --------------------------------------
+-- Comparing DP problems modulo variables
+-- --------------------------------------
+
+instance ( IsDPProblem a, Eq(EqModulo a)
+         , HasRules trs
+         , r ~ Family.Rule trs, GetFresh r, GetMatcher r, GetVars r
+         , v ~ Family.Var r, Enum v, Rename v, Ord v
+         , t ~ Family.TermF r, Traversable t
+         ) => Eq (EqModulo (Problem a trs)) where
+  EqModulo pa == EqModulo pb =
+    EqModulo (rules $ getR pa) == EqModulo (rules $ getR pb) &&
+    EqModulo (rules $ getR pa) == EqModulo (rules $ getP pb) &&
+    EqModulo (getFramework pa) == EqModulo (getFramework pb)
 
 -- ---------------------------
 -- Computing Dependency Pairs
@@ -134,7 +166,7 @@ class GetPairs typ where
               , Family.Id trs ~ DPIdentifier id
               , Family.Id (f (DPIdentifier id)) ~ DPIdentifier id
               , Ord id
-              , Functor t, Foldable t, MapId f, HasId t
+              , Functor t, Foldable t, MapId f, HasId1 t
               ) => typ -> trs -> [Rule t v]
 
 getPairsDefault ::
@@ -142,7 +174,7 @@ getPairsDefault ::
     , Rule (f id) v ~ Family.Rule trs
     , id ~ Family.Id trs
     , id ~ Family.Id (f id)
-    , MapId f, HasId (f id)
+    , MapId f, HasId1 (f id)
     , Foldable (f id), Functor (f id)
     , DPSymbol id
     ) =>
@@ -280,14 +312,15 @@ instance (v ~ Family.Var trs, Ord v, ExtraVars trs, IsDPProblem p
   extraVars p = extraVars (getP p) `mappend` extraVars (getR p)
 
 instance (FrameworkN typ t v
+         ,RemovePrologId(Family.Id t)
          ) =>
     ApplyAF (Problem typ (NarradarTRS t v))
   where
-    apply af p@(getP -> dps@DPTRS{})= mkDPProblem typ trs' dps'
+    apply af p = mkDPProblem typ trs' dps'
      where
        typ  = getFramework p
        trs' = apply af (getR p)
-       dps' = dpTRS typ (trs'  `asTypeOf` getR p) (apply af dps)
+       dps' = apply af (getP p)
 {-
 instance (ApplyAF trs, IsDPProblem p) => ApplyAF (Problem p trs) where
     type AFId (Problem p trs) = AFId trs
@@ -310,11 +343,22 @@ instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) w
 -- Dealing with the pairs in a problem
 -- ------------------------------------
 
-expandDPair :: ( v ~ Var
+class (FrameworkProblem0 typ trs) => ExpandDPair typ trs where
+  expandDPairO :: Observer -> Problem typ trs -> Int -> [RuleFor trs] -> Problem typ trs
+
+expandDPair x = expandDPairO nilObserver x
+
+expandDPairOdefault
+            :: ( v ~ Var
                , FrameworkN typ t v
                ) =>
-               Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
-expandDPair p@(getP -> DPTRS typ dps rr gr (Two unif unifInv) _) i (filter (`notElem` elems dps) . snub -> newdps)
+               Observer -> Problem typ (NarradarTRS t v) -> Int -> [Rule t v] -> Problem typ (NarradarTRS t v)
+
+expandDPairOdefault
+  (O o oo)
+  p@(lowerNTRS.getP -> DPTRS typ dps rr gr (Two unif unifInv) _)
+  i
+  (filter (`notElem` elems dps) . snub -> newdps)
  = runIcap (rules p ++ newdps) $ do
     let dps'     = dps1 ++ dps2 ++ newdps
         l_dps'   = l_dps + l_newdps
@@ -323,19 +367,22 @@ expandDPair p@(getP -> DPTRS typ dps rr gr (Two unif unifInv) _) i (filter (`not
             A.array ((0,0), (l_dps', l_dps'))
                        ([((adjust x,adjust y), sigma) | ((x,y), sigma) <- assocs arr
                                                       , x /= i, y /= i] ++
-                        concat [ [(in1, safeAt "expandPair" arr' in1), (in2, safeAt "expandPair" arr' in2)]
-                                 | j <- new_nodes, k <- [0..l_dps']
-                                 , let in1 = (j,k), let in2 = (k,j)])
+                        concat [ [ (in1, safeAt "expandPair" arr' in1)
+                                 , (in2, safeAt "expandPair" arr' in2)]
+                               | j <- new_nodes
+                               , k <- [0..l_dps']
+                               , let in1 = (j,k)
+                               , let in2 = (k,j)])
         adjust x = if x < i then x else x-1
 
-    Two unif_new unifInv_new <- computeDPUnifiers (getFramework p) (getR p) (listTRS dps')
+    Two unif_new unifInv_new <- oo "compute unifiers" computeDPUnifiersO (setP (listTRS dps') p) setR
                                          -- The use of listTRS here is important ^^
-    let unif'    = mkUnif' unif    unif_new
+    let unif'    = o "mkUnif" mkUnif' unif    unif_new
         unifInv' = mkUnif' unifInv unifInv_new
-        dptrs'   = dpTRS' typ a_dps' rr (Two unif' unifInv')
+        dptrs'   = oo "dpTRS" dpTRSO' typ a_dps' rr (Two (o "unif'" unif') unifInv')
 --      dptrs_new= dpTRS' a_dps' (unif_new :!: unifInv_new)
 
-    let res = setP dptrs' p
+    let res = oo "setP" setPO dptrs' p
 
     assert (isValidUnif p) $
      assert (isValidUnif res) $
@@ -347,24 +394,29 @@ expandDPair p@(getP -> DPTRS typ dps rr gr (Two unif unifInv) _) i (filter (`not
    l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
    l_newdps = length newdps - 1
 
-expandDPair p i newdps = setP (tRS dps') p
+expandDPairOdefault (O o oo) p i newdps = o "expand pair fallthrough case" $ setP (tRS dps') p
   where
     dps'          = dps1 ++ dps2 ++ newdps
     (dps1,_:dps2) = splitAt i (rules $ getP p)
 
 
 class MkDPProblem typ trs => InsertDPairs typ trs where
-    insertDPairs :: Problem typ trs -> trs -> Problem typ trs
+    insertDPairsO :: Observer -> Problem typ trs -> trs -> Problem typ trs
+    insertDPairs  :: Problem typ trs -> trs -> Problem typ trs
+    insertDPairs    = insertDPairsO nilObserver
+    insertDPairsO _ = insertDPairs
 
-insertDPairsDefault p newPairs = setP dps' p
+insertDPairsDefault :: FrameworkProblemN0 typ id =>
+                       Observer -> NProblem typ id -> NTRS id -> NProblem typ id
+insertDPairsDefault o p newPairs = setP dps' p
   where
-   dps' = assert (getR p == rulesUsed (getP p)) $
-          insertDPairs' (getFramework p) (getP p) (rules newPairs)
+   dps' = --assert (Set.fromList(rules $ getR p) == rulesUsed (getP p)) $
+          insertDPairs' o p (rules newPairs)
 
 insertDPairs' ::
-         (FrameworkProblemN framework id
-         ) => framework -> NTRS id -> [Rule (TermF id) Var] -> NTRS id
-insertDPairs' framework p@(DPTRS typ dps rr _ (Two unif unifInv) sig) newPairs
+         (FrameworkProblemN0 typ id
+         ) => Observer -> NProblem typ id -> [Rule (TermF id) Var] -> NTRS id
+insertDPairs' o p@(lowerNTRS.getP -> DPTRS typ dps rr _ (Two unif unifInv) sig) newPairs
     = runIcap (getVars p `mappend` getVars newPairs) $ do
       let (zero,l_dps) = bounds dps
           l_newPairs  = length $ rules newPairs
@@ -380,12 +432,12 @@ insertDPairs' framework p@(DPTRS typ dps rr _ (Two unif unifInv) sig) newPairs
                                  | j <- new_nodes, k <- [zero..l_dps']
                                  , let in1 = (j,k), let in2 = (k,j)])
 
-      Two unif_new unifInv_new <- computeDPUnifiers framework rr (listTRS dps')
+      Two unif_new unifInv_new <- computeDPUnifiersO o (setP (listTRS dps') p) setR
                                -- The use of listTRS here is important ^^
       let unif'    = mkUnif unif unif_new
           unifInv' = mkUnif unifInv unifInv_new
 
-          dptrs'   = dpTRS' typ a_dps' rr (Two unif' unifInv')
+          dptrs'   = dpTRSO' o typ a_dps' rr (Two unif' unifInv')
 
       return dptrs'
 
@@ -393,19 +445,11 @@ insertDPairs' framework p@(DPTRS typ dps rr _ (Two unif unifInv) sig) newPairs
 -- -------------
 -- Sanity Checks
 -- -------------
-isValidUnif :: forall typ p t  v .
-               ( p   ~ Problem typ
-               , Ord v, Enum v, Rename v, Pretty v
-               , Unify t
-               , Traversable p, IsDPProblem typ, Pretty typ
-               , ICap (typ, NarradarTRS t v)
-               , Pretty (Term t v)
-               , Observable (Term t v)
-               , Observable v
-               , Observable typ
-               , Observable1 t
-               ) => p (NarradarTRS t v) -> Bool
-isValidUnif p@(getP -> DPTRS _ dps _ _ (Two unif _) _)
+isValidUnifO :: forall typ p id .
+               ( FrameworkProblemN typ id
+
+               ) => Observer -> NProblem typ id -> Bool
+isValidUnifO o p@(lowerNTRS.getP -> DPTRS _ dps _ _ (Two unif _) _)
   | valid = True -- const True (pPrint (undefined :: Term t v))
   | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
                           text "Problem type:" <+> pPrint (getFramework p) $$
@@ -418,7 +462,8 @@ isValidUnif p@(getP -> DPTRS _ dps _ _ (Two unif _) _)
   where
   liftL = ListT . return
   l     = length (rules $ getP p) - 1
-  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' -> computeDirectUnifiers (getFramework p,rr') (getP p))
+  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' ->
+                             computeDirectUnifiersO o (setR rr' p))
   validUnif = array ( (0,0), (l,l)) $ runIcap p $ runListT $ do
             (x, _ :-> r) <- liftL $ A.assocs dps
             (y, l :-> _) <- liftL $ A.assocs dps

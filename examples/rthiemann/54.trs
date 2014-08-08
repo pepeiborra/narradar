@@ -1,0 +1,7 @@
+(VAR x y)
+(RULES p(s(x)) -> x)
+(PAIRS
+plus(s(x),y) -> plus1(s(x),s(y))
+plus2(x,y) -> plus(x,y)
+plus1(s(x),s(y)) -> plus2(p(s(x)),s(y)))
+(STRATEGY INNERMOST)

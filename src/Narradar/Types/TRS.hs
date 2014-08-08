@@ -11,6 +11,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.TRS where
@@ -28,7 +30,7 @@ import Data.Array.IArray as A (amap)
 import Data.Graph as G (Graph, buildG, edges)
 import Data.Foldable as F (Foldable, toList, sum, foldMap)
 import Data.Functor.Two
-import Data.Maybe (catMaybes, isJust, isNothing)
+import Data.Maybe (fromMaybe, catMaybes, isJust, isNothing)
 import Data.Monoid
 import Data.Map (Map)
 import Data.Set (Set)
@@ -47,12 +49,14 @@ import Narradar.Types.ArgumentFiltering (ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
-import Narradar.Types.Term hiding ((!))
+import Narradar.Types.Signature
+import Narradar.Types.Term hiding ((!), Var)
 import Narradar.Types.Var
 import Narradar.Constraints.ICap
 import Narradar.Constraints.Unify
 import Narradar.Constraints.UsableRules
 import Narradar.Framework
+import Narradar.Framework.Constraints
 import Narradar.Framework.Ppr as Ppr hiding ((<>))
 import Narradar.Utils hiding (O)
 
@@ -64,7 +68,8 @@ import qualified Data.Var.Family as Family
 import Debug.Hoed.Observe
 
 type FrameworkTRS trs =
-  ( IsTRS trs, HasSignature trs, HasRules trs, GetFresh trs, GetVars trs, Observable trs
+  ( IsTRS trs, HasSignature trs, HasRules trs, GetFresh trs
+  , GetVars trs, Typeable trs, Observable trs
   , AF.ApplyAF trs
   , FrameworkTerm (Family.TermF trs) (Family.Var trs)
   , Ord trs
@@ -75,10 +80,14 @@ type FrameworkProblem0 p trs =
   ( FrameworkTyp p
 --  , HasSignature (Problem p id)
   , MkDPProblem p trs
-  , IUsableRules p trs
-  , NeededRules p trs
-  , ICap (p, trs)
+  , IUsableRules (Problem p trs)
+  , NeededRules (Problem p trs)
+  , Ord (Problem p trs)
   , FrameworkTRS trs
+  , NFData p
+  , Typeable p
+  , Observable p
+  , Observable1 (Problem p)
   )
 
 type FrameworkN0 typ t v = FrameworkProblem0 typ (NarradarTRS t v)
@@ -109,44 +118,84 @@ pair2|_____|_____|
 .....|     |     |
 -}
 
-data Comparable where Comparable :: (Typeable a, Eq a) => a -> Comparable deriving (Typeable)
-instance Eq Comparable where Comparable a == Comparable b = cast a == Just b
+data NarradarTRS_ a where
+    TRS       :: () =>
+                 { rulesS :: Set (RuleF a)
+                 , sig    :: Signature (Family.Id a)
+                 } -> NarradarTRS_ a
 
-data NarradarTRSF a where
-    TRS       :: (HasId t, Ord (Term t v)) =>
-                 { rulesS :: Set (Rule t v)
-                 , sig    :: Signature (Family.Id t)
-                 } -> NarradarTRSF (Rule t v)
+    PrologTRS :: (RemovePrologId (Family.Id a)) =>
+                 { rulesByClause :: Map (WithoutPrologId (Family.Id a)) (Set (RuleF a))
+                 , sig           :: Signature (Family.Id a)
+                 } -> NarradarTRS_ a
 
-    PrologTRS :: (HasId t, RemovePrologId (Family.Id t), Ord (Term t v)) =>
-                 { rulesByClause :: Map (WithoutPrologId (Family.Id t)) (Set (Rule t v))
-                 , sig           :: Signature (Family.Id t)
-                 } -> NarradarTRSF (Rule t v)
-
-    DPTRS     :: (HasId t, Ord (Term t v)) =>
-                 { typ       :: Comparable
-                 , dpsA      :: !(Array Int (Rule t v))
-                 , rulesUsed :: NarradarTRSF (Rule t v)
+    DPTRS     :: { typ       :: Comparable
+                 , dpsA      :: !(Array Int (RuleF a))
+                 , rulesUsed :: Set(RuleF a)
                  , depGraph  :: Graph
-                 , unifiers  :: Two (Unifiers t v)
-                 , sig       :: Signature (Family.Id t)
-                 } -> NarradarTRSF (Rule t v)
+                 , unifiers  :: Two (Unifiers a)
+                 , sig       :: Signature (Family.Id a)
+                 } -> NarradarTRS_ a
 
       -- | Used in very few places instead of TRS, when the order of the rules is important
-    ListTRS :: (HasId t, Ord (Term t v)) => [Rule t v] -> Signature (Family.Id t) -> NarradarTRSF (Rule t v)
+    ListTRS :: [RuleF a] -> Signature (Family.Id a) -> NarradarTRS_ a
 
     deriving Typeable
 
 type instance Family.Id     (NarradarTRSF a) = Family.Id a
-type instance Family.Rule   (NarradarTRSF a) = Family.Rule a
+type instance Family.Rule   (NarradarTRSF a) = RuleF a
 type instance Family.Var    (NarradarTRSF a) = Family.Var a
 type instance Family.TermF  (NarradarTRSF a) = Family.TermF a
 
-type Unifiers t v = Array (Int,Int) (Maybe (Two(Substitution t v)))
-type NarradarTRS t v = NarradarTRSF (Rule t v)
+type instance Family.Id     (NarradarTRS_ a) = Family.Id a
+type instance Family.Rule   (NarradarTRS_ a) = RuleF a
+type instance Family.Var    (NarradarTRS_ a) = Family.Var a
+type instance Family.TermF  (NarradarTRS_ a) = Family.TermF a
+
+type instance Family.Id    (Array i x) = Family.Id x
+type instance Family.Rule  (Array i x) = Family.Rule  x
+type instance Family.Var   (Array i x) = Family.Var x
+type instance Family.TermF (Array i x) = Family.TermF x
+
+class (NFData (Family.Var x), NFData(Family.Id x), NFData x, Observable x, HasId x, Ord(Family.Id x)) => NTRSConstraint x
+instance (NFData (Family.Var x), NFData(Family.Id x), NFData x, Observable x, HasId x, Ord(Family.Id x)) => NTRSConstraint x
+
+deriving instance Typeable NTRSConstraint
+
+type NTRSLift x = ( RemovePrologId(Family.Id x), HasSignature x, HasId x, Ord x
+                  , NFData(Family.Var x), NFData(Family.Id x), NFData x, Observable x)
+
+type NarradarTRSRestrictedF constraint = NF constraint NarradarTRS_
+type NarradarTRSF = NarradarTRSRestrictedF NTRSConstraint
+
+lowerNTRS :: forall c f a. ( Ord a, HasId a, HasSignature(RuleF (a))
+                           , c :=># NTRSConstraint
+                           , RemovePrologId(Family.Id(RuleF a))) =>
+             NarradarTRSRestrictedF c (a) -> NarradarTRS_ (a)
+lowerNTRS = lowerNF (fmapNTRS ins) where
+  fmapNTRS :: forall x. c(x) => c (x) :- (NTRSConstraint x) -> (x -> a) -> NarradarTRS_ (x) -> NarradarTRS_ (a)
+  fmapNTRS (Sub Dict) f (TRS rr sig) = TRS rr' sig' where
+      rr'  = Set.map (fmap f) rr
+      sig' = getSignature (rules rr') -- TODO surely this is a signature preserving transformation
+  fmapNTRS (Sub Dict) f (PrologTRS rr sig) = PrologTRS rr' sig' where
+      rr'  = Map.mapKeys fId $ fmap (Set.map (fmap f)) rr
+      fId  = fromMaybe (error "lowerNTRS") . join . fmap removePrologId . getId . f . fromId . outId
+      sig' = getSignature rr' -- TODO surely this is a signature preserving transformation
+  fmapNTRS (Sub Dict) f (ListTRS rr sig) = ListTRS rr' sig' where
+      rr' = fmap2 f rr
+      sig' = getSignature rr' -- TODO surely this is a signature preserving transformation
+  fmapNTRS (Sub Dict) f (DPTRS typ dpsA rulesUsed depGraph unifiers sig) =
+    DPTRS typ dpsA' rulesUsed' depGraph unifiers' sig' where
+      dpsA' = fmap2 f dpsA
+      rulesUsed' = Set.map (fmap f) rulesUsed
+      unifiers' = fmap5 f unifiers
+      sig' = getSignature dpsA' -- TODO surely this is a signature preserving transformation
+
+type Unifiers a = Array (Int,Int) (Maybe (Two(SubstitutionF a)))
+type NarradarTRS t v = NarradarTRSF (Term t v)
 type NTRS id = NarradarTRS (TermF id) Var
 
-instance Eq (NarradarTRS t v) where
+instance (Ord a) => Eq (NarradarTRS_ a) where
     TRS rr1 _       == TRS rr2 _       = rr1 == rr2
     PrologTRS rr1 _ == PrologTRS rr2 _ = rr1 ==  rr2
     DPTRS _ rr1 _ _ _ _ == DPTRS _ rr2 _ _ _ _ = rr1 == rr2
@@ -157,7 +206,10 @@ instance Eq (NarradarTRS t v) where
     rr1@TRS{rulesS} == rr2@DPTRS{dpsA} = rulesS == Set.fromList (elems dpsA)
  -- The rest of cases should not occurr at runtime
 
-instance Ord (NarradarTRS t v) where
+instance (HasSignature a, HasId a, RemovePrologId(Family.Id a), Ord a) =>
+         Eq (NarradarTRSF a) where a == b = lowerNTRS a == lowerNTRS b
+
+instance Ord a => Ord (NarradarTRS_ a) where
     compare (TRS rr1 _)       (TRS rr2 _)       = compare rr1 rr2
     compare (PrologTRS rr1 _) (PrologTRS rr2 _) = compare rr1 rr2
     compare (DPTRS _ rr1 _ _ _ _) (DPTRS _ rr2 _ _ _ _) = compare rr1 rr2
@@ -166,7 +218,10 @@ instance Ord (NarradarTRS t v) where
     compare DPTRS{} PrologTRS{} = GT
     compare PrologTRS{} _       = LT
 
-instance (Ord (Term t v), HasId t, Foldable t) => Monoid (NarradarTRS t v) where
+instance (HasSignature a, HasId a, RemovePrologId(Family.Id a), Ord a) =>
+         Ord (NarradarTRSF a) where compare a b = lowerNTRS a `compare` lowerNTRS b
+
+instance (Ord a, HasSignature a, HasId a) => Monoid (NarradarTRS_ a) where
     mempty                        = TRS mempty mempty
     mappend (TRS r1 _) (TRS r2 _) = let rr = r1 `mappend` r2 in
                                     TRS rr (getSignature rr)
@@ -174,30 +229,46 @@ instance (Ord (Term t v), HasId t, Foldable t) => Monoid (NarradarTRS t v) where
        let rr = r1 `mappend` r2 in PrologTRS rr (getSignature $ mconcat $ Map.elems rr)
     mappend (DPTRS _ dp1 _  _ _ _) (DPTRS _ dp2 _ _ _ _) =
        let dps = elems dp1 `mappend` elems dp2
-       in mkTRS dps
+       in tRS dps
     mappend (TRS (Set.null -> True) _) trs = trs
     mappend trs (TRS (Set.null -> True) _) = trs
     mappend x y = tRS (rules x `mappend` rules y)
 
-instance (Pretty v, Pretty (t(Term t v))) => Pretty (NarradarTRS t v) where
+instance (NTRSLift a) => Monoid (NarradarTRSF a) where
+    mempty = liftNF mempty
+    mappend a b = liftNF (mappend (lowerNTRS a) (lowerNTRS b))
+
+instance (Ord a, Pretty a) => Pretty (NarradarTRS_ a) where
     pPrint trs@TRS{}       = vcat $ map pPrint $ rules trs
     pPrint trs@DPTRS{}     = vcat $ map pPrint $ rules trs
     pPrint trs@PrologTRS{} = vcat $ map pPrint $ rules trs
     pPrint (ListTRS  rr _) = vcat $ map pPrint rr
+instance (HasId a, HasSignature a, Ord a, Pretty a, RemovePrologId(Family.Id a)) => Pretty(NarradarTRSF a) where pPrint = pPrint . lowerNTRS
 
-instance (NFData (t(Term t v)), NFData (Family.Id t), NFData v) => NFData (NarradarTRS t v) where
+instance Foldable NarradarTRS_ where
+    foldMap f (TRS rr _) = foldMap2 f rr
+    foldMap f (PrologTRS rr _) = foldMap3 f rr
+    foldMap f (DPTRS typ dps rr g unif sig) = foldMap2 f rr
+    foldMap f (ListTRS rr _) = foldMap2 f rr
+
+instance (NFData a, NFData(Family.Id a), NFData(Family.Var a)) => NFData (NarradarTRS_ a) where
     rnf (TRS rr sig) = rnf rr `seq` rnf sig `seq` ()
-    rnf (DPTRS typ dps rr g unif sig) = typ `seq` rnf dps `seq` rnf rr `seq` rnf sig `seq` rnf unif `seq` rnf sig
+    rnf (DPTRS typ dps rr g unif sig) = typ `seq` rnf dps `seq` rnf rr `seq` rnf g `seq` rnf sig `seq` rnf unif `seq` rnf sig
 --    rnf (PrologTRS rr sig)    = rnf rr
+
+instance (NFData a, NFData(Family.Id a), NFData(Family.Var a)) => NFData (NarradarTRSF a) where rnf (FMap f x) = rnf f `seq` rnf x
 
 instance (NFData a, NFData b) => NFData (a :!: b) where
     rnf (a :!: b) = rnf a `seq` rnf b `seq` ()
 
-instance Observable1 NarradarTRSF where
+instance Observable1 (NarradarTRS_) where
   observer1 (ListTRS rr sig) = send "ListTRS" (return (`ListTRS` sig) << rr)
   observer1 (TRS rr sig) = send "TRS" (return (`TRS` sig) << rr)
   observer1 (DPTRS typ dpsA ru dg unif sig)
-     = send "DPTRS" (return (\dpsA -> DPTRS typ dpsA ru dg unif sig) << dpsA)
+     = send "DPTRS" (return (\typ dpsA dg unif -> DPTRS typ dpsA ru dg unif sig) << typ << dpsA << dg << unif)
+
+instance Observable1 (NarradarTRSF) where
+  observer1 (FMap f trs) = FMap f . observer1 trs
 
 isNarradarTRS :: NarradarTRS t v -> NarradarTRS t v
 isNarradarTRS = id
@@ -206,34 +277,43 @@ isNarradarTRS = id
 isNarradarTRS1 :: NarradarTRS (t id) v -> NarradarTRS (t id) v
 isNarradarTRS1 = id
 
-listTRS :: (HasId t, Foldable t, Ord (Term t v)) => [Rule t v] -> NarradarTRS t v
-listTRS rr = ListTRS rr (getSignature rr)
-
-narradarTRStoSet :: NarradarTRS t v -> Set (Rule t v)
-narradarTRStoSet TRS{..} = rulesS
-narradarTRStoSet (ListTRS rr _) = Set.fromList rr
+listTRS :: (HasId1 t, Foldable t, NTRSLift (Term t v)
+           ) => [Rule t v] -> NarradarTRS t v
+listTRS rr = liftNF $ ListTRS rr (getSignature rr)
 
 -- ------------------------------
 -- Data.Term framework instances
 -- ------------------------------
-instance HasRules (NarradarTRS t v) where
+instance Ord a => HasRules (NarradarTRS_ a) where
   rules(TRS       rr _)       = toList rr
   rules(PrologTRS rr _)       = toList $ mconcat (Map.elems rr)
   rules(DPTRS   _ rr _ _ _ _) = elems rr
   rules(ListTRS   rr _)       = rr
+instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)
+         ) => HasRules(NarradarTRSF a) where rules = rules . lowerNTRS
 
-instance Ord (Family.Id t) => HasSignature (NarradarTRS t v) where
+instance (Ix i, HasSignature [a]) => HasSignature (Array i a) where
+    getSignature = getSignature . toList
+
+instance Ord (Family.Id a) => HasSignature (NarradarTRS_ a) where
     getSignature (TRS           _ sig) = sig
     getSignature (PrologTRS     _ sig) = sig
     getSignature (DPTRS _ _ _ _ _ sig) = sig
     getSignature (ListTRS rr      sig) = sig
+instance (Ord a, HasSignature a, NTRSConstraint a, RemovePrologId(Family.Id(NarradarTRSF a))
+         ) => HasSignature (NarradarTRSF a) where
+    getSignature = getSignature . lowerNTRS
 
-instance (Ord (Term t v), Foldable t, HasId t) => IsTRS (NarradarTRS t v) where
+instance (HasId a, HasSignature a, Ord a) => IsTRS (NarradarTRS_ a) where
   tRS  rr = TRS (Set.fromList rr) (getSignature rr)
+instance (NTRSLift a
+         ) => IsTRS (NarradarTRSF a) where tRS = liftNF . tRS
 
-instance (Ord v, Functor t, Foldable t) => GetVars (NarradarTRS t v) where getVars = getVars . rules
+instance (GetVars a, Ord a) => GetVars (NarradarTRS_ a) where getVars = getVars . rules
+instance (GetVars a, Ord a, RemovePrologId(Family.Id a), HasId a, HasSignature a) => GetVars (NarradarTRSF a) where getVars = getVars . lowerNTRS
 
-instance (Traversable t, Ord v, GetFresh (Set (Rule t v))) => GetFresh (NarradarTRS t v) where
+instance (GetFresh a, Ord(Family.Var a), Ord a
+         ) => GetFresh (NarradarTRS_ a) where
     getFreshM (TRS rr sig) = getFresh (toList rr) >>= \rr' -> return (TRS (Set.fromDistinctAscList rr') sig)
     getFreshM (ListTRS rr sig) = getFresh rr >>= \rr' -> return (ListTRS rr' sig)
     getFreshM (PrologTRS (unzip . Map.toList -> (i, rr)) sig) =
@@ -241,128 +321,175 @@ instance (Traversable t, Ord v, GetFresh (Set (Rule t v))) => GetFresh (Narradar
     getFreshM (DPTRS typ dps_a rr g uu sig) = getFresh (elems dps_a) >>= \dps' ->
                                        let dps_a' = listArray (bounds dps_a) dps'
                                        in return (DPTRS typ dps_a' rr g uu sig)
+instance (GetFresh a, NTRSLift a, Ord(Family.Var a)) => GetFresh(NarradarTRSF a) where
+  getFreshM = liftM liftNF . getFreshM . lowerNTRS
+
+instance (Ix i, GetFresh a) => GetFresh(Array i a) where getFreshM = getFreshMdefault
 -- -------------------
 -- Narradar instances
 -- -------------------
 
-class IUsableRules typ (NTRS id) => NUsableRules typ id
-instance IUsableRules typ (NTRS id) => NUsableRules typ id
+type NCap typ id = ICap(Problem typ (NTRS id))
+type NUsableRules typ id = IUsableRules(Problem typ id)
 
-class NeededRules typ (NTRS id) => NNeededRules typ id
-instance NeededRules typ (NTRS id) => NNeededRules typ id
+instance (Ord a, Size a) => Size (NarradarTRS_ a) where size = F.sum . fmap size . rules
 
-class ICap (typ, NTRS id) => NCap typ id
-instance ICap (typ, NTRS id) => NCap typ id
-
-
-instance (Functor t, Foldable t) => Size (NarradarTRS t v) where size = F.sum . fmap size . rules
-
-instance (Ord (Term t v), ICap [Rule t v]) => ICap (NarradarTRS t v) where
+instance (Ord (Term t v), ICap [Rule t v], RemovePrologId (Family.Id t), Ord(Family.Id t), HasId1 t, Foldable t
+         ) => ICap (NarradarTRS t v) where
   icapO o trs = icapO o (rules trs)
 
-instance (Ord (Term t v), Foldable t, ApplyAF (Term t v)) => ApplyAF (NarradarTRS t v) where
+instance (Ord a, HasId a, HasSignature a, ApplyAF a) => ApplyAF (NarradarTRS_ a) where
   apply af (PrologTRS rr _)    = prologTRS' ((Map.map . Set.map) (AF.apply af) rr)
   apply af trs@TRS{}           = tRS$ AF.apply af <$$> rules trs
   apply af (DPTRS _ a rr g uu _) = tRS (AF.apply af <$$> toList a) -- cannot recreate the graph without knowledge of the problem type
   apply af (ListTRS rr _)      = let rr' = AF.apply af <$$> rr in ListTRS rr' (getSignature rr')
 
-instance (Functor t, Foldable t, Ord v) =>  ExtraVars (NarradarTRS t v) where
+instance (ApplyAF a, NTRSLift a) => ApplyAF(NarradarTRSF a) where
+  apply af = liftNF . AF.apply af . lowerNTRS
+
+instance (GetVars a, Ord(Family.Var a)) =>  ExtraVars (NarradarTRS_ a) where
   extraVars (TRS rr _)        = extraVars rr
   extraVars (PrologTRS rr _)  = extraVars rr
   extraVars (DPTRS _ a _ _ _ _) = extraVars (A.elems a)
-
-instance (ICap (typ, NarradarTRS t v), Ord (Term t v), Foldable t, HasId t) => ICap (typ, [Rule t v]) where
-  icapO o (typ, p) = icapO o (typ, mkTRS p)
+instance (GetVars a, Ord(Family.Var a), HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)
+         ) => ExtraVars (NarradarTRSF a) where extraVars = extraVars . lowerNTRS
 
 -- ------------
 -- Constructors
 -- ------------
-mkTRS :: (Ord(Term t v), Foldable t, HasId t) => [Rule t v] -> NarradarTRS t v
-mkTRS = tRS
+mkTRS :: (Foldable t, HasId1 t, NTRSLift(Term t v)) => [Rule t v] -> NarradarTRS t v
+mkTRS = liftNF . tRS
 
-tRS' rr sig  = TRS (Set.fromList rr) sig
+tRS' rr sig  = liftNF $ TRS (Set.fromList rr) sig
 
-prologTRS ::  (Ord (Term t v), RemovePrologId (Family.Id t), Foldable t, HasId t) =>
+prologTRS ::  ( Foldable t, HasId1 t, NTRSLift(Term t v)) =>
               [(WithoutPrologId (Family.Id t), Rule t v)] -> NarradarTRS t v
-prologTRS rr = prologTRS' (Map.fromListWith mappend $ map (second Set.singleton) rr)
+prologTRS rr = liftNF $ prologTRS' (Map.fromListWith mappend $ map (second Set.singleton) rr)
 
-prologTRS' :: (Ord (Term t v), RemovePrologId (Family.Id t), Foldable t, HasId t) =>
-              Map (WithoutPrologId (Family.Id t)) (Set(Rule t v)) -> NarradarTRS t v
+prologTRS' :: (HasId a, HasSignature a, RemovePrologId(Family.Id a)) =>
+              Map (WithoutPrologId (Family.Id a)) (Set(RuleF a)) -> NarradarTRS_ a
 prologTRS' rr = PrologTRS rr (getSignature rr)
 
 narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 
-dpTRS :: ( FrameworkN0 typ t v
+dpTRS :: ( rules ~ NarradarTRS t v
+         , pairs ~ NarradarTRS t v
+         , Observable1 (Problem typ)
+         , RemovePrologId (Family.Id t)
+         , Eq (Problem typ rules)
+         , IUsableRules (Problem typ rules)
+         , NeededRules (Problem typ rules)
+         , FrameworkTyp typ
+         , FrameworkTerm t v
+         , MkDPProblem typ rules
          ) =>
-         typ -> NarradarTRS t v -> NarradarTRS t v -> NarradarTRS t v
-dpTRS = dpTRSO nilObserver
+          (rules -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
+         -> (pairs -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
+         -> Problem typ (NarradarTRS t v)
+         -> Problem typ (NarradarTRS t v)
 
--- | Assumes that the rules have already been renamed apart
-dpTRSO :: ( FrameworkN0 typ t v
-         ) =>
-         Observer -> typ -> NarradarTRS t v -> NarradarTRS t v -> NarradarTRS t v
+-- | Takes a Narradar problem and normalizes it, ensuring that the TRS is a consistent DPTRS
+--   A consistent DPTRS is that in which the graph and unifiers are consistent with
+--   the pairs and rules in the context of the problem type
+dpTRS x = dpTRSO nilObserver x
 
-dpTRSO (O o oo) typ trs dps = dpTRS' typ dps_a (tRS trs') unifs
-    where
-      (trs',dps') = runVariant $ do
-        trs' <- mapM getFresh $ rules trs
-        dps' <- mapM getFresh $ snub (rules dps)
-        return (trs', dps')
-      dps_a   = listArray (0, length dps' - 1) dps'
-      unifs   = runIcap (trs' ++ dps')
-                        (oo "computeDirectUnifiers" computeDPUnifiersO typ (listTRS trs')
-                                                                           (listTRS dps'))
+dpTRSO :: ( rules ~ NarradarTRS t v
+          , pairs ~ NarradarTRS t v
+          , Observable1 (Problem typ)
+          , RemovePrologId(Family.Id t)
+         , IUsableRules (Problem typ rules)
+         , NeededRules (Problem typ rules)
+         , Eq (Problem typ rules)
+         , FrameworkTyp typ
+         , FrameworkTerm t v
+         , FrameworkVar v
+         , MkDPProblem typ rules
+          ) =>
+          Observer
+       -> (rules -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
+         -> (pairs -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
+         -> Problem typ (NarradarTRS t v)
+         -> Problem typ (NarradarTRS t v)
+
+-- | Takes a Narradar problem and normalizes it, ensuring that the TRS is a consistent DPTRS
+--   A consistent DPTRS is that in which the graph and unifiers are consistent with
+--   the pairs and rules in the context of the problem type
+dpTRSO (O o oo) updateRules updatePairs p = updatePairs dps' $ updateRules trs' p
+  -- updateRules and updatePairs are versions of Problem.setR and Problem.setP resp.
+  -- which do not perform any checks for renormalization. Otherwise we'd have a circular
+  -- dependency
+  where
+        rr = rules $ getR p
+        pp = snub $ rules $ getP p
+        trs' = tRS rr
+        dpsA   = listArray (0, length pp - 1) pp
+        temp_p = updatePairs (listTRS pp) $ updateRules trs' p
+        -- the use of listTRS here ^ is important to preserve the ordering of pairs
+        unifs  = runIcap (rr ++ pp)
+                         (oo "computeDirectUnifiers" computeDPUnifiersO temp_p updateRules)
+        dps' = oo "dpTRS'" dpTRSO' (Comparable $ getFramework p) dpsA trs' (o "unifs" unifs)
 
 
-dpTRS' :: ( Eq typ, Typeable typ, Foldable t, HasId t, Ord (Term t v)) =>
-         typ -> Array Int (Rule t v) -> NarradarTRS t v -> Two (Unifiers t v) -> NarradarTRS t v
-dpTRS' typ dps rr unifiers = DPTRS (Comparable typ) dps rr (getIEDGfromUnifiers unifiers) unifiers (getSignature $ elems dps)
+dpTRSO' :: ( Foldable t, HasId1 t
+           , Observable v, Observable1 t
+           , NTRSLift (Term t v)
+           , HasRules rules, Family.Rule rules ~ Rule t v
+           ) =>
+         Observer -> Comparable -> Array Int (Rule t v) -> rules -> Two (Unifiers(Term t v)) -> NarradarTRS t v
+dpTRSO' (O o oo) typ dps rr unifiers =
+  liftNF $ DPTRS typ dps (Set.fromList $ rules rr)
+                         (o "dg" $ getIEDGfromUnifiers unifiers)
+                         unifiers
+                         (getSignature $ elems dps)
 
 
 -- ----------
 -- Functions
 -- ----------
 
-mapNarradarTRS :: (Ord (Term t v), Ord (Term t' v), Foldable t', HasId t') =>
-                  (Term t v -> Term t' v) -> NarradarTRS t v -> NarradarTRS t' v
-mapNarradarTRS f (TRS rr sig) = let rr' = Set.map (fmap f) rr in TRS rr' (getSignature rr')
-mapNarradarTRS f (PrologTRS rr sig) = error "mapNarradarTRS: PrologTRS - sorry, can't do it"
-                                  -- prologTRS (Map.mapKeys f' $ Map.map (fmap f) rr)where f' id = let id' = f (term
-mapNarradarTRS f (DPTRS typ dps rr g uu _)
-   = let dps' = fmap2 f dps
-         rr'  = mapNarradarTRS f rr
-     in DPTRS typ dps' rr' g (fmap5 f uu) (getSignature $ A.elems dps')
+mapNarradarRules f = liftNF . mapNarradarRules' f . lowerNTRS
 
-mapNarradarTRS' :: (Ord (Term t v), Ord (Term t' v), Foldable t', HasId t') =>
-                   (Term t v -> Term t' v) -> (Rule t v -> Rule t' v) -> NarradarTRS t v -> NarradarTRS t' v
-mapNarradarTRS' _ fr (TRS rr sig) = let rr' = Set.map fr rr in TRS rr' (getSignature rr')
-mapNarradarTRS' _ fr (PrologTRS rr sig) = error "mapNarradarTRS': PrologTRS - sorry, can't do it"
+mapNarradarRules' :: (Ord (Term t v), HasId1 t, Foldable t, Ord(Family.Id t)) =>
+                    (Rule t v -> Rule t v) -> NarradarTRS_ (Term t v) -> NarradarTRS_ (Term t v)
+mapNarradarRules' fr (TRS rr sig) = let rr' = Set.map fr rr in TRS rr' (getSignature rr')
+mapNarradarRules' fr (PrologTRS rr sig) = error "mapNarradarTRS': PrologTRS - sorry, can't do it"
                                   -- prologTRS (Map.mapKeys f' $ Map.map (fmap f) rr)where f' id = let id' = f (term
-mapNarradarTRS' ft fr (DPTRS typ dps rr g uu _)
+mapNarradarRules' fr (DPTRS typ dps rr g uu _)
    = let dps' = fmap fr dps
-         rr'  = mapNarradarTRS' ft fr rr
-     in DPTRS typ dps' rr' g (fmap5 ft uu) (getSignature $ A.elems dps')
+         rr'  = Set.map fr rr
+     in DPTRS typ dps' rr' g uu (getSignature $ A.elems dps')
 
-filterNarradarTRS :: Foldable t => (Rule t v -> Bool) -> NarradarTRS t v -> NarradarTRS t v
-filterNarradarTRS p (TRS rr sig) = mkTRS (filter p (Set.toList rr))
+filterNarradarTRS :: NTRSLift a => (RuleF a -> Bool) -> NarradarTRSF a -> NarradarTRSF a
+filterNarradarTRS f = liftNF . tRS . filter f . rules . lowerNTRS
 
-isDPTRS :: NarradarTRSF a -> Bool
-isDPTRS DPTRS{} = True; isDPTRS _ = False
+narradarTRStoSet :: (Ord a, HasSignature a, HasId a, RemovePrologId (Family.Id a)) => NarradarTRSF a -> Set (RuleF a)
+narradarTRStoSet (lowerNTRS -> TRS{..}) = rulesS
+narradarTRStoSet (lowerNTRS -> ListTRS rr _) = Set.fromList rr
 
-restrictTRS :: Foldable t => NarradarTRS t v -> [Int] -> NarradarTRS t v
-restrictTRS (TRS rr _) indexes = let rr' = Set.fromList (selectSafe "restrictTRS 1" indexes (toList rr))
-                                   in TRS rr' (getSignature rr')
-restrictTRS (PrologTRS rr _) indexes = let rr'  = Map.fromList (selectSafe "restrictTRS 2" indexes (Map.toList rr))
-                                           sig' = getSignature (Map.elems rr')
-                                       in PrologTRS rr' (getSignature rr')
+isDPTRS :: (HasId a, HasSignature a, Ord a, RemovePrologId (Family.Id a)) => NarradarTRSF a -> Bool
+isDPTRS (lowerNTRS -> DPTRS{}) = True; isDPTRS _ = False
 
-restrictTRS (DPTRS typ dps rr gr unif _) indexes
-  = DPTRS typ dps' rr gr' unif' (getSignature $ elems dps')
+restrictTRS :: (Foldable t, HasId1 t
+               ,NTRSLift(Term t v)
+               ) => NarradarTRS t v -> [Int] -> NarradarTRS t v
+restrictTRS = restrictTRSO nilObserver
+
+restrictTRSO :: ( Foldable t, HasId1 t, NTRSLift(Term t v)
+                ) => Observer -> NarradarTRS t v -> [Int] -> NarradarTRS t v
+restrictTRSO (O o oo) (lowerNTRS -> TRS rr _) indexes = let rr' = Set.fromList (selectSafe "restrictTRS 1" indexes (toList rr))
+                                           in mkTRS (toList rr')
+restrictTRSO (O o oo) (lowerNTRS -> PrologTRS rr _) indexes =
+                                           let rr'  = Map.fromList (selectSafe "restrictTRS 2" indexes (Map.toList rr))
+                                               sig' = getSignature (Map.elems rr')
+                                           in liftNF $ PrologTRS rr' (getSignature rr')
+
+restrictTRSO (O o oo) (lowerNTRS -> DPTRS typ dps rr gr unif _) indexes
+  = liftNF $ DPTRS typ dps' rr gr' unif' (getSignature $ elems dps')
   where
-   newIndexes = Map.fromList (zip indexes [0..])
-   nindexes   = length indexes -1
+   newIndexes = o "newIndexes" $ Map.fromList (zip indexes [0..])
+   nindexes   = length indexes - 1
    dps'       = extractIxx dps indexes `asTypeOf` dps
-   gr'        = A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
+   gr'        = o "gr'" $ A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
 
    extractIxx :: Array Int a -> [Int] -> Array Int a
    extractIxx arr nodes = A.listArray (0, length nodes - 1) [safeAt "restrictTRS" arr n | n <- nodes]
@@ -374,71 +501,55 @@ restrictTRS (DPTRS typ dps rr gr unif _) indexes
                                        , Just x' <- [Map.lookup x newIndexes]
                                        , Just y' <- [Map.lookup y newIndexes]]
 
-dpUnify, dpUnifyInv :: NarradarTRS t v -> Int -> Int -> Maybe (Substitution t v)
-dpUnify    (DPTRS _ _ _ _ (Two unifs _) _) l r = item1 <$> safeAt "dpUnify" unifs (r,l)
-dpUnifyInv (DPTRS _ _ _ _ (Two _ unifs) _) l r = item1 <$> safeAt "dpUnifyInv" unifs (r,l)
+dpUnify, dpUnifyInv :: (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) =>
+                        NarradarTRSF a -> Int -> Int -> Maybe (Two(SubstitutionF a))
+dpUnify    (lowerNTRS -> DPTRS _ _ _ _ (Two unifs _) _) l r = safeAt "dpUnify"    unifs (r,l)
+dpUnifyInv (lowerNTRS -> DPTRS _ _ _ _ (Two _ unifs) _) l r = safeAt "dpUnifyInv" unifs (r,l)
 
-rulesArray :: NarradarTRS t v -> A.Array Int (Rule t v)
-rulesArray (DPTRS _ dps _ _ _ _) = dps
-rulesArray (TRS rules _)   = listArray (0, Set.size rules - 1) (Set.toList rules)
+rulesArray :: (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) =>
+              NarradarTRSF a -> A.Array Int (RuleF a)
+rulesArray (lowerNTRS -> DPTRS _ dps _ _ _ _) = dps
+rulesArray (lowerNTRS -> TRS rules _)   = listArray (0, Set.size rules - 1) (Set.toList rules)
 
-rulesGraph :: NarradarTRSF a -> Graph
-rulesGraph (DPTRS _ _ _ g _ _) = g
+rulesGraph :: (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => NarradarTRSF a -> Graph
+rulesGraph (lowerNTRS -> DPTRS _ _ _ g _ _) = g
 rulesGraph _ = error "rulesGraph: only DP TRSs carry the dependency graph"
 
-
-computeDPUnifiers :: forall unif typ trs t v term m.
-                     ( unif ~ Unifiers t v
-                     , term ~ Term t v
-                     , t ~ Family.TermF trs
-                     , v ~ Family.Var m
-                     , v ~ Family.Var trs
-                     , Rule t v ~ Family.Rule trs
-                     , FrameworkProblem0 typ trs
-                     , Observable1 m
-                     , MonadVariant m) =>
-                     typ -> trs -> trs -> m(Two unif)
 computeDPUnifiers x = computeDPUnifiersO nilObserver x
 
-computeDPUnifiersO :: forall unif typ trs t v term m.
-                     ( unif ~ Unifiers t v
+computeDPUnifiersO :: forall unif typ trs t v term m rules.
+                     ( unif ~ Unifiers (Term t v)
                      , term ~ Term t v
                      , t ~ Family.TermF trs
                      , v ~ Family.Var m
                      , v ~ Family.Var trs
                      , Rule t v ~ Family.Rule trs
-                     , FrameworkProblem0 typ trs
+                     , rules ~ trs
+                     , IsTRS trs, HasRules trs, GetFresh trs
+                     , FrameworkTyp typ
+                     , FrameworkTerm (Family.TermF trs) (Family.Var trs)
+                     , MkDPProblem typ trs
+                     , Eq (Problem typ trs)
+                     , ICap (Problem typ trs)
+                     , IUsableRules (Problem typ trs)
+                     , NeededRules  (Problem typ trs)
+                     , Observable1  (Problem typ)
                      , Observable1 m
+                     , Observable trs
                      , MonadVariant m) =>
-                     Observer -> typ -> trs -> trs -> m(Two unif)
-computeDPUnifiersO o typ trs dps = do
-   unif    <- computeDirectUnifiersO  o (typ, trs) dps
-   unifInv <- computeInverseUnifiersO o (typ, trs) dps
-
+                     Observer
+                     -> Problem typ trs
+                     -> (rules -> Problem typ trs -> Problem typ trs)
+                     -> m(Two unif)
+computeDPUnifiersO (O o oo) p updateRules = do
+   unif    <- oo "direct unifiers"  computeDirectUnifiersO  p
+   unifInv <- oo "inverse unifiers" computeInverseUnifiersO p updateRules
    return (Two unif unifInv)
 
-
-computeDirectUnifiers :: forall unif typ trs t v term m.
-                     ( unif ~ Unifiers t v
-                     , term ~ Term t v
-                     , t ~ Family.TermF trs
-                     , v ~ Family.Var m
-                     , v ~ Family.Var trs
-                     , Rule t v ~ Family.Rule trs
-                     , Ord v, Unify t
-                     , HasRules trs, GetFresh trs
-                     , ICap (typ, trs)
-                     , Pretty (Term t v), Pretty v
-                     , Observable (Term t v), Observable trs, Observable typ
-                     , MonadVariant m
-                     , Observable v
-                     , Observable1 m
-                     , Observable1 t) =>
-                     (typ, trs) -> trs -> m unif
 computeDirectUnifiers x = computeDirectUnifiersO nilObserver x
 
 computeDirectUnifiersO :: forall unif typ trs t v term m.
-                     ( unif ~ Unifiers t v
+                     ( unif ~ Unifiers (Term t v)
                      , term ~ Term t v
                      , t ~ Family.TermF trs
                      , v ~ Family.Var m
@@ -446,25 +557,31 @@ computeDirectUnifiersO :: forall unif typ trs t v term m.
                      , Rule t v ~ Family.Rule trs
                      , Ord v, Unify t
                      , HasRules trs, GetFresh trs
-                     , ICap (typ, trs)
+                     , IsDPProblem typ
+                     , ICap (Problem typ trs)
                      , Pretty (Term t v), Pretty v
                      , Observable (Term t v), Observable trs, Observable typ
                      , MonadVariant m
                      , Observable v
                      , Observable1 m
-                     , Observable1 t) =>
-                     Observer -> (typ, trs) -> trs -> m unif
-computeDirectUnifiersO (O o oo) p_f (rules -> the_dps) =
-   let doOne (O o _) (x, s:->t) (y, u:->v) = do
+                     , Observable1 t
+                     ) =>
+                     Observer -> Problem typ trs -> m unif
+computeDirectUnifiersO (O o oo) p_f =
+  let the_dps = rules $ getP p_f
+      ldps  = length the_dps - 1
+      doOne (O o _) (x, s:->t) (y, u:->v) = do
          (_:->t'', u1) <- runMEnv $ o "getFreshM"  getFreshM (s:->t)
          (u':->v', u2) <- runMEnv $ o "getFreshM2" getFreshM (u:->v)
-         t'            <- oo "icap" icapO p_f [s,u] t''
+         t'            <- icap p_f [s,u] t''
          let sigma = o "unify" unify u' t'
                 -- pprTrace (vcat [text "unify" <+> (u <+> text "with" <+> t')
                 --                ,parens (text "icap" <+> (rules(snd p_f) $$ t))
                 --                ,equals <+> unifier]) (return ())
-         return ((x,y), fmap (\sigma -> Two (u1<>sigma) (u2<>sigma)) sigma)
-       ldps  = length the_dps - 1
+         return ((x,y), fmap (\sigma -> Two (o "u1" u1 <> o "sigma" sigma)
+                                            (o "u2" u2 <> sigma)
+                             )
+                             sigma)
    in do
      unif <- runListT $ do
                 rule1 <- liftL $ zip [0..] the_dps
@@ -473,30 +590,37 @@ computeDirectUnifiersO (O o oo) p_f (rules -> the_dps) =
      return $ array ( (0,0), (ldps, ldps) ) unif
 
 
-computeInverseUnifiersO :: forall unif typ trs t v term m.
-                     ( unif ~ Unifiers t v
+computeInverseUnifiersO :: forall unif typ trs t v term m rules.
+                     ( unif ~ Unifiers (Term t v)
                      , term ~ Term t v
                      , v ~ Family.Var m
                      , v ~ Family.Var trs
                      , t ~ Family.TermF trs
                      , Rule t v ~ Family.Rule trs
-                     , FrameworkProblem0 typ trs
+                     , FrameworkTyp typ
+                     , FrameworkTerm (Family.TermF trs) (Family.Var trs)
                      , MonadVariant m
-                     , Observable1 m) =>
-                     Observer -> (typ, trs) -> trs -> m unif
+                     , Observable1 m
+                     , rules ~ trs, HasRules trs, IsTRS trs
+                     , IUsableRules (Problem typ trs)
+                     ) =>
+                     Observer
+                     -> Problem typ trs
+                     -> (rules -> Problem typ trs -> Problem typ trs)
+                     -> m unif
 --computeInverseUnifiers _ _ | trace "computeInverseUnifiers" False = undefined
-computeInverseUnifiersO (O o oo) (typ, trs) dps = do
-   let ldps  = length (rules dps) - 1
-
+computeInverseUnifiersO (O o oo) p updateR = do
+   let dps   = rules $ getP p
+   let ldps  = length dps - 1
    unif <- runListT $ do
-                (x, s :-> t) <- liftL $ zip [0..] (rules dps)
-                (y, u :-> v) <- liftL $ zip [0..] (rules dps)
-                u_rr <- {-o "usableRules"-} iUsableRulesM typ trs dps [s,u] [t]
-                let p_inv = map swapRule (rules u_rr)
+                (x, s :-> t) <- liftL $ zip [0..] dps
+                (y, u :-> v) <- liftL $ zip [0..] dps
+                u_rr <- {-o "usableRules"-} iUsableRulesM p [s,u] [t]
+                let p_inv = updateR (tRS $ map swapRule (rules $ getR u_rr)) p
                 (s':->t', u1) <- lift (runMEnv $ getFreshM (s:->t))
                 (u':->_,  u2) <- lift (runMEnv $ getFreshM (u:->v))
-                u'' <- lift ({-o"icap"-} icap (typ, tRS p_inv `asTypeOf` trs) [] u')
-                let sigma = {-o "unify"-} unify u'' t'
+                u'' <- lift ({-o"icap"-} icap p_inv [] u')
+                let sigma = {-o "unify"-} Narradar.Constraints.Unify.unify u'' t'
 --                pprTrace (text "unify" <+> l' <+> parens (text "icap" <+> p_inv <+> l)
 --                          <+> text "with" <+> r <+> equals <+> unifier) (return ())
                 return ((x,y), fmap (\sigma -> Two (u1<>sigma) (u2<>sigma)) sigma)
@@ -509,10 +633,12 @@ getIEDGfromUnifiers (Two unif unifInv) = G.buildG (m,n) the_edges where
                    ]
   ((m,_),(n,_)) = bounds unif
 
-getEDGfromUnifiers (Two unif _) = G.buildG (m,n) the_edges where
+getEDGfromUnifiers = getEDGfromUnifiersO nilObserver
+getEDGfromUnifiersO (O o oo) (Two unif _) = G.buildG (m,n) the_edges where
   the_edges = [ xy | (xy, Just _) <- A.assocs unif
                    ]
   ((m,_),(n,_)) = bounds unif
 
 
-instance Pretty (Unifiers t v) where pPrint = pPrint . amap (maybe "N" (const "Y"))
+instance Pretty (Unifiers a) where pPrint = pPrint . amap (maybe "N" (const "Y"))
+

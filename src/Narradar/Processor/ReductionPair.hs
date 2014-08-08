@@ -106,7 +106,7 @@ instance (p0  ~ Problem typ trs, Ord p0, PprTPDB p0
 data AProveReductionPairProof id where
     AProveReductionPairProof :: AF_ id -> [Output] -> AProveReductionPairProof id
     AProveReductionPairFail  :: AProveReductionPairProof id
-
+  deriving (Eq, Ord, Show)
 
 instance Pretty (AProveReductionPairProof id) where
     pPrint _ = text "External: Aprove (Reduction Pair)"

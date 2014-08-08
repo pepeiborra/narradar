@@ -36,7 +36,7 @@ import Narradar.Types.DPIdentifiers
 import Narradar.Types.Goal
 import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
-import Narradar.Types.Problem.Narrowing
+import Narradar.Types.Problem.Narrowing hiding (baseProblem)
 import Narradar.Types.Term
 import Narradar.Framework
 import Narradar.Framework.Ppr
@@ -55,16 +55,16 @@ instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
 instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.Id (Problem p trs)) =>
     MkProblem (Infinitary id p) trs where
   mkProblem (Infinitary af _ base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
-  mapR f (InfinitaryProblem af p) = InfinitaryProblem af (mapR f p)
+  mapRO o f (InfinitaryProblem af p) = InfinitaryProblem af (mapRO o f p)
 
 instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
   getP   (InfinitaryProblem _  p) = getP p
 
 instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
     MkDPProblem (Infinitary id p) trs where
-  mapP f (InfinitaryProblem af p) = InfinitaryProblem af (mapP f p)
-  mkDPProblem (Infinitary af _ base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
-    where p = mkDPProblem base rr dp
+  mapPO o f (InfinitaryProblem af p) = InfinitaryProblem af (mapPO o f p)
+  mkDPProblemO o (Infinitary af _ base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
+    where p = mkDPProblemO o base rr dp
 
 infinitary  g p = Infinitary (mkGoalAF g) bestHeu p
 infinitary' g p = Infinitary g bestHeu p
@@ -116,12 +116,22 @@ instance (Pretty id, PprTPDB (Problem typ trs)) =>
 pprAF af = vcat [ hsep (punctuate comma [ pPrint f <> colon <+> either (pPrint.id) (pPrint.toList) aa | (f, aa) <- xx])
                       | xx <- chunks 3 $ Map.toList $ fromAF af]
 
+-- Framework Extension
+
+instance FrameworkExtension (Infinitary id) where
+  getBaseFramework = baseFramework
+  getBaseProblem   = baseProblem
+  liftProblem   f p = f (baseProblem p) >>= \p0' -> return p{baseProblem = p0'}
+  liftFramework f p = p{baseFramework = f (baseFramework p)}
+  liftProcessorS = liftProcessorSdefault
+
+
 -- Icap
 
-instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (p,trs)) =>
-    ICap (Infinitary id p, trs)
+instance (HasRules trs, Unify (Family.TermF trs), GetVars trs, ICap (Problem p trs)) =>
+    ICap (Problem (Infinitary id p) trs)
   where
-    icapO o (Infinitary{..},trs) = icapO o (baseFramework,trs)
+    icapO = liftIcapO
 
 -- Usable Rules
 
@@ -133,15 +143,34 @@ instance (v ~ Family.Var trs
          ,FrameworkProblem (Infinitary id p) trs
          ,FrameworkProblem p trs
          ) =>
-   IUsableRules (Infinitary id p) trs
+   IUsableRules (Problem (Infinitary id p) trs)
  where
-   iUsableRulesM Infinitary{..} trs dps tt s = do
-      pi_tt <- getFresh (AF.apply pi_PType tt)
-      let it = (baseFramework, trs)
-      trs'  <- f_UsableRulesAF it pi_PType (iUsableRulesVarM baseFramework trs dps) s pi_tt
-      return (tRS $ rules trs')
+   iUsableRulesM p@InfinitaryProblem{..} tt s = do
+      let trs = getR p
+          dps = getP p
+      pi_tt <- getFresh (AF.apply pi tt)
+      assert (Set.null (getVars trs `Set.intersection` getVars tt)) $ return ()
 
-   iUsableRulesVarM Infinitary{..} = iUsableRulesVarM baseFramework
+      let pi_rules = [(AF.apply pi r, r) | r <- rules trs]
+          pi_trs   = AF.apply pi trs
+      --go acc (t:_) | trace ("usableRules acc=" ++ show acc ++ ",  t=" ++ show t) False = undefined
+      let go acc []       = return acc
+          go acc (t:rest) = evalTerm (\v -> iUsableRulesVarM p s v >>= \p' ->
+                                       go (Set.fromList(map EqModulo(rules $ getR p')) `mappend` acc) rest)
+                                     tk t
+            where
+              tk in_t = do
+                t' <- wrap `liftM` (icap (setR pi_trs p) s `T.mapM` in_t)
+                let rr = [ EqModulo rule
+                         | (l:->r, rule) <- pi_rules, not (isVar l)
+                         , t' `unifies` l]
+                    new = Set.difference (Set.fromList rr) acc
+                rhsSubterms <- getFresh (AF.apply pi . rhs . eqModulo <$> F.toList new)
+                go (new `mappend` acc) (mconcat [rhsSubterms, directSubterms t, rest])
+      trs'  <- go mempty tt
+      return $ setR (tRS $ map eqModulo $ F.toList trs') p
+
+   iUsableRulesVarM = liftUsableRulesVarM
 
 {-
 instance (Enum v, Unify t, Ord (Term t v), IsTRS t v trs, GetVars v trs

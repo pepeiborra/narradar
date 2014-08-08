@@ -1,23 +1,23 @@
 (VAR x y z b)
 (RULES
-p(s(x)) → x 
-p(0) → s(0) 
-plus(s(x), y) → plus1(s(x), s(y)) 
-plus1(x, y) → plus2(p(x), y) 
-plus2(x, y) → plus(x, y) 
-plus(0, y) → y 
-minus(s(x), s(y)) → minus(x, y)
-minus(0, x) → 0 
-minus(x, 0) → x 
-minus(x, x) → 0 
-ge(s(x), s(y)) → ge(x, y) 
-ge(0, s(x)) → ff 
-ge(x, 0) → tt 
-div(x, y) → quot(x, y, 0) 
-quot(x, y, z) → if(ge(0, y), ge(x, y), minus(x, y), y, plus(z, s(0))) 
-if(tt, b, x, y, z) → divByZeroError 
-if(ff,b,x,y,z) → if2(b,x,y,z) 
-if2(tt, x, y, z) → quot(x, y, z) 
-if2(ff, x, y, z) → p(z)
+p(s(x)) -> x 
+p(0) -> s(0) 
+plus(s(x), y) -> plus1(s(x), s(y)) 
+plus1(x, y) -> plus2(p(x), y) 
+plus2(x, y) -> plus(x, y) 
+plus(0, y) -> y 
+minus(s(x), s(y)) -> minus(x, y)
+minus(0, x) -> 0 
+minus(x, 0) -> x 
+minus(x, x) -> 0 
+ge(s(x), s(y)) -> ge(x, y) 
+ge(0, s(x)) -> ff 
+ge(x, 0) -> tt 
+div(x, y) -> quot(x, y, 0) 
+quot(x, y, z) -> if(ge(0, y), ge(x, y), minus(x, y), y, plus(z, s(0))) 
+if(tt, b, x, y, z) -> divByZeroError 
+if(ff,b,x,y,z) -> if2(b,x,y,z) 
+if2(tt, x, y, z) -> quot(x, y, z) 
+if2(ff, x, y, z) -> p(z)
 )
 (STRATEGY INNERMOST)

@@ -12,14 +12,17 @@ import Narradar.Types
 
 import qualified Data.Set as Set
 import qualified Data.Term.Family as Family
+import Debug.Hoed.Observe (Observable)
 
 isOrthogonal p = isLeftLinear p && null (criticalPairs p)
 
-isAlmostOrthogonal :: ( HasRules trs
+isAlmostOrthogonal :: ( HasRules trs, GetVars trs
                       , Rule t v ~ Family.Rule trs
+                      , v ~ Family.Var trs
                       , Eq (Term t v)
                       , Unify t
                       , Rename v, Enum v, Ord v
+                      , Observable v, Observable(Term t v)
                       ) => trs -> Bool
 isAlmostOrthogonal p = isLeftLinear p && all isOverlay cps && and[ r1==r2 | (p,r1,r2) <- cps]
     where cps = criticalPairs p
@@ -31,9 +34,12 @@ isOverlay _ = False
 
 isNonOverlapping p = (null . criticalPairs) p
 
-locallyConfluent :: ( HasRules trs, Unify t, Ord (Term t v)
+locallyConfluent :: ( HasRules trs, GetVars trs
+                    , Unify t, Ord (Term t v)
                     , Enum v, Ord v, Rename v
                     , Family.Rule trs ~ RuleF (Term t v)
+                    , Family.Var trs ~ v
+                    , Observable v, Observable(Term t v)
                     ) => trs -> Bool
 locallyConfluent p = (all joinable . criticalPairs) p
   where
@@ -42,25 +48,45 @@ locallyConfluent p = (all joinable . criticalPairs) p
 
     rewritesQuickly t = fmap EqModulo $ listToMaybe $ take 100 $ rewrites (rules p) t
 
-criticalPairs :: (HasRules trs, Rule t v ~ Family.Rule trs, Enum v, Ord v, Rename v, Unify t) =>
+--getOverlay :: Term t v -> Term -> [ (Position, Substitution) ]
+getOverlaysGen subterms l l' =
+  [ (note l_p, sigma)
+  | l_p <- subterms $ annotateWithPos l
+  , not (isVar l_p)
+  , Just sigma <- [unify (dropNote l_p) l']
+  ]
+
+getOverlays x       = getOverlaysGen subterms x
+getProperOverlays x = getOverlaysGen properSubterms x
+
+criticalPairsOfGen subterms (l :-> r) rr =
+  [ (p, updateAt p (const r') l \\ sigma, r \\ sigma)
+  | l' :-> r' <- rr
+  , (p,sigma) <- getOverlaysGen subterms l l'
+  ]
+  where
+    t \\ sigma = applySubst sigma t
+
+properCriticalPairsOf x = criticalPairsOfGen properSubterms x
+criticalPairsOf x = criticalPairsOfGen subterms x
+
+criticalPairs :: ( HasRules trs, Rule t v ~ Family.Rule trs
+                 , v ~ Family.Var trs, GetVars trs, Enum v, Ord v, Rename v, Unify t
+                 , Observable v, Observable(Term t v)) =>
                  trs -> [(Position, Term t v, Term t v)]
 criticalPairs trs
    | null (rules trs) = []
    | otherwise        = -- Overlays between distinct rules
-                        [ (p, updateAt p (const r') l \\ sigma, r \\ sigma)
-                             | (l :-> r,rest)  <- view (rules trs)
-                             , l' :-> r' <- (`getVariant` (l:->r)) `map` rules rest
-                             , l_p@Impure{} <- subterms $ annotateWithPos l
-                             , let p = note l_p
-                             , sigma <- maybeToList $ unify (dropNote l_p) l'
+                        [ cp
+                             | (lr,rest)  <- view (rules trs)
+                             , let lr' = getVariant lr trs
+                             , cp <- criticalPairsOf lr' rest
                         ] ++
                         -- Overlays inside the same rule
-                        [ (p, updateAt p (const r') l \\ sigma, r \\ sigma)
-                             | l :-> r <- rules trs
-                             , let l' :-> r' = getVariant (l:->r) (l:->r)
-                             , l_p@Impure{} <- properSubterms $ annotateWithPos l
-                             , let p = note l_p
-                             , sigma <- maybeToList $ unify (dropNote l_p) l'
+                        [ cp
+                             | lr <- rules trs
+                             , let lr' = getVariant lr lr
+                             , cp <- properCriticalPairsOf lr' [lr]
                         ]
   where
    t \\ sigma = applySubst sigma t
