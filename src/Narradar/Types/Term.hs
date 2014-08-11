@@ -21,6 +21,7 @@ module Narradar.Types.Term
     where
 
 import           Control.Applicative
+import           Control.Applicative.Compose
 import           Control.Arrow          (first)
 import           Control.DeepSeq
 import           Control.Monad.ConstrainedNormal (NF)
@@ -84,7 +85,11 @@ type instance Family.Id (TermF id) = id
 type instance Family.Id (Term f v) = Family.Id f
 type instance Family.TermF (TermF id f) = TermF id
 
-instance Eq id => Match (TermF id) where matchStructure (Term a _) (Term b _) = a == b
+instance Eq id => Applicative (Maybe :+: TermF id) where
+  pure _ = Compose Nothing
+  Compose(Just(Term id1 ff)) <*> Compose(Just(Term id2 xx))
+    | id1 == id2 = Compose(Just(Term id1 (zipWith ($) ff xx)))
+    | otherwise  = Compose Nothing
 
 term :: id -> [Term (TermF id) a] -> Term (TermF id) a
 term f = Impure . Term f
