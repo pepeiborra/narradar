@@ -25,7 +25,6 @@ import Data.Graph
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Reflection
 import Data.Term (MEnvT, Var)
 import Language.Prolog.Representation
 import MuTerm.Framework.Proof

@@ -124,8 +124,7 @@ Library
                   prelude-extras,
                   constrained-normal,
                   constraints,
-                  reflection
---                  uglymemo
+                  applicative-extras
 
 
   if flag(aprove)
