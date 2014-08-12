@@ -254,7 +254,7 @@ instance (FrameworkId id, Pretty(NTRS id)
   iUsableRulesVarMO (O o oo) p@QRewritingProblem{qCondition,rr} _s _
     | o "qCondition" qCondition = return (setR mempty p)
     | otherwise  = return (setR rr p)
-  iUsableRulesMO (O _ oo) p@QRewritingProblem{q,rr,dd} s tt =
+  iUsableRulesMO (O _ oo) p@QRewritingProblem{q,rr} s tt =
 --    pprTrace ("Q-Usable Rules" <+> tt) $
     let go acc [] = return $ setR (tRS $ map eqModulo $ F.toList acc) p
         go acc ((s,t):rest) = do
@@ -308,11 +308,24 @@ instance (FrameworkId id, Pretty(NTRS id)
 instance FrameworkId id => InsertDPairs (QRewriting (TermN id)) (NTRS id) where
   insertDPairsO = insertDPairsDefault
 
--- TODO Custom Expand Pair instance with the pair-graph expansion of Thiemann
+--  Custom Expand Pair instance with the pair-graph expansion of Thiemann
 instance FrameworkProblem (QRewriting (TermN id)) (NTRS id) =>
          ExpandDPair (QRewriting (TermN id)) (NTRS id) where
-  expandDPairO o = expandDPairOdefault o
+  expandDPairO o p i new = setP (liftNF $ dptrs{ depGraph = dg'' }) p where
+    dptrs = lowerNTRS $ getP $ expandDPairOdefault o p i new
+    -- ignore the new graph computed by expandDPairDefault,
+    -- using only its bounds in putting together a custom graph
+    dg'' = G.buildG bb $
+           [ (m,i+j)   | (m,n) <- edges dg, n == i, j <- [0..length new - 1] ] ++
+           [ (i+j,n)   | (m,n) <- edges dg, m == i, j <- [0..length new - 1] ] ++
+           [ (i+j,i+k) | (m,n) <- edges dg, m == i, n == i
+                       , j <- [0..length new - 1]
+                       , k <- [0..length new - 1]] ++
+          edges dg
 
+    dg  = depGraph (lowerNTRS $ getP p)
+--  bb  = G.bounds $ depGraph dptrs
+    bb  = G.bounds $ dpsA dptrs
 -- Hood
 
 --instance Observable t => Observable (QRewriting t) where observer (QRewriting x m) = send ("Q Problem") (return QRewriting << x << m)
