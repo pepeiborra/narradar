@@ -20,11 +20,14 @@ module Narradar.Framework (
 import Control.Exception (Exception)
 import Control.Monad.Free
 import Control.Monad.Identity
+import Control.DeepSeq (NFData)
+import Control.DeepSeq.Extras (NFData1)
 import Data.Foldable (toList, Foldable, foldMap)
 import Data.Functor.Constant
 import Data.Hashable (Hashable)
 import Data.Traversable (Traversable)
 import Data.Typeable
+import Prelude.Extras
 
 import Data.Term (foldTerm, getId, Rename, Term, Unify, HasId1)
 import qualified Data.Term as Family
@@ -44,7 +47,6 @@ import Narradar.Types.ArgumentFiltering (ApplyAF)
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
 import Narradar.Utils ((<$$>))
-import Control.DeepSeq (NFData)
 
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
@@ -62,7 +64,7 @@ instance (GetVars trs, Foldable (Problem typ)) => GetVars (Problem typ trs) wher
 
 type FrameworkTyp a  = (Eq a, Typeable a, Pretty a, IsDPProblem a, Observable a, NFData a, Traversable (Problem a), HasMinimality a)
 type FrameworkVar v  = (Enum v, Ord v, NFData v, Pretty v, Rename v, Typeable v, PprTPDB v, Observable v)
-type FrameworkT   t  = (Unify t, HasId1 t, Traversable t, Typeable t, Observable1 t, FrameworkId (Family.Id t))
+type FrameworkT   t  = (Unify t, HasId1 t, Traversable t, Typeable t, Observable1 t, FrameworkId (Family.Id t), Ord1 t, NFData1 t)
 type FrameworkId id  = (NFData id, Pretty id, Ord id, Observable id, Typeable id, Show id, Hashable id, NFData id, RemovePrologId id)
 type FrameworkTerm t v = (FrameworkVar v, FrameworkT t, FrameworkId (Family.Id t)
                          ,Ord(Term t v), Pretty(Term t v), NFData(Term t v)
