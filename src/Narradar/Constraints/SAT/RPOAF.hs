@@ -31,6 +31,7 @@ import Control.Monad.Free (Free(..))
 import Control.Monad.List
 import Control.Monad.Reader
 import Data.Bifunctor
+import Data.Functor1
 import Data.Foldable (Foldable, toList)
 import Data.List ((\\), find, transpose, inits, tails)
 import Data.Maybe
@@ -80,7 +81,7 @@ instance SATSymbol (Usable(LPOsymbol  v id)) where mkSATSymbol = lpo
 instance SATSymbol (Usable(MPOsymbol  v id)) where mkSATSymbol = mpo
 
 -- TODO apply these constraint synonyms consistently across this file
-type RPOId id = (FrameworkId id, UsableSymbol id, HasPrecedence id, HasStatus id, HasFiltering id, DPSymbol id, GenSymbol id)
+type RPOId id = (FrameworkId id, UsableSymbol id, HasPrecedence id, HasStatus id, HasFiltering id, DPSymbol id)
 type RPOProblemN typ id = (FrameworkProblemN typ id, RPOId id, NeededRules (NProblem typ id))
 
 -- | RPO + AF
@@ -121,35 +122,34 @@ rpoAF_DP ::
 --         ,v    ~ Family.Var repr
          ,v    ~ Family.Var sid
 --         ,v    ~ Family.Var v
-         ,term ~ Term (TermF id) tv
-         ,term' ~ Term (TermF sid) tv
          ,TermF sid ~ Family.TermF repr
          ,Ord id, Show id
          ,Ord tv, Observable tv
-         ,Functor typ
-         ,IsDPProblem (typ term)
-         ,MkDPProblem (typ term') trs'
+         ,Functor1 typ
+         ,IsDPProblem (typ (TermF id))
+         ,MkDPProblem (typ (TermF sid)) trs'
          ,SATSymbol sid
          ,FrameworkId sid
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
-         ,HasSignature (Problem (typ term) trs)
+         ,HasSignature (Problem (typ (TermF id)) trs)
          ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
          ,UsableSymbol sid
          ,Decode v Bool
          ,MonadSAT repr v m
          ,v ~ Var) =>
-         Bool -> (Problem (typ term') trs' -> repr v) -> Problem (typ term) trs
+         Bool -> (Problem (typ (TermF sid)) trs' -> repr v) -> Problem (typ (TermF id)) trs
          -> m (EvalM v ([Int], BIEnv v, [sid]))
 
 rpoAF_DP allowCol omega p
   | _ <- isNarradarTRS1 (getR p)
   = runRPOAF allowCol (getSignature p) $ \dict -> do
-  let convert = mapTermSymbols (\f -> fromMaybe (error ("rpoAF_DP: Symbol not found " ++ show( f))) $ Map.lookup f dict)
+  let convert = mapTermSymbols f_id
+      f_id    = (\f -> fromMaybe (error ("rpoAF_DP: Symbol not found " ++ show( f))) $ Map.lookup f dict)
       trs'    = fmap convert (getR p)
       dps'    = fmap convert (getP p)
-      typ'    = fmap convert $ getFramework p
+      typ'    = fmap1 (bimap f_id id) $ getFramework p
       p'      = mkDPProblem typ' trs' dps'
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
@@ -179,7 +179,7 @@ rpoAF_DP allowCol omega p
     let the_non_decreasing_pairs = [ r | (r,False) <- zip [(0::Int)..] decreasing]
     return the_non_decreasing_pairs
 
-rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid satSymbol repr m tv v base extraConstraints.
+rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid repr m tv v base extraConstraints.
          (initialgoal  ~ InitialGoal (TermF id) base
          ,initialgoal' ~ InitialGoal (TermF sid) base
          ,problem  ~ Problem initialgoal trs
@@ -209,14 +209,17 @@ rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid s
          ,v ~ Var
          ) =>
             Bool
-         -> (problem' -> (repr v, EvalM v extraConstraints))
+         -> (problem' -> (repr v, EvalM v [Tree (TermN sid) Var]))
          -> problem
-         -> m (EvalM v ( ([Int], extraConstraints), BIEnv v, [sid]))
+         -> m (EvalM v ( ([Int], [Tree (TermN id) Var]), BIEnv v, [sid]))
 
 rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
   = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
   let convert :: forall v. Term (TermF id) v -> Term (TermF sid) v
       convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
+      convertBack :: forall v. Tree (TermN sid) Var -> Tree (TermN id) Var
+      convertBack = mapTreeTerms (mapTermSymbols (fromJust . (`Map.lookup` dict')))
+      dict' = Map.fromList $ fmap swap $ Map.toList dict
       trs' = fmap convert (getR p)
       dps' = fmap convert (getP p)
       typ' = InitialGoal (map (bimap convert convert) goals)
@@ -244,7 +247,7 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
              decreasing <- decode decreasing_dps
              ec <- extraConstraintsAdded
              return ([ r | (r,False) <- zip [(0::Int)..] decreasing]
-                    ,ec)
+                    ,fmap convertBack ec)
 {-
     (weakly, strictly) <- do
        weakly   <- evalB (and $ omegaIG  p' :
@@ -894,12 +897,13 @@ omegaIG p = --pprTrace ("Solving P=" <> getP p $$ "where the involved pairs are:
          rls       = rulesFor id_t trs
          rest      = trs \\ rls
 
-omegaIGgen :: forall problem initialgoal id base repr v.
+omegaIGgen :: forall problem initialgoal id base.
               (problem ~ NProblem initialgoal id
               ,initialgoal ~ InitialGoal (TermF id) base
               ,Var ~ Family.Var id
               ,RPOProblemN initialgoal id
               ,RPOProblemN base id
+              ,GenSymbol id
               ,Eq base
               ) => problem -> (Tree (TermN id) Var, EvalM Var [Tree (TermN id) Var])
 omegaIGgen p

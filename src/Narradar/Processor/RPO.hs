@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
@@ -11,6 +12,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# OPTIONS-GHC -}
 
 module Narradar.Processor.RPO where
 
@@ -70,7 +72,6 @@ import Debug.Hoed.Observe
 --rpo :: (MonadPlus mp, Info info i, Info info o, Processor info RPOProc i o) =>
 --       i -> Proof info mp o
 --rpo = apply (RPOProc RPOSAF SMTSerial)
-import Data.Functor.Constant (Constant(..))
 
 runSAT :: (Hashable id, Ord id, Show id) =>
           SATSolver -> SAT (TermF id) Var (EvalM Var a) -> IO (Maybe a)
@@ -84,6 +85,8 @@ type AllowCol = Bool
 data RPOProc (info :: * -> *) where
   RPOProc :: SATSymbol e => Extension e -> UsableRulesMode -> Solver -> AllowCol -> RPOProc info
 type instance InfoConstraint (RPOProc info) = info
+
+instance Observable (RPOProc info) where observer = observeOpaque "RPO processor"
 
 {-
   Some combinations are not safe. The ones I am aware of right now:
@@ -245,8 +248,8 @@ instance (Info info (RPOProof id)
     applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p MPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
 
-{-
-instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
+
+instance (FrameworkId id, DPSymbol id, GenSymbol id
          ,Pretty (TermN id)
          ,Info info (RPOProof id)
          ) => Processor (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id)
@@ -272,7 +275,7 @@ instance (Show id, Ord id, Pretty id, DPSymbol id, Hashable id, GenSymbol id
     applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
     applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p MPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
 --    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IGgen p MPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
--- -}
+--
 
 instance (Info info (RPOProof id)
          ,Info info (NProblem INarrowingGen id)
@@ -444,6 +447,34 @@ procAF p e usablerules run = (f . unsafePerformIO . run omega) p
    CE.assert isValidProof $
 -}
 
+procAF_IG, procAF_IGgen ::
+  forall info typ base id sid repr a m .
+                ( Decode a (UsableSymbolRes sid)
+                , FrameworkProblemN typ sid
+                , RPOId id
+                , ExpandDPair (InitialGoal (TermF id) base) (NTRS id)
+                , ExpandDPair base (NTRS id)
+                , InsertDPairs (InitialGoal (TermF id) base) (NTRS id)
+                , InsertDPairs base (NTRS id)
+                , PprTPDB (NProblem base id)
+                , Suitable info (RPOProof sid)
+                , Suitable info (NProblem typ sid)
+                , Applicative info, Ord1 info, Typeable info
+                , Monad m
+                , Family.Var id  ~ Var
+                , Family.TermF repr ~ TermF id
+                , RPOAF.CoRPO repr (TermF id) Narradar.Var Var
+                , RPOAF.RPOExtCircuit repr id
+                , MonadSAT.ECircuit repr
+                ) => NProblem typ sid
+                  -> Extension a
+                  -> UsableRulesMode
+                  -> ((NProblem (InitialGoal (TermF id) base) id
+                       -> (repr Var, EvalM Var [Tree (TermN id) Var]))
+                       -> NProblem typ sid
+                       -> IO (Maybe (([Int], [Tree (TermN sid) Var]), BIEnv (Family.Var a), [a])))
+                  -> Proof info m (NProblem typ sid)
+
 procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
  omega = case usablerules of
             Needed -> omegaIG
@@ -476,25 +507,6 @@ procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
     | otherwise = Debug.Trace.trace (show (proof $+$ Ppr.empty $+$ verification)) False
 -}
 
-
-procAF_IGgen :: ( Decode a (UsableSymbolRes sid)
-                , RPOProblemN base id
-                , RPOProblemN (InitialGoal (TermF id) base) id
-                , RPOProblemN typ sid
-                , Suitable info (RPOProof sid)
-                , Suitable info (NProblem typ sid)
-                , Applicative info, Ord1 info, Typeable info
-                , Monad m
-                , Family.Var id ~ Var
-                , Ord(Problem typ (NTRS sid))
-                ) => Problem typ (NTRS sid)
-                  -> Extension a
-                  -> UsableRulesMode
-                  -> ((NProblem (InitialGoal (TermF id) base) id
-                       -> (Tree (TermN id) Var, EvalM Var [Tree (TermN id) Var]))
-                       -> Problem typ (NarradarTRS (TermF sid) Narradar.Var)
-                       -> IO (Maybe (([Int], [Tree (TermN sid) Var]), BIEnv (Family.Var a), [a])))
-                  -> Proof info m (Problem typ (NarradarTRS (TermF sid) Narradar.Var))
 procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
   omega = case usablerules of
             Needed -> omegaIGgen
@@ -513,6 +525,7 @@ procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
                        , let Just f = rootSymbol (lhs r)
                        , f `Set.member` usableSymbols]
    usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]
+   extraConstraints' :: [Tree (TermN sid) Var]
    extraConstraints' = mapTreeTerms (mapTermSymbols theSymbol) <$> extraConstraints
    theSymbol = id -- head . F.toList
 
