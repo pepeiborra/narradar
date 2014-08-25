@@ -98,7 +98,7 @@ isHT exsig basesig = go
   go t
     | Just f <- rootSymbol t
     , f `Set.member` d_ex
-    = t `notFrom` d_b && all go (directSubterms t)
+    = all go (directSubterms t)
     | Just f <- rootSymbol t
     , f `Set.member` d_b
     = t `notFrom` d_ex && all go (directSubterms t)
