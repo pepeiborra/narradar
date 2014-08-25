@@ -38,18 +38,12 @@ module Narradar.Types ( module Narradar.Framework
                       ) where
 
 import           Control.Applicative                  hiding (Alternative(..), many, optional)
-import           Control.Monad.Error                  (Error(..))
-import           Control.Monad.Free                   (Free(..))
-import           Control.Monad                        (liftM, MonadPlus(..), (>=>))
-import           Data.Bifunctor
-import           Data.ByteString.Char8                (ByteString, unpack)
-import           Data.Graph                           (Graph, Vertex)
-import           Data.List                            (find, groupBy, maximumBy, sort, partition)
-import           Data.Foldable                        (Foldable(..))
+import           Control.Monad                        (MonadPlus(..), (>=>))
+import           Data.ByteString.Char8                (ByteString)
+import           Data.List                            (maximumBy, sort)
 import           Data.Hashable
 import           Data.Maybe
 import           Data.Monoid
-import           Data.Set                             (Set)
 import           Data.Suitable
 import qualified Data.Map                             as Map
 import qualified Data.Set                             as Set
@@ -71,7 +65,6 @@ import qualified Data.Term.Family as Family
 
 import           Narradar.Constraints.Unify
 import           Narradar.Types.ArgumentFiltering     (AF_, simpleHeu, bestHeu, innermost)
-import qualified Narradar.Types.ArgumentFiltering     as AF
 import           Narradar.Types.DPIdentifiers         hiding (ArityId(..), StringId)
 import           Narradar.Types.PrologIdentifiers
 import           Narradar.Types.Labellings
@@ -91,11 +84,8 @@ import           Narradar.Types.Term
 import           Narradar.Types.Var
 import           Narradar.Utils
 import           Narradar.Framework
-import           Narradar.Framework.Constraints
 import           Narradar.Framework.Ppr               as Ppr
 
-import qualified Language.Prolog.Syntax               as Prolog hiding (ident)
-import qualified Language.Prolog.Parser               as Prolog hiding (term)
 
 import           Debug.Hoed.Observe
 
@@ -117,8 +107,9 @@ instance Pretty [Output] where
 -- The Narradar Parser
 -- --------------------
 
-narradarParse name input = let
-    results = map (\p -> runParser p mempty name input) [trsParser, APrologProblem <$> prologParser]
+narradarParse x = narradarParseO nilObserver x
+narradarParseO o name input = let
+    results = map (\p -> runParser p mempty name input) [trsParserO o, APrologProblem <$> prologParser]
     in case results of
          [Right x, _] -> Right x
          [_, Right x] -> Right x
@@ -183,6 +174,7 @@ data AProblem t trs where
     APrologProblem            :: PrologProblem -> AProblem t trs
 --    AGoalNarrowingRelativeRewritingProblem :: Problem (Relative trs NarrowingGoal (TermId t)) trs -> AProblem t trs
 
+instance Observable1 (AProblem t) where observer1 = observeOpaque "A problem"
 
 
 dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
@@ -223,8 +215,9 @@ parseTRS :: (trs ~ NTRS Id, Monad m) =>
              String -> m (AProblem (TermF Id) trs)
 parseTRS s = eitherM (runParser trsParser mempty "<input>" s)
 
-trsParser :: TRS.TRSParser (AProblem (TermF Id) (NTRS Id))
-trsParser = do
+trsParser = trsParserO nilObserver
+trsParserO :: Observer -> TRS.TRSParser (AProblem (TermF Id) (NTRS Id))
+trsParserO obs@(O o oo) = do
   Spec spec <- TRS.trsParser
 
   let allvars = Map.fromList (Set.toList(getVars spec) `zip` [0..])
@@ -263,31 +256,31 @@ trsParser = do
       mkMode _                      = fail "parsing the abstract goal"
 
   case (r0, dps, strategies) of
-    ([], Nothing, [])  -> return $ ARewritingProblem (mkNewProblem rewriting r)
-    ([], Nothing, TRS.Narrowing:_)        -> return $ ANarrowingProblem (mkNewProblem narrowing r)
-    ([], Nothing, ConstructorNarrowing:_) -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
-    ([], Nothing, InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (mkNewProblem cnarrowing r)
+    ([], Nothing, [])  -> return $ ARewritingProblem (oo "mkNewProblem" mkNewProblemO rewriting r)
+    ([], Nothing, TRS.Narrowing:_)        -> return $ ANarrowingProblem (oo "mkNewProblem" mkNewProblemO narrowing r)
+    ([], Nothing, ConstructorNarrowing:_) -> return $ ACNarrowingProblem (oo "mkNewProblem" mkNewProblemO cnarrowing r)
+    ([], Nothing, InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (oo "mkNewProblem" mkNewProblemO cnarrowing r)
 
     ([], Nothing, [GoalStrategy g])
-        -> return $ AGoalRewritingProblem (mkNewProblem (initialGoal [mkGoal g] rewriting) r)
+        -> return $ AGoalRewritingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [mkGoal g] rewriting) r)
 
     ([], Nothing, InnerMost:_)
-        -> return $ AIRewritingProblem (mkNewProblem irewriting r)
+        -> return $ AIRewritingProblem (oo "mkNewProblem" mkNewProblemO irewriting r)
     ([], Nothing, GoalStrategy g:TRS.Narrowing:_)
-        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (mkNewProblem (initialGoal [g'] narrowing) r)}
+        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [g'] narrowing) r)}
 --    (r0, Nothing, GoalStrategy g:TRS.Narrowing:_)
 --        -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingRelativeRewritingProblem
---                                                (mkNewProblem (relative (tRS r0) (narrowingGoal g')) r)}
+--                                                (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) (narrowingGoal g')) r)}
     ([], Nothing, GoalStrategy g:ConstructorNarrowing:_)
-        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (initialGoal [g'] cnarrowing) r)}
+        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [g'] cnarrowing) r)}
     ([], Nothing, GoalStrategy g:InnerMost:TRS.Narrowing:_)
-        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (mkNewProblem (initialGoal [g'] cnarrowing) r)}
+        -> do {g' <- mkAbstractGoal g; return $ AGoalCNarrowingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [g'] cnarrowing) r)}
     ([], Nothing, (GoalStrategy g : InnerMost : _))
-        -> return $ AGoalIRewritingProblem (mkNewProblem (initialGoal [mkGoal g] irewriting) r)
+        -> return $ AGoalIRewritingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [mkGoal g] irewriting) r)
     ([], Nothing, (TRS.Q q : _))
-        -> return $ AQRewritingProblem (mkNewProblem (QRewriting (QSet (mapTermSymbols IdFunction <$> q)) minimality) r)
+      -> return $ AQRewritingProblem (oo "mkNewProblem" mkNewProblemO (qRewritingO nilObserver (mapTermSymbols IdFunction <$> q) minimality) r)
     ([], Just dps, (TRS.Q q : _))
-        -> return $ AQRewritingProblem (mkDPProblem (QRewriting (QSet (mapTermSymbols IdFunction <$> q)) minimality) r' (mkTRS dps))
+        -> return $ AQRewritingProblem (mkDPProblem (qRewritingO nilObserver (mapTermSymbols IdFunction <$> q) minimality) r' (mkTRS dps))
     ([], Just dps, [])
         -> return $ ARewritingProblem (setMinimality minimality $ mkDPProblem rewriting r' (mkTRS dps))
 
@@ -304,15 +297,15 @@ trsParser = do
         -> return $ AGoalIRewritingProblem (setMinimality minimality $ mkDPProblem (initialGoal [mkGoal g] irewriting) r' (tRS dps))
 
     (r0, Nothing, [])
-        -> return $ ARelativeRewritingProblem (mkNewProblem (relative (tRS r0) rewriting) r)
+        -> return $ ARelativeRewritingProblem (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) rewriting) r)
     (r0, Nothing, InnerMost:_)
-        -> return $ ARelativeIRewritingProblem (mkNewProblem (relative (tRS r0) irewriting) r)
+        -> return $ ARelativeIRewritingProblem (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) irewriting) r)
 
 
     (r0, Nothing, [GoalStrategy g])
-        -> return $ AGoalRelativeRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] rewriting)) r)
+        -> return $ AGoalRelativeRewritingProblem (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) (initialGoal [mkGoal g] rewriting)) r)
     (r0, Nothing, GoalStrategy g:InnerMost:_)
-        -> return $ AGoalRelativeIRewritingProblem (mkNewProblem (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r)
+        -> return $ AGoalRelativeIRewritingProblem (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) (initialGoal [mkGoal g] irewriting)) r)
 
 
     (r0, Just dps, [])

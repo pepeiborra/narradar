@@ -24,6 +24,7 @@ import           Control.Applicative
 import           Control.Applicative.Compose
 import           Control.Arrow          (first)
 import           Control.DeepSeq
+import           Control.DeepSeq.Extras
 import           Control.Monad.ConstrainedNormal (NF)
 import           Control.Monad.Free
 import           Data.Char
@@ -32,8 +33,12 @@ import           Data.ByteString.Char8  as BS (ByteString, pack, unpack)
 import           Data.Constraint        ( (:-)(..), Dict(..))
 import           Data.Foldable          as F (Foldable(..),sum,msum)
 import           Data.Hashable
+import qualified Data.Map               as Map
 import qualified Data.Set               as Set
 import           Data.Traversable
+import           Data.Typeable
+import           Prelude.Extras
+
 import           Data.Term
                   (Term, TermFor, evalTerm, foldTerm, foldTermM
                   ,Match(..)
@@ -50,9 +55,6 @@ import qualified Data.Id.Family         as Family
 import qualified Data.Term.Family       as Family
 import qualified Data.Rule.Family       as Family
 import qualified Data.Var.Family        as Family
-import           Data.Typeable
-
-import qualified Data.Map               as Map
 
 import           Narradar.Constraints.Unify hiding (TermF, Var)
 import           Narradar.Framework.Ppr
@@ -80,6 +82,10 @@ instance HasArity (ArityId a) where getIdArity = the_arity
 data TermF id f = Term id [f] deriving (Eq,Ord,Show,Generic,Typeable)
 type TermN id = Term (TermF id) Var
 type RuleN id = RuleF(TermN id)
+
+instance Eq id => Eq1 (TermF id) where (==#) = (==)
+instance Ord id => Ord1 (TermF id) where compare1 = compare
+instance Show id => Show1 (TermF id) where showsPrec1 = showsPrec
 
 type instance Family.Id (TermF id) = id
 type instance Family.Id (Term f v) = Family.Id f
@@ -137,6 +143,7 @@ instance Eq id => Unify (TermF id) where
 
 instance Ord id => HasId1 (TermF id) where
     getId1 (Term id _) = Just id
+    fromId1 id = Term id []
 
 instance MapId TermF where mapIdM f (Term id tt) = (`Term` tt) <$> f id
 
@@ -215,20 +222,13 @@ instance Hashable a => Hashable (ArityId a) where hashWithSalt s (ArityId id a) 
 instance NFData Var where
   rnf (Var s i) = rnf s `seq` rnf i `seq` ()
 
-instance (NFData a, NFData id) => NFData (TermF id a) where
-  rnf (Term id tt) = rnf id `seq` rnf tt `seq` ()
+instance (NFData id) => NFData1 (TermF id) where
+  rnf1 (Term i tt) = rnf i `seq` rnf tt
 
-instance NFData a => NFData (RuleF a) where
-  rnf (a :-> b) = rnf a `seq` rnf b `seq` ()
+instance NFData1 ArityId where
+  rnf1 (ArityId a i) = rnf i `seq` rnf a `seq` ()
 
-instance NFData id => NFData (Signature id) where
-  rnf (Sig cc dd) = rnf cc `seq` rnf dd `seq` ()
-
-instance NFData id => NFData (ArityId id) where
-  rnf (ArityId a i) = rnf i `seq` rnf a `seq` ()
-
-instance (NFData a, NFData(Family.Var a)) => NFData (Substitution_ a) where
-  rnf = rnf . unSubst
+instance NFData a => NFData(ArityId a) where rnf = rnf1
 
 -- --------------------
 -- Observable instances

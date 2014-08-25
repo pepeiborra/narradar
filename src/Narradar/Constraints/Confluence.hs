@@ -12,7 +12,7 @@ import Narradar.Types
 
 import qualified Data.Set as Set
 import qualified Data.Term.Family as Family
-import Debug.Hoed.Observe (Observable)
+import Debug.Hoed.Observe (Observable, Observable1)
 
 isOrthogonal p = isLeftLinear p && null (criticalPairs p)
 
@@ -39,7 +39,7 @@ locallyConfluent :: ( HasRules trs, GetVars trs
                     , Enum v, Ord v, Rename v
                     , Family.Rule trs ~ RuleF (Term t v)
                     , Family.Var trs ~ v
-                    , Observable v, Observable(Term t v)
+                    , Observable v, Observable1 t, Observable(Term t v)
                     ) => trs -> Bool
 locallyConfluent p = (all joinable . criticalPairs) p
   where

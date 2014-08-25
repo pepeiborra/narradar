@@ -21,6 +21,7 @@ import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Narradar.Utils
 import Funsat.RPOCircuit.Symbols (Status(..), mkStatus)
+import Prelude.Extras
 
 class HasPrecedence a where precedence :: a -> Int
 class HasStatus     a where status     :: a -> Status
@@ -29,8 +30,7 @@ class HasFiltering  a where filtering  :: a -> Either Int [Int]
 
 data RPO m a = RPO {(>), (>~), (~~) :: a -> a -> m Bool}
 
-symbolRPO :: (id ~ Family.Id t, HasId1 t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq(t(Term t v))
-             ,Monad m) => RPO m (Term t v)
+symbolRPO :: (id ~ Family.Id t, HasId1 t, Pretty id, HasPrecedence id, HasStatus id, Foldable t, Eq v, Eq1 t,Monad m) => RPO m (Term t v)
 symbolRPO = RPO{..} where
 
   infixr 4 >
@@ -131,8 +131,7 @@ symbolRPO = RPO{..} where
   sel = selectSafe "Narradar.Constraints.RPO"
 
 
-symbolRPOAF :: (id ~ Family.Id t, HasId1 t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq(t(Term t v))
-             ,Monad m) => RPO m (Term t v)
+symbolRPOAF :: (id ~ Family.Id t, HasId1 t, Pretty id, HasPrecedence id, HasStatus id, HasFiltering id, Foldable t, Eq v, Eq1 t, Monad m) => RPO m (Term t v)
 symbolRPOAF = RPO{..} where
 
   infixr 4 >

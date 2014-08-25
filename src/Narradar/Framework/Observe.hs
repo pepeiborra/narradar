@@ -21,7 +21,7 @@ import Data.Constraint.Forall
 import Data.Map (Map)
 import Data.Set (Set)
 import Data.AlaCarte
-import Data.Graph
+import Data.Graph(SCC(..))
 import qualified Data.ByteString as BS
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -32,11 +32,14 @@ import MuTerm.Framework.Strategy
 import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Data.Functor.Constant (Constant(..))
+import Text.Parsec.Error(ParseError(..))
+import Prelude.Extras
 
 import Debug.Hoed.Observe
 import GHC.Generics(Generic)
 import Data.Foldable (toList)
 import Data.Term.Rules (RuleF(..))
+import Data.Term.Automata (TermMatcher(..), Tree(..))
 import qualified Data.Term as Term
 
 
@@ -55,8 +58,6 @@ instance (Observable a, Observable(Var a), ObservableVar1 f) => Observable (f a)
 -- ---------------
 -- Hood instances
 -- ---------------
-instance (Observable k) => Observable1 (Map k) where
-  observer1 x p = Map.fromDistinctAscList $ fmap unLiftObserve1 $ observer1 (fmap LiftObserve1 $ Map.toList x) p
 instance Observable1 Set where
   observer1 x p = Set.fromDistinctAscList (observer1 (Set.toList x) p)
 deriving instance Generic (SCC a)
@@ -65,8 +66,6 @@ instance Observable1 SCC
 
 --instance (Pretty (Term term var), Pretty var) => Observable (Substitution term var) where
 --  observer s = send (show $ pPrint s) (return s)
-instance Observable1 RuleF where observer1 (l :-> r) = send "(:->)" (return (:->) << l << r)
-
 instance Observable (f(Expr f)) => (Observable (Expr f))
 instance (Observable1 f, Observable1 g) => Observable1 (f :+: g)
 instance (Observable a) => Observable1 (K a)
@@ -80,7 +79,6 @@ instance (Monad m) => Observable1 (MVariantT v m) where
   observer1 = observeComp "<MvariantT>"
 instance (Monad m) => Observable1 (ListT m) where
   observer1 = observeComp "<ListT>"
-instance Monad m => Observable1 (MEnvT  t v m) where observer1 = observeComp "<MEnvT>"
 
 -- newtype WrapObserveM m a = WrapObserveM {unwrapObserveM :: m a} deriving (Observable, Observable1)
 -- class ObserveM ma where observeM :: String -> ma -> ma
@@ -106,6 +104,8 @@ instance Observable Final
 
 deriving instance Generic (EqModulo a)
 instance Observable1 EqModulo
+
+instance Observable ParseError where observer = observeOpaque "ParseError"
 
 --instance (Observable x, Observable(Var x)) => Observable (SubstitutionF x) where
   --observer = observerVar1

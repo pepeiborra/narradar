@@ -181,6 +181,7 @@ f_UsableRules :: forall typ vk t v trs m.
                  , MonadVariant m
                  , Observable1 m
                  , Observable1 t
+                 , Observable v
                  ) =>
                  Problem typ trs -> vk -> [Term t v] -> [Term t v] -> m(Problem typ trs)
 f_UsableRules (getR -> trs) _  s tt | assert (Set.null (getVars trs `Set.intersection` getVars tt)) False = undefined

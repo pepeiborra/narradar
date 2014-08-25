@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 
@@ -42,7 +43,7 @@ isRelaxedHierarchicalCombination ex base =
 isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules trs, Ord (Term t v)
                                         , Rule t v ~ Family.Rule trs
                                         , HasId1 t, Match t, Traversable t
-                                        , Enum v, Ord v, Rename v
+                                        , Enum v, Ord v, Rename v, Observable v
                                         , Family.Id t ~ Family.Id trs
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =

@@ -2,6 +2,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, UndecidableInstances  #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 
 module Narradar.Framework.Constraints
        ( module Narradar.Framework.Constraints
@@ -10,10 +12,13 @@ module Narradar.Framework.Constraints
        )where
 
 import Control.Monad.ConstrainedNormal (NF(..), liftNF, lowerNF)
+import Control.DeepSeq
+import Control.Monad.Free
 import Data.Constraint (Dict(..), (:-)(..))
 import Data.Foldable(Foldable(..))
 import Data.Term (GetVars)
 import qualified Data.Term as Family
+import Prelude.Extras
 
 import Debug.Hoed.Observe
 

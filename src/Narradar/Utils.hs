@@ -125,12 +125,6 @@ comparableEqO (Observe.O o oo) (Comparable a) (Comparable b) =
 instance Observable Comparable where observer (Comparable a) = send "Comparable" (return Comparable << a)
 instance NFData Comparable where rnf (Comparable a) = rnf a
 
--- ----------------------------
--- Type Constructor Composition
--- ----------------------------
-newtype O f g x = O (f(g x))
-instance (Functor f, Functor g) => Functor (O f g) where fmap f (O fgx) = O (fmap2 f fgx)
-
 -- --------------------------------
 -- fmap / mapM / foldMap / toList n
 -- --------------------------------
@@ -454,7 +448,6 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
 -- Missing Typeable instances
 -- --------------------------------
 deriving instance Typeable NF
-deriving instance Typeable Free
 deriving instance Typeable Expr
 deriving instance Typeable RuleF
 deriving instance Typeable RPOSsymbol
