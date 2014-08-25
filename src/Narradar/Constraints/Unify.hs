@@ -37,12 +37,18 @@ type SubstitutionF a  = SubstitutionNF GetVarsObservable a
 type Substitution t v  = SubstitutionF (Term t v)
 type SubstitutionFor t = Substitution (Family.TermF t) (Family.Var t)
 
-instance (Eq a, GetVars a, c :=># GetVars, Ord(Family.Var a)) => Eq (SubstitutionNF c a) where a == b = unSubst(lowerSubst a) == unSubst(lowerSubst b)
-instance (Ord a, GetVars a, c :=># GetVars, Ord(Family.Var a)) => Ord (SubstitutionNF c a) where compare a b = unSubst(lowerSubst a) `compare` unSubst(lowerSubst b)
-instance (Ord a, GetVars a, c :=># GetVars, Ord(Family.Var a), Pretty a, Pretty(Family.Var a)) => Pretty(SubstitutionNF c a) where pPrint = pPrint . lowerSubst
+instance (Eq a, GetVars a, c :=># GetVars, Ord(Family.Var a), Observable(Family.Var a)
+         ) => Eq (SubstitutionNF c a) where
+  a == b = unSubst(lowerSubst a) == unSubst(lowerSubst b)
+instance (Ord a, GetVars a, c :=># GetVars, Ord(Family.Var a), Observable(Family.Var a)
+         ) => Ord (SubstitutionNF c a) where
+  compare a b = unSubst(lowerSubst a) `compare` unSubst(lowerSubst b)
+instance (Ord a, GetVars a, c :=># GetVars, Ord(Family.Var a), Pretty a, Pretty(Family.Var a), Observable(Family.Var a)
+         ) => Pretty(SubstitutionNF c a) where
+  pPrint = pPrint . lowerSubst
 
 instance (v ~ Family.Var (t v), constraint (t v), constraint :=># GetVars, GetVars(t v)
-         , Ord v, Monad t
+         , Ord v, Observable v, Monad t
          ) => Monoid (SubstitutionNF constraint (t v)) where
   mempty  = liftNF Term.emptySubst
   mappend a b = liftNF (Term.appendSubst (lowerSubst a) (lowerSubst b))
@@ -50,7 +56,9 @@ instance (v ~ Family.Var (t v), constraint (t v), constraint :=># GetVars, GetVa
 liftSubstNF :: (GetVarsObservable a) => Substitution_ a -> SubstitutionF a
 liftSubstNF = liftNF
 
-lowerSubst :: forall constraint a. (constraint :=># GetVars, Ord(Family.Var a), GetVars a) =>
+lowerSubst :: forall constraint a.
+              (constraint :=># GetVars, Ord(Family.Var a), GetVars a, Observable(Family.Var a)
+              ) =>
            SubstitutionNF constraint a -> Substitution_ a
 lowerSubst = lowerNF (fmapSubst ins) where
   fmapSubst :: forall x. constraint x => constraint x :- GetVars x -> (x -> a) -> Substitution_ x -> Substitution_ a
@@ -62,7 +70,7 @@ flushSubst :: (GetVars a, Observable a, Observable(Family.Var a), Ord(Family.Var
               ) => SubstitutionF a -> SubstitutionF a
 flushSubst = liftNF . lowerSubst
 
-applySubst :: (v ~ Family.Var(t v), Ord v
+applySubst :: (v ~ Family.Var(t v), Ord v, Observable v
               ,Monad t
               ,c :=># GetVars, GetVars (t v)
               ) => SubstitutionNF c (t v) -> t v -> t v
