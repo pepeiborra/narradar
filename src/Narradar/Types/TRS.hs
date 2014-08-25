@@ -44,6 +44,7 @@ import Data.Typeable
 import Prelude as P hiding (concatMap, (.), id)
 
 import qualified Data.Term as Family
+import Data.Term.Automata (TermMatcher)
 
 import Narradar.Types.ArgumentFiltering (ApplyAF(..))
 import qualified Narradar.Types.ArgumentFiltering as AF
@@ -312,7 +313,7 @@ instance (NTRSLift a
 instance (GetVars a, Ord a) => GetVars (NarradarTRS_ a) where getVars = getVars . rules
 instance (GetVars a, Ord a, RemovePrologId(Family.Id a), HasId a, HasSignature a) => GetVars (NarradarTRSF a) where getVars = getVars . lowerNTRS
 
-instance (GetFresh a, Ord(Family.Var a), Ord a
+instance (GetFresh a, Ord(Family.Var a), Observable(Family.Var a), Ord a
          ) => GetFresh (NarradarTRS_ a) where
     getFreshM (TRS rr sig) = getFresh (toList rr) >>= \rr' -> return (TRS (Set.fromDistinctAscList rr') sig)
     getFreshM (ListTRS rr sig) = getFresh rr >>= \rr' -> return (ListTRS rr' sig)
@@ -321,7 +322,8 @@ instance (GetFresh a, Ord(Family.Var a), Ord a
     getFreshM (DPTRS typ dps_a rr g uu sig) = getFresh (elems dps_a) >>= \dps' ->
                                        let dps_a' = listArray (bounds dps_a) dps'
                                        in return (DPTRS typ dps_a' rr g uu sig)
-instance (GetFresh a, NTRSLift a, Ord(Family.Var a)) => GetFresh(NarradarTRSF a) where
+instance (GetFresh a, NTRSLift a, Ord(Family.Var a), Observable(Family.Var a)
+         ) => GetFresh(NarradarTRSF a) where
   getFreshM = liftM liftNF . getFreshM . lowerNTRS
 
 instance (Ix i, GetFresh a) => GetFresh(Array i a) where getFreshM = getFreshMdefault
@@ -383,9 +385,7 @@ dpTRS :: ( rules ~ NarradarTRS t v
          , FrameworkTerm t v
          , MkDPProblem typ rules
          ) =>
-          (rules -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
-         -> (pairs -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
-         -> Problem typ (NarradarTRS t v)
+         Problem typ (NarradarTRS t v)
          -> Problem typ (NarradarTRS t v)
 
 -- | Takes a Narradar problem and normalizes it, ensuring that the TRS is a consistent DPTRS
@@ -406,28 +406,24 @@ dpTRSO :: ( rules ~ NarradarTRS t v
          , MkDPProblem typ rules
           ) =>
           Observer
-       -> (rules -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
-         -> (pairs -> Problem typ (NarradarTRS t v) -> Problem typ (NarradarTRS t v))
          -> Problem typ (NarradarTRS t v)
          -> Problem typ (NarradarTRS t v)
 
 -- | Takes a Narradar problem and normalizes it, ensuring that the TRS is a consistent DPTRS
 --   A consistent DPTRS is that in which the graph and unifiers are consistent with
 --   the pairs and rules in the context of the problem type
-dpTRSO (O o oo) updateRules updatePairs p = updatePairs dps' $ updateRules trs' p
-  -- updateRules and updatePairs are versions of Problem.setR and Problem.setP resp.
-  -- which do not perform any checks for renormalization. Otherwise we'd have a circular
-  -- dependency
+--dpTRSO _ p | pprTrace (text "dpTRSO" <+> getFramework p) False = undefined
+dpTRSO obs@(O o oo) p = setP_uncheckedO obs dps' $ setR_uncheckedO obs trs' p
   where
         rr = rules $ getR p
         pp = snub $ rules $ getP p
         trs' = tRS rr
         dpsA   = listArray (0, length pp - 1) pp
-        temp_p = updatePairs (listTRS pp) $ updateRules trs' p
+        temp_p = setP_uncheckedO obs (listTRS pp) $ setR_uncheckedO obs trs' p
         -- the use of listTRS here ^ is important to preserve the ordering of pairs
         unifs  = runIcap (rr ++ pp)
-                         (oo "computeDirectUnifiers" computeDPUnifiersO temp_p updateRules)
-        dps' = oo "dpTRS'" dpTRSO' (Comparable $ getFramework p) dpsA trs' (o "unifs" unifs)
+                         (oo "computeDirectUnifiers" computeDPUnifiersO temp_p)
+        dps' = oo "dpTRS'" dpTRSO' (Comparable $ getFramework p) dpsA trs' unifs
 
 
 dpTRSO' :: ( Foldable t, HasId1 t
@@ -539,11 +535,10 @@ computeDPUnifiersO :: forall unif typ trs t v term m rules.
                      , MonadVariant m) =>
                      Observer
                      -> Problem typ trs
-                     -> (rules -> Problem typ trs -> Problem typ trs)
                      -> m(Two unif)
-computeDPUnifiersO (O o oo) p updateRules = do
+computeDPUnifiersO (O o oo) p = do
    unif    <- oo "direct unifiers"  computeDirectUnifiersO  p
-   unifInv <- oo "inverse unifiers" computeInverseUnifiersO p updateRules
+   unifInv <- oo "inverse unifiers" computeInverseUnifiersO p
    return (Two unif unifInv)
 
 computeDirectUnifiers x = computeDirectUnifiersO nilObserver x
@@ -567,6 +562,7 @@ computeDirectUnifiersO :: forall unif typ trs t v term m.
                      , Observable1 t
                      ) =>
                      Observer -> Problem typ trs -> m unif
+--computeDirectUnifiersO _ _ | trace "computeDirectUnifiers" False = undefined
 computeDirectUnifiersO (O o oo) p_f =
   let the_dps = rules $ getP p_f
       ldps  = length the_dps - 1
@@ -603,20 +599,20 @@ computeInverseUnifiersO :: forall unif typ trs t v term m rules.
                      , Observable1 m
                      , rules ~ trs, HasRules trs, IsTRS trs
                      , IUsableRules (Problem typ trs)
+                     , MkProblem typ trs
                      ) =>
                      Observer
                      -> Problem typ trs
-                     -> (rules -> Problem typ trs -> Problem typ trs)
                      -> m unif
---computeInverseUnifiers _ _ | trace "computeInverseUnifiers" False = undefined
-computeInverseUnifiersO (O o oo) p updateR = do
+--computeInverseUnifiers _ _ _ | trace "computeInverseUnifiers" False = undefined
+computeInverseUnifiersO obs@(O o oo) p  = do
    let dps   = rules $ getP p
    let ldps  = length dps - 1
    unif <- runListT $ do
                 (x, s :-> t) <- liftL $ zip [0..] dps
                 (y, u :-> v) <- liftL $ zip [0..] dps
                 u_rr <- {-o "usableRules"-} iUsableRulesM p [s,u] [t]
-                let p_inv = updateR (tRS $ map swapRule (rules $ getR u_rr)) p
+                let p_inv = setR_uncheckedO obs (tRS $ map swapRule (rules $ getR u_rr)) p
                 (s':->t', u1) <- lift (runMEnv $ getFreshM (s:->t))
                 (u':->_,  u2) <- lift (runMEnv $ getFreshM (u:->v))
                 u'' <- lift ({-o"icap"-} icap p_inv [] u')

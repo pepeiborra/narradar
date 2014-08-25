@@ -206,7 +206,8 @@ Library
      Narradar.Utils.Parse,
 --     Data.NarradarTrie,
      Control.Monad.Supply,
-     Data.Functor.Two
+     Data.Functor.Two,
+     Data.Functor1,
      Lattice
   other-modules:
      Data.UniqueList,

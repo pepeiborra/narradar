@@ -31,6 +31,7 @@ import           MuTerm.Framework.Problem
 
 import           Narradar.Types.DPIdentifiers
 import           Narradar.Types.Problem
+import           Narradar.Types.PrologIdentifiers
 import           Narradar.Types.Problem.Rewriting
 import           Narradar.Types.Term
 import           Narradar.Types.TRS
@@ -67,6 +68,21 @@ instance NFData a => NFData (GenId a) where
   rnf GenId = ()
   rnf GoalId = ()
   rnf (AnId id) = rnf id
+
+instance RemovePrologId id => RemovePrologId (GenId id) where
+  type WithoutPrologId (GenId id) = GenId(WithoutPrologId id)
+  removePrologId GenId  = Just GenId
+  removePrologId GoalId = Just GoalId
+  removePrologId (AnId a) = AnId <$> removePrologId a
+  outId GenId = GenId
+  outId GoalId = GoalId
+  outId (AnId a) = AnId (outId a)
+  inId GenId = GenId
+  inId GoalId = GoalId
+  inId (AnId a) = AnId (inId a)
+  functorId GenId = GenId
+  functorId GoalId = GoalId
+  functorId (AnId a) = AnId (functorId a)
 
 
 class GenSymbol id where
@@ -116,6 +132,7 @@ instance IsProblem p => IsProblem (MkNarrowingGen p) where
 instance MkProblem p trs => MkProblem (MkNarrowingGen p) trs where
   mkProblem (NarrowingGen p) rr = NarrowingGenProblem (mkProblem p rr)
   mapRO o f (NarrowingGenProblem p) = NarrowingGenProblem (mapRO o f p)
+  setR_uncheckedO obs rr p = p{ baseProblem = setR_uncheckedO obs rr (baseProblem p)}
 
 instance IsDPProblem p => IsDPProblem (MkNarrowingGen p) where
   getP   (NarrowingGenProblem p) = getP p
@@ -130,6 +147,7 @@ instance (FrameworkProblemN p id, GenSymbol id) =>
    where
     trs' = mapNarradarRules extraVarsToGen trs
     dps' = mapNarradarRules extraVarsToGen dps
+  setP_uncheckedO obs pp p = p{ baseProblem = setP_uncheckedO obs pp (baseProblem p)}
 
 narrowingGen  = NarrowingGen  rewriting
 cnarrowingGen = NarrowingGen  irewriting

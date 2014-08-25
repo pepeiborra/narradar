@@ -44,6 +44,8 @@ import Narradar.Utils (chunks)
 
 import Prelude hiding (pi)
 
+import Debug.Hoed.Observe
+
 type NarrowingGoal id = MkNarrowingGoal id Rewriting
 type CNarrowingGoal id = MkNarrowingGoal id IRewriting
 
@@ -143,3 +145,5 @@ instance ( id ~ Family.Id trs
    iUsableRulesM p s tt = return p
    iUsableRulesVarM = liftUsableRulesVarM
 
+instance Observable1 (MkNarrowingGoal id) where observer1 = observeOpaque "narrowingGoal"
+instance Observable1 (Problem (MkNarrowingGoal id p)) where observer1 = observeOpaque "narrowingGoal problem"

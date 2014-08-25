@@ -39,18 +39,15 @@ instance Pretty term => Pretty (UsableRulesProof term) where
 
 instance Observable1 UsableRulesProof
 
-instance (Info info (UsableRulesProof term)
-         ,term ~ Term (Family.TermF trs) (Family.Var trs)
-         ,Family.Rule trs ~ Rule (Family.TermF trs) (Family.Var trs)
-         ,FrameworkProblem (QRewriting term) trs
-         ,Eq trs, Pretty trs
-         ) => Processor (UsableRules info) (Problem (QRewriting term) trs) where
-  type Typ (UsableRules info) (Problem (QRewriting term) trs) = QRewriting term
-  type Trs (UsableRules info) (Problem (QRewriting term) trs) = trs
-  applyO (O _ oo) UsableRules p
+instance (Info info (UsableRulesProof (Term t Var))
+         ,FrameworkN (QRewriting t) t Var
+         ) => Processor (UsableRules info) (NarradarProblem (QRewriting t) t) where
+  type Typ (UsableRules info) (NarradarProblem (QRewriting t) t) = QRewriting t
+  type Trs (UsableRules info) (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
+  applyO obs@(O _ oo) UsableRules p
    | length(rules $ getR p') == length(rules $ getR p) = mzero
    | otherwise = qusableRulesProof p p'
    where
     rr' = getR $ oo "iUsableRulesO" iUsableRulesO p
     -- Avoid a call to setR, which would recompute the DP unifiers, as it is not needed
-    p' = p{ rr = rr', qCondition = mkQCondition (q p) rr'}
+    p' = p{ rr = rr', qCondition = mkQConditionO obs (q p) rr'}

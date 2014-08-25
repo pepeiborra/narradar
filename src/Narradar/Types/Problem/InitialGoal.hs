@@ -17,6 +17,7 @@ module Narradar.Types.Problem.InitialGoal where
 
 import Control.Applicative
 import Control.DeepSeq
+import Control.DeepSeq.Extras
 import Control.Exception (assert)
 import Control.Monad.Identity
 import Control.Monad.Free
@@ -92,10 +93,6 @@ instance (Show p, Show (Term t Var), Show (GoalTerm t)) => Show (InitialGoal t p
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
-instance (NFData p, NFData(GoalTerm t), NFData(t(Term t Var)), NFData(Family.Id t)
-         ) => NFData (InitialGoal t p) where
-  rnf (InitialGoal g dg b) = rnf g `seq` rnf dg `seq` rnf b
-
 mapInitialGoal :: forall t t' p .
                   ( Functor t, Functor t', Foldable t', HasId1 t'
                   , Ord (Term t Var), Ord(Term t' Var)
@@ -126,15 +123,6 @@ deriving instance (HasId1 t, Foldable t, Ord(Family.Id t), RemovePrologId(Family
 instance (IsDPProblem p, HasId1 t, Foldable t) => IsDPProblem (InitialGoal t p) where
   getP   (InitialGoalProblem _     _ p) = getP p
 
-
-igdpTRSO :: ( FrameworkN0 (InitialGoal t p) t v
-            , FrameworkN0 p t v
---            , Observable1 (Problem )
-            ) => Observer -> Problem (InitialGoal t p) (NarradarTRS t v) ->
-              Problem (InitialGoal t p) (NarradarTRS t v)
-igdpTRSO o = dpTRSO o (\rr -> runIdentity . liftProblem (return . setR rr))
-                      (\dd -> runIdentity . liftProblem (return . setP dd))
-
 instance ( t ~ f id, MapId f
          , FrameworkId id, DPSymbol id
          , FrameworkN p t Var
@@ -142,11 +130,12 @@ instance ( t ~ f id, MapId f
          ) =>
      MkProblem (InitialGoal t p) (NarradarTRS t Var)
  where
-  mkProblem (InitialGoal gg gr p) rr = initialGoalProblem gg gr (mkProblem p rr)
+  mkProblemO o (InitialGoal gg gr p) rr = initialGoalProblem o gg gr (mkProblem p rr)
   mapRO o f p@(InitialGoalProblem goals dg _) = p'{dgraph = dg'}
    where
-    p'     = igdpTRSO o (runIdentity $ liftProblem (return . mapR f) p)
+    p'     = dpTRSO o (runIdentity $ liftProblem (return . mapR f) p)
     dg'    = mkDGraphO o p' goals
+  setR_uncheckedO o rr p = p{baseProblem = setR_uncheckedO o rr (baseProblem p)}
 
 mkIGDPProblem ::
          (t ~ f id, MapId f
@@ -157,10 +146,12 @@ mkIGDPProblem ::
          ,Eq (GoalTerm t), Pretty (GoalTerm t)
          ) => Observer -> InitialGoal t p -> NarradarTRS t v -> NarradarTRS t v ->
               Problem (InitialGoal t p) (NarradarTRS t v)
-mkIGDPProblem o it@(InitialGoal goals g p0) rr dd
+mkIGDPProblem (O _ oo) it@(InitialGoal goals g p0) rr dd
     | not $ all isVar (properSubterms =<< concrete goals)
     = error "Initial goals must be of the form f(x,y,z..)"
-    | otherwise = igdpTRSO o $ initialGoalProblem goals g $ mkDPProblemO o p0 rr dd
+    | otherwise = oo "dpTRS" dpTRSO $
+                  oo "initialGoalProblem" initialGoalProblem goals g $
+                  oo "baseProblem" mkDPProblemO p0 rr dd
 
 mapIGP ::
          (t ~ f id, MapId f
@@ -174,10 +165,10 @@ mapIGP ::
          Problem (InitialGoal t p) (NarradarTRS t v) ->
          Problem (InitialGoal t p) (NarradarTRS t v)
 mapIGP o f p@(InitialGoalProblem goals g p0)
-    = igdpTRSO nilObserver $ InitialGoalProblem goals g' p'
+    = dpTRSO o $ InitialGoalProblem goals g' p'
    where
-     p' = mapP f p0
-     g' = mkDGraph p' goals
+     p' = mapPO o f p0
+     g' = mkDGraphO o p' goals
 
 
 instance (t ~ f id, MapId f
@@ -192,6 +183,7 @@ instance (t ~ f id, MapId f
   where
     mkDPProblemO = mkIGDPProblem
     mapPO = mapIGP
+    setP_uncheckedO o pp p = p{baseProblem = setP_uncheckedO o pp (baseProblem p)}
 
 instance (t ~ f id, MapId f
          ,FrameworkId id, DPSymbol id
@@ -202,6 +194,7 @@ instance (t ~ f id, MapId f
   where
   mkDPProblemO = mkIGDPProblem
   mapPO = mapIGP
+  setP_uncheckedO o pp p = p{baseProblem = setP_uncheckedO o pp (baseProblem p)}
 
 instance (DPSymbol id, GenSymbol id
          ,FrameworkProblemN (InitialGoal (TermF id) (MkNarrowingGen p)) id
@@ -211,6 +204,7 @@ instance (DPSymbol id, GenSymbol id
   where
   mkDPProblemO = mkIGDPProblem
   mapPO = mapIGP
+  setP_uncheckedO o pp p = p{baseProblem = setP_uncheckedO o pp (baseProblem p)}
 
 
 instance FrameworkExtension (InitialGoal t) where
@@ -226,12 +220,14 @@ initialGoalProblem :: ( t ~ f id, MapId f
                       , FrameworkId id, DPSymbol id
                       , FrameworkN0 typ t Var
                       ) =>
-                      [CAGoal t]
+                      Observer
+                   -> [CAGoal t]
                    -> Maybe(DGraph t Var)
-                   -> Problem typ (NarradarTRS t Var) -> Problem (InitialGoal t typ) (NarradarTRS t Var)
+                   -> Problem typ (NarradarTRS t Var)
+                   -> Problem (InitialGoal t typ) (NarradarTRS t Var)
 
-initialGoalProblem gg Nothing p = InitialGoalProblem gg (mkDGraph p gg) p
-initialGoalProblem gg (Just dg) p = InitialGoalProblem gg dg p
+initialGoalProblem o gg Nothing   p = InitialGoalProblem gg (mkDGraphO o p gg) p
+initialGoalProblem o gg (Just dg) p = InitialGoalProblem gg dg p
 
 concrete gg = [g | Concrete g <- gg]
 abstract gg = [g | Abstract g <- gg]
@@ -293,6 +289,193 @@ reachableUsableRules :: (t ~ f id, MapId f
 reachableUsableRules p = getR $ neededRules (getBaseProblem p)
                                             (rhs <$> involvedPairs p)
 
+-- -------------------------------
+-- Dependency Graph data structure
+-- -------------------------------
+type DGraph t v = DGraphF (Term t v)
+
+-- Invariant - the pairs field is always a DPTRS
+
+data DGraphF a = DGraph {pairs    :: NarradarTRSF a            -- ^ A DPTRS storing all the pairs in the problem and the depGraph
+                        ,pairsMap :: Map (RuleF a) Vertex      -- ^ Mapping from pairs to vertexes in the sccs graph
+                        ,initialPairsG   :: Set Vertex         -- ^ Set of vertexes corresponding to initial pairs
+                        ,reachablePairsG :: Set Vertex         -- ^ Set of vertexes corresponding to reachable pairs
+                        ,sccs     :: Array Int (SCC Vertex)    -- ^ Array of SCCs in the dep graph
+                        ,sccsMap  :: Array Vertex (Maybe Int)  -- ^ Mapping from each vertex to its SCC
+                        ,sccGraph :: Graph}                    -- ^ Graph of the reachable SCCs in the dep graph
+
+  deriving (Generic)
+
+deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => Eq  (DGraphF a)
+deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => Ord (DGraphF a)
+deriving instance Eq  a => Eq  (SCC a)
+deriving instance Ord a => Ord (SCC a)
+
+fullgraph :: NTRSLift a => DGraphF a -> Graph
+fullgraph = rulesGraph . pairs
+
+deriving instance Show a => Show (SCC a)
+instance (NTRSLift (Term t v), Pretty (Term t v)) => Pretty (DGraph t v) where
+  pPrint DGraph{..} = text "DGraphF" <> brackets(vcat [text "pairs =" <+> pPrint (elems $ rulesArray pairs)
+                                                      ,text "pairsMap =" <+> pPrint pairsMap
+                                                      ,text "initial pairs = " <+> pPrint initialPairsG
+                                                      ,text "reachable pairs = " <+> pPrint reachablePairsG
+                                                      ,text "graph =" <+> text (show $ rulesGraph pairs)
+                                                      ,text "sccs =" <+> text (show sccs)
+                                                      ,text "sccsMap =" <+> pPrint (elems sccsMap)
+                                                      ,text "sccGraph =" <+> text (show sccGraph)])
+
+
+mapDGraph :: ( Ord(Term t v), Ord(Term t' v), Foldable t', HasId1 t'
+             , Observable v, Observable1 t'
+             ) => (Term t v -> Term t' v) -> DGraph t v -> DGraph t' v
+mapDGraph f (DGraph p pm ip rp sccs sccsM sccsG)
+    = (DGraph (fmap f p) (Map.mapKeys (fmap f) pm) ip rp sccs sccsM sccsG)
+{-
+mapDGraph' :: ( Ord(Term t v), Ord(Term t' v), Foldable t', HasId t'
+              , Observable v, Observable1 t')
+           => (Term t v -> Term t' v)
+           -> (Rule t v -> Rule t' v)
+           -> DGraph t v -> DGraph t' v
+mapDGraph' ft fr (DGraph p pm ip rp sccs sccsM sccsG)
+    = (DGraph (mapNarradarTRS' ft fr p) (Map.mapKeys fr pm) ip rp sccs sccsM sccsG)
+-}
+
+mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
+            , FrameworkId id, FrameworkN0 typ t Var
+            ) => Problem typ (NarradarTRS t Var) -> [CAGoal t] -> DGraph t Var
+mkDGraph = mkDGraphO nilObserver
+
+mkDGraphO :: ( t ~ f id, MapId f, DPSymbol id
+            , FrameworkId id, FrameworkN0 typ t Var
+            ) => Observer -> Problem typ (NarradarTRS t Var) -> [CAGoal t] -> DGraph t Var
+--mkDGraph (getP -> dps) _ | pprTrace ("mkDGraph with pairs: "<> dps) False = undefined
+mkDGraphO o p@(lowerNTRS.getP -> DPTRS{dpsA,depGraph=fullgraph}) goals =
+ runIcap (rules p) $ do
+  let pairsMap = Map.fromList (map swap $ assocs dpsA)
+
+  -- List of indexes for fullgraph
+  initialPairsG <- liftM Set.fromList $ runListT $ do
+                     (i,s :-> t) <- liftL (assocs dpsA)
+                     g           <- liftL goals
+                     case g of
+                       Concrete g -> do g' <- lift (getFresh g >>= icap p [])
+                                        guard(markDP g' `unifies` s)
+                                        return i
+                       Abstract g -> do guard (rootSymbol g == rootSymbol s)
+                                        return i
+
+  let -- list of indexes for fullgraph
+      reachablePairsG = Set.fromList $ concatMap (reachable fullgraph) (toList initialPairsG)
+
+      -- A list of tuples (ix, scc, edges)
+      sccGraphNodes = [ it | it@(flattenSCC -> nn,_,_) <-SCC.sccGraph fullgraph
+                           , any (`Set.member` reachablePairsG) nn]
+
+      sccsIx   = [ ix | (_,ix,_) <- sccGraphNodes]
+      sccGraph  = case sccsIx of
+                    [] -> emptyArray
+                    _  -> buildG (minimum sccsIx, maximum sccsIx)
+                         [ (n1,n2) | (_, n1, nn) <- sccGraphNodes
+                                   , n2 <- nn]
+      sccs      = case sccsIx of
+                    [] -> emptyArray
+                    _  -> array (minimum sccsIx, maximum sccsIx)
+                                 [ (ix, scc) | (scc,ix,_) <- sccGraphNodes]
+
+      -- The scc for every node, with indexes from fullgraph
+      sccsMap    = array (bounds fullgraph) (zip (indices dpsA) (repeat Nothing) ++
+                                         [ (n, Just ix) | (scc,ix,_) <- sccGraphNodes
+                                                                   , n <- flattenSCC scc])
+      the_dgraph = DGraph {pairs = getP p, ..}
+
+
+--  pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, pairs) $$
+--            text "The initial pairs are:" <+> pPrint initialPairsG $$
+--            text "where the EDG is:" <+> text (show fullgraph)
+--            text "The final graph stored is:" <+> text (show graph) $$
+--            text "where the mapping used for the nodes is" <+> pPrint (assocs reindexMap) $$
+--            text "and the final initial pairs are:" <+> pPrint initialPairsG
+--           ) $
+
+  -- The index stored for a pair is within the range of the pairs array
+--   assert (all (inRange (bounds pairs)) (Map.elems pairsMap)) $
+  -- The scc index stored for a pair is within the range of the sccs array
+  assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
+  -- No duplicate edges in the graph
+   assert (noDuplicateEdges fullgraph) $
+  -- There must be at least one initial pair, right ?
+   return the_dgraph
+
+  where
+    liftL :: Monad m => [a] -> ListT m a
+    liftL = ListT . return
+
+insertDGraphO o p@InitialGoalProblem{..} newdps
+    = mkDGraphO o p' goals
+  where
+    p'     =  insertDPairs (setP (pairs dgraph) p) newdps
+
+expandDGraph ::
+      ( t ~ f id, MapId f
+      , FrameworkId id, DPSymbol id
+      , FrameworkN (InitialGoal t typ) t Var
+      , Observable (GoalTerm t)
+      ) =>
+       Problem (InitialGoal t typ) (NarradarTRS t Var)
+    -> Rule t Var
+    -> [Rule t Var]
+    -> Problem (InitialGoal t typ) (NarradarTRS t Var)
+expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} olddp newdps
+   = case lookupNode olddp dg of
+      Nothing -> p
+      Just i  -> p{dgraph=expandDGraph' p i newdps}
+
+expandDGraph' ::
+      ( t ~ f id, MapId f
+      , FrameworkId id, DPSymbol id
+      , FrameworkN (InitialGoal t typ) t Var
+      , Observable(GoalTerm t)
+      ) =>
+       Problem (InitialGoal t typ) (NarradarTRS t Var)
+    -> Int
+    -> [Rule t Var]
+    -> DGraph t Var
+expandDGraph' p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} i newdps
+  = mkDGraph (expandDPair (setP pairs p) i newdps) goals
+
+data instance Constraints DGraphF a = Ord a => DGraphConstraints
+instance Ord a => Suitable DGraphF a where
+  constraints = DGraphConstraints
+
+lookupNode p dg = Map.lookup p (pairsMap dg)
+
+lookupPair n dg = safeAt "lookupPair" (rulesArray $ pairs dg) n
+
+sccFor n dg = safeAt "sccFor" (sccsMap dg) n
+
+dreachablePairs DGraph{..} = Set.fromList $ rules pairs
+
+dinitialPairs g = map (safeAt "initialPairs" (rulesArray $ pairs g)) (toList $ initialPairsG g)
+
+
+nodesInPath :: DGraphF a -> Vertex -> Vertex -> Set Vertex
+-- TODO Implement as a BF traversal on the graph, modified to accumulate the
+--      set of possible predecessors instead of the direct one
+nodesInPath dg@DGraph{..} from to
+    | Just from' <- sccFor from dg
+    , Just to'   <- sccFor to   dg
+    , sccsInPath <- Set.intersection (Set.fromList $ reachable sccGraph from')
+                                     (Set.fromList $ reachable (transposeG sccGraph) to')
+    = Set.fromList (flattenSCCs [safeAt "nodesInPath" sccs i | i <- Set.toList sccsInPath])
+
+    | otherwise = Set.empty
+
+
+nodesInPathNaive g from to = Set.intersection (Set.fromList $ reachable g from)
+                                              (Set.fromList $ reachable g' to)
+  where g' = transposeG g
+
 -- ---------
 -- Instances
 -- ---------
@@ -311,13 +494,26 @@ instance Bifunctor CAGoalF where
 
 -- NFData
 
-instance (NFData (t(Term t Var)), NFData(GoalTerm t), NFData (Family.Id t), NFData (Problem p trs)) =>
+instance (NFData p, NFData1 t, NFData(Family.Id t)
+         ) => NFData (InitialGoal t p) where
+  rnf (InitialGoal g dg b) = rnf g `seq` rnf dg `seq` rnf b
+
+instance (NFData1 t, NFData (Family.Id t), NFData (Problem p trs)) =>
   NFData (Problem (InitialGoal t p) trs)
  where
   rnf (InitialGoalProblem gg g p) = rnf gg `seq` rnf g `seq` rnf p `seq` ()
 
 instance (NFData a, NFData c) => NFData (CAGoalF c a) where
    rnf (Concrete g) = rnf g; rnf (Abstract g) = rnf g
+
+instance (NFData1 t , NFData (Family.Id t), NFData v) => NFData (DGraph t v) where
+  rnf (DGraph p pm ip rp sccs sccsm sccg)  = rnf p  `seq`
+                                             rnf pm `seq`
+                                             rnf ip `seq`
+                                             rnf rp `seq`
+--                                             rnf sccs `seq`
+                                             rnf sccsm `seq`
+                                             rnf sccg
 
 -- Output
 
@@ -403,208 +599,12 @@ instance ( FrameworkProblemN typ id
   InsertDPairs (InitialGoal (TermF id) typ) (NTRS id)
  where
   insertDPairsO o p@InitialGoalProblem{dgraph=DGraph{..},..} newPairs
-    = let dgraph' = insertDGraph p newPairs
-      in insertDPairsDefault o (initialGoalProblem goals (Just dgraph') baseProblem) newPairs
+    = let dgraph' = insertDGraphO o p newPairs
+      in insertDPairsDefault o (initialGoalProblem o goals (Just dgraph') baseProblem) newPairs
 
 instance FrameworkProblem (InitialGoal (TermF id) typ) (NTRS id) =>
          ExpandDPair (InitialGoal (TermF id) typ) (NTRS id) where
   expandDPairO = expandDPairOdefault
-
--- -------------------------------
--- Dependency Graph data structure
--- -------------------------------
-type DGraph t v = DGraphF (Term t v)
-
--- Invariant - the pairs field is always a DPTRS
-
-data DGraphF a = DGraph {pairs    :: NarradarTRSF a            -- ^ A DPTRS storing all the pairs in the problem and the depGraph
-                        ,pairsMap :: Map (RuleF a) Vertex      -- ^ Mapping from pairs to vertexes in the sccs graph
-                        ,initialPairsG   :: Set Vertex         -- ^ Set of vertexes corresponding to initial pairs
-                        ,reachablePairsG :: Set Vertex         -- ^ Set of vertexes corresponding to reachable pairs
-                        ,sccs     :: Array Int (SCC Vertex)    -- ^ Array of SCCs in the dep graph
-                        ,sccsMap  :: Array Vertex (Maybe Int)  -- ^ Mapping from each vertex to its SCC
-                        ,sccGraph :: Graph}                    -- ^ Graph of the reachable SCCs in the dep graph
-
-  deriving (Generic)
-
-deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => Eq  (DGraphF a)
-deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => Ord (DGraphF a)
-deriving instance Eq  a => Eq  (SCC a)
-deriving instance Ord a => Ord (SCC a)
-
-fullgraph :: NTRSLift a => DGraphF a -> Graph
-fullgraph = rulesGraph . pairs
-
-deriving instance Show a => Show (SCC a)
-instance (NTRSLift (Term t v), Pretty (Term t v)) => Pretty (DGraph t v) where
-  pPrint DGraph{..} = text "DGraphF" <> brackets(vcat [text "pairs =" <+> pPrint (elems $ rulesArray pairs)
-                                                      ,text "pairsMap =" <+> pPrint pairsMap
-                                                      ,text "initial pairs = " <+> pPrint initialPairsG
-                                                      ,text "reachable pairs = " <+> pPrint reachablePairsG
-                                                      ,text "graph =" <+> text (show $ rulesGraph pairs)
-                                                      ,text "sccs =" <+> text (show sccs)
-                                                      ,text "sccsMap =" <+> pPrint (elems sccsMap)
-                                                      ,text "sccGraph =" <+> text (show sccGraph)])
-
-instance (NFData (t(Term t v)), NFData (Family.Id t), NFData v) => NFData (DGraph t v) where
-  rnf (DGraph p pm ip rp sccs sccsm sccg)  = rnf p  `seq`
-                                             rnf pm `seq`
-                                             rnf ip `seq`
-                                             rnf rp `seq`
---                                             rnf sccs `seq`
-                                             rnf sccsm `seq`
-                                             rnf sccg
-
-
-mapDGraph :: ( Ord(Term t v), Ord(Term t' v), Foldable t', HasId1 t'
-             , Observable v, Observable1 t'
-             ) => (Term t v -> Term t' v) -> DGraph t v -> DGraph t' v
-mapDGraph f (DGraph p pm ip rp sccs sccsM sccsG)
-    = (DGraph (fmap f p) (Map.mapKeys (fmap f) pm) ip rp sccs sccsM sccsG)
-{-
-mapDGraph' :: ( Ord(Term t v), Ord(Term t' v), Foldable t', HasId t'
-              , Observable v, Observable1 t')
-           => (Term t v -> Term t' v)
-           -> (Rule t v -> Rule t' v)
-           -> DGraph t v -> DGraph t' v
-mapDGraph' ft fr (DGraph p pm ip rp sccs sccsM sccsG)
-    = (DGraph (mapNarradarTRS' ft fr p) (Map.mapKeys fr pm) ip rp sccs sccsM sccsG)
--}
-
-mkDGraph :: ( t ~ f id, MapId f, DPSymbol id
-            , FrameworkId id, FrameworkN0 typ t Var
-            ) => Problem typ (NarradarTRS t Var) -> [CAGoal t] -> DGraph t Var
-mkDGraph = mkDGraphO nilObserver
-
-mkDGraphO :: ( t ~ f id, MapId f, DPSymbol id
-            , FrameworkId id, FrameworkN0 typ t Var
-            ) => Observer -> Problem typ (NarradarTRS t Var) -> [CAGoal t] -> DGraph t Var
---mkDGraph (getP -> dps) _ | pprTrace ("mkDGraph with pairs: "<> dps) False = undefined
-mkDGraphO o p@(lowerNTRS.getP -> DPTRS{dpsA,depGraph=fullgraph}) goals =
- runIcap (rules p) $ do
-  let pairsMap = Map.fromList (map swap $ assocs dpsA)
-
-  -- List of indexes for fullgraph
-  initialPairsG <- liftM Set.fromList $ runListT $ do
-                     (i,s :-> t) <- liftL (assocs dpsA)
-                     g           <- liftL goals
-                     case g of
-                       Concrete g -> do g' <- lift (getFresh g >>= icap p [])
-                                        guard(markDP g' `unifies` s)
-                                        return i
-                       Abstract g -> do guard (rootSymbol g == rootSymbol s)
-                                        return i
-
-  let -- list of indexes for fullgraph
-      reachablePairsG = Set.fromList $ concatMap (reachable fullgraph) (toList initialPairsG)
-
-      -- A list of tuples (ix, scc, edges)
-      sccGraphNodes = [ it | it@(flattenSCC -> nn,_,_) <-SCC.sccGraph fullgraph
-                           , any (`Set.member` reachablePairsG) nn]
-
-      sccsIx   = [ ix | (_,ix,_) <- sccGraphNodes]
-      sccGraph  = case sccsIx of
-                    [] -> emptyArray
-                    _  -> buildG (minimum sccsIx, maximum sccsIx)
-                         [ (n1,n2) | (_, n1, nn) <- sccGraphNodes
-                                   , n2 <- nn]
-      sccs      = case sccsIx of
-                    [] -> emptyArray
-                    _  -> array (minimum sccsIx, maximum sccsIx)
-                                 [ (ix, scc) | (scc,ix,_) <- sccGraphNodes]
-
-      -- The scc for every node, with indexes from fullgraph
-      sccsMap    = array (bounds fullgraph) (zip (indices dpsA) (repeat Nothing) ++
-                                         [ (n, Just ix) | (scc,ix,_) <- sccGraphNodes
-                                                                   , n <- flattenSCC scc])
-      the_dgraph = DGraph {..}
-
-
---  pprTrace (text "Computing the dgraph for problem" <+> pPrint (typ, trs, pairs) $$
---            text "The initial pairs are:" <+> pPrint initialPairsG $$
---            text "where the EDG is:" <+> text (show fullgraph)
---            text "The final graph stored is:" <+> text (show graph) $$
---            text "where the mapping used for the nodes is" <+> pPrint (assocs reindexMap) $$
---            text "and the final initial pairs are:" <+> pPrint initialPairsG
---           ) $
-
-  -- The index stored for a pair is within the range of the pairs array
---   assert (all (inRange (bounds pairs)) (Map.elems pairsMap)) $
-  -- The scc index stored for a pair is within the range of the sccs array
-  assert (all (maybe True (inRange (bounds sccs))) (elems sccsMap)) $
-  -- No duplicate edges in the graph
-   assert (noDuplicateEdges fullgraph) $
-  -- There must be at least one initial pair, right ?
-   return the_dgraph
-
-  where
-    liftL :: Monad m => [a] -> ListT m a
-    liftL = ListT . return
-
-insertDGraph p@InitialGoalProblem{..} newdps
-    = mkDGraph p' goals
-  where
-    p'     =  insertDPairs (setP (pairs dgraph) p) newdps
-
-expandDGraph ::
-      ( t ~ f id, MapId f
-      , FrameworkId id, DPSymbol id
-      , FrameworkN (InitialGoal t typ) t Var
-      , Observable (GoalTerm t)
-      ) =>
-       Problem (InitialGoal t typ) (NarradarTRS t Var)
-    -> Rule t Var
-    -> [Rule t Var]
-    -> Problem (InitialGoal t typ) (NarradarTRS t Var)
-expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} olddp newdps
-   = case lookupNode olddp dg of
-      Nothing -> p
-      Just i  -> p{dgraph=expandDGraph' p i newdps}
-
-expandDGraph' ::
-      ( t ~ f id, MapId f
-      , FrameworkId id, DPSymbol id
-      , FrameworkN (InitialGoal t typ) t Var
-      , Observable(GoalTerm t)
-      ) =>
-       Problem (InitialGoal t typ) (NarradarTRS t Var)
-    -> Int
-    -> [Rule t Var]
-    -> DGraph t Var
-expandDGraph' p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} i newdps
-  = mkDGraph (expandDPair (setP pairs p) i newdps) goals
-
-data instance Constraints DGraphF a = Ord a => DGraphConstraints
-instance Ord a => Suitable DGraphF a where
-  constraints = DGraphConstraints
-
-lookupNode p dg = Map.lookup p (pairsMap dg)
-
-lookupPair n dg = safeAt "lookupPair" (rulesArray $ pairs dg) n
-
-sccFor n dg = safeAt "sccFor" (sccsMap dg) n
-
-dreachablePairs DGraph{..} = Set.fromList $ rules pairs
-
-dinitialPairs g = map (safeAt "initialPairs" (rulesArray $ pairs g)) (toList $ initialPairsG g)
-
-
-nodesInPath :: DGraphF a -> Vertex -> Vertex -> Set Vertex
--- TODO Implement as a BF traversal on the graph, modified to accumulate the
---      set of possible predecessors instead of the direct one
-nodesInPath dg@DGraph{..} from to
-    | Just from' <- sccFor from dg
-    , Just to'   <- sccFor to   dg
-    , sccsInPath <- Set.intersection (Set.fromList $ reachable sccGraph from')
-                                     (Set.fromList $ reachable (transposeG sccGraph) to')
-    = Set.fromList (flattenSCCs [safeAt "nodesInPath" sccs i | i <- Set.toList sccsInPath])
-
-    | otherwise = Set.empty
-
-
-nodesInPathNaive g from to = Set.intersection (Set.fromList $ reachable g from)
-                                              (Set.fromList $ reachable g' to)
-  where g' = transposeG g
 
 -------------------------------
 -- Hood

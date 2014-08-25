@@ -62,11 +62,13 @@ instance IsDPProblem b => IsDPProblem (MkNarrowing b) where
 instance MkProblem b trs => MkProblem (MkNarrowing b) trs where
   mkProblem (MkNarrowing b)   = NarrowingProblem . mkProblem b
   mapRO o f (NarrowingProblem b) = NarrowingProblem (mapRO o f b)
+  setR_uncheckedO o rr p = p{baseProblem = setR_uncheckedO o rr (baseProblem p)}
 
 
 instance (MkProblem (MkNarrowing b) trs, MkDPProblem b trs) => MkDPProblem (MkNarrowing b) trs where
   mkDPProblemO o (MkNarrowing b) r p = NarrowingProblem $ mkDPProblemO o b r p
   mapPO o f (NarrowingProblem b) = NarrowingProblem (mapPO o f b)
+  setP_uncheckedO obs pp p = p{ baseProblem = setP_uncheckedO obs pp (baseProblem p)}
 
 deriving instance (Eq (Problem p trs)) => Eq (Problem (MkNarrowing p) trs)
 deriving instance (Ord (Problem p trs)) => Ord (Problem (MkNarrowing p) trs)

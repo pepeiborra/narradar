@@ -56,6 +56,7 @@ instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.
     MkProblem (Infinitary id p) trs where
   mkProblem (Infinitary af _ base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
   mapRO o f (InfinitaryProblem af p) = InfinitaryProblem af (mapRO o f p)
+  setR_uncheckedO o rr p = p{baseProblem = setR_uncheckedO o rr (baseProblem p)}
 
 instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
   getP   (InfinitaryProblem _  p) = getP p
@@ -65,6 +66,7 @@ instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
   mapPO o f (InfinitaryProblem af p) = InfinitaryProblem af (mapPO o f p)
   mkDPProblemO o (Infinitary af _ base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
     where p = mkDPProblemO o base rr dp
+  setP_uncheckedO obs pp p = p{ baseProblem = setP_uncheckedO obs pp (baseProblem p)}
 
 infinitary  g p = Infinitary (mkGoalAF g) bestHeu p
 infinitary' g p = Infinitary g bestHeu p

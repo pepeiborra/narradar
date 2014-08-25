@@ -1,4 +1,5 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards, NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, OverlappingInstances, TypeSynonymInstances #-}
@@ -39,13 +40,14 @@ import qualified Narradar.Types as Narradar
 import qualified Narradar.Types.ArgumentFiltering as AF
 
 import Debug.Hoed.Observe
+import Data.Data (Typeable)
 
 -- ------------------------------------------------------------
 -- | This is the processor described at the LOPSTR'09 paper
 -- ------------------------------------------------------------
-data NarrowingGoalToRelativeRewriting (info :: * -> *) = NarrowingGoalToRelativeRewriting deriving (Eq, Show)
+data NarrowingGoalToRelativeRewriting (info :: * -> *) = NarrowingGoalToRelativeRewriting deriving (Eq, Show, Typeable, Generic)
 data NarrowingGoalToRelativeRewritingProof = NarrowingGoalToRelativeRewritingProof | NotConstructorBased
-           deriving (Eq, Show)
+           deriving (Eq, Ord, Show, Typeable, Generic)
 
 type instance InfoConstraint (NarrowingGoalToRelativeRewriting info) = info
 
@@ -54,20 +56,15 @@ instance Pretty NarrowingGoalToRelativeRewritingProof where
                                                  text "problem implies the termination of narrowing (LOPSTR'09)"
   pPrint NotConstructorBased = text "The system is not constructor based, and hence the method from (LOPSTR'09) does not apply"
 
+instance Observable NarrowingGoalToRelativeRewritingProof
+
 
 -- | Regular instance. Must be applied before decomposing the problem using the Dependency Graph
 instance (gid ~ DPIdentifier (GenId id)
-         ,Ord id, Pretty (GenId id)
-         ,GetPairs base, Pretty base
-         ,Traversable (Problem base)
-         ,MkDPProblem (InitialGoal (TermF gid) (MkNarrowingGen base)) (NTRS gid)
-         ,NCap base gid
-         ,NUsableRules base gid
-         ,HasSignature (NProblem base (DPIdentifier id))
---         ,InsertDPairs (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) (NTRS gid)
-         ,InsertDPairs base (NTRS gid)
+         ,FrameworkId id
+         ,GetPairs base
+         ,FrameworkProblemN base gid
          ,Info info NarrowingGoalToRelativeRewritingProof
-         ,Observable base, Observable id
          ) =>
          Processor (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
   where
@@ -87,17 +84,11 @@ instance (gid ~ DPIdentifier (GenId id)
 --   For this we grab the entire dependency graph from the original pairs, which are stored
 --   in the InitialGoal problem
 instance (gid ~ DPIdentifier (GenId id)
-         ,Ord id, Pretty (GenId id)
-         ,GetPairs (MkNarrowing base), Pretty (MkNarrowing base)
-         ,Traversable (Problem base)
-         ,MkDPProblem (InitialGoal (TermF gid) (MkNarrowingGen base)) (NTRS gid)
-         ,NCap base gid
-         ,NUsableRules base gid
-         ,HasSignature (NProblem base (DPIdentifier id))
-         ,InsertDPairs (MkNarrowing base) (NTRS gid)
+         ,GetPairs (MkNarrowing base)
          ,Info info NarrowingGoalToRelativeRewritingProof
+         ,FrameworkId id
          ,FrameworkProblemN base gid
-         ,FrameworkProblemN base (DPIdentifier id)
+         ,PprTPDB (Problem(MkNarrowing base) (NTRS gid))
          ) =>
          Processor (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id))
   where
@@ -125,20 +116,19 @@ instance (gid ~ DPIdentifier (GenId id)
                                (take (length modes) $ map return vars)
                goalPairs = [ l :-> r | l :-> r <- getPairs baseFramework (goalRule:initialRules)
                                , rootSymbol l == Just (IdDP GoalId)]
-               r' = mapNarradarTRS convert (getR prob) `mappend` tRS [goalRule]
-               p1 = mapNarradarTRS convert (getP prob)
-               p' = DPTRS{typ       = Comparable newFramework
-                         ,dpsA      = dpsA p1
-                         ,rulesUsed = rulesUsed p1 `mappend` tRS [goalRule]
-                         ,depGraph  = depGraph p1
-                         ,unifiers  = unifiers p1
-                         ,sig       = sig p1}
+               r' = fmap convert (getR prob) `mappend` tRS [goalRule]
+               p1 = lowerNTRS $ fmap convert (getP prob)
+               p' = liftNF $
+                      p1{ typ       = Comparable newFramework
+                         ,rulesUsed = rulesUsed p1 `mappend`  Set.singleton goalRule
+                      }
 
-               dg = mkDGraph' baseFramework r'
-                              (insertDPairs' baseFramework
-                                             (mapNarradarTRS convert (pairs dgraph))
-                                             goalPairs)
-                              [goal']
+               initialProblem =
+                 insertDPairs
+                       (mkDPProblem baseFramework r' (fmap convert (pairs dgraph)))
+                       (tRS goalPairs)
+               dg = mkDGraph initialProblem [goal']
+
                newFramework = relative genRules $
                               InitialGoal [goal'] (Just dg) $
                               NarrowingGen (getBaseFramework baseFramework)
@@ -150,22 +140,19 @@ instance (gid ~ DPIdentifier (GenId id)
                            | c <- toList $ getConstructorSymbols (getR prob)
                            , let ar = getArity prob c]
 
-   genTerm   = term (IdFunction GenId) []
+   genTerm  = term (IdFunction GenId) []
 
-   vars = [toEnum 0 ..] \\ toList (getVars prob)
+   vars     = [toEnum 0 ..] \\ toList (getVars prob)
+   convert :: forall id f g v. (MapId f, Functor g, Functor (f(g id)), Functor(f(g(GenId id)))
+                               ) => Term (f (g id)) v -> Term(f(g(GenId id))) v
    convert  = mapTermSymbols (fmap AnId)
 
 
 procLOPSTR09 :: (gid ~ DPIdentifier (GenId id)
-                ,Ord id, Pretty (GenId id)
-                ,GetPairs base, Pretty base
-                ,Traversable (Problem base)
-                ,MkDPProblem (InitialGoal (TermF gid) (MkNarrowingGen base)) (NTRS gid)
-                ,NCap base gid
-                ,NUsableRules base gid
-                ,HasSignature (NProblem base (DPIdentifier id))
-                ,InsertDPairs base (NTRS gid)
-                ,Observable base, Observable id
+                ,FrameworkId id
+                ,Pretty (DPIdentifier id)
+                ,FrameworkProblemN base gid
+                ,GetPairs base
                 ) =>
                 NTRS (DPIdentifier id) -> NTRS (DPIdentifier id) -> DPIdentifier id -> [Mode] -> base ->
                 NProblem (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) gid
@@ -177,8 +164,8 @@ procLOPSTR09 rr pp goal_f modes baseFramework
   where
        newType  = relative genRules $ initialGoal [Concrete goal'] $ NarrowingGen baseFramework
 
-       r'       = mapNarradarTRS convert rr `mappend` mkTRS [goalRule]
-       p'       = mapNarradarTRS convert pp
+       r'       = fmap convert rr `mappend` mkTRS [goalRule]
+       p'       = fmap convert pp
 
        initialRules = [ rule | rule <- rules r'
                              , let Just id_f = getId (lhs rule)

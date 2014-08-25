@@ -10,6 +10,7 @@ module Narradar.Processor.RelativeProblemIPL14 (RelativeToRegularIPL14(..)) wher
 import Data.List ((\\))
 import Data.Monoid
 import Data.Typeable
+import Prelude.Extras
 
 import Narradar.Constraints.Modularity
 import Narradar.Constraints.Syntactic
@@ -73,7 +74,7 @@ instance Pretty RelativeToRegularProofIPL14 where
 instance ( MkProblem base trs
          , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
-         , Ord (t(Term t v)), Ord v, Enum v, Rename v
+         , Ord1 t, Ord v, Enum v, Rename v
          , HasId1 t, Unify t
          , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProofIPL14
@@ -102,7 +103,7 @@ instance ( MkProblem base trs
 instance ( MkProblem base trs
          , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
-         , Ord (t(Term t v)), Ord v, Enum v, Rename v
+         , Ord1 t, Ord v, Enum v, Rename v
          , HasId1 t, Unify t
          , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProofIPL14

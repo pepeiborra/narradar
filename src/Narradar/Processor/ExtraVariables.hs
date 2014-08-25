@@ -27,6 +27,7 @@ type instance InfoConstraint (ExtraVarsP info) = info
 --data ExtraVarsAF tag =  ExtraVarsAF (MkHeu tag)
 data ExtraVarsProof = EVFail | EVAFFail deriving (Eq, Ord, Show, Generic, Typeable)
 
+instance Observable (ExtraVarsP info) where observer = observeOpaque "Extra Vars"
 instance Observable ExtraVarsProof
 
 instance Pretty ExtraVarsProof where
@@ -34,11 +35,11 @@ instance Pretty ExtraVarsProof where
     pPrint EVAFFail = text "Failed to find an argument filtering which filters out the extra variables"
 
 
-instance (ExtraVars trs, Ord(Family.Var trs), Info info ExtraVarsProof) =>
-          Processor (ExtraVarsP info) (Problem (QRewriting id) trs)
+instance (QRewritingConstraint t, ExtraVars trs, Ord(Family.Var trs), Info info ExtraVarsProof) =>
+          Processor (ExtraVarsP info) (Problem (QRewriting t) trs)
   where
-    type Typ (ExtraVarsP info) (Problem (QRewriting id) trs) = QRewriting id
-    type Trs (ExtraVarsP info) (Problem (QRewriting id) trs) = trs
+    type Typ (ExtraVarsP info) (Problem (QRewriting t) trs) = QRewriting t
+    type Trs (ExtraVarsP info) (Problem (QRewriting t) trs) = trs
     applyO _ _ p
        | null (extraVars p) = return p
        | otherwise  = refuted EVFail p

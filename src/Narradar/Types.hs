@@ -158,7 +158,7 @@ mkDispatcher f =  f >=> final
 data AProblem t trs where
     ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
     AIRewritingProblem        :: Problem IRewriting trs -> AProblem t trs
-    AQRewritingProblem        :: Problem (QRewriting (TermFor trs)) trs -> AProblem t trs
+    AQRewritingProblem        :: Problem (QRewriting (Family.TermF trs)) trs -> AProblem t trs
     ANarrowingProblem         :: Problem Narrowing trs  -> AProblem t trs
     ACNarrowingProblem        :: Problem CNarrowing trs -> AProblem t trs
     ARelativeRewritingProblem :: Problem (Relative trs Rewriting) trs -> AProblem t trs
@@ -179,7 +179,7 @@ instance Observable1 (AProblem t) where observer1 = observeOpaque "A problem"
 
 dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
                     ,Dispatch (Problem Rewriting  trs)
-                    ,Dispatch (Problem (QRewriting (TermFor trs))  trs)
+                    ,Dispatch (Problem (QRewriting (Family.TermF trs))  trs)
                     ,Dispatch (Problem IRewriting trs)
                     ,Dispatch (Problem (InitialGoal t Rewriting) trs)
                     ,Dispatch (Problem (InitialGoal t IRewriting) trs)

@@ -66,30 +66,34 @@ instance IsDPProblem (MkRewriting st) where
 instance (MkDPProblem (MkRewriting st) trs, Monoid trs) => MkProblem (MkRewriting st) trs where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
   mapRO o f (RewritingProblem r p s m) = mkDPProblemO o (MkRewriting s m) (f r) p
+  setR_uncheckedO _ rr p = p{rr}
 
 instance MkProblem (MkRewriting st) trs => MkDPProblem (MkRewriting st) trs where
   mkDPProblemO o (MkRewriting s m) r p = RewritingProblem r p s m
   mapPO o f (RewritingProblem r p s m) = RewritingProblem r (f p) s m
+  setP_uncheckedO _ dd p = p{dd}
 
 instance (FrameworkN0 (MkRewriting st) t v) =>
   MkProblem (MkRewriting st) (NarradarTRS t v)
  where
   mkProblem (MkRewriting s m) rr = RewritingProblem rr mempty s m
   mapRO o f (RewritingProblem rr pp s m) = mkDPProblemO o (MkRewriting s m) (f rr) pp
+  setR_uncheckedO _ rr p = p{rr}
 
 instance ( FrameworkN0 (MkRewriting st) t v, Observable st ) =>
   MkDPProblem (MkRewriting st) (NarradarTRS t v)
  where
-  mkDPProblemO o it@(MkRewriting s m) rr dd
+  mkDPProblemO (O o oo) it@(MkRewriting s m) rr dd
     = case lowerNTRS dd of
         pp@DPTRS{rulesUsed} | (Set.fromList $ rules rr) == rulesUsed -> RewritingProblem rr dd s m
-        otherwise -> dpTRSO o (\rr p -> p{rr}) (\dd p -> p{dd}) (RewritingProblem rr dd s m)
-  mapPO o f me@RewritingProblem{rr,dd} =
+        otherwise -> oo "dpTRS" dpTRSO (RewritingProblem rr dd s m)
+  mapPO (O _ oo) f me@RewritingProblem{rr,dd} =
     let dd' = f dd in
     case lowerNTRS dd' of
       DPTRS{rulesUsed}
         | Set.fromList(rules rr) == rulesUsed -> me{dd=dd'}
-      _ -> dpTRSO o (\rr p -> p{rr}) (\dd p -> p{dd}) me{dd=dd'}
+      _ -> oo "dpTRS" dpTRSO me{dd=dd'}
+  setP_uncheckedO _ dd p = p{dd}
 
 -- Prelude
 

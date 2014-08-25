@@ -105,6 +105,7 @@ import           Language.Prolog.Transformations      (QueryAnswer(..))
 import           Prelude                              hiding (and,or,any,notElem,pi)
 import qualified Prelude                              as P
 
+import           Debug.Hoed.Observe
 
 -- ---------------------------
 -- Transformational processors
@@ -125,9 +126,9 @@ instance (Info info SKTransformProof
   type Typ (SKTransformNarrowing info) PrologProblem = CNarrowingGoal DRP
   type Trs (SKTransformNarrowing info) PrologProblem = NTRS DRP
 
-  applyO _ SKTransformNarrowing p0@PrologProblem{..} =
+  applyO o SKTransformNarrowing p0@PrologProblem{..} =
    andP SKTransformNarrowingProof p0
-   [ mkNewProblem (cnarrowingGoal ngoal) sk_p :: NProblem (CNarrowingGoal DRP) DRP
+   [ mkNewProblemO o (cnarrowingGoal ngoal) sk_p :: NProblem (CNarrowingGoal DRP) DRP
          | let sk_p  = prologTRS'' rr (getSignature rr) :: NarradarTRS (TermF RP) Narradar.Var
                rr    = skTransformWith id (prepareProgram $ addMissingPredicates program) :: PrologRules RP Narradar.Var
          , goal     <- goals
@@ -1120,7 +1121,7 @@ instance Monoid (Max Int) where mempty = Max 0; mappend (Max i) (Max j) = Max(ma
 
 prologMState :: ( id ~ Labelled (PrologId a)
                 , Ord a
-                , Enum v, Ord v, Rename v
+                , Enum v, Ord v, Rename v, Observable v
                 ) => PrologRules' id v -> AF_ id -> PrologMState id v
 prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0)) af0 sig0 db (max_depth+1) max_u s_vars
   where

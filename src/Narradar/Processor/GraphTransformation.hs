@@ -97,11 +97,11 @@ instance ( t ~ f (DPIdentifier id)
 instance ( t ~ f (DPIdentifier id)
          , Family.Id t ~ DPIdentifier id
          , Info info GraphTransformationProof
-         , FrameworkN (QRewriting (Term t Var)) t Var
+         , FrameworkN (QRewriting t) t Var
          ) =>
-  Processor (NarrowingP info) (NarradarProblem (QRewriting (Term t Var)) t) where
-  type Typ (NarrowingP info) (NarradarProblem (QRewriting (Term t Var)) t) = QRewriting (Term t Var)
-  type Trs (NarrowingP info) (NarradarProblem (QRewriting (Term t Var)) t) = NarradarTRS t Var
+  Processor (NarrowingP info) (NarradarProblem (QRewriting t) t) where
+  type Typ (NarrowingP info)  (NarradarProblem (QRewriting t) t) = QRewriting t
+  type Trs (NarrowingP info)  (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
   applySearchO (O o oo) NarrowingP{restrict} p0@(QRewritingProblem _ _ q _ qCondition)
    | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
    | otherwise  = [ singleP (NarrowingProof p olddp newdps) p0 (oo "expand" expandDPairO p0 i newdps)
@@ -115,7 +115,7 @@ instance ( t ~ f (DPIdentifier id)
           dpss = zip [0..] (map (oo "f" f) $ assocs dpsA')
 
           f (O o oo) (i, olddp@(s :-> t))
-              | (null (qset q) && isLinear t) || qCondition
+              | (null (terms q) && isLinear t) || qCondition
               , not (null newdps)
               = newdps
 
@@ -139,12 +139,12 @@ instance ( t ~ f (DPIdentifier id)
                           -- (I don't recall having seen this in any paper but surely is common knowledge)
                           , none(isVar.rhs) dps ]
 
-                 uu     = o "uu" $ map (lhs . (safeAt "narrowing" dpsA)) (o "gr_i" $ safeAt "narrowing" gr i)
+                 uu     = {-o "uu" $ -}map (lhs . (safeAt "narrowing" dpsA)) ({-o "gr_i" $ -}safeAt "narrowing" gr i)
 --                 pos_uu = mconcat (Set.fromList . positions <$> uu)
                  pos_t  = oo "pos_t" $ \(O o oo) ->
                           Set.fromList $ positions $ o "icap" $ runIcap (getVars p0) $
                             (getFresh t >>= icap p0 [s])
-                 pos_uu = intersections $ o "pos_uu" $ map Set.fromList $ flip map uu $ o "pos_uu\\" $ \u -> do
+                 pos_uu = intersections $ {- o "pos_uu" $ -} map Set.fromList $ flip map uu $ {-o "pos_uu\\" $-} \u -> do
                     p <- positions u
                     guard (Set.member p pos_t)
                     case unify (u!p) (t!p) of
@@ -154,9 +154,9 @@ instance ( t ~ f (DPIdentifier id)
                  pos_qnf  = Set.fromList $ filter (\p -> not(inQNF (t ! p) q)) (positions t)
                  validPos = oo "validPos" $ \(O o oo) ->
                             o "restrict & valid"
-                          $ Set.toList
-                          $ maybe id (Set.intersection . o "restrict" . Set.fromList) restrict
-                          $ o "valid" (Set.union (o "uu" pos_uu) (o "qnf" pos_qnf))
+                          $-} Set.toList
+                          $ maybe id (Set.intersection . {-o "restrict" .-} Set.fromList) restrict
+                          $ {-o "valid"-} (Set.union ({-o "uu"-} pos_uu) ({-o "qnf"-} pos_qnf))
 
 
 -- Liftings
@@ -295,11 +295,11 @@ instance (trs ~ NarradarTRS t Var
          ,DPIdentifier id ~ Family.Id t
          ,Info info GraphTransformationProof
          ,FrameworkId id, NFData (Term t Var)
-         ,FrameworkN (QRewriting (Term t Var)) t Var
+         ,FrameworkN (QRewriting t) t Var
          ) =>
-    Processor (Instantiation info) (NarradarProblem (QRewriting (Term t Var)) t) where
-  type Typ (Instantiation info) (NarradarProblem (QRewriting (Term t Var)) t) = QRewriting (Term t Var)
-  type Trs (Instantiation info) (NarradarProblem (QRewriting (Term t Var)) t) = NarradarTRS t Var
+    Processor (Instantiation info) (NarradarProblem (QRewriting t) t) where
+  type Typ (Instantiation info) (NarradarProblem (QRewriting t) t) = QRewriting t
+  type Trs (Instantiation info) (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
 --  applySearchO o Instantiation = instantiation o
   applySearchO (O o oo) Instantiation p
    | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
@@ -397,11 +397,11 @@ instance (trs ~ NarradarTRS t Var
          ,DPIdentifier id ~ Family.Id t
          ,Info info GraphTransformationProof
          ,FrameworkId id, NFData (Term t Var)
-         ,FrameworkN (QRewriting (Term t Var)) t Var
+         ,FrameworkN (QRewriting t) t Var
          ) =>
-    Processor (FInstantiation info) (NarradarProblem (QRewriting (Term t Var)) t) where
-  type Typ (FInstantiation info) (NarradarProblem (QRewriting (Term t Var)) t) = QRewriting (Term t Var)
-  type Trs (FInstantiation info) (NarradarProblem (QRewriting (Term t Var)) t) = NarradarTRS t Var
+    Processor (FInstantiation info) (NarradarProblem (QRewriting t) t) where
+  type Typ (FInstantiation info) (NarradarProblem (QRewriting t) t) = QRewriting t
+  type Trs (FInstantiation info) (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
   applySearchO o FInstantiation = finstantiation o
 
 instance (v ~ Var
@@ -491,13 +491,13 @@ instance ( t ~ f id, MapId f
 
 instance ( t ~ f id, v ~ Var
          , Info info GraphTransformationProof
-         , FrameworkN (QRewriting (Term t Var)) t Var
+         , FrameworkN (QRewriting t) t Var
          , Observable (SomeInfo info)
          ) =>
-    Processor (RewritingP info) (NarradarProblem (QRewriting (Term t Var)) t)
+    Processor (RewritingP info) (NarradarProblem (QRewriting t) t)
  where
-  type Typ (RewritingP info) (NarradarProblem (QRewriting (Term t Var)) t) = QRewriting (Term t Var)
-  type Trs (RewritingP info) (NarradarProblem (QRewriting (Term t Var)) t) = NarradarTRS t Var
+  type Typ (RewritingP info) (NarradarProblem (QRewriting t) t) = QRewriting t
+  type Trs (RewritingP info) (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
   applySearchO (O o oo) RewritingP p0 = problems
     where
      redexes t = [ p | p <- positions t, not (isNF (rules $ getR p0) (t!p))]
@@ -743,8 +743,8 @@ narrowing_innermostIG o p0@InitialGoalProblem{dgraph}
 narrow1DP rr (l :-> r) = [ (Term.applySubst theta l :-> r', p)
                            | ((r',p),theta) <- observeAll (narrow1P rr r) ]
 
---qNarrow1DPO :: Observer -> QSet (TermN id) -> [RuleN id] -> RuleN id -> [(RuleN id, Position)]
-qNarrow1DPO (O o oo) qset@(QSet q) rr (l :-> r) =
+qNarrow1DPO :: FrameworkTerm t Var => Observer -> QSet t -> [Rule t Var] -> Rule t Var -> [(Rule t Var, Position)]
+qNarrow1DPO (O o oo) qset@QSet{terms=q} rr (l :-> r) =
   [ (l' :-> r', p)
   | ((r',p),theta) <- observeAll (qNarrow1P' q rr r)
   , let l' = applySubst (o "theta" $ liftSubstNF theta) l

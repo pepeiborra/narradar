@@ -101,15 +101,16 @@ instance (FrameworkProblem Rewriting trs
 -- Implementation of Theorem 3.14 in Rene Thiemann's thesis
 instance (Family.Rule trs ~ Rule t v
          ,v ~ Family.Var trs
+         ,v ~ Var
          ,Info info ToInnermostProof
-         ,FrameworkProblem (QRewriting (Term t v)) trs
-         ,FrameworkN (QRewriting (Term t v)) t v
+         ,FrameworkProblem (QRewriting t) trs
+         ,FrameworkN (QRewriting t) t v
          ,Eq trs
          ) =>
-    Processor (ToInnermost info) (Problem (QRewriting (Term t v)) trs)
+    Processor (ToInnermost info) (Problem (QRewriting t) trs)
   where
-   type Typ (ToInnermost info) (Problem (QRewriting (Term t v)) trs) = QRewriting (Term t v)
-   type Trs (ToInnermost info) (Problem (QRewriting (Term t v)) trs) = trs
+   type Typ (ToInnermost info) (Problem (QRewriting t) trs) = QRewriting t
+   type Trs (ToInnermost info) (Problem (QRewriting t) trs) = trs
    applyO o ToInnermost p
       | isNothing cond1 && isNothing cond2 && cond3 && cond4 && p' /= p = singleP QInnermostProof p p'
       | otherwise = dontKnow (QInnermostFail reason) p
@@ -123,11 +124,12 @@ instance (Family.Rule trs ~ Rule t v
        cond3 = isQValid p
        cond4 = m == M
        r  = rules(getR p)
-       p' = mkDerivedDPProblem (QRewriting (QSet (lhs <$> r)) m) p
+       p' = mkDerivedDPProblem (qRewritingO o (lhs <$> r) m) p
        joinable s t =
             last (take 100 (rewrites r s)) == last(take 100 (rewrites r t))
 
-       QRewriting (QSet q) m = getFramework p
+       m = qmin $ getFramework p
+       q = terms $ qset $ getFramework p
 
        reason =
          case (cond1, cond2, cond3, cond4) of
@@ -140,16 +142,17 @@ instance (Family.Rule trs ~ Rule t v
 -- Adaptation of Theorem 3.14 in Rene's thesis
 instance (Family.Rule trs ~ Rule t v
          ,v ~ Family.Var trs
+         ,v ~ Var
          ,Info info ToInnermostProof
-         ,Info info (Problem (QRewriting (Term t v)) trs)
-         ,FrameworkN (InitialGoal (TermF id) (QRewriting (Term t v))) t v
-         ,FrameworkN (QRewriting (Term t v)) t v
-         ,FrameworkProblem (InitialGoal (TermF id) (QRewriting (Term t v))) trs
-         ,FrameworkProblem (QRewriting (Term t v)) trs
+         ,Info info (Problem (QRewriting t) trs)
+         ,FrameworkN (InitialGoal (TermF id) (QRewriting t)) t v
+         ,FrameworkN (QRewriting t) t v
+         ,FrameworkProblem (InitialGoal (TermF id) (QRewriting t)) trs
+         ,FrameworkProblem (QRewriting t) trs
          ,Eq trs
          ) =>
-    Processor (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting (Term t v))) trs)
+    Processor (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting t)) trs)
   where
-   type Typ (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting (Term t v))) trs) = InitialGoal (TermF id) (QRewriting (Term t v))
-   type Trs (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting (Term t v))) trs) = trs
+   type Typ (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting t)) trs) = InitialGoal (TermF id) (QRewriting t)
+   type Trs (ToInnermost info) (Problem (InitialGoal (TermF id) (QRewriting t)) trs) = trs
    applyO o ToInnermost = liftProcessor o ToInnermost
