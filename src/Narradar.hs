@@ -15,6 +15,7 @@ module Narradar ( module Narradar.Processor.Graph
                 , module Narradar.Processor.RelativeProblem
                 , module Narradar.Processor.RelativeProblemIPL14
                 , module Narradar.Processor.InnermostProblem
+                , module Narradar.Processor.InitialGoal
                 , module Narradar.Processor.SubtermCriterion
                 , module Narradar.Processor.QRewriting
                 , module Narradar.Types
@@ -30,6 +31,7 @@ import Narradar.Processor.RPO
 import Narradar.Processor.ExtraVariables
 import Narradar.Processor.UsableRules
 import Narradar.Processor.NarrowingProblem
+import Narradar.Processor.InitialGoal
 import Narradar.Processor.InnermostProblem
 import Narradar.Processor.PrologProblem
 import Narradar.Processor.RelativeProblem

@@ -200,6 +200,7 @@ Library
      Narradar.Processor.SubtermCriterion,
      Narradar.Processor.FLOPS08,
 --     Narradar.Processor.LOPSTR09,
+     Narradar.Processor.InitialGoal,
      Narradar.Utils,
      Narradar.Utils.Memo,
      Narradar.Utils.Html,
