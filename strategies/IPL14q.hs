@@ -22,13 +22,13 @@ import Data.Typeable
 import qualified Data.Set as Set
 import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
-import Narradar hiding (lfp)
+import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Framework.GraphViz
-import Lattice ()
 import Narradar.Utils (pprTrace, Comparable(..))
+import Common
 import Text.Printf
 
 import Debug.Hoed.Observe
@@ -39,7 +39,7 @@ import System.IO.Unsafe
 #ifndef WEB
 import Narradar.Interface.Cli
 main = do
-  narradarMain listToMaybe
+  runO$ narradarMain (id :: [a] -> [a]) nilObserver
   lpos <- readIORef lpoCounter
   let lpoUnique = length (nub lpos)
   printf "Counted %d calls to lpo, %d unique" (length lpos) lpoUnique
@@ -57,25 +57,25 @@ instance Dispatch thing where dispatch _ = error "This version of Narradar does 
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = apply RewritingToQRewriting >=> dispatch
+  dispatch = qr >=> dispatch
 
 -- Rewriting
 instance () => Dispatch (NProblem IRewriting Id) where
-  dispatch p = apply RewritingToQRewriting p >>= dispatch
+  dispatch = qr >=> dispatch
+
+qrO p = gdmobservers "QRewriting" applyO RewritingToQRewriting p
+qr p = apply RewritingToQRewriting p
 
 -- Rewriting
-instance (Eq(EqModulo(NProblem (QRewritingN Id) Id))
+instance (-- Eq(EqModulo(NProblem (QRewritingN Id) Id))
          ) => Dispatch (NProblem (QRewritingN Id) Id) where
   dispatch = ev
-             >=> lfpBounded 5 (lfp dgi >=> (sc `orElse` lpo `orElse` (rew .|. inst .|. finst .|. narr )))
---             >=> lfp dgi >=> ((inst >=> ur >=> dg >=> lpoO >=> dg) .|.
---                              (finst >=> lfp dgi >=> (lpo .|. narrP [[1]]) >=> lfp dgi >=> narrP [[2]] >=> lfp dgi >=> (rew .|. narrP [[3]]) >=> lfp dgi >=> lpo >=> lfp dgi))
+             >=> lfpBounded 5 (lfp dgi >=> (sc `orElse` lpo `orElse` rew `orElse` (narrO .|. inst .|. finst )))
              >=> final
     where
       dgi    = inn `orElse` ur `orElse` dg
       inn    = apply ToInnermost
       innO p = gdmobservers "Innermost" applyO ToInnermost p
---      lpo  = apply (RPOProc LPOAF Needed SMTFFI True)
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
@@ -91,72 +91,7 @@ instance (Dispatch (NProblem base id)
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegularIPL14 >=> dispatch
 
--- Solvers
-dg_ = DependencyGraphSCC{useInverse=True}
-dg = apply dg_
-sc = apply SubtermCriterion
-dgsc = lfp(dg >=> sc)
-ev = apply ExtraVarsP
-inn = apply ToInnermost >=> dispatch
-ur    = apply UsableRules
-narr = apply (NarrowingP Nothing)
-narrP p x = apply (NarrowingP (Just p)) x
-inst  = apply Instantiation
-rew   = apply RewritingP
-finst = apply FInstantiation
-scO p = gdmobservers "Subterm criterion" applyO SubtermCriterion p
-urO p = gdmobservers "Usable Rules" applyO UsableRules p
-instO p = gdmobservers "Instantiation" applyO Instantiation p
-rewO p = gdmobservers "Rewriting" applyO RewritingP p
-narrO p = gdmobservers "Narrowing" applyO (NarrowingP (Just p))
-dgO p = gdmobservers "Graph" applyO (DependencyGraphSCC False) p
-
-rpoPlus transform
-   = repeatSolver 2 (dgsc >=> (lpo .|. rpos .|. transform))
-
 lpoCounter :: IORef [Comparable]
 lpoCounter = unsafePerformIO $ do
   c <- newIORef []
   return c
-
-lpo = lpoO' nilObserver
-lpoO = gdmobservers "LPO" lpoO'
-lpoO' o p  = unsafePerformIO$ do
-  modifyIORef lpoCounter $ (Comparable (EqModulo p) :)
-  return $ applyO o (RPOProc LPOAF  Needed SMTFFI True) p
-mpo  = apply (RPOProc MPOAF  Needed SMTFFI True)
-lpos = apply (RPOProc LPOSAF Needed SMTFFI True)
-rpo  = apply (RPOProc RPOAF  Needed SMTFFI True)
-rpos = apply (RPOProc RPOSAF Needed SMTFFI True)
-
-gt1 = apply RewritingP .||. narr .||. apply FInstantiation .||. apply Instantiation
-gt2 = narr .||. apply FInstantiation .||. inst
-
--- | Take the largest fixpoint of a strategy.
-lfp :: (IsMZero mp, Traversable mp, Eq a) => (a -> Proof info mp a) -> a -> Proof info mp a
-lfp strat prob = do
-  let proof = strat prob
-  case proof of
-      (F.toList -> [prob']) | prob == prob' -> return prob
-      _ | isFailedLayer proof -> return prob
-      _ -> do
-       prob' <- proof
-       if prob == prob' then return prob else lfp strat prob'
-
--- | Take the largest fixpoint of a strategy, bounded.
-lfpBounded :: (IsMZero mp, Traversable mp, Eq a) => Int -> (a -> Proof info mp a) -> a -> Proof info mp a
-lfpBounded 0 strat prob = return prob
-lfpBounded n strat prob = do
-  let proof = strat prob
-  case proof of
-      (F.toList -> [prob']) | prob == prob' -> return prob
-      _ | isFailedLayer proof -> return prob
-      _ -> do
-       prob' <- proof
-       if prob == prob' then return prob else lfpBounded (n-1) strat prob'
-
-isFailedLayer proof =
-  case proof of
-            Impure DontKnow{} -> True
-            Impure (Search m) -> isMZero m
-            _ -> False
