@@ -165,11 +165,14 @@ mapIGP ::
          Problem (InitialGoal t p) (NarradarTRS t v) ->
          Problem (InitialGoal t p) (NarradarTRS t v)
 mapIGP o f p@(InitialGoalProblem goals g p0)
-    = dpTRSO o $ InitialGoalProblem goals g' p'
+    = case getP p' of
+        (lowerNTRS -> DPTRS{rulesUsed=rulesUsed'})
+          | rulesUsed' == rulesUsed(lowerNTRS $ getP p)
+          -> p'
+        _ -> dpTRSO o p'
    where
-     p' = mapPO o f p0
-     g' = mkDGraphO o p' goals
-
+     p'  = InitialGoalProblem goals g p0'
+     p0' = mapPO o f p0
 
 instance (t ~ f id, MapId f
          ,FrameworkId id, DPSymbol id
@@ -521,9 +524,12 @@ instance (Pretty (GoalTerm t), Pretty (Term t Var)) => Pretty (CAGoal t) where
   pPrint (Concrete g) = text "concrete" <+> g
   pPrint (Abstract g) = text "abstract" <+> g
 
+instance (PprTPDB (GoalTerm t), PprTPDB (Term t Var)) => PprTPDB (CAGoal t) where
+  pprTPDB (Concrete g) = text "concrete" <+> pprTPDB g
+  pprTPDB (Abstract g) = text "abstract" <+> pprTPDB g
+
 instance Pretty p => Pretty (InitialGoal id p) where
     pPrint InitialGoal{..} = text "Initial Goal" <+> pPrint baseFramework
-
 
 instance (Pretty (Term t Var), Pretty(GoalTerm t), Pretty (Problem base trs)) =>
     Pretty (Problem (InitialGoal t base) trs)
@@ -532,18 +538,19 @@ instance (Pretty (Term t Var), Pretty(GoalTerm t), Pretty (Problem base trs)) =>
       pPrint baseProblem $$
       text "GOALS:" <+> pPrint goals
 
+instance PprTPDB Mode where pprTPDB = pPrint
 
 instance HTML p => HTML (InitialGoal id p) where
     toHtml InitialGoal{..} = toHtml "Initial goal " +++ baseFramework
 
 instance HTMLClass (InitialGoal id typ) where htmlClass _ = theclass "G0DP"
 
-instance (Pretty (Term t Var), Pretty (GoalTerm t), PprTPDB (Problem typ trs)) =>
+instance (Pretty (Term t Var), PprTPDB (CAGoal t), PprTPDB (Problem typ trs)) =>
     PprTPDB (Problem (InitialGoal t typ) trs)
  where
     pprTPDB (InitialGoalProblem goals _ p) =
         pprTPDB p $$
-        vcat [parens (text "STRATEGY GOAL" <+> g) | g <- goals]
+        vcat [parens (text "STRATEGY GOAL" <+> pprTPDB g) | g <- goals]
 
 
 -- ICap
