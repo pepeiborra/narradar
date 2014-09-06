@@ -60,26 +60,26 @@ printDiagram :: (IsMZero mp, Traversable mp) =>
 printDiagram tmp Options{..} proof
        | isNothing pdfFile = return ()
        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
-                               let dotSrc = dotProof' DotProof{showFailedPaths = verbose > 1} proof
+                               let dotSrc = dotProof' DotProof{showFailedPaths = gdmobserve "showFailedPaths" $ verbose > 1} proof
                                hPutStrLn h dotSrc
                                hClose h
 #ifdef DEBUG
                                when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
 #endif
-                               let dotCmd = printf "dot -Tpdf %s -o%s" fp the_pdf
+                               let dotCmd = printf "%s -Tpdf %s -o%s" dot fp the_pdf
                                echoV dotCmd
                                dotOk <- system dotCmd
                                echo ("PDF proof written to " ++ the_pdf)
                                return (dotOk == ExitSuccess, ())
 
 narradarMain :: forall mp.
-                 (IsMZero mp, Traversable mp, Observable1 mp
+                 (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
-                 ,Dispatch (Problem (QRewriting (TermN Id)) (NTRS Id))
+                 ,Dispatch (Problem (QRewriting  (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
-                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermN Id))) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermF Id))) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
@@ -89,21 +89,22 @@ narradarMain :: forall mp.
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
                  ,Dispatch PrologProblem
-                 ) => (forall a. mp a -> Maybe a) -> IO ()
-narradarMain run = catchTimeout $ do
+                 ) => (forall a. mp a -> [a]) -> Observer ->IO ()
+narradarMain run o = catchTimeout $ do
   (options, _, _errors) <- getOptions
-  narradarMain' run options
+  narradarMain' run o options
   where
     catchTimeout = (`CE.catch` \TimeoutException -> putStrLn "MAYBE" >> exitSuccess)
 
+
 narradarMain' :: forall mp.
-                 (IsMZero mp, Traversable mp, Observable1 mp
-                 ,Dispatch (Problem (QRewriting (TermN Id)) (NTRS Id))
+                 (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
+                 ,Dispatch (Problem (QRewriting (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
-                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermN Id))) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermF Id))) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
@@ -113,17 +114,17 @@ narradarMain' :: forall mp.
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
                  ,Dispatch PrologProblem
-                 ) => (forall a. mp a -> Maybe a) -> Options -> IO ()
+                 ) => (forall a. mp a -> [a]) -> Observer -> Options -> IO ()
 
-narradarMain' run flags@Options{..} = do
+narradarMain' run (O o oo) flags@Options{..} = do
   tmp <- getTemporaryDirectory
 
-  a_problem <- eitherM $ narradarParse problemFile input
+  a_problem <- eitherM $ {-oo "narradarParse"-} narradarParse problemFile input
 
   let --proof :: forall info. Proof info mp Final
-      proof = dispatchAProblem a_problem
-  sol <- maybe (fmap Just) withTimeout timeout $
-         evaluate $ run (runProof proof)
+      proof = o "proof" $ dispatchAProblem a_problem
+  sol <- maybe (fmap return) withTimeout timeout $
+         evaluate (listToMaybe $ run (runProof proof))
   let diagrams = isJust pdfFile
 
   case join sol of
@@ -131,11 +132,11 @@ narradarMain' run flags@Options{..} = do
                    when diagrams $ printDiagram tmp flags sol
                    when (verbose>0) $ print $ pPrint sol
 
-    Nothing  -> do
+    Nothing -> do
              putStrLn "MAYBE"
-             let proof' = simplifyProof proof
-             when (verbose > 1) $ print $ pprProofFailures proof'
-             when (verbose > 1 && diagrams) (printDiagram tmp flags proof') `const` proof
+             let proof' = {-simplifyProof-} proof
+             when (verbose > 1) $ print $ pprProofFailures ( proof')
+             when (diagrams) (printDiagram tmp flags (proof))
 
 
 withTimeout t m = do
@@ -218,12 +219,16 @@ data Options =  Options { problemFile :: FilePath
                         , input       :: String
                         , verbose     :: Int
                         , timeout     :: Maybe Int
+                        , dot         :: String
                         }
 
-defOpts = Options{ problemFile = "", pdfFile = Nothing, input = "", verbose = 0, timeout = Nothing}
+defOpts = Options{ problemFile = "", pdfFile = Nothing, input = "", verbose = 0, timeout = Nothing, dot = "dot"}
 
 --opts :: [OptDescr (Flags f id -> Flags f id)]
 opts = [ Option ""  ["pdf"] (OptArg setPdfPath "PATH") "Produce a pdf proof file (implied by -v2)"
+       , Option ""  ["fdp"] (NoArg (setDot "fdp")) "Use the fdp layout for the pdf proof"
+       , Option ""  ["sfdp"] (NoArg (setDot "sfdp")) "Use the sfdp layout for the pdf proof"
+       , Option ""  ["twopi"] (NoArg (setDot "twopi")) "Use the twopi layout for the pdf proof"
 #ifndef GHCI
        , Option "t" ["timeout"] (ReqArg setTimeout "SECONDS") "Timeout in seconds (default:none)"
 #endif
@@ -273,3 +278,5 @@ setVerbosity (Just i) opts@Options{..}
 
 setPdfPath Nothing  opts = P.return opts{ pdfFile = Just (problemFile opts <.> "pdf") }
 setPdfPath (Just f) opts = P.return opts{ pdfFile = Just f }
+
+setDot x opts = P.return opts{ dot = x}
