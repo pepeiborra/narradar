@@ -456,12 +456,14 @@ instance ( t ~ f id, v ~ Var
     where
      redexes t = [ p | p <- positions t, not (isNF (rules $ getR p0) (t!p))]
 
-     problems = [ singleP (RewritingProof olddp (s:->t')) p0 (expandDPair p0 i [s:->t'])
+     problems = [ singleP (RewritingProof olddp newdp) p0 (expandDPair p0 i [newdp])
                 | (i, olddp@(s :-> t)) <- zip [0..] (rules $ getP p0)
                 , p <- redexes t
-                , let urp = getR$  iUsableRules' p0 [] [t!p]
+                , let urp = getR$ iUsableRules' p0 [] [t!p]
                 , isNonOverlapping urp
                 , [t'] <- [rewrite1p (rules urp) t p]
+                , let newdp = s :-> t'
+                , olddp /= newdp
                 ]
 
 instance ( t ~ f id, MapId f
