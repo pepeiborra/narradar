@@ -12,7 +12,6 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# OPTIONS-GHC -}
 
 module Narradar.Processor.RPO where
 
@@ -49,11 +48,11 @@ import Narradar.Constraints.SAT.Solve ( SAT, EvalM, BIEnv, runEvalM, Var
 import qualified Narradar.Constraints.SAT.Solve as Solve
 import qualified Narradar.Constraints.SAT.MonadSAT as MonadSAT
 import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms )
-import Narradar.Constraints.SAT.RPOAF ( SATSymbol, UsableSymbol(..)
+import Narradar.Constraints.SAT.RPOAF ( UsableSymbol(..), MkSATSymbol
                                       , RPOSsymbol(..), RPOsymbol(..), LPOSsymbol, LPOsymbol, MPOsymbol
                                       , RPOProblemN, RPOId
-                                      , UsableSymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
-                                      , theSymbolR, isUsable, filtering, status
+                                      , UsableSymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, rpoAF_IGDP'
+                                      , theSymbolR, isUsable, usableSymbol, filtering, status
                                       , verifyRPOAF, isCorrect
                                       , omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone)
 --import Narradar.Constraints.SAT.RPO   (verifyRPO)
@@ -83,7 +82,7 @@ runSAT Yices = satYices YicesOpts{maxWeight = 20, timeout = Nothing}
 -- runS (YicesSimp1 timeout) = unsafePerformIO . solveYicesSimp1 YicesOpts{maxWeight = 20, timeout = Just 60}
 type AllowCol = Bool
 data RPOProc (info :: * -> *) where
-  RPOProc :: SATSymbol e => Extension e -> UsableRulesMode -> Solver -> AllowCol -> RPOProc info
+  RPOProc :: Extension -> UsableRulesMode -> Solver -> AllowCol -> RPOProc info
 type instance InfoConstraint (RPOProc info) = info
 
 instance Observable (RPOProc info) where observer = observeOpaque "RPO processor"
@@ -96,74 +95,71 @@ instance Observable (RPOProc info) where observer = observeOpaque "RPO processor
    - would enable them only in the FFI encoding
 
  -}
-data Extension a where
-    RPOSAF :: Extension (RPOAF.Usable(RPOSsymbol v id))
-    RPOAF  :: Extension (RPOAF.Usable(RPOsymbol  v id))
-    LPOSAF :: Extension (RPOAF.Usable(LPOSsymbol v id))
-    LPOAF  :: Extension (RPOAF.Usable(LPOsymbol  v id))
-    MPOAF  :: Extension (RPOAF.Usable(MPOsymbol  v id))
+data Extension       = RPOSAF | RPOAF | LPOSAF | LPOAF | MPOAF
 data UsableRulesMode = None | Usable | Needed
-data Solver    = SMTFFI | SMTSerial -- | SAT SATSolver
-data SATSolver = Yices | Minisat | Funsat
+data Solver          = SMTFFI | SMTSerial -- | SAT SATSolver
+data SATSolver       = Yices | Minisat | Funsat
 
+smtSerial :: (FrameworkId id
+             ) => Solve.SMTY id Var (EvalM Var (a,b,[id])) -> IO (Maybe (a,b,[id]))
 smtSerial = Solve.smtSerial MonadSAT.V
-procAF' p ex ur run = fmap (mapFramework getConstant) $ procAF (mapFramework Constant p) ex ur run
 
-instance (Info info (RPOProof id)
+procAF' p ur run = fmap (mapFramework getConstant) $ procAF (mapFramework Constant p) ur run
+
+instance ( Info info (RPOProof id)
+         , Info info (Problem (Constant Rewriting (TermF id)) (NTRS id))
          , FrameworkId id, Show id
 --         , FrameworkProblemN (Constant Rewriting (TermN id)) id
          ) => Processor (RPOProc info) (NProblem Rewriting id)
    where
     type Typ (RPOProc info) (NProblem Rewriting id) = Rewriting
     type Trs (RPOProc info) (NProblem Rewriting id) = NTRS id
-    applyO _ (RPOProc RPOSAF usablerules SMTFFI    allowCol) p = procAF' p RPOSAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF' p RPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOSAF usablerules SMTFFI    allowCol) p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial .). rpoAF_DP allowCol RPOAF.rpos)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF' p RPOSAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.rpo)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF' p RPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF' p RPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF' p RPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF' p LPOSAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF' p LPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF' p LPOSAF usablerules ((runSAT s .). rpoAF_DP allowCol)
-
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF' p LPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF' p LPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF' p LPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
-
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF' p MPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF' p MPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF' p MPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.mpo)
 
 
 instance (FrameworkId id
          ,Info info (RPOProof id)
+         ,Info info (Problem (Constant IRewriting (TermF id)) (NTRS id))
 --         ,FrameworkProblemN (Constant IRewriting (TermN id)) id
          ) => Processor (RPOProc info) (NProblem IRewriting id)
    where
     type Typ (RPOProc info) (NProblem IRewriting id) = IRewriting
     type Trs (RPOProc info) (NProblem IRewriting id) = NTRS id
-    applyO _ (RPOProc RPOSAF usablerules SMTFFI allowCol)    p = procAF' p RPOSAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF' p RPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF' p RPOSAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOSAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF' p RPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF' p RPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF' p RPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF' p LPOSAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF' p LPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF' p LPOSAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF' p LPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF' p LPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF' p LPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF' p MPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF' p MPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF' p MPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF' p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF' p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.mpo)
 
 instance (FrameworkId id
          ,Info info (RPOProof id)
@@ -171,25 +167,25 @@ instance (FrameworkId id
    where
     type Typ (RPOProc info) (NProblem (QRewritingN id) id) = QRewritingN id
     type Trs (RPOProc info) (NProblem (QRewritingN id) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usablerules SMTFFI allowCol)    p = procAF p RPOSAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF p RPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF p RPOSAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOSAF usablerules SMTFFI allowCol)    p = procAF p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF p RPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF p RPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF p RPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF p LPOSAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF p LPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF p LPOSAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF p LPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF p LPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF p LPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF p MPOAF usablerules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF p MPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF p MPOAF usablerules ((runSAT s .). rpoAF_DP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF p usablerules ((smtFFI.) . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF p usablerules ((runSAT s .). rpoAF_DP allowCol RPOAF.mpo)
 
 
 instance (Info info (RPOProof id)
@@ -199,28 +195,29 @@ instance (Info info (RPOProof id)
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = InitialGoal (TermF id) Rewriting
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procAF_IG p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF_IG p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procAF_IG p usableRules ((smtFFI.)   . rpoAF_IGDP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF_IG p usablerules ((smtSerial .). rpoAF_IGDP allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IG p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF_IG p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF_IG p RPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF_IG p usablerules ((smtFFI.)   . rpoAF_IGDP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF_IG p usablerules ((smtSerial.). rpoAF_IGDP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IG p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF_IG p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF_IG p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF_IG p usablerules ((smtFFI.)   . rpoAF_IGDP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF_IG p usablerules ((smtSerial.). rpoAF_IGDP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IG p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF_IG p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF_IG p LPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF_IG p usablerules ((smtFFI.)   . rpoAF_IGDP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF_IG p usablerules ((smtSerial.). rpoAF_IGDP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IG p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF_IG p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF_IG p MPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF_IG p usablerules ((smtFFI.)   . rpoAF_IGDP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF_IG p usablerules ((smtSerial.). rpoAF_IGDP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.mpo)
 
 instance (Info info (RPOProof id)
          ,Info info (NProblem IRewriting id)
+         ,Info info (Problem (Constant IRewriting (TermF id)) (NTRS id))
          ,FrameworkProblemN IRewriting id
 --         ,FrameworkProblemN (Constant IRewriting (TermN id)) id
          ,FrameworkProblemN (InitialGoal (TermF id) IRewriting) id
@@ -228,25 +225,25 @@ instance (Info info (RPOProof id)
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = InitialGoal (TermF id) IRewriting
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p RPOSAF usableRules ((smtFFI.) . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p RPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usableRules ((smtFFI.) . rpoAF_DP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpos)
 --    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF'_IG p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p RPOAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p RPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpo)
 --    apply (RPOProc RPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF'_IG p RPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p LPOSAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p LPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpos)
 --    apply (RPOProc LPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF'_IG p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p LPOAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p LPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpo)
 --    apply (RPOProc LPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF'_IG p LPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p MPOAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p MPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p MPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IG p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.mpo)
 
 
 instance (FrameworkId id, DPSymbol id, GenSymbol id
@@ -256,29 +253,30 @@ instance (FrameworkId id, DPSymbol id, GenSymbol id
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = InitialGoal (TermF id) NarrowingGen
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procAF_IGgen p RPOSAF usableRules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF_IGgen p RPOSAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IGgen p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procAF_IGgen p usableRules ((smtFFI.)   . rpoAF_IGDP' allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procAF_IGgen p usablerules ((smtSerial.) . rpoAF_IGDP' allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procAF_IGgen p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p RPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p RPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IGgen p RPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p usablerules ((smtFFI.)   . rpoAF_IGDP' allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p usablerules ((smtSerial.). rpoAF_IGDP' allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procAF_IGgen p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF_IGgen p LPOSAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF_IGgen p LPOSAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IGgen p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procAF_IGgen p usablerules ((smtFFI.)   . rpoAF_IGDP' allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procAF_IGgen p usablerules ((smtSerial.). rpoAF_IGDP' allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procAF_IGgen p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p LPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p LPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IGgen p LPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p usablerules ((smtFFI.)   . rpoAF_IGDP' allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p usablerules ((smtSerial.). rpoAF_IGDP' allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procAF_IGgen p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p MPOAF usablerules ((smtFFI.)   . rpoAF_IGDP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p MPOAF usablerules ((smtSerial.). rpoAF_IGDP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IGgen p MPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
---
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procAF_IGgen p usablerules ((smtFFI.)   . rpoAF_IGDP' allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procAF_IGgen p usablerules ((smtSerial.). rpoAF_IGDP' allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procAF_IGgen p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.mpo)
+
 
 instance (Info info (RPOProof id)
          ,Info info (NProblem INarrowingGen id)
+         ,Info info (Problem (Constant INarrowingGen (TermF id)) (NTRS id))
          ,FrameworkProblemN INarrowingGen id
 --         ,FrameworkProblemN (Constant INarrowingGen (TermN id)) id
          ,FrameworkProblemN (InitialGoal (TermF id) INarrowingGen) id
@@ -287,25 +285,25 @@ instance (Info info (RPOProof id)
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = InitialGoal (TermF id) INarrowingGen
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p RPOSAF usableRules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p RPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p RPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usableRules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p RPOAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p RPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p RPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p LPOSAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p LPOSAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p LPOSAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p LPOAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p LPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p LPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p MPOAF usablerules ((smtFFI.)   . rpoAF_DP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p MPOAF usablerules ((smtSerial.). rpoAF_DP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p MPOAF usablerules ((runSAT s .). rpoAF_IGDP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    = liftProblem $ \p -> procAF' p usablerules ((smtFFI.)   . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) = liftProblem $ \p -> procAF' p usablerules ((smtSerial.). rpoAF_DP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   = liftProblem $ \p -> procAF' p usablerules ((runSAT s .). rpoAF_IGDP allowCol RPOAF.mpo)
 
 
 instance (Info info (RPOProof id)
@@ -315,25 +313,25 @@ instance (Info info (RPOProof id)
     type Typ (RPOProc info) (NProblem Narrowing id) = Narrowing
     type Trs (RPOProc info) (NProblem Narrowing id) = NTRS id
    -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
-    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procNAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procNAF p RPOSAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procNAF p RPOSAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procNAF p usableRules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procNAF p RPOAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procNAF p RPOAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procNAF p RPOAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procNAF p LPOSAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procNAF p LPOSAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procNAF p LPOSAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procNAF p LPOAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procNAF p LPOAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procNAF p LPOAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procNAF p MPOAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procNAF p MPOAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p MPOAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.mpo)
 
 
 instance (FrameworkId  id
@@ -343,25 +341,25 @@ instance (FrameworkId  id
     type Typ (RPOProc info) (NProblem CNarrowing id) = CNarrowing
     type Trs (RPOProc info) (NProblem CNarrowing id) = NTRS id
    -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
-    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procNAF p RPOSAF usableRules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procNAF p RPOSAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc RPOSAF usablerules (SAT s))   p = procNAF p RPOSAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc RPOSAF usableRules SMTFFI allowCol)    p = procNAF p usableRules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.rpos)
+    applyO _ (RPOProc RPOSAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.rpos)
+--    apply (RPOProc RPOSAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.rpos)
 
-    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procNAF p RPOAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procNAF p RPOAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc RPOAF usablerules (SAT s))   p = procNAF p RPOAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc RPOAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.rpo)
+    applyO _ (RPOProc RPOAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.rpo)
+--    apply (RPOProc RPOAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.rpo)
 
-    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procNAF p LPOSAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procNAF p LPOSAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc LPOSAF usablerules (SAT s))   p = procNAF p LPOSAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc LPOSAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.lpos)
+    applyO _ (RPOProc LPOSAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.lpos)
+--    apply (RPOProc LPOSAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.lpos)
 
-    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procNAF p LPOAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procNAF p LPOAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc LPOAF usablerules (SAT s))   p = procNAF p LPOAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc LPOAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.lpo)
+    applyO _ (RPOProc LPOAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.lpo)
+--    apply (RPOProc LPOAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.lpo)
 
-    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procNAF p MPOAF usablerules ((smtFFI.)   . rpoAF_NDP allowCol)
-    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procNAF p MPOAF usablerules ((smtSerial.). rpoAF_NDP allowCol)
---    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p MPOAF usablerules ((runSAT s .). rpoAF_NDP allowCol)
+    applyO _ (RPOProc MPOAF usablerules SMTFFI allowCol)    p = procNAF p usablerules ((smtFFI.)   . rpoAF_NDP allowCol RPOAF.mpo)
+    applyO _ (RPOProc MPOAF usablerules SMTSerial allowCol) p = procNAF p usablerules ((smtSerial.). rpoAF_NDP allowCol RPOAF.mpo)
+--    apply (RPOProc MPOAF usablerules (SAT s))   p = procNAF p usablerules ((runSAT s .). rpoAF_NDP allowCol RPOAF.mpo)
 
 -- -----------------
 -- Implementations
@@ -385,8 +383,6 @@ procAF' :: (Monad m
            -> Proof info m (NProblem typ id)
 -}
 
-fixExtension :: Extension e -> [e] -> [e]
-fixExtension _ = id
 
 {-
 procAF' :: ( id  ~ Family.Var repr
@@ -418,7 +414,7 @@ procAF' :: ( id  ~ Family.Var repr
            IO (Maybe([Int], BIEnv Var, [sid]))) ->
           Proof info m (NProblem typ id)
 -}
-procAF p e usablerules run = (f . unsafePerformIO . run omega) p
+procAF p usablerules run = (f . unsafePerformIO . run omega) p
  where
   omega = case usablerules of
             Needed -> omegaNeeded
@@ -428,7 +424,7 @@ procAF p e usablerules run = (f . unsafePerformIO . run omega) p
   f Nothing = dontKnow (rpoFail p) p
   f (Just (nondec_dps, bienv, symbols_raw)) = singleP proof p p'
    where
-    symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
+    symbols       = runEvalM bienv $ mapM decode symbols_raw
     proof         = RPOAFProof decreasingDps usableRules symbols
     dps           = getP p
     decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
@@ -446,9 +442,9 @@ procAF p e usablerules run = (f . unsafePerformIO . run omega) p
 
    CE.assert isValidProof $
 -}
-
-procAF_IG, procAF_IGgen ::
-  forall info typ base id sid repr a m .
+{-
+procAF_IG ::
+  forall info typ base id sid repr e a m .
                 ( Decode a (UsableSymbolRes sid)
                 , FrameworkProblemN typ sid
                 , RPOId id
@@ -467,15 +463,15 @@ procAF_IG, procAF_IGgen ::
                 , RPOAF.RPOExtCircuit repr id
                 , MonadSAT.ECircuit repr
                 ) => NProblem typ sid
-                  -> Extension a
+                  -> SExtension e
                   -> UsableRulesMode
                   -> ((NProblem (InitialGoal (TermF id) base) id
                        -> (repr Var, EvalM Var [Tree (TermN id) Var]))
                        -> NProblem typ sid
                        -> IO (Maybe (([Int], [Tree (TermN sid) Var]), BIEnv (Family.Var a), [a])))
                   -> Proof info m (NProblem typ sid)
-
-procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
+-}
+procAF_IG p usablerules run = (f . unsafePerformIO . run omega) p where
  omega = case usablerules of
             Needed -> omegaIG
             Usable -> omegaIG
@@ -486,7 +482,7 @@ procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
    = -- CE.assert isValidProof $
      singleP proof p (setP (restrictTRS dps nondec_dps) p)
   where
-   symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
+   symbols       = runEvalM bienv $ mapM decode symbols_raw
    proof         = RPOAFProof decreasingDps usableRules symbols
    dps           = getP p
    decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
@@ -507,7 +503,30 @@ procAF_IG p e usablerules run = (f . unsafePerformIO . run omega) p where
     | otherwise = Debug.Trace.trace (show (proof $+$ Ppr.empty $+$ verification)) False
 -}
 
-procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
+procAF_IGgen ::
+  forall info typ base id sid m e .
+                ( Decode id (UsableSymbolRes sid)
+                , FrameworkProblemN typ sid
+                , RPOId id, GenSymbol id
+                , ExpandDPair (InitialGoal (TermF id) base) (NTRS id)
+                , ExpandDPair base (NTRS id)
+                , InsertDPairs (InitialGoal (TermF id) base) (NTRS id)
+                , InsertDPairs base (NTRS id)
+                , PprTPDB (NProblem base id)
+                , Suitable info (RPOProof sid)
+                , Suitable info (NProblem typ sid)
+                , Applicative info, Ord1 info, Typeable info
+                , Monad m
+                , Family.Var id  ~ Var
+                ) => NProblem typ sid
+                  -> UsableRulesMode
+                  -> ((NProblem (InitialGoal (TermF id) base) id
+                            -> (Tree (TermN id) Var, EvalM Var [Tree (TermN id) Var]))
+                       -> NProblem typ sid
+                       -> IO (Maybe (([Int], [Tree (TermN sid) Var]), BIEnv Var, [id])))
+                  -> Proof info m (NProblem typ sid)
+
+procAF_IGgen p usablerules run = (f . unsafePerformIO . run omega) p where
   omega = case usablerules of
             Needed -> omegaIGgen
             Usable -> omegaIGgen
@@ -517,23 +536,24 @@ procAF_IGgen p e usablerules run = (f . unsafePerformIO . run omega) p where
    = -- CE.assert isValidProof $
      singleP proof p (setP (restrictTRS dps nondec_dps) p) where
 
-   symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
+   symbols       = runEvalM bienv $ mapM decode (symbols_raw)
    proof         = RPOAFExtraProof decreasingDps usableRules symbols extraConstraints'
    dps           = getP p
-   decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ nondec_dps) (rules dps)
+   decreasingDps = selectSafe "Narradar.Processor.RPO"
+                        ([0..length (rules dps) - 1] \\ nondec_dps)
+                        (rules dps)
    usableRules   = [ r | r <- rules(getR p)
                        , let Just f = rootSymbol (lhs r)
                        , f `Set.member` usableSymbols]
    usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]
    extraConstraints' :: [Tree (TermN sid) Var]
-   extraConstraints' = mapTreeTerms (mapTermSymbols theSymbol) <$> extraConstraints
-   theSymbol = id -- head . F.toList
+   extraConstraints' = mapTreeTerms (mapTermSymbols id) <$> extraConstraints
 
 -- For Narrowing we need to add the constraint that one of the dps is ground in the rhs
 -- We do not just remove the strictly decreasing pairs,
 -- Instead we create two problems, one without the decreasing pairs and one
 -- without the ground right hand sides
-procNAF p e usablerules run =
+procNAF p usablerules run =
  case usablerules of
             Needed -> (f . unsafePerformIO . run omegaNeeded) p
             Usable -> (f . unsafePerformIO . run omegaUsable) p
@@ -542,7 +562,7 @@ procNAF p e usablerules run =
  f Nothing = dontKnow (rpoFail p) p
  f (Just ((non_dec_dps, non_rhsground_dps), bienv, symbols_raw)) =
     let proof = RPOAFProof decreasingDps usableRules symbols
-        symbols       = runEvalM bienv $ mapM decode (fixExtension e symbols_raw)
+        symbols       = runEvalM bienv $ mapM decode (symbols_raw)
         decreasingDps = selectSafe "Narradar.Processor.RPO" ([0..length (rules dps) - 1] \\ non_dec_dps) (rules dps)
         usableRules   = [ r | r <- rules(getR p), let Just f = rootSymbol (lhs r), f `Set.member` usableSymbols]
         usableSymbols = Set.fromList [ theSymbolR s | s <- symbols, isUsable s]

@@ -88,6 +88,18 @@ instance UsableSymbol (Usable s) where usable = encodeUsable
 instance (NFData a, NFData (Family.Var a)
          ) => NFData(Usable a) where rnf (Usable u enc dec) = rnf u `seq` rnf enc `seq` dec `seq` ()
 
+-- -------------------
+-- MkSATSymbol
+-- -------------------
+
+data MkSATSymbol sid = MkSATSymbol {
+  mkSatSymbol
+     :: forall v id m repr.
+        (v  ~ Family.Var sid
+        ,id ~ Family.Id sid
+        ,Decode v Bool, Show id, Co repr v, MonadSAT repr v m) =>
+        (id, Int) -> m (sid, [(String, repr v)]) }
+
 makeUsableSymbol :: ( MonadSAT repr v m
                     , v ~ Family.Var s
                     , Decode s (SymbolRes (Family.Id s))
@@ -99,14 +111,16 @@ makeUsableSymbol makeSymbol x = do
   let evalres = mkUsableSymbolDecoder encodeUsable (decode s)
   return (Usable s encodeUsable evalres, constraints)
 
-rpo ::
- (Co repr v, MonadSAT repr v m, OneCircuit repr, ECircuit repr, Show id) =>
- (id, Int) -> m (Usable (RPOsymbol v id), [(String, repr v)])
-rpos = makeUsableSymbol Funsat.rpos
-rpo = makeUsableSymbol  Funsat.rpo
-lpos = makeUsableSymbol Funsat.lpos
-lpo = makeUsableSymbol  Funsat.lpo
-mpo = makeUsableSymbol  Funsat.mpo
+rpos :: MkSATSymbol (Usable (RPOSsymbol Var id))
+rpo  :: MkSATSymbol (Usable (RPOsymbol  Var id))
+lpos :: MkSATSymbol (Usable (LPOSsymbol Var id))
+lpo  :: MkSATSymbol (Usable (LPOsymbol  Var id))
+mpo  :: MkSATSymbol (Usable (MPOsymbol  Var id))
+rpos  = MkSATSymbol (makeUsableSymbol Funsat.rpos)
+rpo   = MkSATSymbol (makeUsableSymbol Funsat.rpo)
+lpos  = MkSATSymbol (makeUsableSymbol Funsat.lpos)
+lpo   = MkSATSymbol (makeUsableSymbol Funsat.lpo)
+mpo   = MkSATSymbol (makeUsableSymbol Funsat.mpo)
 
 type UsableRPOSsymbol v id = Usable (RPOSsymbol v id)
 

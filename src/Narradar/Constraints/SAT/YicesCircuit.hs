@@ -41,7 +41,7 @@ import qualified Data.Map                            as Map
 import qualified Narradar.Types                      as Narradar
 import qualified Data.Term.Family                    as Family
 
-import           Funsat.ECircuit                     (Circuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
+import           Funsat.ECircuit                     (Circuit(..), CastCircuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
 import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), AssertCircuit(..)
                                                      , termGt_, termGe_, termEq_)
@@ -201,6 +201,10 @@ instance ExistCircuit (YicesSource id) where
               v   <- freshV "existsNat"
               exp <- unYicesSource $ f (YicesSource . return . VarE . show $ v)
               return $ EXISTS [(show v, VarT "nat")] exp
+
+instance CastCircuit (YicesSource id) (YicesSource id) where
+  type CastCo (YicesSource id) (YicesSource id) v = ()
+  castCircuit = id
 
 instance AssertCircuit (YicesSource id) where
   assertCircuit this then_ = YicesSource $ do

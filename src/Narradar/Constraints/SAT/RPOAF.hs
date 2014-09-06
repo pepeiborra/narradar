@@ -11,16 +11,17 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE Rank2Types #-}
 
 module Narradar.Constraints.SAT.RPOAF (
-   SATSymbol(..), UsableSymbolRes(..), prec, filtering, status, theSymbolR
-  ,RPOSsymbol(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
+   UsableSymbolRes(..), prec, filtering, status, theSymbolR
+  ,MkSATSymbol, RPOSsymbol(..), RPOsymbol(..), LPOsymbol(..), LPOSsymbol(..), MPOsymbol(..)
   ,RPOProblemN, RPOId
-  ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP
+  ,rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, rpoAF_IGDP'
   ,rpo, rpos, lpo, lpos, mpo
   ,verifyRPOAF, isCorrect
   ,omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone
-  ,Usable, UsableSymbol(..)
+  ,Usable, UsableSymbol(..), usableSymbol
   ) where
 
 import Control.Applicative
@@ -42,6 +43,7 @@ import Data.Typeable (Typeable)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Funsat.RPOCircuit.Symbols as Funsat
+import Funsat.Circuit (CastCircuit, CastCo)
 import Funsat.RPOCircuit (Co, CoRPO, assertCircuits)
 import Funsat.RPOCircuit.Symbols (Natural(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), RPOSsymbol(..), RPOsymbol(..), mkSymbolDecoder)
 
@@ -68,18 +70,6 @@ import qualified Debug.Trace as Debug
 import Debug.Hoed.Observe
 import Control.DeepSeq (NFData)
 
-class SATSymbol sid where
-  mkSATSymbol :: (v  ~ Family.Var sid
-                 ,id ~ Family.Id sid
-                 ,Decode v Bool, Show id, Co repr v, MonadSAT repr v m) =>
-                 (id, Int) -> m (sid, [(String,repr v)])
-
-instance SATSymbol (Usable(RPOSsymbol v id)) where mkSATSymbol = rpos
-instance SATSymbol (Usable(RPOsymbol  v id)) where mkSATSymbol = rpo
-instance SATSymbol (Usable(LPOSsymbol v id)) where mkSATSymbol = lpos
-instance SATSymbol (Usable(LPOsymbol  v id)) where mkSATSymbol = lpo
-instance SATSymbol (Usable(MPOsymbol  v id)) where mkSATSymbol = mpo
-
 -- TODO apply these constraint synonyms consistently across this file
 type RPOId id = (FrameworkId id, UsableSymbol id, HasPrecedence id, HasStatus id, HasFiltering id, DPSymbol id)
 type RPOProblemN typ id = (FrameworkProblemN typ id, RPOId id, NeededRules (NProblem typ id))
@@ -95,7 +85,6 @@ rpoAF :: (id ~ Family.Id trs
          ,Ord sid, Show id, Pretty id
          ,HasSignature trs
          ,HasRules trs
-         ,SATSymbol sid
          ,Pretty sid
          ,HasStatus sid
          ,HasFiltering sid
@@ -105,8 +94,8 @@ rpoAF :: (id ~ Family.Id trs
          ,MonadReader r mr
          ,MonadSAT repr v m
          ,v ~ Var) =>
-         Bool -> trs -> m( mr ((), r, [sid]))
-rpoAF allowCol trs = runRPOAF allowCol (getSignature trs) $ \dict -> do
+         Bool -> MkSATSymbol sid -> trs -> m( mr ((), r, [sid]))
+rpoAF allowCol mkS trs = runRPOAF allowCol mkS (getSignature trs) $ \dict -> do
   let symb_rules = mapTermSymbols (\f -> fromJust $ Map.lookup f dict) <$$> rules trs
   let problem = and [ l > r | l:->r <- symb_rules]
   assert [problem]
@@ -128,7 +117,6 @@ rpoAF_DP ::
          ,Functor1 typ
          ,IsDPProblem (typ (TermF id))
          ,MkDPProblem (typ (TermF sid)) trs'
-         ,SATSymbol sid
          ,FrameworkId sid
          ,HasStatus sid
          ,HasFiltering sid
@@ -139,12 +127,14 @@ rpoAF_DP ::
          ,Decode v Bool
          ,MonadSAT repr v m
          ,v ~ Var) =>
-         Bool -> (Problem (typ (TermF sid)) trs' -> repr v) -> Problem (typ (TermF id)) trs
+         Bool ->
+         MkSATSymbol sid ->
+         (Problem (typ (TermF sid)) trs' -> repr v) -> Problem (typ (TermF id)) trs
          -> m (EvalM v ([Int], BIEnv v, [sid]))
 
-rpoAF_DP allowCol omega p
+rpoAF_DP allowCol mkS omega p
   | _ <- isNarradarTRS1 (getR p)
-  = runRPOAF allowCol (getSignature p) $ \dict -> do
+  = runRPOAF allowCol mkS (getSignature p) $ \dict -> do
   let convert = mapTermSymbols f_id
       f_id    = (\f -> fromMaybe (error ("rpoAF_DP: Symbol not found " ++ show( f))) $ Map.lookup f dict)
       trs'    = fmap convert (getR p)
@@ -179,45 +169,76 @@ rpoAF_DP allowCol omega p
     let the_non_decreasing_pairs = [ r | (r,False) <- zip [(0::Int)..] decreasing]
     return the_non_decreasing_pairs
 
-rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid repr m tv v base extraConstraints.
+
+rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid repr m base extraConstraints.
          (initialgoal  ~ InitialGoal (TermF id) base
          ,initialgoal' ~ InitialGoal (TermF sid) base
          ,problem  ~ Problem initialgoal trs
          ,problem' ~ Problem initialgoal' trs'
-         ,trs      ~ NarradarTRS (TermF id) tv
-         ,trs'     ~ NarradarTRS (TermF sid) tv
+         ,trs      ~ NTRS id
+         ,trs'     ~ NTRS sid
          ,id       ~ Family.Id sid
-         ,v        ~ Family.Var sid
-         ,v        ~ Family.Var v
+         ,Var      ~ Family.Var sid
          ,TermF sid~ Family.TermF repr
          ,FrameworkId id
          ,FrameworkId sid
-         ,SATSymbol sid
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
          ,UsableSymbol sid
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
-         ,Ord tv, Observable tv, NFData tv
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) Narradar.Var Var
+         ,CastCircuit repr repr, CastCo repr repr Var
+         ,Traversable (Problem base), Pretty base
+         ,MkDPProblem initialgoal' (NTRS sid)
+         ,IsDPProblem base
+         ,MkDPProblem initialgoal' trs'
+         ,MonadSAT repr Var m
+         ,Observable (TermN id)
+         ) =>
+            Bool
+         -> MkSATSymbol sid
+         -> (problem' -> (repr Var, EvalM Var [Tree (TermN sid) Var]))
+         -> problem
+         -> m (EvalM Var ( ([Int], [Tree (TermN id) Var]), BIEnv Var, [sid]))
+rpoAF_IGDP = rpoAF_IGDP'
+
+rpoAF_IGDP' :: forall initialgoal initialgoal' problem problem' trs trs' id sid repr repr' m base extraConstraints.
+         (initialgoal  ~ InitialGoal (TermF id) base
+         ,initialgoal' ~ InitialGoal (TermF sid) base
+         ,problem  ~ Problem initialgoal trs
+         ,problem' ~ Problem initialgoal' trs'
+         ,trs      ~ NTRS id
+         ,trs'     ~ NTRS sid
+         ,id       ~ Family.Id sid
+         ,Var      ~ Family.Var sid
+         ,TermF sid~ Family.TermF repr
+         ,FrameworkId id
+         ,FrameworkId sid
+         ,HasStatus sid
+         ,HasFiltering sid
+         ,HasPrecedence sid
+         ,UsableSymbol sid
+         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) Narradar.Var Var
+         ,CastCircuit repr' repr, CastCo repr' repr Var
          ,Traversable (Problem base), Pretty base
          ,MkDPProblem initialgoal' (NTRS sid)
          ,IsDPProblem base
          ,MkDPProblem initialgoal' trs'
 --         ,Decode sid (SymbolRes id) v
-         ,MonadSAT repr v m
-         ,Observable (Term (TermF id) tv)
-         ,v ~ Var
+         ,MonadSAT repr Var m
+         ,Observable (TermN id)
          ) =>
             Bool
-         -> (problem' -> (repr v, EvalM v [Tree (TermN sid) Var]))
+         -> MkSATSymbol sid
+         -> (problem' -> (repr' Var, EvalM Var [Tree (TermN sid) Var]))
          -> problem
-         -> m (EvalM v ( ([Int], [Tree (TermN id) Var]), BIEnv v, [sid]))
+         -> m (EvalM Var ( ([Int], [Tree (TermN id) Var]), BIEnv Var, [sid]))
 
-rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
-  = runRPOAF allowCol (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
+rpoAF_IGDP' allowCol mkS omega p@InitialGoalProblem{..}
+  = runRPOAF allowCol mkS (getSignature p `mappend` getSignature (pairs dgraph)) $ \dict -> do
   let convert :: forall v. Term (TermF id) v -> Term (TermF sid) v
       convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
-      convertBack :: forall v. Tree (TermN sid) Var -> Tree (TermN id) Var
+      convertBack :: Tree (TermN sid) Var -> Tree (TermN id) Var
       convertBack = mapTreeTerms (mapTermSymbols (fromJust . (`Map.lookup` dict')))
       dict' = Map.fromList $ fmap swap $ Map.toList dict
       trs' = fmap convert (getR p)
@@ -228,7 +249,7 @@ rpoAF_IGDP allowCol omega p@InitialGoalProblem{..}
       p'   = mkDPProblem typ' trs' dps'
 
   let (omegaConstraint, extraConstraintsAdded) = omega p'
-  assertAll [omegaConstraint]
+  assertAll [castCircuit omegaConstraint]
   assertAll [ l >~ r | l:->r <- rules dps']
 
   decreasing_dps <- replicateM (length $ rules dps') boolean
@@ -284,7 +305,6 @@ rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
          ,trs'     ~ NarradarTRS (TermF sid) tv
          ,id       ~ Family.Id sid
          ,v        ~ Family.Var sid
-         ,v        ~ Family.Var v
          ,TermF sid~ Family.TermF repr
          ,Ord tv, Observable tv
          ,Ord id, Show id, Pretty id
@@ -296,18 +316,18 @@ rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
          ,HasSignature (Problem typ trs)
          ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
          ,UsableSymbol sid
-         ,SATSymbol sid
          ,MkDPProblem typ trs'
          ,Decode v Bool
          ,MonadSAT repr v m
          ,v ~ Var) =>
             Bool
+         -> MkSATSymbol sid
          -> (problem' -> repr v)
          -> problem
          -> m (EvalM v ( ([Int], [Int]), BIEnv v, [sid]))
-rpoAF_NDP allowCol omega p
+rpoAF_NDP allowCol mkS omega p
   | _ <- isNarradarTRS1 (getR p)
-  = runRPOAF allowCol (getSignature p) $ \dict -> do
+  = runRPOAF allowCol mkS (getSignature p) $ \dict -> do
   let convert = mapTermSymbols (\f -> fromJust $ Map.lookup f dict)
       trs' = fmap convert (getR p)
       dps' = fmap convert (getP p)
@@ -341,11 +361,24 @@ rpoAF_NDP allowCol omega p
            ,[ r | (r,False) <- zip [(0::Int)..] af_ground])
 
 
-runRPOAF allowCol sig f = do
+runRPOAF :: ( Co repr (Family.Var sid)
+            , MonadSAT repr (Family.Var sid) m
+            , Decode (Family.Var sid) Bool
+            , HasFiltering sid
+            , MonadReader env reader
+            , Show id
+            , Ord id
+            , id ~ Family.Id sid
+            ) => Bool
+              -> MkSATSymbol sid
+              -> Signature id
+              -> (Map.Map id sid -> m (reader t))
+              -> m (reader (t, env, [sid]))
+runRPOAF allowCol i sig f = do
   let ids  = arities sig
      -- bits = calcBitWidth $ Map.size ids
 
-  (symbols, constraints) <- unzip <$> mapM mkSATSymbol (Map.toList ids)
+  (symbols, constraints) <- unzip <$> mapM (mkSatSymbol i)  (Map.toList ids)
 
   forM_ (concat constraints) $ \(name, c) -> assert_ name [c]
 

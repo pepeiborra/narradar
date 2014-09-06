@@ -72,6 +72,7 @@ import qualified Data.Term.Family as Family
 
 import Funsat.ECircuit ( Circuit(..)
                        , ECircuit(..)
+                       , CastCircuit(..)
                        , NatCircuit(..)
                        , ExistCircuit(..)
                        , BIEnv)
@@ -177,6 +178,10 @@ instance Circuit (YicesSource id) where
 instance ECircuit (YicesSource id) where
   iff  = liftY2 mkEq
   ite  = liftY3 mkIte
+
+instance CastCircuit (YicesSource id) (YicesSource id) where
+  type CastCo (YicesSource id) (YicesSource id) v = ()
+  castCircuit = id
 
 instance NatCircuit (YicesSource id) where
 
