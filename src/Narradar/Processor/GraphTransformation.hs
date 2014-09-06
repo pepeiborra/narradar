@@ -154,7 +154,7 @@ instance ( t ~ f (DPIdentifier id)
                  pos_qnf  = Set.fromList $ filter (\p -> not(inQNF (t ! p) q)) (positions t)
                  validPos = oo "validPos" $ \(O o oo) ->
                             o "restrict & valid"
-                          $-} Set.toList
+                          $ Set.toList
                           $ maybe id (Set.intersection . {-o "restrict" .-} Set.fromList) restrict
                           $ {-o "valid"-} (Set.union ({-o "uu"-} pos_uu) ({-o "qnf"-} pos_qnf))
 
