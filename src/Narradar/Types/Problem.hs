@@ -114,8 +114,12 @@ instance IsDPProblem typ => IsDPProblem (Constant typ a) where
   getP = getP . getConstantP
 instance MkProblem typ trs => MkProblem (Constant typ a) trs where
   mkProblem typ = ConstantP . mkProblem (getConstant typ)
+  mapRO o f = ConstantP . mapRO o f . getConstantP
+  setR_uncheckedO o x = ConstantP . setR_uncheckedO o x . getConstantP
 instance MkDPProblem typ trs => MkDPProblem (Constant typ a) trs where
   mkDPProblemO o typ trs = ConstantP . mkDPProblemO o (getConstant typ) trs
+  mapPO o f = ConstantP . mapPO o f . getConstantP
+  setP_uncheckedO o x = ConstantP . setP_uncheckedO o x . getConstantP
 instance ICap (Problem p trs) => ICap (Problem(Constant p a) trs) where
   icapO o p s = icapO o (getConstantP p) s
 instance IUsableRules (Problem p trs) => IUsableRules (Problem (Constant p a) trs) where
@@ -128,8 +132,8 @@ instance HasMinimality typ => HasMinimality (Constant typ a) where
   setMinimality m = ConstantP . setMinimality m . getConstantP
 instance ( Typeable a, ExpandDPair typ trs) => ExpandDPair (Constant typ a) trs where expandDPairO o p i = ConstantP . expandDPairO o (getConstantP p) i
 instance (MkDPProblem typ trs, InsertDPairs typ trs) => InsertDPairs (Constant typ a) trs where insertDPairsO o p = ConstantP . insertDPairsO o (getConstantP p)
-instance Suitable info (Problem typ trs) => Suitable info (Problem (Constant typ a) trs)
---instance Info info (Problem typ trs) => Info info (Problem (Constant typ a) trs)
+--instance Suitable info (Problem typ trs) => Suitable info (Problem (Constant typ a) trs)
+
 instance Functor(Problem typ) => Functor (Problem(Constant typ a)) where
   fmap f = ConstantP . fmap f. getConstantP
 instance Traversable (Problem typ) => Foldable (Problem (Constant typ a)) where
@@ -138,6 +142,7 @@ instance Traversable (Problem typ) => Traversable (Problem (Constant typ a)) whe
   traverse f = fmap ConstantP . traverse f . getConstantP
 instance Observable1 (Problem typ) => Observable1 (Problem (Constant typ a))
 instance NFData a => NFData (Constant a x) where rnf (Constant a) = rnf a
+instance Pretty (Problem a trs) => Pretty (Problem(Constant a x) trs) where pPrint = pPrint . getConstantP
 instance PprTPDB (Problem a trs) => PprTPDB (Problem(Constant a x) trs) where pprTPDB = pprTPDB . getConstantP
 deriving instance Eq a => Eq (Constant a x)
 deriving instance Eq (Problem typ trs) => Eq (Problem(Constant typ a) trs)
