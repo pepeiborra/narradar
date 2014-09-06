@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, DeriveGeneric, ConstraintKinds, MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies, KindSignatures #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 
 module Narradar.Processor.InitialGoal where
 
