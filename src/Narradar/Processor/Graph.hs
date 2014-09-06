@@ -138,7 +138,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
   type Typ (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var)) = InitialGoal t typ0
   type Trs (DependencyGraph info) (Problem (InitialGoal t typ0) (NarradarTRS t Var)) = NarradarTRS t Var
   applyO _ DependencyGraphCycles{} _ = error "Cycles processor not available for Initial Goal problems"
-  applyO _ (DependencyGraphSCC useInverse)
+  applyO (O o oo) (DependencyGraphSCC useInverse)
         p@InitialGoalProblem{ dgraph=dg@DGraph{pairs, initialPairsG, reachablePairsG}
                             , baseProblem = (getP -> dps@(lowerNTRS -> DPTRS _ dd _ igr unif sig))}
    = do
@@ -171,7 +171,7 @@ instance ( t ~ f (DPIdentifier id0), MapId f
      [] -> if null (rules dps) then success (NoCycles gr) p else success proof2 p
      [c] | sort c == sort(vertices gr) -> return p
      cc -> andP proof p
-               [setP (restrictTRS dps scc) p | scc <- cc]
+               [oo "setP" setP_uncheckedO (oo "restrict" restrictTRSO dps scc) p | scc <- cc]
 
 -- --------------
 -- Graph Proofs
