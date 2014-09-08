@@ -67,6 +67,7 @@ import qualified Data.Term.Family as Family
 import qualified Data.Var.Family as Family
 
 import Debug.Hoed.Observe
+import Debug.Hoed.Observe.Instances
 
 type FrameworkTRS trs =
   ( IsTRS trs, HasSignature trs, HasRules trs, GetFresh trs
@@ -271,6 +272,10 @@ instance Observable1 (NarradarTRS_) where
 instance Observable1 (NarradarTRSF) where
   observer1 (FMap f trs) = FMap f . observer1 trs
 
+instance Observable a => Observable (NarradarTRSF a) where
+  observer = observer1
+  observers = observers1
+
 isNarradarTRS :: NarradarTRS t v -> NarradarTRS t v
 isNarradarTRS = id
 
@@ -377,6 +382,7 @@ narradarTRS rules = TRS (Set.fromList rules) (getSignature rules)
 dpTRS :: ( rules ~ NarradarTRS t v
          , pairs ~ NarradarTRS t v
          , Observable1 (Problem typ)
+         , Observable rules
          , RemovePrologId (Family.Id t)
          , Eq (Problem typ rules)
          , IUsableRules (Problem typ rules)
@@ -396,6 +402,7 @@ dpTRS x = dpTRSO nilObserver x
 dpTRSO :: ( rules ~ NarradarTRS t v
           , pairs ~ NarradarTRS t v
           , Observable1 (Problem typ)
+          , Observable rules
           , RemovePrologId(Family.Id t)
          , IUsableRules (Problem typ rules)
          , NeededRules (Problem typ rules)
@@ -530,8 +537,8 @@ computeDPUnifiersO :: forall unif typ trs t v term m rules.
                      , IUsableRules (Problem typ trs)
                      , NeededRules  (Problem typ trs)
                      , Observable1  (Problem typ)
-                     , Observable1 m
-                     , Observable trs
+                     , Observable1  m
+                     , Observable   trs
                      , MonadVariant m) =>
                      Observer
                      -> Problem typ trs

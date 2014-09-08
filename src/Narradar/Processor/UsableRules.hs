@@ -26,7 +26,7 @@ instance Observable1 info => Observable (UsableRules info)
 type instance InfoConstraint (UsableRules info) = info
 data UsableRulesProof term = UsableRulesProof [RuleF term]
                            | QUsableRulesProof [RuleF term]
-                           deriving (Eq, Ord, Show, Generic, Typeable)
+                           deriving (Eq, Ord, Show, Generic1, Typeable)
 
 
 usableRulesProof p p' = singleP (UsableRulesProof (rules(getR p) \\ rules(getR p'))) p p'
@@ -38,6 +38,8 @@ instance Pretty term => Pretty (UsableRulesProof term) where
     nest 2 (vcat (map pPrint rr))
 
 instance Observable1 UsableRulesProof
+instance Observable a => Observable (UsableRulesProof a) where
+  observer = observer1 ; observers = observers1
 
 instance (Info info (UsableRulesProof (Term t Var))
          ,FrameworkN (QRewriting t) t Var

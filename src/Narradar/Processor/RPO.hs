@@ -626,6 +626,7 @@ data RPOProof id where
 instance (Ord id, Pretty id) => Eq (RPOProof id) where a == b = pPrint a == pPrint b
 instance (Ord id, Pretty id) => Ord (RPOProof id) where compare a b = pPrint a `compare` pPrint b
 instance Observable1 RPOProof where observer1 = observeOpaque "RPOProof"
+instance Observable a => Observable (RPOProof a) where observer = observer1 ; observers = observers1
 
 rpoFail :: Problem typ (NarradarTRS t Narradar.Var) -> RPOProof (Family.Id t)
 rpoFail _ = RPOFail

@@ -22,6 +22,8 @@ import Narradar.Types.PrologIdentifiers
 import Narradar.Types.Term
 import Narradar.Framework.Ppr
 
+import GHC.Generics
+
 -- -----------------------
 -- Named Term Signatures
 -- -----------------------
@@ -38,7 +40,7 @@ instance RemovePrologId a => RemovePrologId (Labelled a) where
 -- Labellings
 -- -----------
 type Label = [Int]
-data Labelled a = Labelling {labelling::Label, unlabel::a} | Plain {unlabel::a} deriving (Eq, Ord)
+data Labelled a = Labelling {labelling::Label, unlabel::a} | Plain {unlabel::a} deriving (Eq, Ord, Generic, Generic1)
 
 instance Functor Labelled where
   fmap f (Plain a)      = Plain (f a)

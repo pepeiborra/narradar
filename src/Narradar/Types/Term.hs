@@ -60,14 +60,14 @@ import           Narradar.Constraints.Unify hiding (TermF, Var)
 import           Narradar.Framework.Ppr
 import           Narradar.Types.Var
 
-import           GHC.Generics          (Generic)
+import           GHC.Generics          (Generic,Generic1)
 import           Debug.Hoed.Observe
 
 -- ---------------------
 -- Basic Identifiers
 -- ---------------------
 type StringId = ArityId ByteString
-data ArityId a = ArityId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable, Generic)
+data ArityId a = ArityId {the_id :: a, the_arity::Int} deriving (Eq, Ord, Show, Typeable, Generic,Generic1)
 
 instance Pretty StringId where pPrint ArityId{..} = text (BS.unpack the_id)
 instance Pretty a => Pretty (ArityId a) where pPrint ArityId{..} = pPrint the_id
@@ -79,7 +79,7 @@ instance HasArity (ArityId a) where getIdArity = the_arity
 -- Terms
 -- -------
 
-data TermF id f = Term id [f] deriving (Eq,Ord,Show,Generic,Typeable)
+data TermF id f = Term id [f] deriving (Eq,Ord,Show,Generic,Generic1,Typeable)
 type TermN id = Term (TermF id) Var
 type RuleN id = RuleF(TermN id)
 
@@ -234,7 +234,11 @@ instance NFData a => NFData(ArityId a) where rnf = rnf1
 -- Observable instances
 -- --------------------
 instance Observable id => Observable1 (TermF id) where observer1 (Term id tt) = send "" (return Term << id .<< tt)
+instance (Observable a, Observable id) => Observable (TermF id a) where
+  observer = observer1 ; observers = observers1
 
 instance Observable1 ArityId
+instance Observable a => Observable (ArityId a) where
+  observer = observer1 ; observers = observers1
 
 instance (Pretty(TermN id)) => Observable (TermN id) where observer t = t `seq` send (show$ pPrint t) (return t)

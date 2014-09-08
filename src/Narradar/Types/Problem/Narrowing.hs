@@ -42,7 +42,7 @@ import Narradar.Framework.Ppr
 import Debug.Hoed.Observe
 
 newtype MkNarrowing base = MkNarrowing base
-                         deriving (Eq, Ord, Show, Typeable, NFData)
+                         deriving (Eq, Ord, Show, Typeable, Generic, Generic1, NFData)
 
 type Narrowing  = MkNarrowing Rewriting
 type CNarrowing = MkNarrowing IRewriting
@@ -165,6 +165,13 @@ getNPairs trs = getPairs rewriting trs ++ getLPairs trs
 getLPairs trs = [ markDP l :-> markDP lp | l :-> _ <- rules trs, lp <- properSubterms l, isRootDefined trs lp]
 
 -- Observe
+instance Observable1 MkNarrowing
+instance Observable st => Observable (MkNarrowing st) where
+  observer = observer1 ; observers = observers1
 
-instance Observable st => Observable (MkNarrowing st) where observer (MkNarrowing x) = send "MkNarrowing"  (return MkNarrowing << x)
-instance (Observable1 (Problem p)) => Observable1 (Problem (MkNarrowing p))
+instance (Observable1 (Problem p)) => Observable1 (Problem (MkNarrowing p)) where
+  observer1 (NarrowingProblem p) = send "NarrowingProblem" (return NarrowingProblem << p)
+
+instance (Observable a, Observable1(Problem p)) => Observable (Problem (MkNarrowing p) a) where
+  observer = observer1
+  observers = observers1

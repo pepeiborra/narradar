@@ -40,7 +40,7 @@ type DP a = RuleN (DPIdentifier a)
 -- Concrete DP Identifiers
 -- -----------------------
 data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier
-                    deriving (Ord, Typeable, Functor, Foldable, Traversable, Generic)
+                    deriving (Ord, Typeable, Functor, Foldable, Traversable, Generic,Generic1)
 instance Eq a => Eq (DPIdentifier a) where
     IdFunction f1 == IdFunction f2 = f1 == f2
     IdDP f1       == IdDP f2       = f1 == f2
@@ -75,6 +75,8 @@ instance Hashable a => Hashable (DPIdentifier a) where
 instance Observable (DPIdentifier String)   where observer  x = send (show x) (return x)
 instance Observable (DPIdentifier StringId) where observer  x = send (show x) (return x)
 instance Observable1 DPIdentifier           -- where observer1 x = send "NO WAY" (return x)
+instance Observable a => Observable(DPIdentifier a) where
+  observer = observer1 ; observers = observers1
 
 -- ------------
 -- DP Symbols

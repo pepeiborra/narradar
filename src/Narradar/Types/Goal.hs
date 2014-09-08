@@ -21,9 +21,9 @@ import Narradar.Types.Term
 
 import Debug.Hoed.Observe
 
-data GoalF id a = Goal {goalId::id, goalArgs::[a]} deriving (Eq, Ord, Show)
+data GoalF id a = Goal {goalId::id, goalArgs::[a]} deriving (Eq, Ord, Show, Generic, Generic1)
 type Goal id = GoalF id Mode
-data Mode = G | V deriving (Eq, Ord, Bounded, Show)
+data Mode = G | V deriving (Eq, Ord, Bounded, Show, Generic)
 
 goal :: id -> [Mode] -> Goal id
 goal = Goal

@@ -29,7 +29,7 @@ import Data.Graph as G (Graph, edges, buildG)
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Functor1
 import Data.Functor.Two
-import GHC.Generics(Generic)
+import GHC.Generics(Generic,Generic1)
 import Data.Maybe (isJust, isNothing)
 import Data.Monoid
 import qualified Data.Map as Map
@@ -66,7 +66,7 @@ import qualified Data.Term as Family
 import qualified Data.Rule.Family as Family
 import Data.Term.Rules
 
-import Debug.Hoed.Observe (Observable, Observable1, Observer(..), nilObserver)
+import Debug.Hoed.Observe (Observable(..), Observable1(..), Observer(..), nilObserver)
 
 type FrameworkProblem p trs =
   ( FrameworkProblem0 p trs
@@ -140,7 +140,8 @@ instance Traversable (Problem typ) => Foldable (Problem (Constant typ a)) where
   foldMap f = foldMapDefault f
 instance Traversable (Problem typ) => Traversable (Problem (Constant typ a)) where
   traverse f = fmap ConstantP . traverse f . getConstantP
-instance Observable1 (Problem typ) => Observable1 (Problem (Constant typ a))
+instance Observable1 (Problem typ) => Observable1 (Problem (Constant typ a)) where
+  observer1 p ctxt = ConstantP $ observer1 (getConstantP p) ctxt
 instance NFData a => NFData (Constant a x) where rnf (Constant a) = rnf a
 instance Pretty (Problem a trs) => Pretty (Problem(Constant a x) trs) where pPrint = pPrint . getConstantP
 instance PprTPDB (Problem a trs) => PprTPDB (Problem(Constant a x) trs) where pprTPDB = pprTPDB . getConstantP
@@ -451,7 +452,6 @@ insertDPairs' o p@(lowerNTRS.getP -> DPTRS typ dps rr _ (Two unif unifInv) sig) 
           dptrs'   = dpTRSO' o typ a_dps' rr (Two unif' unifInv')
 
       return dptrs'
-
 
 -- -------------
 -- Sanity Checks

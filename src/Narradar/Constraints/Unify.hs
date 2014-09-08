@@ -80,7 +80,7 @@ fromListSubst ::(v ~ Family.Var a, Ord v, Observable v, Observable a, GetVars a
                 ) => [(Family.Var a, a)] -> SubstitutionF a
 fromListSubst = liftNF . Term.fromListSubst
 
-runMEnv :: (Ord v, Observable v, Observable1 (Term t)
+runMEnv :: (Ord v, Observable v, Observable1 t
            ,Functor t, Foldable t, Monad m
            ) => Term.MEnvT t v m a -> m (a, Substitution t v)
 runMEnv = liftM(second liftNF) . Term.runMEnv

@@ -146,4 +146,6 @@ instance ( id ~ Family.Id trs
    iUsableRulesVarM = liftUsableRulesVarM
 
 instance Observable1 (MkNarrowingGoal id) where observer1 = observeOpaque "narrowingGoal"
+instance Observable a => Observable(MkNarrowingGoal id a) where observer = observer1 ; observers = observers1
 instance Observable1 (Problem (MkNarrowingGoal id p)) where observer1 = observeOpaque "narrowingGoal problem"
+instance Observable a => Observable(Problem(MkNarrowingGoal id p) a) where observer = observer1 ; observers = observers1

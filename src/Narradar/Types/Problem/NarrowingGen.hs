@@ -113,7 +113,7 @@ type INarrowingGen = MkNarrowingGen IRewriting
 --instance GetPairs NarrowingGen where getPairs _ = getNPairs
 
 newtype MkNarrowingGen p = NarrowingGen {baseFramework :: p}
-          deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic, NFData)
+          deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic, Generic1, NFData)
 
 instance FrameworkExtension MkNarrowingGen where
   getBaseFramework = baseFramework
@@ -218,8 +218,11 @@ instance (FrameworkProblem (MkNarrowingGen base) trs
 -- Hood
 instance Observable a => Observable (MkNarrowingGen a)
 instance Observable a => Observable (GenId a)
-instance Observable1 (Problem p) => Observable1 (Problem (MkNarrowingGen p))
-
+instance Observable1 (Problem p) => Observable1 (Problem (MkNarrowingGen p)) where
+  observer1 (NarrowingGenProblem p0) = send "NarrowingGenProblem" (return NarrowingGenProblem << p0)
+instance (Observable a, Observable1(Problem p)) => Observable(Problem (MkNarrowingGen p) a) where
+  observer = observer1
+  observers = observers1
 -- -------------------
 -- Support functions
 -- -------------------

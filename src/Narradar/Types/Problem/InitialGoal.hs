@@ -63,6 +63,7 @@ import Narradar.Utils
 import qualified Narradar.Types.Problem.Narrowing as N
 
 import Prelude hiding (pi)
+import Prelude.Extras
 
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
@@ -71,11 +72,11 @@ data InitialGoal t p = InitialGoal
     { goals_PType     :: [CAGoal t]
     , dgraph_PType    :: Maybe (DGraph t Var)
     , baseFramework :: p}
-  deriving (Generic, Typeable)
+  deriving (Generic, Generic1, Typeable)
 
 data CAGoalF c a = Concrete c
                  | Abstract a
-  deriving (Eq, Ord, Show, Functor, Generic, Typeable)
+  deriving (Eq, Ord, Show, Functor, Generic, Generic1, Typeable)
 
 type GoalTerm t = Term t Mode
 
@@ -146,12 +147,14 @@ mkIGDPProblem ::
          ,Eq (GoalTerm t), Pretty (GoalTerm t)
          ) => Observer -> InitialGoal t p -> NarradarTRS t v -> NarradarTRS t v ->
               Problem (InitialGoal t p) (NarradarTRS t v)
-mkIGDPProblem (O _ oo) it@(InitialGoal goals g p0) rr dd
+mkIGDPProblem obs@(O _ oo) it@(InitialGoal goals g p0) rr dd
     | not $ all isVar (properSubterms =<< concrete goals)
     = error "Initial goals must be of the form f(x,y,z..)"
     | otherwise = oo "dpTRS" dpTRSO $
                   oo "initialGoalProblem" initialGoalProblem goals g $
-                  oo "baseProblem" mkDPProblemO p0 rr dd
+                  loo obs "baseProblem" mkDPProblemO p0 rr dd
+  where
+    loo (O _ oo) label x a b c = lower1 $ oo label (\o a b c -> Lift1 $ x o a b c) a b c
 
 mapIGP ::
          (t ~ f id, MapId f
@@ -616,7 +619,17 @@ instance FrameworkProblem (InitialGoal (TermF id) typ) (NTRS id) =>
 -------------------------------
 -- Hood
 
-instance (Observable p, Observable (GoalTerm t), Observable(Term t Var)) => Observable (InitialGoal t p)
-instance (Observable1 (Problem p), Observable1 t)  => Observable1 (Problem (InitialGoal t p))
+instance (Observable (GoalTerm t), Observable(Term t Var)) => Observable1 (InitialGoal t)
+instance (Observable a, Observable (GoalTerm t), Observable(Term t Var)) => Observable (InitialGoal t a) where
+  observer = observer1 ; observers = observers1
+
+instance (Observable1 (Problem p), Observable1 t)  => Observable1 (Problem (InitialGoal t p)) where
+  observer1 (InitialGoalProblem goals dgraph p) =
+    send "InitialGoalProblem" (return InitialGoalProblem << goals << dgraph << p)
+instance (Observable1 (Problem p), Observable1 t, Observable a)  => Observable (Problem (InitialGoal t p) a) where
+  observer = observer1
+  observers = observers1
+
 instance (Observable c, Observable a) => Observable (CAGoalF c a)
+
 instance (Observable a, (Observable (RuleF a))) => Observable (DGraphF a)

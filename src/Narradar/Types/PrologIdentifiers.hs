@@ -31,7 +31,7 @@ import Debug.Hoed.Observe
 -- Prolog Identifiers
 -- -------------------
 data PrologId a = InId a | OutId a | UId Int | FunctorId a
-                  deriving (Eq,Ord,Typeable, Functor, Foldable, Traversable)
+                  deriving (Eq,Ord,Typeable, Functor, Foldable, Traversable, Generic, Generic1)
 
 
 instance Hashable a => Hashable (PrologId a) where
@@ -137,3 +137,5 @@ instance Observable1 PrologId where
   observer1 (OutId a) = send "OutId" (return OutId << a)
   observer1 (UId   i) = send "UId"   (return UId << i)
   observer1 (FunctorId f) = send "FunctorId" (return FunctorId << f)
+instance Observable a => Observable(PrologId a) where
+  observer = observer1 ; observers = observers1

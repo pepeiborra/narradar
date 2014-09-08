@@ -128,6 +128,9 @@ instance (FrameworkExtension ext, IsDPProblem (ext b), HasStrategy b st) => HasS
 instance Observable1 (Strategy) where
   observer1 Standard  = send "Standard"  (return Standard)
   observer1 Innermost = send "Innermost" (return Innermost)
+instance Observable a => Observable(Strategy a) where
+  observer = observer1
+  observers = observers1
 instance Observable Standard where observer _ = undefined
 instance Observable Innermost where observer _ = undefined
 instance NFData Standard
@@ -166,3 +169,10 @@ forDPProblem f p = f (getFramework p) (getR p) (getP p)
 
 data TimeoutException = TimeoutException deriving (Show, Typeable)
 instance Exception TimeoutException
+
+-- ----------------
+-- Other instances
+-- ----------------
+instance (Observable1 (Problem typ), Observable trs) => Observable (Problem typ trs) where
+  observer = observer1
+  observers = observers1

@@ -445,4 +445,9 @@ instance ( FrameworkTerm t Var
 instance Observable1 f => Observable (QRewriting_ f)
 instance Observable (QRewriting f) where
   observer (FMap1 f qr) = FMap1 f . observer qr
-instance (Observable1 t) => Observable1 (Problem (QRewriting t))
+instance (Observable1 t) => Observable1 (Problem (QRewriting t)) where
+  observer1 (QRewritingProblem rr d q m qCond) = send "QRewritingProblem" (return QRewritingProblem << rr << d << q << m << qCond)
+
+instance (Observable a, Observable1 t) => Observable (Problem (QRewriting t) a) where
+  observer = observer1
+  observers = observers1

@@ -38,7 +38,7 @@ import Narradar.Utils
 import Debug.Hoed.Observe
 import Control.DeepSeq (NFData(..))
 
-data Relative trs p = Relative {relativeTRS_PType::trs, baseFramework::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic)
+data Relative trs p = Relative {relativeTRS_PType::trs, baseFramework::p} deriving (Eq, Ord, Show, Functor, Foldable, Traversable, Typeable, Generic, Generic1)
 
 --instance GetPairs p => GetPairs (Relative trs p) where getPairs = getPairs . baseProblem
 
@@ -47,7 +47,11 @@ instance IsProblem p => IsProblem (Relative trs0 p) where
   getFramework (RelativeProblem r0 p) = Relative r0 (getFramework p)
   getR (RelativeProblem _ p) = getR p
 
-instance (Observable trs, Observable1 (Problem p)) => Observable1 (Problem (Relative trs p))
+instance (Observable trs, Observable1 (Problem p)) => Observable1 (Problem (Relative trs p)) where
+  observer1 (RelativeProblem trs0 p0) = send "RelativeProblem" (return RelativeProblem << trs0 << p0)
+instance (Observable trs, Observable1 (Problem p), Observable a) => Observable (Problem (Relative trs p) a) where
+  observer = observer1
+  observers = observers1
 
 instance IsDPProblem p => IsDPProblem (Relative trs0 p) where
   getP (RelativeProblem _ p) = getP p
@@ -83,6 +87,9 @@ instance Foldable (Problem p) => Foldable (Problem (Relative trs0 p)) where fold
 instance Traversable (Problem p) => Traversable (Problem (Relative trs0 p)) where traverse f (RelativeProblem r0 p) = RelativeProblem r0 <$> traverse f p
 
 instance Observable trs => Observable1 (Relative trs)
+instance (Observable trs, Observable a) => Observable(Relative trs a) where
+  observer = observer1
+  observers = observers1
 instance (NFData trs, NFData a) => NFData(Relative trs a) where
   rnf (Relative trs a) = rnf trs `seq` rnf a
 

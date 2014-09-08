@@ -417,5 +417,6 @@ mapRight f = bimap id f
 -- ------------
 
 --instance Observable id => Observable (AF_ id) where observer (AF m) = observer m
-instance Observable1 AF_
+instance Observable1 AF_ where
+  observer1 (AF m) = send "AF" (return AF << m)
 

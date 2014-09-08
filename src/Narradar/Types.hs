@@ -122,7 +122,7 @@ bestError = maximumBy (compare `on` errorPos)
 -- ---------------------------------
 -- Parsing and dispatching TPDB TRSs
 -- ---------------------------------
-newtype PrettyDotF a = PrettyDotF a deriving (Functor, Pretty, DotRep, Generic, Typeable)
+newtype PrettyDotF a = PrettyDotF a deriving (Functor, Pretty, DotRep, Generic, Generic1, Typeable)
 instance Applicative PrettyDotF where
   pure = PrettyDotF
   PrettyDotF f <*> PrettyDotF a = PrettyDotF (f a)
@@ -138,7 +138,7 @@ instance DotRep (SomeInfo PrettyDotF) where
   dot (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dot p
   dotSimple (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> dotSimple p
 instance Observable(SomeInfo PrettyDotF) where
-  observer (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> SomeInfo . observer p
+  observer (SomeInfo p) = withConstraintsOf p $ \PrettyDotConstraint -> SomeInfo . observer1 p
 
 instance Show (SomeInfo PrettyDotF) where
   show = show . pPrint

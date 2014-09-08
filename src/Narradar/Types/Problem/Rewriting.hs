@@ -42,7 +42,7 @@ import Narradar.Framework.Ppr as Ppr
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
 
-data MkRewriting strat = MkRewriting (Strategy strat) Minimality deriving (Eq, Ord, Show, Generic, Typeable)
+data MkRewriting strat = MkRewriting (Strategy strat) Minimality deriving (Eq, Ord, Show, Generic, Generic1, Typeable)
 
 type Rewriting  = MkRewriting Standard
 type IRewriting = MkRewriting Innermost
@@ -56,7 +56,7 @@ instance GetPairs (MkRewriting strat) where getPairs = getPairsDefault
 
 instance IsProblem (MkRewriting st) where
   data Problem (MkRewriting st) a = RewritingProblem {rr,dd :: a, st :: Strategy st, m :: Minimality}
-                                     deriving (Eq, Ord, Show, Generic)
+                                  deriving (Eq, Ord, Show)
   getFramework (RewritingProblem _ _ s m) = MkRewriting s m
   getR (RewritingProblem r _ _ _) = r
 
@@ -228,4 +228,15 @@ instance (FrameworkProblemN (MkRewriting st) id
 -- Hood
 
 instance Observable1 MkRewriting
-instance Observable st => Observable1 (Problem (MkRewriting st))
+instance Observable a => Observable(MkRewriting a) where
+  observer = observer1
+  observers = observers1
+
+instance Observable st => Observable1 (Problem (MkRewriting st)) where
+  observer1 (RewritingProblem rr dd st m) =
+    send "RewritingProblem"
+    (return RewritingProblem << rr << dd << st << m)
+
+instance (Observable st, Observable trs) => Observable(Problem(MkRewriting st) trs) where
+  observer = observer1
+  observers = observers1

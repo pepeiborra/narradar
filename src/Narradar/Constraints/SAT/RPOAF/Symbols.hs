@@ -196,9 +196,15 @@ instance (Var ~ Family.Var s, GenSymbol s, Decode s (SymbolRes (Family.Id s))) =
   genSymbol = let s :: s = genSymbol in Usable s (V Nothing 14) (mkUsableSymbolDecoder (V Nothing 14) (decode s))
 
 
-instance Observable1 Usable where observer1 = observeOpaque "usable-symbol"
+instance Observable1 Usable         where observer1 = observeOpaque "usable-symbol"
 instance Observable1 (RPOSsymbol v) where observer1 = observeOpaque "rpos-symbol"
 instance Observable1 (RPOsymbol v)  where observer1 = observeOpaque "rpo-symbol"
 instance Observable1 (LPOSsymbol v) where observer1 = observeOpaque "lpos-symbol"
 instance Observable1 (LPOsymbol v)  where observer1 = observeOpaque "lpo-symbol"
 instance Observable1 (MPOsymbol v)  where observer1 = observeOpaque "mpo-symbol"
+instance Observable a => Observable (Usable       a) where observer = observer1 ; observers = observers1
+instance Observable a => Observable (RPOSsymbol v a) where observer = observer1 ; observers = observers1
+instance Observable a => Observable (RPOsymbol  v a) where observer = observer1 ; observers = observers1
+instance Observable a => Observable (LPOSsymbol v a) where observer = observer1 ; observers = observers1
+instance Observable a => Observable (LPOsymbol  v a) where observer = observer1 ; observers = observers1
+instance Observable a => Observable (MPOsymbol  v a) where observer = observer1 ; observers = observers1

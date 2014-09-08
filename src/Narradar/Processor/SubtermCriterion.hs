@@ -31,10 +31,13 @@ import Debug.Hoed.Observe
 data SubtermCriterion (info :: * -> *) = SubtermCriterion deriving (Eq, Show, Ord, Generic)
 data SubtermCriterionProof id = SubtermCriterionProof (Proj id)
                               | SubtermCriterionFailMinimality
-     deriving (Eq, Show, Ord, Generic, Typeable)
+                              | SubtermCriterionFailQ
+     deriving (Eq, Show, Ord, Generic, Generic1, Typeable)
 
 instance Observable1 info => Observable (SubtermCriterion info)
 instance Observable1 SubtermCriterionProof
+instance Observable a => Observable (SubtermCriterionProof a) where
+  observer = observer1 ; observers = observers1
 
 type instance InfoConstraint (SubtermCriterion info) = info
 
@@ -42,6 +45,7 @@ instance (Pretty (DPIdentifier id), Ord id) => Pretty (SubtermCriterionProof (DP
     pPrint SubtermCriterionFailMinimality = text "The problem does not have the minimality property," $$
                                             text "nor is innermost, hence the subterm criterion does not apply"
 
+    pPrint SubtermCriterionFailQ = text "The problem does not have the minimality nor the Q property, hence the subterm criterion does not apply."
     pPrint (SubtermCriterionProof pi) = text "Subterm Criterion with the projection:" $$
                                         nest 2 pi
 
@@ -72,10 +76,11 @@ instance (Info info (SubtermCriterionProof id), FrameworkId id) =>
    type Typ (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id)) = QRewritingN id
    type Trs (SubtermCriterion info) (Problem (QRewritingN id) (NTRS id)) = NTRS id
    applyO _ SubtermCriterion p0
-     | isQInnermost p0 = case subtermCriterion (getP p0) of
+     | isQInnermost p0 || getMinimalityFromProblem p0 == M
+     = case subtermCriterion (getP p0) of
                                 Nothing          -> mzero
                                 Just (pTRS',prj) -> singleP  (SubtermCriterionProof prj) p0 (setP pTRS' p0)
-     | otherwise = dontKnow (SubtermCriterionFailMinimality :: SubtermCriterionProof id) p0
+     | otherwise = dontKnow (SubtermCriterionFailQ :: SubtermCriterionProof id) p0
 
 instance(Info info (Problem base (NTRS id))
         ,Processor (SubtermCriterion info) (Problem base (NTRS id))
@@ -116,10 +121,11 @@ subtermCriterion pTRS
 ------------------------
 
 data Kind = Weak | Strict deriving (Eq, Ord, Show, Generic)
-data Proj id = Proj {af::AF_ id, kind::[Kind]} deriving (Generic,Show)
+data Proj id = Proj {af::AF_ id, kind::[Kind]} deriving (Generic,Generic1,Show)
 
 instance Observable Kind
 instance Observable1 Proj
+instance Observable a => Observable (Proj a) where observer = observer1 ; observers = observers1
 
 proj af kk = Proj af (sort kk)
 
