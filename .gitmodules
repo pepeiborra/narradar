@@ -31,3 +31,33 @@
 [submodule "submodules/control-monad-free.git"]
 	path = submodules/control-monad-free.git
 	url = git@github.com:pepeiborra/control-monad-free.git
+[submodule "hoed"]
+	path = hoed
+	url = git://github.com/pepeiborra/hoed
+[submodule "submodules/hoed"]
+	path = submodules/hoed
+	url = git://github.com/pepeiborra/hoed
+[submodule "submodules/hoed-extras"]
+	path = submodules/hoed-extras
+	url = git://github.com/pepeiborra/hoed-extras
+[submodule "submodules/control-monad-free-extras"]
+	path = submodules/control-monad-free-extras
+	url = git://github.com/pepeiborra/control-monad-free-extras
+[submodule "submodules/deepseq-extras"]
+	path = submodules/deepseq-extras
+	url = git://github.com/pepeiborra/deepseq-extras
+[submodule "submodules/muterm-framework-charts"]
+	path = submodules/muterm-framework-charts
+	url = git://github.com/pepeiborra/muterm-framework-charts
+[submodule "submodules/funsat"]
+	path = submodules/funsat
+	url = git://github.com/pepeiborra/funsat
+[submodule "submodules/funsat-rpo"]
+	path = submodules/funsat-rpo
+	url = git://github.com/pepeiborra/funsat-rpo
+[submodule "submodules/yices"]
+	path = submodules/yices
+	url = git://github.com/pepeiborra/yices-0.0.0.12
+[submodule "submodules/bindings-yices"]
+	path = submodules/bindings-yices
+	url = git://github.com/pepeiborra/bindings-yices
