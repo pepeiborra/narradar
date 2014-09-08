@@ -55,7 +55,7 @@ Library
   buildable: True
 --  cpp-options: -DGHCI
   ghc-options: 
-  ghc-prof-options: -fprof-auto-calls
+  ghc-prof-options: -fprof-auto
   hs-source-dirs: src
   extensions:   FlexibleContexts,
                 FlexibleInstances,
@@ -122,12 +122,13 @@ Library
                   hashmap,
                   suitable,
                   bifunctors,
-                  Hoed,
+                  Hoed, hoed-extras,
                   prelude-extras,
                   constrained-normal,
                   constraints,
-                  applicative-extras
-
+                  applicative-extras,
+                  tpdb,
+                  hxt
 
   if flag(aprove)
     build-depends:network, 

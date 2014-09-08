@@ -119,8 +119,8 @@ narradarMain' :: forall mp.
 narradarMain' run (O o oo) flags@Options{..} = do
   tmp <- getTemporaryDirectory
 
-  a_problem <- eitherM $ {-oo "narradarParse"-} narradarParse problemFile input
-
+  a_problemE <-  {-oo "narradarParse"-} narradarParse problemFile input
+  a_problem <- either fail return $ a_problemE
   let --proof :: forall info. Proof info mp Final
       proof = o "proof" $ dispatchAProblem a_problem
   sol <- maybe (fmap return) withTimeout timeout $

@@ -38,9 +38,12 @@ module Narradar.Types ( module Narradar.Framework
                       ) where
 
 import           Control.Applicative                  hiding (Alternative(..), many, optional)
-import           Control.Monad                        (MonadPlus(..), (>=>))
-import           Data.ByteString.Char8                (ByteString)
-import           Data.List                            (maximumBy, sort)
+import           Control.Arrow                        ((>>>))
+import           Control.Monad                        (MonadPlus(..), (>=>), when)
+import           Control.Monad.Trans                  (lift, liftIO)
+import           Control.Monad.Error                  (runErrorT)
+import           Data.ByteString.Char8                (ByteString, pack)
+import           Data.List                            (maximumBy, sort, isSuffixOf)
 import           Data.Hashable
 import           Data.Maybe
 import           Data.Monoid
@@ -82,10 +85,16 @@ import           Narradar.Types.Problem.Infinitary    hiding (pi, baseProblem, b
 import           Narradar.Types.TRS
 import           Narradar.Types.Term
 import           Narradar.Types.Var
+import qualified Narradar.Types.Var                   as Narradar
 import           Narradar.Utils
 import           Narradar.Framework
 import           Narradar.Framework.Ppr               as Ppr
 
+
+import qualified TPDB.Data                            as TPDB
+import qualified TPDB.XTC.Read                        as TPDB
+import           Text.XML.HXT.Arrow.XmlState          ( runX )
+import           Text.XML.HXT.Arrow.ReadDocument      ( readString )
 
 import           Debug.Hoed.Observe
 
@@ -108,15 +117,26 @@ instance Pretty [Output] where
 -- --------------------
 
 narradarParse x = narradarParseO nilObserver x
-narradarParseO o name input = let
-    results = map (\p -> runParser p mempty name input) [trsParserO o, APrologProblem <$> prologParser]
+narradarParseO o name input
+  | ".xml" `isSuffixOf` name = do
+      e_p <- parseXMLO o input
+      case e_p of
+       Right p -> do
+         writeFile (name ++ ".trs") (show $ pprAProblem p)
+       Left  _ -> return ()
+      return e_p
+  | otherwise =
+    return $
+    let
+       results = map (\p -> runParser p mempty name input)
+                     [trsParserO o, APrologProblem <$> prologParser]
     in case results of
          [Right x, _] -> Right x
          [_, Right x] -> Right x
          [Left e1 , Left e2] -> Left $ bestError [e1,e2]
 
-bestError :: [ParseError] -> ParseError
-bestError = maximumBy (compare `on` errorPos)
+bestError :: [ParseError] -> String
+bestError = show . maximumBy (compare `on` errorPos)
  where on cmp f x y = f x `cmp` f y
 
 -- ---------------------------------
@@ -156,26 +176,30 @@ mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
 mkDispatcher f =  f >=> final
 
 data AProblem t trs where
-    ARewritingProblem         :: Problem Rewriting trs  -> AProblem t trs
-    AIRewritingProblem        :: Problem IRewriting trs -> AProblem t trs
-    AQRewritingProblem        :: Problem (QRewriting (Family.TermF trs)) trs -> AProblem t trs
-    ANarrowingProblem         :: Problem Narrowing trs  -> AProblem t trs
-    ACNarrowingProblem        :: Problem CNarrowing trs -> AProblem t trs
-    ARelativeRewritingProblem :: Problem (Relative trs Rewriting) trs -> AProblem t trs
+    ARewritingProblem              :: Problem Rewriting trs  -> AProblem t trs
+    AIRewritingProblem             :: Problem IRewriting trs -> AProblem t trs
+    AQRewritingProblem             :: Problem (QRewriting (Family.TermF trs)) trs -> AProblem t trs
+    ANarrowingProblem              :: Problem Narrowing trs  -> AProblem t trs
+    ACNarrowingProblem             :: Problem CNarrowing trs -> AProblem t trs
+    ARelativeRewritingProblem      :: Problem (Relative trs Rewriting) trs -> AProblem t trs
     ARelativeIRewritingProblem     :: Problem (Relative trs IRewriting) trs -> AProblem t trs
     AGoalRelativeRewritingProblem  :: Problem (Relative trs (InitialGoal t Rewriting)) trs  -> AProblem t trs
     AGoalRelativeIRewritingProblem :: Problem (Relative trs (InitialGoal t IRewriting)) trs -> AProblem t trs
-    AGoalRewritingProblem     :: Problem (InitialGoal t Rewriting) trs  -> AProblem t trs
-    AGoalIRewritingProblem    :: Problem (InitialGoal t IRewriting) trs -> AProblem t trs
---    AGoalNarrowingProblem     :: Problem (NarrowingGoal (TermId t)) trs -> AProblem t trs
-    AGoalNarrowingProblem     :: Problem (InitialGoal t Narrowing) trs -> AProblem t trs
-    AGoalCNarrowingProblem    :: Problem (InitialGoal t INarrowing) trs -> AProblem t trs
---    AGoalCNarrowingProblem    :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
-    APrologProblem            :: PrologProblem -> AProblem t trs
+    AGoalRewritingProblem          :: Problem (InitialGoal t Rewriting) trs  -> AProblem t trs
+    AGoalIRewritingProblem         :: Problem (InitialGoal t IRewriting) trs -> AProblem t trs
+--    AGoalNarrowingProblem          :: Problem (NarrowingGoal (TermId t)) trs -> AProblem t trs
+    AGoalNarrowingProblem          :: Problem (InitialGoal t Narrowing) trs -> AProblem t trs
+    AGoalCNarrowingProblem         :: Problem (InitialGoal t INarrowing) trs -> AProblem t trs
+--    AGoalCNarrowingProblem         :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
+    APrologProblem                 :: PrologProblem -> AProblem t trs
 --    AGoalNarrowingRelativeRewritingProblem :: Problem (Relative trs NarrowingGoal (TermId t)) trs -> AProblem t trs
 
 instance Observable1 (AProblem t) where observer1 = observeOpaque "A problem"
 
+pprAProblem (ARewritingProblem  p) = pprTPDB $ setP (tRS []) p
+pprAProblem (AIRewritingProblem p) = pprTPDB $ setP (tRS []) p
+pprAProblem (ARelativeRewritingProblem p) = pprTPDB $ setP (tRS [])  p
+pprAProblem (ARelativeIRewritingProblem p) = pprTPDB $ setP (tRS []) p
 
 dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
                     ,Dispatch (Problem Rewriting  trs)
@@ -215,6 +239,25 @@ parseTRS :: (trs ~ NTRS Id, Monad m) =>
              String -> m (AProblem (TermF Id) trs)
 parseTRS s = eitherM (runParser trsParser mempty "<input>" s)
 
+parseXML :: String -> IO (Either String (AProblem (TermF Id) (NTRS Id)))
+parseXML = parseXMLO nilObserver
+parseXMLO obs@(O o oo) inp = runErrorT $ do
+  problems <- lift $ runX (readString [] inp >>> TPDB.getProblem)
+  case problems of
+   [ p@TPDB.Problem { type_ = TPDB.Termination } ] ->
+     let r  = map convertRule (TPDB.strict_rules $ TPDB.trs p)
+         r0 = map convertRule (TPDB.weak_rules   $ TPDB.trs p)
+     in mkAProblem obs r A r0 Nothing []
+   []  -> fail "parse XML failed."
+   [_] -> fail "Can only do termination problems."
+   _   -> fail "Can only do one problem at once."
+  where
+   convertRule (l, r) = convertTerm l :-> convertTerm r
+   convertTerm (TPDB.Var  (TPDB.Identifier hash name arity)      ) =
+     return (Narradar.Var (Just name) hash)
+   convertTerm (TPDB.Node (TPDB.Identifier hash name arity) nodes) =
+     Impure (Term (ArityId (pack name) arity) (map convertTerm nodes))
+
 trsParser = trsParserO nilObserver
 trsParserO :: Observer -> TRS.TRSParser (AProblem (TermF Id) (NTRS Id))
 trsParserO obs@(O o oo) = do
@@ -232,14 +275,18 @@ trsParserO obs@(O o oo) = do
                     else A
 
   let r   = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->  r) _ <- rr]
-      r0  = [ mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r
-                  | Rules rr <- spec', TRS.Rule (l TRS.:->= r) _ <- rr]
+      r0  = [ l :-> r  | Rules rr <- spec', TRS.Rule (l TRS.:->= r) _ <- rr]
       dps = if null [()|Pairs{}<-spec]
               then Nothing
               else Just [markDPRule (mapTermSymbols IdFunction l :-> mapTermSymbols IdFunction r)
                              | Pairs rr <- spec', TRS.Rule (l TRS.:-> r) _ <- rr]
-      r' = mkTRS (mapTermSymbols IdFunction <$$> r)
 
+  mkAProblem obs r minimality r0 dps strategies
+
+mkAProblem (O o oo) r minimality r0_ dps strategies =
+  let
+      r' = mkTRS (mapTermSymbols IdFunction <$$> r)
+      r0 =        mapTermSymbols IdFunction <$$> r0_
       mkGoal = Concrete . markDP . mapTermSymbols IdFunction
 
 --      mkAbstractGoal :: Monad m => Term String -> m (Goal Id)
@@ -255,6 +302,7 @@ trsParserO obs@(O o oo) = do
       mkMode (Impure (Term (the_id -> "f") [])) = return V
       mkMode _                      = fail "parsing the abstract goal"
 
+  in
   case (r0, dps, strategies) of
     ([], Nothing, [])  -> return $ ARewritingProblem (oo "mkNewProblem" mkNewProblemO rewriting r)
     ([], Nothing, TRS.Narrowing:_)        -> return $ ANarrowingProblem (oo "mkNewProblem" mkNewProblemO narrowing r)
@@ -262,7 +310,7 @@ trsParserO obs@(O o oo) = do
     ([], Nothing, InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (oo "mkNewProblem" mkNewProblemO cnarrowing r)
 
     ([], Nothing, [GoalStrategy g])
-        -> return $ AGoalRewritingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [mkGoal g] rewriting) r)
+      -> return $ AGoalRewritingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [mkGoal g] rewriting) r)
 
     ([], Nothing, InnerMost:_)
         -> return $ AIRewritingProblem (oo "mkNewProblem" mkNewProblemO irewriting r)
