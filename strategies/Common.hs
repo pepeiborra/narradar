@@ -7,8 +7,10 @@ import Narradar
 import Debug.Hoed.Observe
 
 -- Solvers
-dg_ = DependencyGraphSCC{useInverse=False}
-dg = apply dg_
+dg  = apply DependencyGraphSCC{useInverse=False}
+dgI = apply DependencyGraphSCC{useInverse=True}
+
+
 sc = apply SubtermCriterion
 dgsc = lfp(dg >=> sc)
 ev    = apply ExtraVarsP
