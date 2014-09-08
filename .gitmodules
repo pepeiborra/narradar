@@ -27,10 +27,10 @@
 	url = git://github.com/pepeiborra/satchmo.git
 [submodule "submodyles/control-monad-free.git"]
 	path = submodyles/control-monad-free.git
-	url = git@github.com:pepeiborra/control-monad-free.git
+	url = git://github.com/pepeiborra/control-monad-free.git
 [submodule "submodules/control-monad-free.git"]
 	path = submodules/control-monad-free.git
-	url = git@github.com:pepeiborra/control-monad-free.git
+	url = git://github.com/pepeiborra/control-monad-free.git
 [submodule "hoed"]
 	path = hoed
 	url = git://github.com/pepeiborra/hoed
