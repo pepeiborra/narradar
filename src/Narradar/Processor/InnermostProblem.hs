@@ -111,7 +111,7 @@ instance (Family.Rule trs ~ Rule t v
   where
    type Typ (ToInnermost info) (Problem (QRewriting t) trs) = QRewriting t
    type Trs (ToInnermost info) (Problem (QRewriting t) trs) = trs
-   applyO o ToInnermost p
+   applyO o@(O _ oo) ToInnermost p
       | isNothing cond1 && isNothing cond2 && cond3 && cond4 && p' /= p = singleP QInnermostProof p p'
       | otherwise = dontKnow (QInnermostFail reason) p
 
@@ -124,7 +124,7 @@ instance (Family.Rule trs ~ Rule t v
        cond3 = isQValid p
        cond4 = m == M
        r  = rules(getR p)
-       p' = mkDerivedDPProblem (qRewritingO o (lhs <$> r) m) p
+       p' = oo "mkDerived" mkDerivedDPProblemO (qRewritingO o (lhs <$> r) m) p
        joinable s t =
             last (take 100 (rewrites r s)) == last(take 100 (rewrites r t))
 
