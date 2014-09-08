@@ -13,9 +13,6 @@
 [submodule "submodules/trsparser.git"]
 	path = submodules/trsparser.git
 	url = git://github.com/pepeiborra/trsparser.git
-[submodule "submodules/testsuite"]
-	path = submodules/testsuite
-	url = http://safe-tools.dsic.upv.es/narradar/testsuite.git
 [submodule "submodules/alacarte.git"]
 	path = submodules/alacarte.git
 	url = git://github.com/pepeiborra/alacarte.git
@@ -25,15 +22,9 @@
 [submodule "submodules/satchmo"]
 	path = submodules/satchmo
 	url = git://github.com/pepeiborra/satchmo.git
-[submodule "submodyles/control-monad-free.git"]
-	path = submodyles/control-monad-free.git
-	url = git://github.com/pepeiborra/control-monad-free.git
 [submodule "submodules/control-monad-free.git"]
 	path = submodules/control-monad-free.git
 	url = git://github.com/pepeiborra/control-monad-free.git
-[submodule "hoed"]
-	path = hoed
-	url = git://github.com/pepeiborra/hoed
 [submodule "submodules/hoed"]
 	path = submodules/hoed
 	url = git://github.com/pepeiborra/hoed
