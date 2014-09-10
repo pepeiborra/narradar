@@ -51,13 +51,13 @@ defPage :: MonadCGI m => m CGIResult
 defPage = outputFPS (LBS.fromChunks [defaultForm])
 
 narradarCgi :: forall mp.
-                 (IsMZero mp, Traversable mp, Observable1 mp
+                 (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
-                 ,Dispatch (Problem (QRewriting (TermN Id)) (NTRS Id))
+                 ,Dispatch (Problem (QRewriting (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)Rewriting) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id)IRewriting) (NTRS Id))
-                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermN Id))) (NTRS Id))
+                 ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermF Id))) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Narrowing)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) INarrowing) (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) Rewriting))  (NTRS Id))
@@ -67,7 +67,7 @@ narradarCgi :: forall mp.
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
                  ,Dispatch PrologProblem
-                 ) => (forall a. mp a -> Maybe a) -> IO ()
+                 ) => (forall a. mp a -> [a]) -> IO ()
 narradarCgi run = runCGI (handleErrors' cgiMain) where
  handleErrors' = (`catchCGI` \TimeoutException  -> output "Timeout").
                     (`catchCGI` \e@SomeException{} -> (output.show) e)
@@ -93,11 +93,11 @@ narradarCgi run = runCGI (handleErrors' cgiMain) where
   mypath <- fromMaybe "" <$> getInput "PATH"
   case mb_input of
     Just input -> do
-       a_problem <- eitherM $ narradarParse "INPUT" input
-
+       a_problemE <- liftIO $ narradarParse "INPUT" input
+       a_problem  <- either fail return $ a_problemE
        let proof   = dispatchAProblem a_problem
        sol <- liftIO $ liftM Control.Monad.join $ withTimeout timeout $
-              evaluate (run (runProof proof))
+              evaluate (listToMaybe $ run (runProof proof))
 
        let dotsol = case sol of
                        Just sol -> dotProof' DotProof{showFailedPaths = False} sol
