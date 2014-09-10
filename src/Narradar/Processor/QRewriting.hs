@@ -13,6 +13,7 @@ import Data.Monoid
 import qualified Data.Term.Family as Family
 import Data.Typeable
 import Narradar.Types
+import Narradar.Types.Problem.QRewriting
 import Narradar.Framework
 
 import Debug.Hoed.Observe
@@ -35,14 +36,14 @@ instance Observable RewritingToQRewritingProof
 
 instance (FrameworkProblem Rewriting trs
          ,Info info RewritingToQRewritingProof
-         ,MkDPProblem (QRewriting (Family.TermF trs)) trs) =>
+         ,MkDPProblem (QRewriting (Family.TermF trs)) trs
+         ,Observable (Term(Family.TermF trs) Var)) =>
          Processor (RewritingToQRewriting info) (Problem Rewriting trs) where
   type Typ (RewritingToQRewriting info) (Problem Rewriting trs) = QRewriting (Family.TermF trs)
   type Trs (RewritingToQRewriting info) (Problem Rewriting trs) = trs
-  applyO _ RewritingToQRewriting p =
+  applyO o RewritingToQRewriting p =
     singleP RewritingToQRewritingProof p $
-    setMinimality (getMinimality $ lowerNF p) $
-    mapFramework (\_ ->  qrewriting) p
+     mapFramework (\(MkRewriting _ m) -> qRewritingO o mempty m) p
 
 instance (FrameworkN IRewriting t Var
          ,Info info RewritingToQRewritingProof
