@@ -223,9 +223,12 @@ secondM f (x,y) = f y >>= \y' -> return (x,y')
 showPpr = show . pPrint
 
 snub :: Ord a => [a] -> [a]
-snub = go Set.empty where
+snub = snubBy id
+snubBy :: Ord a => (t -> a) -> [t] -> [t]
+snubBy f = go Set.empty where
   go _   []     = []
-  go acc (x:xx) = if x `Set.member` acc then go acc xx else x : go (Set.insert x acc) xx
+  go acc (x:xx) = if fx `Set.member` acc then go acc xx else x : go (Set.insert fx acc) xx
+    where fx = f x
 
 (cmp `on` f) a b = cmp (f a) (f b)
 

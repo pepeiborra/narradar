@@ -124,7 +124,7 @@ instance ( t ~ f (DPIdentifier id)
                  narrowingsByPos = map (\g -> (snd (head g), map fst g))
                                  $ groupBy ((==) `on` snd)
                                  $ oo "qNarrow1DP" qNarrow1DPO q (rules $ getR p0) olddp
-                 newdps =
+                 newdps = snubBy ((==) `on` snd) $
                           [ (p, dps)
                           -- For every valid position p, collect all the narrowings below it
                           | (p, dps) <- [ (p, [ n
