@@ -31,7 +31,7 @@ import Narradar.Interface.Cli
 main = narradarMain (id :: [a] -> [a]) nilObserver
 #else
 import Narradar.Interface.Cgi
-main = narradarCgi listToMaybe
+main = narradarCgi (id :: [a] -> [a])
 #endif
 
 -- Missing dispatcher cases

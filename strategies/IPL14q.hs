@@ -45,7 +45,7 @@ main = do
   printf "Counted %d calls to lpo, %d unique" (length lpos) lpoUnique
 #else
 import Narradar.Interface.Cgi
-main = narradarCgi listToMaybe
+main = narradarCgi (id :: [a] -> [a])
 #endif
 
 
