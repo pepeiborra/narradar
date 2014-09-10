@@ -424,21 +424,25 @@ instance ( FrameworkTerm t Var
          , Pretty (t(Term t Var))
          ) =>
          ExpandDPair (QRewriting t) (NarradarTRS t Var) where
-  expandDPairO o p i new = setP (liftNF $ dptrs{ depGraph = dg'' }) p where
-    dptrs = lowerNTRS $ getP $ expandDPairOdefault o p i new
+  expandDPairO (O o oo) p i new = setP (liftNF $ dptrs{ depGraph = dg'' }) p where
+    dptrs = lowerNTRS $ getP $ oo "expandDPairDefault" expandDPairOdefault p i new
     -- ignore the new graph computed by expandDPairDefault,
     -- using only its bounds in putting together a custom graph
-    dg'' = G.buildG bb $
-           [ (m,i+j)   | (m,n) <- edges dg, n == i, j <- [0..length new - 1] ] ++
-           [ (i+j,n)   | (m,n) <- edges dg, m == i, j <- [0..length new - 1] ] ++
-           [ (i+j,i+k) | (m,n) <- edges dg, m == i, n == i
-                       , j <- [0..length new - 1]
-                       , k <- [0..length new - 1]] ++
+    dg'' = o "dg''" $
+           G.buildG bb $
+           o "matrix" $ force $ 
+           o "m" [ (m,i+j)   | (m,n) <- edges dg, n == i, j <- [0..ln] ] ++
+           o "n" [ (i+j,n)   | (m,n) <- edges dg, m == i, j <- [0..ln] ] ++
+           o "mn" [ (i+j,i+k) | (m,n) <- edges dg, m == i, n == i
+                              , j <- [0..ln]
+                              , k <- [0..ln]] ++
           edges dg
 
+    ln  = length (snub new) - 1
     dg  = depGraph (lowerNTRS $ getP p)
 --  bb  = G.bounds $ depGraph dptrs
-    bb  = G.bounds $ dpsA dptrs
+    bb  = o "bb" $ G.bounds $ dpsA dptrs
+
 -- Hood
 
 --instance Observable t => Observable (QRewriting t) where observer (QRewriting x m) = send ("Q Problem") (return QRewriting << x << m)
