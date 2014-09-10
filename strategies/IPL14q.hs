@@ -70,12 +70,18 @@ qr p = apply RewritingToQRewriting p
 instance (-- Eq(EqModulo(NProblem (QRewritingN Id) Id))
          ) => Dispatch (NProblem (QRewritingN Id) Id) where
   dispatch = ev
-             >=> lfpBounded 5 (lfp dgi >=> (sc `orElse` lpo `orElse` rew `orElse` (narrO .|. inst .|. finst )))
+             >=> lfpBounded 5 ( lfp dgInnU >=> (sc `orElse` lpo `orElse` rpos `orElse` (narr .|. inst .|. finst )))
+--             >=> dg >=> try (inn `orElse` ur) >=> lpo >=> dg
              >=> final
     where
-      dgi    = inn `orElse` ur `orElse` dg
+      dgInnU = dgI `ifSuccessOrElse` inn `orElse` ur
       inn    = apply ToInnermost
       innO p = gdmobservers "Innermost" applyO ToInnermost p
+
+ifSuccessOrElse strat otherwise prob =
+  case strat prob of
+    proof@(Impure Success{}) -> proof
+    proof -> (otherwise `orElse` (\_ -> proof)) prob
 
 -- Initial Goal
 type GId id = DPIdentifier (GenId id)
