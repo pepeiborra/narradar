@@ -30,14 +30,12 @@
 <form id="myform"  accept-charset="utf-8" method="post"> 
 <p>
 <textarea cols="80" rows="30" name="TRS">
-(VAR x y) 
+(VAR x y)
 (RULES
- a -> b
- main -> f(a,a)
- f(b,x) ->= f(x,x)
-)
-(STRATEGY GOAL main)
-</textarea>
+ f(x,y) ->= x
+ f(x,y) ->= f(x,s(y))
+ g(s(x),y) -> g(f(x,y),y)
+)</textarea>
 </p>
 <input type="hidden" name="action" id="action" value="solve" />
 <input name="LOG" type="hidden" value="True" />
