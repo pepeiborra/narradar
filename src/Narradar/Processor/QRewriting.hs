@@ -40,7 +40,9 @@ instance (FrameworkProblem Rewriting trs
   type Typ (RewritingToQRewriting info) (Problem Rewriting trs) = QRewriting (Family.TermF trs)
   type Trs (RewritingToQRewriting info) (Problem Rewriting trs) = trs
   applyO _ RewritingToQRewriting p =
-    singleP RewritingToQRewritingProof p $ mapFramework (\_ -> qrewriting) p
+    singleP RewritingToQRewritingProof p $
+    setMinimality (getMinimality $ lowerNF p) $
+    mapFramework (\_ ->  qrewriting) p
 
 instance (FrameworkN IRewriting t Var
          ,Info info RewritingToQRewritingProof
