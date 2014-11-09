@@ -1,0 +1,9 @@
+(VAR x)
+(RULES
+ a -> a
+ f(x) -> f(a)
+ )
+ (PAIRS
+ F(x) -> F(a)
+ )
+ (MINIMALITY)

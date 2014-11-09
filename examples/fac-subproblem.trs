@@ -1,0 +1,8 @@
+(VAR x y) 
+(RULES
+)
+(PAIRS
+add#(n(x),n(y)) -> add#(x,y) 
+add#(x,s(y)) -> add#(x,y) 
+add#(s(x),n(s(y))) -> add#(x,n(y))
+)

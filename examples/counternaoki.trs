@@ -1,0 +1,9 @@
+(VAR x y) 
+(RULES
+a -> b
+e(x) -> f(x,x)
+main -> e(a)
+
+f(b,x) ->= f(x,x)
+)
+(STRATEGY GOAL main)
