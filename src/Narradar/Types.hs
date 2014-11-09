@@ -244,7 +244,7 @@ parseXML = parseXMLO nilObserver
 parseXMLO obs@(O o oo) inp = runErrorT $ do
   problems <- lift $ runX (readString [] inp >>> TPDB.getProblem)
   case problems of
-   [ p@TPDB.Problem { type_ = TPDB.Termination } ] ->
+   [ p@TPDB.Problem { TPDB.type_ = TPDB.Termination } ] ->
      let r  = map convertRule (TPDB.strict_rules $ TPDB.trs p)
          r0 = map convertRule (TPDB.weak_rules   $ TPDB.trs p)
      in mkAProblem obs r A r0 Nothing []

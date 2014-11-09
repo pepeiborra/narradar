@@ -23,6 +23,8 @@ import qualified Data.Set as Set
 import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
 import Narradar hiding (lfp)
+import Narradar.Processor.RPO
+import Narradar.Processor.RPO.Yices
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen

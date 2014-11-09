@@ -34,6 +34,15 @@ Flag hood
 Flag aprove
    description: include the Aprove processor in the build
    default: False
+Flag rpo
+   description: include the RPO processor in the build
+   default: False
+Flag yices
+   description: include support for the Yices SMT solver
+   default: False
+Flag z3
+   description: include support for the Z3 SMT solver
+   default: True
 
 Library
   if flag(base4)
@@ -51,6 +60,26 @@ Library
      -- ghc-options: -fhpc
   if flag(hood)
      cpp-options: -DHOOD
+  if flag(rpo)
+     exposed-modules: 
+       Narradar.Processor.RPO,
+       Narradar.Constraints.SAT.RPOAF,
+       Narradar.Constraints.SAT.RPOAF.Symbols
+  if flag(yices) && flag(rpo)
+     extra-libraries: yices
+     exposed-modules:
+       Narradar.Processor.RPO.Yices,
+       Narradar.Processor.RPO.YicesPipe,
+       Narradar.Constraints.SAT.YicesCircuit,
+       Narradar.Constraints.SAT.YicesFFICircuit
+     build-depends:
+                  yices >= 0.0.0.12.1,
+                  bindings-yices >= 0.2
+  if flag(z3) && flag(rpo)
+     build-depends: z3 > 0.3.2
+     exposed-modules:
+      Narradar.Constraints.SAT.Z3Circuit
+      Narradar.Processor.RPO.Z3
 
   buildable: True
 --  cpp-options: -DGHCI
@@ -73,9 +102,6 @@ Library
                 DeriveGeneric,
                 ConstraintKinds
                 
-
-  extra-libraries: yices
-
   build-Depends:  base,
                   transformers >= 0.3,
                   mtl >= 2.1.3.1,
@@ -107,8 +133,6 @@ Library
                   suitable >= 0.1.2,
                   split,
 --                  parse-dimacs,
-                  yices >= 0.0.0.12.1,
-                  bindings-yices >= 0.2,
                   narradar-alacarte >= 0.6,
                   narradar-funsat-lang >= 0.8, 
                   narradar-funsat-rpo >= 0.3.2,
@@ -127,7 +151,7 @@ Library
                   constrained-normal,
                   constraints,
                   applicative-extras,
-                  tpdb,
+                  tpdb >= 0.9.8,
                   hxt
 
   if flag(aprove)
@@ -150,13 +174,8 @@ Library
      Narradar.Constraints.Unify,
      Narradar.Constraints.Modularity,
      Narradar.Constraints.VariableCondition,
-     Narradar.Constraints.RPO,
      Narradar.Constraints.SAT.MonadSAT,
      Narradar.Constraints.SAT.Solve,
-     Narradar.Constraints.SAT.YicesCircuit,
-     Narradar.Constraints.SAT.YicesFFICircuit,
-     Narradar.Constraints.SAT.RPOAF,
-     Narradar.Constraints.SAT.RPOAF.Symbols,
      Narradar.Constraints.Confluence,
      Narradar.Constraints.Syntactic,
      Narradar.Examples,
@@ -191,7 +210,6 @@ Library
 --     Narradar.Processor.InitialGoalNarrowingProblem,
      Narradar.Processor.InfinitaryProblem,
      Narradar.Processor.QRewriting,
-     Narradar.Processor.RPO,
 --     Narradar.Processor.RPOFunsat
      Narradar.Processor.UsableRules,
      Narradar.Processor.InnermostProblem,

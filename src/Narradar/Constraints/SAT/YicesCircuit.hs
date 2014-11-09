@@ -10,30 +10,32 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Narradar.Constraints.SAT.YicesCircuit
-   (YicesSource(..), YMaps(..)
-   ,module Math.SMT.Yices.Syntax
-   ,solveYices, runYices, runYices', emptyYMaps --YicesCircuitProblem(..)
-   ,generateDeclarations, solveDeclarations
+   (solve
    ) where
 
+import           Control.Applicative                 ((<$>))
+import           Control.Arrow                       (second)
 import           Control.Exception as CE             (catch, SomeException)
 import           Control.Monad.Reader
 import           Control.Monad.State.Lazy            hiding ((>=>), forM_)
 import           Data.Foldable                       (toList)
 import           Data.List                           (sortBy)
 import           Data.Hashable
-import           Data.Monoid
+import           Data.Monoid                         ( Monoid(..) )
 import           Data.Sequence                       ( Seq, (<|) )
 import           Data.Set                            ( Set )
 import           Math.SMT.Yices.Syntax
 import           Math.SMT.Yices.Pipe
 import           Narradar.Types.Term
+import           Narradar.Constraints.SAT.MonadSAT   hiding (and,or)
+import           Narradar.Constraints.SAT.Solve      (VarMaps(..))
 import           Narradar.Utils                      (on,debug,debug',withTempFile)
 import           Text.PrettyPrint.HughesPJClass
 import           System.IO
-import Prelude hiding( not, and, or, (>) )
+import           Prelude                             hiding( not, and, or, (>) )
 
 import qualified Data.HashMap                        as HashMap
 import qualified Data.Set                            as Set
@@ -45,6 +47,8 @@ import           Funsat.ECircuit                     (Circuit(..), CastCircuit(.
 
 import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), AssertCircuit(..)
                                                      , termGt_, termGe_, termEq_)
+import           Funsat.RPOCircuit.Symbols (Natural(..))
+import           Funsat.RPOCircuit.Internal ( runEvalM )
 
 deriving instance Eq  ExpY
 deriving instance Ord ExpY
@@ -53,7 +57,7 @@ deriving instance Ord TypY
 
 type k :->: v = HashMap.HashMap k v
 
-newtype YicesSource id var = YicesSource { unYicesSource :: State (YMaps id var) ExpY}
+newtype YicesSource id var = YicesSource { unYicesSource :: State (YState id var) ExpY}
 
 type instance Family.TermF (YicesSource id) = TermF id
 type instance Family.Id (YicesSource id)    = id
@@ -73,31 +77,32 @@ instance Enum YVar where
   toEnum          i = YV i "fromEnum"
   fromEnum (YV i _) = i
 
-data YMaps id var = YMaps
+data YState id var = YState
     { internal  :: !([YVar])
     , variables :: !(Set (var, TypY))
     , assertions :: !(Seq ExpY)
-    , termGtMap :: !((TermN id, TermN id) :->: (YVar, ExpY))
-    , termGeMap :: !((TermN id, TermN id) :->: (YVar, ExpY))
-    , termEqMap :: !((TermN id, TermN id) :->: (YVar, ExpY))
+    , varmaps    :: VarMaps (YVar, ExpY) id var
     }
-  deriving Show
+   deriving Show
 
-emptyYMaps = YMaps [YV 2 "" ..] mempty mempty mempty mempty mempty
+updateGtMap f it@YState{varmaps} = it{ varmaps = varmaps{ termGtMap = f (termGtMap varmaps)}}
+updateEqMap f it@YState{varmaps} = it{ varmaps = varmaps{ termEqMap = f (termEqMap varmaps)}}
+
+emptyYState = YState [YV 2 "" ..] mempty mempty mempty
 
 solveYices :: (Hashable id, Ord id, Read var, Ord var, Show var) => YicesSource id var -> IO (Maybe (BIEnv var))
 solveYices = solveDeclarations Nothing . runYices
 
 runYices :: (Hashable id, Ord id, Ord var, Show var) => YicesSource id var -> [CmdY]
-runYices y = let (me,stY) = runYices' emptyYMaps y
+runYices y = let (me,stY) = runYices' emptyYState y
              in generateDeclarations stY ++
                 [ ASSERT x | x <- me : toList(assertions stY)]
 
 
 runYices' stY (YicesSource y) = runState y stY
 
-generateDeclarations :: (Hashable id, Ord var, Show var) => YMaps id var -> [CmdY]
-generateDeclarations YMaps{..} =
+generateDeclarations :: (Hashable id, Ord var, Show var) => YState id var -> [CmdY]
+generateDeclarations YState{varmaps=VarMaps{..},..} =
    [DEFINE (show v, typ) Nothing | (v,typ) <- Set.toList variables] ++
    [DEFINE (show v, VarT "bool")  (Just c)
         | (v, c) <- sortBy (compare `on` fst) (HashMap.elems termEqMap ++ HashMap.elems termGtMap ++ HashMap.elems termGeMap)]
@@ -218,21 +223,21 @@ instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id) =>
 
  termGt s t = YicesSource $ do
       env <- get
-      case HashMap.lookup (s,t) (termGtMap env) of
+      case HashMap.lookup (s,t) (termGtMap $ varmaps env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termGt_ s t
            meVar        <- freshV "termGt"
-           modify $ \env -> env{termGtMap = HashMap.insert (s,t) (meVar, meConstraint) (termGtMap env)}
+           modify $ updateGtMap $ HashMap.insert (s,t) (meVar, meConstraint)
            return (VarE (show meVar))
  termEq s t = YicesSource $ do
       env <- get
-      case HashMap.lookup (s,t) (termEqMap env) of
+      case HashMap.lookup (s,t) (termEqMap $ varmaps env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
            meConstraint <- unYicesSource $ termEq_ s t
            meVar        <- freshV "termEq"
-           modify $ \env -> env{termEqMap = HashMap.insert (s,t) (meVar, meConstraint) (termEqMap env)}
+           modify $ updateEqMap $ HashMap.insert (s,t) (meVar, meConstraint) 
            return (VarE (show meVar))
 {-
  termGe s t = YicesSource $ do
@@ -267,3 +272,45 @@ freshV msg = do
   modify $ \y -> y{internal = vv}
 --  debug(show v ++ ": " ++ msg)
   return (YV v msg)
+
+-- ----------------------------
+-- MonadSAT implementation
+-- ----------------------------
+
+data StY id v = StY { poolY :: [Int]
+                    , mkV   :: Maybe String -> Int -> v
+                    , cmdY  :: [CmdY]
+                    , stY   :: YState id v
+                    }
+
+newtype SMTY id v a = SMTY {unSMTY :: State (StY id v) a} deriving (Functor, Monad, MonadState (StY id v))
+
+solve :: (Hashable id, Ord id, Show id, Pretty id, Enum v, Ord v, Read v, Show v) =>
+             (Maybe String -> Int -> v) -> SMTY id v (EvalM v a) -> IO (Maybe a)
+solve mkVar (SMTY my) = do
+  let (me, StY{..}) = runState my (StY [toEnum 1000 ..] mkVar [] emptyYState)
+--  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
+  bienv <- solveDeclarations Nothing (generateDeclarations stY ++ cmdY)
+--  debug (unlines $ map show $ Set.toList symbols)
+--  debug (show . vcat . map (uncurry printGt.second fst) . HashMap.toList . termGtMap $ stY)
+--  debug (show . vcat . map (uncurry printEq.second fst) . HashMap.toList . termEqMap $ stY)
+  return ( (`runEvalM` me) <$> bienv )
+ where
+  printEq (t,u) v = v <> colon <+> t <+> text "=" <+> u
+  printGt (t,u) v = v <> colon <+> t <+> text ">" <+> u
+
+instance (Hashable v, Ord v, Show v) => MonadSAT (YicesSource id) v (SMTY id v) where
+  boolean_ "" = do {st@StY{poolY = h:t, mkV} <- get; put st{poolY=t}; return (mkV Nothing h)}
+  boolean_ s = do {st@StY{poolY = h:t, mkV} <- get; put st{poolY=t}; return (mkV (Just s) h)}
+  natural_ s = do {b <- boolean_ s; return (Natural b)}
+  assert_ _ [] = return ()
+  assert_ msg a = do
+      st <- gets stY
+      let (me, stY') = runYices' st $ foldr or false a
+      modify $ \st -> st{cmdY = ASSERT me : cmdY st, stY = stY'}
+
+  assertW w a = do
+      st <- gets stY
+      let (me, st') = runYices' st $ foldr or false a
+      modify $ \st -> st{cmdY = ASSERT_P me (Just $ fromIntegral w) : cmdY st, stY = st'}
+      return ()

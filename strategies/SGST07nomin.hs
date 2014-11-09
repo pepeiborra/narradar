@@ -21,6 +21,8 @@ import Narradar
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, typeHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
+import Narradar.Processor.RPO
+import Narradar.Processor.RPO.Yices
 import Narradar.Processor.LOPSTR09
 import Narradar.Processor.InfinitaryProblem
 import Narradar.Framework.GraphViz

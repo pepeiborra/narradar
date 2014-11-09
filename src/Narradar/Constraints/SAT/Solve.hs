@@ -15,12 +15,9 @@
 
 module Narradar.Constraints.SAT.Solve
     ( BIEnv, EvalM, runEvalM
-    , module Narradar.Constraints.SAT.Solve
-    , Var
+    , Var, VarMaps(..)
     ) where
 
-import Bindings.Yices ( Context, mkContext, interrupt, setVerbosity, assertWeighted
-                      , setLogFile, delContext, isInconsistent)
 import           Control.Applicative
 import           Control.Arrow                            (first,second)
 import           Control.DeepSeq                          (rnf)
@@ -28,8 +25,9 @@ import           Control.Exception                        (evaluate, try, SomeEx
 import           Control.Monad.RWS                        (RWST(..), MonadReader(..), runRWST)
 import           Control.Monad.State
 import           Data.Array.Unboxed
+import qualified Data.HashMap                             as Trie
 import           Data.List                                (unfoldr)
-import           Data.Monoid                              (Monoid(..))
+import           Data.Monoid                              (Monoid(..), (<>))
 import           Data.Hashable
 import           Data.Term.Rules                          (getAllSymbols)
 import           Funsat.Types                             (Solution(Sat), numVars, numClauses, clauses)
@@ -38,7 +36,6 @@ import           Funsat.ECircuit                          (eproblemCnf, projectE
 import           Funsat.RPOCircuit
 import           Funsat.RPOCircuit.Symbols                (Natural(..))
 import           Funsat.RPOCircuit.Internal
-import           Math.SMT.Yices.Syntax
 import           System.Directory
 import           System.FilePath
 import           System.IO
@@ -48,14 +45,10 @@ import           System.TimeIt
 import           Text.Printf
 
 import           Narradar.Constraints.SAT.MonadSAT        hiding (and,or)
-import           Narradar.Constraints.SAT.YicesCircuit    as Serial (YicesSource, YMaps(..), emptyYMaps, runYices', generateDeclarations, solveDeclarations)
-import           Narradar.Constraints.SAT.YicesFFICircuit as FFI    (YicesSource, YMaps(..), emptyYMaps, computeBIEnv, runYicesSource)
 import           Narradar.Framework                       (TimeoutException(..))
-import           Narradar.Framework.Ppr
 import           Narradar.Utils                           ( debug, debug', echo, echo', readProcessWithExitCodeBS )
 import           Narradar.Types                           ( TermN )
 
-import qualified Bindings.Yices                           as Yices
 import qualified Control.Exception                        as CE
 import qualified Data.ByteString.Char8                    as BS
 import qualified Data.ByteString.Lazy.Char8               as LBS
@@ -69,106 +62,19 @@ import qualified Narradar.Types                           as Narradar
 import           Prelude                                  hiding (and, not, or, any, all, lex, (>))
 import qualified Prelude                                  as P
 
--- ----------------------------
--- SMT MonadSAT implementation
--- ----------------------------
+type k :->: v = Trie.HashMap k v
 
--- *** serialized
+data VarMaps expr id var = VarMaps
+    { termGtMap :: !((TermN id, TermN id) :->: expr)
+    , termGeMap :: !((TermN id, TermN id) :->: expr)
+    , termEqMap :: !((TermN id, TermN id) :->: expr)
+    }
+  deriving Show
 
-data StY id v = StY { poolY :: [Int]
-                    , mkV   :: Maybe String -> Int -> v
-                    , cmdY  :: [CmdY]
-                    , stY   :: Serial.YMaps id v
-                    }
-
-newtype SMTY id v a = SMTY {unSMTY :: State (StY id v) a} deriving (Functor, Monad, MonadState (StY id v))
-
-smtSerial :: (Hashable id, Ord id, Show id, Pretty id, Enum v, Ord v, Read v, Show v) =>
-             (Maybe String -> Int -> v) -> SMTY id v (EvalM v a) -> IO (Maybe a)
-smtSerial mkVar (SMTY my) = do
-  let (me, StY{..}) = runState my (StY [toEnum 1000 ..] mkVar [] Serial.emptyYMaps)
---  let symbols = getAllSymbols $ mconcat [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
-  bienv <- solveDeclarations Nothing (generateDeclarations stY ++ cmdY)
---  debug (unlines $ map show $ Set.toList symbols)
-  debug (show . vcat . map (uncurry printGt.second fst) . HashMap.toList . Serial.termGtMap $ stY)
-  debug (show . vcat . map (uncurry printEq.second fst) . HashMap.toList . Serial.termEqMap $ stY)
-  return ( (`runEvalM` me) <$> bienv )
- where
-  printEq (t,u) v = v <> colon <+> t <+> text "=" <+> u
-  printGt (t,u) v = v <> colon <+> t <+> text ">" <+> u
-
-instance (Hashable v, Ord v, Show v) => MonadSAT (Serial.YicesSource id) v (SMTY id v) where
-  boolean_ "" = do {st@StY{poolY = h:t, mkV} <- get; put st{poolY=t}; return (mkV Nothing h)}
-  boolean_ s = do {st@StY{poolY = h:t, mkV} <- get; put st{poolY=t}; return (mkV (Just s) h)}
-  natural_ s = do {b <- boolean_ s; return (Natural b)}
-  assert_ _ [] = return ()
-  assert_ msg a = do
-      st <- gets stY
-      let (me, stY') = runYices' st $ foldr or false a
-      modify $ \st -> st{cmdY = ASSERT me : cmdY st, stY = stY'}
-
-  assertW w a = do
-      st <- gets stY
-      let (me, st') = runYices' st $ foldr or false a
-      modify $ \st -> st{cmdY = ASSERT_P me (Just $ fromIntegral w) : cmdY st, stY = st'}
-      return ()
--- *** FFI
-
-data StY' id v = StY' { poolY' :: ![v]
-                      , stY'   :: !(FFI.YMaps id v)
-                      }
-
-newtype SMTY' id v a = SMTY' {unSMTY' :: RWST Context () (StY' id v) IO a}
-    deriving (Functor, Monad, MonadIO, MonadReader Context, MonadState (StY' id v))
-
-smtFFI :: (Enum v, Ord v, Show v, Hashable v
-          ,Hashable id, Ord id, Show id, Pretty id
-          ) => SMTY' id v (EvalM v a) -> IO (Maybe a)
-smtFFI = smtFFI' 1
-smtFFI' start (SMTY' my) = do
-  ctx <- mkContext
-#ifdef DEBUG
---  setVerbosity 10
-  setLogFile "yices.log"
-#endif
-  (me, StY'{stY'}, _) <- runRWST my ctx (StY' [toEnum start ..] FFI.emptyYMaps)
---  let symbols = getAllSymbols $ mconcat
---                [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
-  debug' "Calling Yices..."
-#ifdef DEBUG
-#endif
-  (ti, bienv) <- timeItT(computeBIEnv ctx stY')
---  debug (unlines $ map show $ Set.toList symbols)
---  debug (show . vcat . map (uncurry printGt.second fst) . HashMap.toList . termGtMap $ stY)
---  debug (show . vcat . map (uncurry printEq.second fst) . HashMap.toList . termEqMap $ stY)
-  debug ("done (" ++ show ti ++ " seconds)")
-#ifdef DEBUG
---  removeFile "yices.log"
-#endif
-  delContext ctx
-  return $ (`runEvalM` me) <$> bienv
-
- where
-  printEq (t,u) v = v <> colon <+> t <+> text "=" <+> u
-  printGt (t,u) v = v <> colon <+> t <+> text ">" <+> u
-
-
-instance (Enum v, Ord v, Show v, Hashable v) => MonadSAT (FFI.YicesSource id) v (SMTY' id v) where
-  boolean_ _ = do {st@StY'{poolY' = h:t} <- get; put st{poolY'=t}; return h}
-  natural_ _ = do {b <- boolean; return (Natural b)}
-  assert_ _ [] = return ()
-  assert_ _ a  = do
-      st  <- gets stY'
-      ctx <- ask
-      (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
-      liftIO $ Yices.assert ctx me
-      modify $ \st -> st{stY' = new_stY}
-  assertW w a = do
-      st  <- gets stY'
-      ctx <- ask
-      (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
-      liftIO $ Yices.assertWeighted ctx me w
-      modify $ \st -> st{stY' = new_stY}
+instance Ord id => Monoid (VarMaps expr id var) where
+ mempty = VarMaps mempty mempty mempty
+ mappend (VarMaps gt1 ge1 eq1) (VarMaps gt2 ge2 eq2) =
+   VarMaps (gt1 <> gt2) (ge1 <> ge2) (eq1 <> eq2)
 
 -- ------------------------------------------
 -- Boolean Circuits MonadSAT implementation

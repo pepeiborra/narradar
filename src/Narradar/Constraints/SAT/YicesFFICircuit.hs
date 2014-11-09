@@ -14,18 +14,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 
 module Narradar.Constraints.SAT.YicesFFICircuit
-   (Circuit(..)
-   ,ECircuit(..)
-   ,NatCircuit(..)
-   ,OneCircuit(..)
-   ,RPOCircuit(..)
-   ,RPOExtCircuit(..)
-   ,ExistCircuit(..)
-   ,AssertCircuit(..)
-   ,YicesSource(..), YMaps(..)
-   ,emptyYMaps
-   ,runYicesSource
-   ,computeBIEnv
+   (solve
    ) where
 
 import Control.Applicative
@@ -33,16 +22,17 @@ import Control.Arrow (first, second)
 import Control.Concurrent
 import Control.DeepSeq
 import Control.Monad.List
-import Control.Monad.RWS hiding ((>=>), forM_)
+import Control.Monad.RWS (RWST, runRWST, MonadReader(..), MonadState(..), gets, modify)
 import Control.Monad.Writer (runWriter)
 import Data.Foldable (Foldable, foldMap)
 import Data.List( nub, foldl', sortBy, (\\))
-import Data.Bimap( Bimap )
+import           Data.Bimap                               (Bimap)
+import qualified Data.Bimap                               as Bimap
 import Data.Map( Map )
 import Data.Maybe( fromJust, catMaybes )
 import Data.Hashable
 --import Data.NarradarTrie (HasTrie, (:->:) )
-import Data.Monoid
+import Data.Monoid (Monoid(..))
 import Data.Set( Set )
 import Data.Traversable (Traversable, traverse)
 import Bindings.Yices as Yices
@@ -51,11 +41,13 @@ import Prelude hiding( not, and, or, (>) )
 
 import Narradar.Constraints.RPO (Status(..))
 import Narradar.Constraints.SAT.RPOAF.Symbols
-import Narradar.Utils (debug, on, firstM)
+import Narradar.Constraints.SAT.MonadSAT        hiding (and,or)
+import Narradar.Utils (debug, debug', on, firstM)
 import Narradar.Framework (TimeoutException(..))
 import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Narradar.Types.Problem.NarrowingGen
+import Narradar.Constraints.SAT.Solve
 
 import qualified Control.Exception as CE (assert, throw, catch, evaluate)
 import qualified Data.Bimap as Bimap
@@ -75,7 +67,8 @@ import Funsat.ECircuit ( Circuit(..)
                        , CastCircuit(..)
                        , NatCircuit(..)
                        , ExistCircuit(..)
-                       , BIEnv)
+                       , BIEnv
+                       )
 
 import Funsat.RPOCircuit ( RPOCircuit(..)
                          , RPOExtCircuit(..)
@@ -86,25 +79,30 @@ import Funsat.RPOCircuit ( RPOCircuit(..)
                          , HasFiltering(..)
                          , oneExist)
 
-type k :->: v = Trie.HashMap k v
+import Funsat.RPOCircuit.Symbols (Natural(..))
+import Funsat.RPOCircuit.Internal ( runEvalM )
 
-newtype YicesSource id var = YicesSource { unYicesSource :: RWST Context () (YMaps id var) IO Expr}
+import System.TimeIt
+
+type YMaps = VarMaps Expr
+
+data VarType = Bool | Nat deriving (Eq, Ord, Show)
+
+data YState id var = YState
+  { varmaps   :: VarMaps Expr id var
+  , variables :: !(Bimap (var, VarType) Expr)
+  }
+
+emptyYState = YState mempty Bimap.empty
+
+updateGtMap f it@YState{varmaps} = it{ varmaps = varmaps{ termGtMap = f (termGtMap varmaps)}}
+updateEqMap f it@YState{varmaps} = it{ varmaps = varmaps{ termEqMap = f (termEqMap varmaps)}}
+
+newtype YicesSource id var = YicesSource { unYicesSource :: RWST Context () (YState id var) IO Expr}
 
 type instance Family.Id    (YicesSource id) = id
 type instance Family.TermF (YicesSource id) = TermF id
 type instance Family.Var   (YicesSource id) = Narradar.Var
-
-data VarType = Bool | Nat deriving (Eq, Ord, Show)
-
-data YMaps id var = YMaps
-    { variables :: !(Bimap (var, VarType) Expr)
-    , termGtMap :: !((TermN id, TermN id) :->: Expr)
-    , termGeMap :: !((TermN id, TermN id) :->: Expr)
-    , termEqMap :: !((TermN id, TermN id) :->: Expr)
-    }
-  deriving Show
-
-emptyYMaps = YMaps Bimap.empty mempty mempty mempty
 
 runYicesSource ctx stY (YicesSource y) = do
   (a, stY',()) <- runRWST y ctx stY
@@ -113,8 +111,8 @@ runYicesSource ctx stY (YicesSource y) = do
 fromDefWithDefault _ (YDef val) = val
 fromDefWithDefault def _ = def
 
-computeBIEnv :: (Ord var, Show var) => Context -> YMaps id var -> IO (Maybe(BIEnv var))
-computeBIEnv ctx YMaps{variables} = do
+computeBIEnv :: (Ord var, Show var) => Context -> YState id var -> IO (Maybe(BIEnv var))
+computeBIEnv ctx YState{variables} = do
 
   res <- newEmptyMVar
 
@@ -247,22 +245,22 @@ instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id
  type CoRPO_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = YicesSource $ do
-      env <- gets termGtMap
+      env <- gets (termGtMap.varmaps)
       ctx <- ask
       case Trie.lookup (s,t) env of
          Just v -> return v
          Nothing -> mdo
-           modify $ \env -> env{termGtMap = Trie.insert (s,t) me (termGtMap env)}
+           modify $ updateGtMap $ Trie.insert (s,t) me
            me <- unYicesSource $ RPOCircuit.termGt_ s t
            return me
 
  termEq s t = YicesSource $ do
-      env <- gets termEqMap
+      env <- gets (termEqMap.varmaps)
       ctx <- ask
       case Trie.lookup (s,t) env of
          Just v  -> return v
          Nothing -> mdo
-           modify $ \env -> env{termEqMap = Trie.insert (s,t) me (termEqMap env)}
+           modify $ updateEqMap $ Trie.insert (s,t) me
            me   <- unYicesSource $ RPOCircuit.termEq_ s t
            return me
 
@@ -303,3 +301,63 @@ liftY3 f a b c = YicesSource $ do
   vc <- unYicesSource c
   ctx <- ask
   lift $ f ctx va vb vc
+
+-- ----------------------------
+-- MonadSAT implementation
+-- ----------------------------
+
+data StY' id v = StY' { poolY' :: ![v]
+                      , stY'   :: !(YState id v)
+                      }
+
+newtype SMTY' id v a = SMTY' {unSMTY' :: RWST Context () (StY' id v) IO a}
+    deriving (Functor, Monad, MonadIO, MonadReader Context, MonadState (StY' id v))
+
+solve :: (Enum v, Ord v, Show v, Hashable v
+          ,Hashable id, Ord id, Show id, Pretty id
+          ) => SMTY' id v (EvalM v a) -> IO (Maybe a)
+solve = solve' 1
+solve' start (SMTY' my) = do
+  ctx <- mkContext
+#ifdef DEBUG
+--  setVerbosity 10
+  setLogFile "yices.log"
+#endif
+  (me, StY'{stY'}, _) <- runRWST my ctx (StY' [toEnum start ..] emptyYState)
+--  let symbols = getAllSymbols $ mconcat
+--                [ Set.fromList [t, u] | ((t,u),_) <- HashMap.toList (termGtMap stY) ++ HashMap.toList (termEqMap stY)]
+  debug' "Calling Yices..."
+#ifdef DEBUG
+#endif
+  (ti, bienv) <- timeItT(computeBIEnv ctx stY')
+--  debug (unlines $ map show $ Set.toList symbols)
+--  debug (show . vcat . map (uncurry printGt.second fst) . HashMap.toList . termGtMap $ stY)
+--  debug (show . vcat . map (uncurry printEq.second fst) . HashMap.toList . termEqMap $ stY)
+  debug ("done (" ++ show ti ++ " seconds)")
+#ifdef DEBUG
+--  removeFile "yices.log"
+#endif
+  delContext ctx
+  return $ (`runEvalM` me) <$> bienv
+
+ where
+  printEq (t,u) v = v <> colon <+> t <+> text "=" <+> u
+  printGt (t,u) v = v <> colon <+> t <+> text ">" <+> u
+
+
+instance (Enum v, Ord v, Show v, Hashable v) => MonadSAT (YicesSource id) v (SMTY' id v) where
+  boolean_ _ = do {st@StY'{poolY' = h:t} <- get; put st{poolY'=t}; return h}
+  natural_ _ = do {b <- boolean; return (Natural b)}
+  assert_ _ [] = return ()
+  assert_ _ a  = do
+      st  <- gets stY'
+      ctx <- ask
+      (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
+      liftIO $ Yices.assert ctx me
+      modify $ \st -> st{stY' = new_stY}
+  assertW w a = do
+      st  <- gets stY'
+      ctx <- ask
+      (me, new_stY) <- liftIO $ runYicesSource ctx st $ orL a
+      liftIO $ Yices.assertWeighted ctx me w
+      modify $ \st -> st{stY' = new_stY}

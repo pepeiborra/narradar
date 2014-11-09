@@ -4,6 +4,7 @@ module Common where
 
 import Control.Monad
 import Narradar
+import Narradar.Processor.RPO
 import Debug.Hoed.Observe
 
 -- Solvers
@@ -28,12 +29,12 @@ instO p = gdmobservers "Instantiation" applyO Instantiation p
 rewO p = gdmobservers "Rewriting" applyO RewritingP p
 narrO = gdmobservers "Narrowing" applyO (NarrowingP Nothing)
 dgO p = gdmobservers "Graph" applyO (DependencyGraphSCC False) p
-lpo  = apply (RPOProc LPOAF  Needed SMTFFI True)
-mpo  = apply (RPOProc MPOAF  Needed SMTFFI True)
-lpos = apply (RPOProc LPOSAF Needed SMTFFI True)
-rpo  = apply (RPOProc RPOAF  Needed SMTFFI True)
-rpos = apply (RPOProc RPOSAF Needed SMTFFI True)
-lpoO p = gdmobservers "lpo" applyO (RPOProc LPOAF  Needed SMTFFI True) p
+lpo  = apply (RPOProc LPOAF  Needed True)
+mpo  = apply (RPOProc MPOAF  Needed True)
+lpos = apply (RPOProc LPOSAF Needed True)
+rpo  = apply (RPOProc RPOAF  Needed True)
+rpos = apply (RPOProc RPOSAF Needed True)
+lpoO p = gdmobservers "lpo" applyO (RPOProc LPOAF Needed True) p
 
 
 rpoPlus transform
@@ -42,8 +43,8 @@ rpoPlus transform
 rpoPlusPar transform = parallelize f where
  f = repeatSolver 5 ( (lpo.||. rpos .||. transform) >=> dg)
   where
-    lpo  = apply (RPOProc LPOAF  Needed SMTSerial True)
-    rpos = apply (RPOProc RPOSAF Needed SMTSerial True)
+    lpo  = apply (RPOProc LPOAF  Needed True)
+    rpos = apply (RPOProc RPOSAF Needed True)
 
 gt1 = rewO `orElse` (narr .||. finst .||. inst)
 gt2 = narr .||. finst .||. inst

@@ -15,6 +15,7 @@ import Narradar.Types.Problem
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
 import Narradar.Processor.RPO
+import Narradar.Processor.RPO.Yices
 import Narradar.Processor.FLOPS08
 import Narradar.Processor.LOPSTR09
 import Lattice

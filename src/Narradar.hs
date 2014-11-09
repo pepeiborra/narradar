@@ -6,7 +6,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Narradar ( module Narradar.Processor.Graph
-                , module Narradar.Processor.RPO
                 , module Narradar.Processor.GraphTransformation
                 , module Narradar.Processor.UsableRules
                 , module Narradar.Processor.NarrowingProblem
@@ -27,7 +26,6 @@ import Narradar.Types.Problem.Relative
 import Narradar.Types.Problem.InitialGoal
 import Narradar.Processor.Graph
 import Narradar.Processor.GraphTransformation
-import Narradar.Processor.RPO
 import Narradar.Processor.ExtraVariables
 import Narradar.Processor.UsableRules
 import Narradar.Processor.NarrowingProblem

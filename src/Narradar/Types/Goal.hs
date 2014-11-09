@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverlappingInstances, FlexibleInstances #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE StandaloneDeriving, DeriveGeneric #-}
 module Narradar.Types.Goal where
 
 import Control.Applicative hiding (Alternative(..), many, optional)
