@@ -7,10 +7,11 @@
 {-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 module Narradar.Processor.RelativeProblemIPL14 (RelativeToRegularIPL14(..)) where
 
-import Data.List ((\\))
+import Data.List ((\\), partition)
 import Data.Monoid
 import Data.Typeable
 import Prelude.Extras
+import qualified Data.Set as Set
 
 import Narradar.Constraints.Modularity
 import Narradar.Constraints.Syntactic
@@ -71,34 +72,28 @@ instance Pretty RelativeToRegularProofIPL14 where
       text "The two systems form a Hierarchical Combination and the extension is right-HT," $$
       text "but the goal is not HT"
 
-instance ( MkProblem base trs
-         , Family.Id trs ~ Family.Id t
-         , Family.Rule trs ~ Rule t v
-         , Ord1 t, Ord v, Enum v, Rename v
-         , HasId1 t, Unify t
-         , Monoid trs, HasRules trs, HasSignature trs
+instance ( FrameworkProblem base trs
+         , GetPairs base
+         , trs ~ NTRS (DPIdentifier id)
+         , Ord id
          , Info info RelativeToRegularProofIPL14
-         , HasMinimality base
-         ) => Processor (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs) where
+         ) => Processor (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs)
+ where
   type Typ (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs) = base
   type Trs (RelativeToRegularIPL14 info) (Problem (Relative trs base) trs) = trs
   applyO _ RelativeToRegularIPL14 p@RelativeProblem{relativeTRS}
-    | isHierarchicalCombination ex relativeTRS
-    , isNonDuplicatingTRS relativeTRS
-    =  let p' = setMinimality A (getBaseProblem p)
-       in singleP RelativeToRegularProof p p'
-
-    | isHierarchicalCombination ex relativeTRS
-    , isHTtrs ex relativeTRS
-    = dontKnow (RelativeToRegularProofFail HTbutNotInitialGoal) p
-
-    | isHierarchicalCombination ex relativeTRS
-    = dontKnow (RelativeToRegularProofFail HCbutNotNonDuplicatingOrHT) p
-
-    | otherwise = dontKnow (RelativeToRegularProofFail NoHC) p
+    = let p' = mkDPProblem b
+                           (getR p `mappend` relativeTRS)
+                           (tRS $ getPairs b ex')
+      in singleP RelativeToRegularProof p p'
 
     where
-     ex = rules(getR p) \\ rules relativeTRS
+     b = getBaseProblemFramework p
+     (ex, base) = makeHierarchicalCombination (rules $ getR p) (rules relativeTRS)
+     duplicatingSymbols = Set.fromList $ map (getId . lhs) $ duplicatingRules base
+     (dup, _base') = partition ((`Set.member` duplicatingSymbols) . getId . lhs)
+                              (rules base)
+     ex' = dup `mappend` ex
 
 instance ( MkProblem base trs
          , Family.Id trs ~ Family.Id t

@@ -17,6 +17,7 @@ isLeftLinear = null . nonLeftLinearRules
 
 isNonDuplicatingTRS = null . duplicatingRules
 
+duplicatingRules :: (HasRules a, Foldable termF, Ord v, Functor termF, Family.Rule a ~ RuleF (Term termF v)) => a -> [RuleF (Term termF v)]
 duplicatingRules = filter isDuplicating . rules
 
 nonLeftLinearRules :: (Ord v, Foldable t, Functor t, HasRules trs, Rule t v ~ Family.Rule trs) => trs -> [Rule t v]

@@ -5,14 +5,51 @@
 module Narradar.Constraints.Modularity where
 
 import Data.Foldable (Foldable,toList)
-import Data.List ((\\))
+import Data.List ((\\), partition)
+import Data.Array as A
+import qualified Data.Graph as G
+import Data.Graph.SCC
 import qualified Data.Map as Map
+import qualified Data.Set as Set
+import Data.Monoid
 import Data.Traversable (Traversable)
 import qualified Data.Set as Set
-import Narradar.Types
+import Narradar.Types hiding ((<>))
 
 import qualified Data.Term.Family as Family
 import Debug.Hoed.Observe (Observable)
+
+makeHierarchicalCombination :: ( id ~ Family.Id ex
+                               , ex ~ base
+                               , HasSignature ex, HasId ex
+                               , Ord id
+                               ) => [RuleF ex] -> [RuleF base] -> ([RuleF ex],[RuleF base])
+
+makeHierarchicalCombination ex base =
+    partition (maybe True (`Set.member` exSymbols') . getId . lhs) allRules
+  where
+    exSymbols' =
+      Set.fromList $ concat
+      [ map (allDefSymbols A.!) scc
+            | scc <- map G.flattenSCC $ sccList callGraph
+            , not $ Set.null (Set.fromList scc `Set.intersection` exSymbols)
+            ]
+
+    exSymbols = Set.fromList [ i | let s = getDefinedSymbols ex
+                                 , (i,g) <- assocs allDefSymbols
+                                 , Set.member g s]
+
+    callGraph = G.buildG (bounds allDefSymbols)
+                         [ (i,j) | (i,f) <- assocs allDefSymbols
+                                 , (j,g) <- assocs allDefSymbols
+                                 , f /= g
+                                 , any ( (g `Set.member`)  . getAllSymbols . rhs)
+                                       (getRulesFor f)
+                                 ]
+    all = ex <> base
+    allDefSymbols = let s = toList(getDefinedSymbols all) in listArray (0, length s -1 ) s
+    allRules = rules all
+    getRulesFor f = filter ( (== Just f) . getId . lhs) allRules
 
 --isHierarchicalCombination :: (HasSignature trs1, HasSignature trs2) => trs1 -> trs2 -> Bool
 isHierarchicalCombination :: ( HasSignature ex, HasSignature base
