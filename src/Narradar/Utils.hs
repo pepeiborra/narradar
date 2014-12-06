@@ -60,7 +60,6 @@ import           Data.Suitable
 import           Data.Traversable
 import           Data.Typeable
 import           Language.Prolog.Representation       as Prolog
-import           Funsat.RPOCircuit.Symbols
 
 import           System.IO
 import           System.Directory
@@ -453,11 +452,6 @@ instance (Monoid a, Monoid b) => Monoid (Pair a b) where
 deriving instance Typeable NF
 deriving instance Typeable Expr
 deriving instance Typeable RuleF
-deriving instance Typeable RPOSsymbol
-deriving instance Typeable RPOsymbol
-deriving instance Typeable LPOSsymbol
-deriving instance Typeable LPOsymbol
-deriving instance Typeable MPOsymbol
 deriving instance Typeable Constant
 deriving instance Typeable NFData
 deriving instance Typeable Observable

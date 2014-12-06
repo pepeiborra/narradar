@@ -16,46 +16,58 @@
 module Narradar.Constraints.SAT.MonadSAT
     ( module Narradar.Constraints.SAT.MonadSAT
     , Status(..), mkStatus
-    , Circuit, ECircuit, NatCircuit, OneCircuit, RPOCircuit
-    , RPOExtCircuit(..), ExistCircuit(..)
+    , Circuit, ECircuit, NatCircuit, OneCircuit, TermCircuit
+    , ExistCircuit(..)
     , AssertCircuit(..) -- , assertCircuits
     , castCircuit, Clause
     , Tree, printTree, mapTreeTerms
     , Eval, evalB, evalN, BIEnv, EvalM
     , input, true, false, not, ite, eq, lt, gt, one
-    , Shared, runShared, removeComplex
     , HasPrecedence(..), precedence
     , HasFiltering(..), listAF, inAF
     , HasStatus(..), useMul, lexPerm
     ) where
 
-import           Control.Arrow                       (first,second)
 import           Control.DeepSeq
-import           Control.Monad.Reader                (MonadReader(..),liftM)
+import           Data.Foldable                       (Foldable)
 import           Data.Hashable
-import           Data.List                           (foldl')
+import           Data.HashMap                        (HashMap)
+import           Data.Monoid                         (Monoid(..))
 import           Data.Term                           (Term, HasId1)
 import qualified Data.Term                           as Family
 import           Data.Typeable
 import           Prelude                             hiding (and, not, or, any, all, lex, (>))
 
-import           Narradar.Utils
 import           Narradar.Framework.Ppr              as Ppr
-import           Narradar.Constraints.RPO            (Status(..), mkStatus)
+import           Narradar.Types                      (TermN)
 
-import           Funsat.ECircuit                     (BEnv, BIEnv, Eval, EvalF(..), runEval)
-import           Funsat.Types                        (Clause,Solution(..))
-import           Funsat.ECircuit                     (Co, Circuit(true,false,input,not,andL,orL), ECircuit(..), NatCircuit(..), ExistCircuit(..), castCircuit)
+import           Funsat.ECircuit                     (BIEnv, Eval, )
+import           Funsat.Types                        (Clause)
+import           Funsat.ECircuit                     (Circuit(true,false,input,not,andL,orL), ECircuit(..), NatCircuit(..), ExistCircuit(..), castCircuit)
 import qualified Funsat.ECircuit                     as Funsat
-import           Funsat.RPOCircuit
-import           Funsat.RPOCircuit.Internal
-import           Funsat.RPOCircuit.Symbols           (Natural(..))
-import qualified Funsat.ECircuit                     as ECircuit
-import qualified Funsat.Types                        as Funsat
-import qualified Funsat.RPOCircuit                   as Funsat
+import           Funsat.TermCircuit
+import           Funsat.TermCircuit.Symbols          (Natural(..))
+import           Funsat.TermCircuit.RPO.Symbols      (Status(..), mkStatus)
+import qualified Funsat.TermCircuit                  as Funsat
 
 import qualified Prelude                             as P
-import Data.Foldable (Foldable)
+
+-- -----------
+-- VarMaps
+-- -----------
+type k :->: v = HashMap k v
+
+data VarMaps expr id var = VarMaps
+    { termGtMap :: !((TermN id, TermN id) :->: expr)
+    , termGeMap :: !((TermN id, TermN id) :->: expr)
+    , termEqMap :: !((TermN id, TermN id) :->: expr)
+    }
+  deriving Show
+
+instance Ord id => Monoid (VarMaps expr id var) where
+ mempty = VarMaps mempty mempty mempty
+ mappend (VarMaps gt1 ge1 eq1) (VarMaps gt2 ge2 eq2) =
+   VarMaps (gt1 `mappend` gt2) (ge1 `mappend` ge2) (eq1 `mappend` eq2)
 
 -- --------
 -- MonadSAT
@@ -162,7 +174,7 @@ constant False = false
         ( id    ~ Family.Id termF
         , v     ~ Family.Var id
         , termF ~ Family.TermF repr
-        , CoRPO repr termF tv v, RPOCircuit repr
+        , CoTerm repr termF tv v, TermCircuit repr
         , HasFiltering id, HasStatus id, HasPrecedence id
         , HasId1 termF, Foldable termF
         , Eq (Term termF tv)

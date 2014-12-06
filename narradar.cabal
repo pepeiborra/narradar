@@ -36,13 +36,16 @@ Flag aprove
    default: False
 Flag rpo
    description: include the RPO processor in the build
-   default: False
+   default: True
 Flag yices
    description: include support for the Yices SMT solver
    default: False
 Flag z3
    description: include support for the Z3 SMT solver
    default: True
+Flag sbv
+   description: include support for SBV
+   default: False
 
 Library
   if flag(base4)
@@ -61,10 +64,13 @@ Library
   if flag(hood)
      cpp-options: -DHOOD
   if flag(rpo)
+     build-depends:  narradar-funsat-rpo >= 0.4
      exposed-modules: 
        Narradar.Processor.RPO,
        Narradar.Constraints.SAT.RPOAF,
-       Narradar.Constraints.SAT.RPOAF.Symbols
+       Narradar.Constraints.SAT.RPOAF.Symbols,
+       Narradar.Constraints.SAT.MonadSAT
+
   if flag(yices) && flag(rpo)
      extra-libraries: yices
      exposed-modules:
@@ -80,6 +86,12 @@ Library
      exposed-modules:
       Narradar.Constraints.SAT.Z3Circuit
       Narradar.Processor.RPO.Z3
+
+  if flag(sbv) && flag(rpo)
+     build-depends: sbv > 3.1
+     exposed-modules:
+      Narradar.Constraints.SAT.SBVCircuit
+      Narradar.Processor.RPO.SBV
 
   buildable: True
 --  cpp-options: -DGHCI
@@ -135,8 +147,7 @@ Library
 --                  parse-dimacs,
                   narradar-alacarte >= 0.6,
                   narradar-funsat-lang >= 0.8, 
-                  narradar-funsat-rpo >= 0.3.2,
-                  narradar-term >= 0.3.1,
+                  narradar-term >= 0.3.2,
                   narradar-trsparser >= 0.4.3, 
                   narradar-prolog >= 0.3,
                   narradar-prolog-tools >= 0.3,
@@ -174,8 +185,6 @@ Library
      Narradar.Constraints.Unify,
      Narradar.Constraints.Modularity,
      Narradar.Constraints.VariableCondition,
-     Narradar.Constraints.SAT.MonadSAT,
-     Narradar.Constraints.SAT.Solve,
      Narradar.Constraints.Confluence,
      Narradar.Constraints.Syntactic,
      Narradar.Examples,

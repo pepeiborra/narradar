@@ -47,7 +47,6 @@ import Narradar.Framework (TimeoutException(..))
 import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Narradar.Types.Problem.NarrowingGen
-import Narradar.Constraints.SAT.Solve
 
 import qualified Control.Exception as CE (assert, throw, catch, evaluate)
 import qualified Data.Bimap as Bimap
@@ -56,7 +55,7 @@ import qualified Data.Set as Set
 --import qualified Data.NarradarTrie as Trie
 import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
-import qualified Funsat.RPOCircuit as RPOCircuit
+import qualified Funsat.TermCircuit as RPOCircuit
 import qualified Narradar.Types.Var as Narradar
 import qualified Prelude as Prelude
 import qualified Data.HashMap as Trie
@@ -70,17 +69,17 @@ import Funsat.ECircuit ( Circuit(..)
                        , BIEnv
                        )
 
-import Funsat.RPOCircuit ( RPOCircuit(..)
-                         , RPOExtCircuit(..)
+import Funsat.TermCircuit( TermCircuit(..)
                          , AssertCircuit(..)
                          , OneCircuit(..)
                          , HasStatus(..)
                          , HasPrecedence(..)
                          , HasFiltering(..)
-                         , oneExist)
-
-import Funsat.RPOCircuit.Symbols (Natural(..))
-import Funsat.RPOCircuit.Internal ( runEvalM )
+                         , oneExist
+                         , runEvalM)
+import Funsat.TermCircuit.Ext ( TermExtCircuit(..) )
+import Funsat.TermCircuit.Symbols (Natural(..))
+import Funsat.TermCircuit.RPO as RPO
 
 import System.TimeIt
 
@@ -239,10 +238,10 @@ instance AssertCircuit (YicesSource id) where
       liftIO $ Yices.assert ctx ass
       unYicesSource c
 
-instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id
+instance (Hashable id, Pretty id, Ord id, TermExtCircuit (YicesSource id) id
          ) =>
-    RPOCircuit (YicesSource id) where
- type CoRPO_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
+    TermCircuit (YicesSource id) where
+ type CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = YicesSource $ do
       env <- gets (termGtMap.varmaps)
@@ -251,7 +250,7 @@ instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id
          Just v -> return v
          Nothing -> mdo
            modify $ updateGtMap $ Trie.insert (s,t) me
-           me <- unYicesSource $ RPOCircuit.termGt_ s t
+           me <- unYicesSource $ RPO.termGt_ s t
            return me
 
  termEq s t = YicesSource $ do
@@ -261,7 +260,7 @@ instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (YicesSource id) id
          Just v  -> return v
          Nothing -> mdo
            modify $ updateEqMap $ Trie.insert (s,t) me
-           me   <- unYicesSource $ RPOCircuit.termEq_ s t
+           me   <- unYicesSource $ RPO.termEq_ s t
            return me
 
 {-

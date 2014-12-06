@@ -43,7 +43,6 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO (Status(..))
-import qualified Narradar.Constraints.SAT.Solve as Solve
 import Narradar.Constraints.SAT.YicesFFICircuit
 import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms )
 import qualified Narradar.Constraints.SAT.MonadSAT as MonadSAT
@@ -59,7 +58,7 @@ import Narradar.Processor.RPO
 import Narradar.Utils
 import System.IO.Unsafe
 import qualified Debug.Trace
-import qualified Funsat.RPOCircuit as RPOAF
+import qualified Funsat.TermCircuit as RPOAF
 
 import Debug.Hoed.Observe
 
@@ -70,7 +69,6 @@ import Debug.Hoed.Observe
 instance ( Info info (RPOProof id)
          , Info info (Problem (Constant Rewriting (TermF id)) (NTRS id))
          , FrameworkId id, Show id
---         , FrameworkProblemN (Constant Rewriting (TermN id)) id
          ) => Processor (RPOProc info) (NProblem Rewriting id)
    where
     type Typ (RPOProc info) (NProblem Rewriting id) = Rewriting
@@ -85,7 +83,6 @@ instance ( Info info (RPOProof id)
 instance (FrameworkId id
          ,Info info (RPOProof id)
          ,Info info (Problem (Constant IRewriting (TermF id)) (NTRS id))
---         ,FrameworkProblemN (Constant IRewriting (TermN id)) id
          ) => Processor (RPOProc info) (NProblem IRewriting id)
    where
     type Typ (RPOProc info) (NProblem IRewriting id) = IRewriting

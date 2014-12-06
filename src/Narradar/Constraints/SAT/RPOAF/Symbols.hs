@@ -22,8 +22,8 @@ import           Data.Hashable
 import qualified Data.Term                         as Family
 import           Data.Typeable
 import           Funsat.Circuit                    (Co)
-import           Funsat.RPOCircuit.Symbols         (SymbolRes, SymbolFactory, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
-import qualified Funsat.RPOCircuit.Symbols         as Funsat
+import           Funsat.TermCircuit.RPO.Symbols         (SymbolRes, SymbolFactory, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
+import qualified Funsat.TermCircuit.RPO.Symbols         as Funsat
 
 import           Narradar.Constraints.SAT.MonadSAT
 import           Narradar.Framework.Ppr            as Ppr

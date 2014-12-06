@@ -31,7 +31,6 @@ import           Math.SMT.Yices.Syntax
 import           Math.SMT.Yices.Pipe
 import           Narradar.Types.Term
 import           Narradar.Constraints.SAT.MonadSAT   hiding (and,or)
-import           Narradar.Constraints.SAT.Solve      (VarMaps(..))
 import           Narradar.Utils                      (on,debug,debug',withTempFile)
 import           Text.PrettyPrint.HughesPJClass
 import           System.IO
@@ -45,10 +44,10 @@ import qualified Data.Term.Family                    as Family
 
 import           Funsat.ECircuit                     (Circuit(..), CastCircuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
-import           Funsat.RPOCircuit                   ( RPOCircuit(..), RPOExtCircuit(..), OneCircuit(..), AssertCircuit(..)
-                                                     , termGt_, termGe_, termEq_)
-import           Funsat.RPOCircuit.Symbols (Natural(..))
-import           Funsat.RPOCircuit.Internal ( runEvalM )
+import           Funsat.TermCircuit                   ( TermCircuit(..), OneCircuit(..), AssertCircuit(..), runEvalM)
+import           Funsat.TermCircuit.Ext               ( TermExtCircuit(..) )
+import           Funsat.TermCircuit.Symbols           (Natural(..))
+import           Funsat.TermCircuit.RPO               as RPO
 
 deriving instance Eq  ExpY
 deriving instance Ord ExpY
@@ -217,16 +216,16 @@ instance AssertCircuit (YicesSource id) where
       modify $ \env -> env{ assertions = exp <| assertions env }
       unYicesSource then_
 
-instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id) =>
-   RPOCircuit (YicesSource id) where
- type CoRPO_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
+instance (Hashable id, Ord id, Pretty id, TermExtCircuit (YicesSource id) id) =>
+   TermCircuit (YicesSource id) where
+ type CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = YicesSource $ do
       env <- get
       case HashMap.lookup (s,t) (termGtMap $ varmaps env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
-           meConstraint <- unYicesSource $ termGt_ s t
+           meConstraint <- unYicesSource $ RPO.termGt_ s t
            meVar        <- freshV "termGt"
            modify $ updateGtMap $ HashMap.insert (s,t) (meVar, meConstraint)
            return (VarE (show meVar))
@@ -235,9 +234,9 @@ instance (Hashable id, Ord id, Pretty id, RPOExtCircuit (YicesSource id) id) =>
       case HashMap.lookup (s,t) (termEqMap $ varmaps env) of
          Just (v,_)  -> return (VarE (show v))
          Nothing -> do
-           meConstraint <- unYicesSource $ termEq_ s t
+           meConstraint <- unYicesSource $ RPO.termEq_ s t
            meVar        <- freshV "termEq"
-           modify $ updateEqMap $ HashMap.insert (s,t) (meVar, meConstraint) 
+           modify $ updateEqMap $ HashMap.insert (s,t) (meVar, meConstraint)
            return (VarE (show meVar))
 {-
  termGe s t = YicesSource $ do

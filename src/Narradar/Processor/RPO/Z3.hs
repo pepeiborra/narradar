@@ -43,7 +43,6 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO (Status(..))
-import qualified Narradar.Constraints.SAT.Solve as Solve
 import qualified Narradar.Constraints.SAT.Z3Circuit as Z3
 import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms )
 import qualified Narradar.Constraints.SAT.MonadSAT as MonadSAT
@@ -59,7 +58,7 @@ import Narradar.Processor.RPO
 import Narradar.Utils
 import System.IO.Unsafe
 import qualified Debug.Trace
-import qualified Funsat.RPOCircuit as RPOAF
+import qualified Funsat.TermCircuit as RPOAF
 
 import Debug.Hoed.Observe
 

@@ -45,7 +45,6 @@ import Narradar.Framework (TimeoutException(..))
 import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Narradar.Types.Problem.NarrowingGen
-import Narradar.Constraints.SAT.Solve
 
 import qualified Control.Exception as CE (assert, throw, catch, evaluate)
 import qualified Data.Map.Strict as Map
@@ -53,7 +52,7 @@ import qualified Data.Set as Set
 --import qualified Data.NarradarTrie as Trie
 import qualified Funsat.Circuit  as Circuit
 import qualified Funsat.ECircuit as ECircuit
-import qualified Funsat.RPOCircuit as RPOCircuit
+import qualified Funsat.TermCircuit as TermCircuit
 import qualified Narradar.Types.Var as Narradar
 import qualified Prelude as Prelude
 import qualified Data.HashMap as Trie
@@ -67,17 +66,19 @@ import Funsat.ECircuit ( Circuit(..)
                        , BIEnv
                        )
 
-import Funsat.RPOCircuit ( RPOCircuit(..)
-                         , RPOExtCircuit(..)
+import Funsat.TermCircuit( TermCircuit(..)
                          , AssertCircuit(..)
                          , OneCircuit(..)
                          , HasStatus(..)
                          , HasPrecedence(..)
                          , HasFiltering(..)
-                         , oneExist)
+                         , oneExist
+                         , runEvalM)
 
-import Funsat.RPOCircuit.Symbols (Natural(..))
-import Funsat.RPOCircuit.Internal ( runEvalM )
+import Funsat.TermCircuit.Ext (TermExtCircuit(..))
+import Funsat.TermCircuit.RPO as RPO
+
+import Funsat.TermCircuit.Symbols (Natural(..))
 
 import System.TimeIt
 
@@ -171,10 +172,10 @@ instance AssertCircuit (Z3Source id) where
     assertCnstr ass
     unZ3Source c
 
-instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (Z3Source id) id
+instance (Hashable id, Pretty id, Ord id, TermExtCircuit (Z3Source id) id
          ) =>
-    RPOCircuit (Z3Source id) where
- type CoRPO_ (Z3Source id) (TermF id) tv v = (tv ~ Narradar.Var)
+    TermCircuit (Z3Source id) where
+ type CoTerm_ (Z3Source id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = Z3Source $ do
       env <- gets (termGtMap.termMaps)
@@ -182,7 +183,7 @@ instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (Z3Source id) id
          Just v -> return v
          Nothing -> mdo
            modify $ updateGtMap $ Trie.insert (s,t) me
-           me <- unZ3Source $ RPOCircuit.termGt_ s t
+           me <- unZ3Source $ RPO.termGt_ s t
            return me
 
  termEq s t = Z3Source $ do
@@ -191,7 +192,7 @@ instance (Hashable id, Pretty id, Ord id, RPOExtCircuit (Z3Source id) id
          Just v  -> return v
          Nothing -> mdo
            modify $ updateEqMap $ Trie.insert (s,t) me
-           me   <- unZ3Source $ RPOCircuit.termEq_ s t
+           me   <- unZ3Source $ RPO.termEq_ s t
            return me
 
 -- -----------------------

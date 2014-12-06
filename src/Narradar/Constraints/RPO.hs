@@ -20,7 +20,7 @@ import Data.Typeable
 import Narradar.Framework.Ppr
 import Narradar.Types.Term
 import Narradar.Utils
-import Funsat.RPOCircuit.Symbols (Status(..), mkStatus)
+import Funsat.TermCircuit.RPO.Symbols (Status(..), mkStatus)
 import Prelude.Extras
 
 class HasPrecedence a where precedence :: a -> Int

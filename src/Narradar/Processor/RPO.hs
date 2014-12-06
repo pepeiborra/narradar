@@ -43,8 +43,7 @@ import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO (Status(..))
-import Narradar.Constraints.SAT.Solve (EvalM, runEvalM, Var, BIEnv)
-import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms )
+import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms,EvalM, Var, BIEnv)
 import qualified Narradar.Constraints.SAT.MonadSAT as MonadSAT
 import Narradar.Constraints.SAT.RPOAF ( UsableSymbol(..), MkSATSymbol
                                       , RPOSsymbol(..), RPOsymbol(..), LPOSsymbol, LPOsymbol, MPOsymbol
@@ -53,13 +52,14 @@ import Narradar.Constraints.SAT.RPOAF ( UsableSymbol(..), MkSATSymbol
                                       , theSymbolR, isUsable, usableSymbol, filtering, status
                                       , verifyRPOAF, isCorrect
                                       , omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone)
---import Narradar.Constraints.SAT.RPO   (verifyRPO)
---import qualified Narradar.Constraints.SAT.RPO as RPO
+
+import Funsat.TermCircuit (runEvalM)
+
 import qualified Narradar.Constraints.SAT.RPOAF as RPOAF
 import Narradar.Utils
 import System.IO.Unsafe
 import qualified Debug.Trace
-import qualified Funsat.RPOCircuit as RPOAF
+import qualified Funsat.TermCircuit as RPOAF
 
 import Debug.Hoed.Observe
 

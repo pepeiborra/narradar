@@ -42,10 +42,12 @@ import Data.Traversable (Traversable, traverse)
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Funsat.RPOCircuit.Symbols as Funsat
+import qualified Funsat.TermCircuit.RPO.Symbols as Funsat
 import Funsat.Circuit (CastCircuit, CastCo)
-import Funsat.RPOCircuit (Co, CoRPO, assertCircuits)
-import Funsat.RPOCircuit.Symbols (Natural(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), RPOSsymbol(..), RPOsymbol(..), mkSymbolDecoder)
+import Funsat.TermCircuit (Co, CoTerm, assertCircuits)
+import Funsat.TermCircuit.Ext
+import Funsat.TermCircuit.RPO ()
+import Funsat.TermCircuit.RPO.Symbols (Natural(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), RPOSsymbol(..), RPOsymbol(..), mkSymbolDecoder)
 
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.Syntactic
@@ -89,7 +91,7 @@ rpoAF :: (id ~ Family.Id trs
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,TermExtCircuit repr sid, CoTerm repr (TermF sid) tv v
          ,Decode v Bool
          ,MonadReader r mr
          ,MonadSAT repr v m
@@ -122,7 +124,7 @@ rpoAF_DP ::
          ,HasFiltering sid
          ,HasPrecedence sid
          ,HasSignature (Problem (typ (TermF id)) trs)
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,TermExtCircuit repr sid, CoTerm repr (TermF sid) tv v
          ,UsableSymbol sid
          ,Decode v Bool
          ,MonadSAT repr v m
@@ -186,7 +188,7 @@ rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid r
          ,HasFiltering sid
          ,HasPrecedence sid
          ,UsableSymbol sid
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) Narradar.Var Var
+         ,TermExtCircuit repr sid, CoTerm repr (TermF sid) Narradar.Var Var
          ,CastCircuit repr repr, CastCo repr repr Var
          ,Traversable (Problem base), Pretty base
          ,MkDPProblem initialgoal' (NTRS sid)
@@ -218,7 +220,7 @@ rpoAF_IGDP' :: forall initialgoal initialgoal' problem problem' trs trs' id sid 
          ,HasFiltering sid
          ,HasPrecedence sid
          ,UsableSymbol sid
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) Narradar.Var Var
+         ,TermExtCircuit repr sid, CoTerm repr (TermF sid) Narradar.Var Var
          ,CastCircuit repr' repr, CastCo repr' repr Var
          ,Traversable (Problem base), Pretty base
          ,MkDPProblem initialgoal' (NTRS sid)
@@ -314,7 +316,7 @@ rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
          ,HasFiltering sid
          ,HasPrecedence sid
          ,HasSignature (Problem typ trs)
-         ,RPOExtCircuit repr sid, CoRPO repr (TermF sid) tv v
+         ,TermExtCircuit repr sid, CoTerm repr (TermF sid) tv v
          ,UsableSymbol sid
          ,MkDPProblem typ trs'
          ,Decode v Bool
@@ -399,8 +401,8 @@ runRPOAF allowCol i sig f = do
 -- Symbols set extensions
 -- ----------------------
 
-instance (Eq a, RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr) =>
-    RPOExtCircuit repr (Usable (RPOSsymbol v a)) where
+instance (Eq a, TermCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr) =>
+    TermExtCircuit repr (Usable (RPOSsymbol v a)) where
      exEq s t ss tt =
        and [useMul s, useMul t, muleq s t ss tt]
        \/
@@ -422,28 +424,28 @@ instance (Eq a, RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircu
        and [not$ useMul s, not$ useMul t, lexpge_exist s t ss tt]
 -}
 
-instance (RPOCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
+instance (TermCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
          ,Ord a, Pretty a) =>
-  RPOExtCircuit repr (Usable(LPOSsymbol v a)) where
+  TermExtCircuit repr (Usable(LPOSsymbol v a)) where
   exEq s t = lexpeq s t
   exGt s t = lexpgt s t
 --  exGe = lexpge_exist
 
-instance (RPOCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
+instance (TermCircuit repr, AssertCircuit repr, OneCircuit repr, ECircuit repr, ExistCircuit repr
          ,Pretty a, Ord a) =>
-  RPOExtCircuit repr (Usable(LPOsymbol v a)) where
+  TermExtCircuit repr (Usable(LPOsymbol v a)) where
   exEq s t = lexeq s t
   exGt s t = lexgt s t
 
-instance (RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
+instance (TermCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          ,Pretty a, Ord a) =>
-  RPOExtCircuit repr (Usable(MPOsymbol v a)) where
+  TermExtCircuit repr (Usable(MPOsymbol v a)) where
   exEq s t = muleq s t
   exGt s t = mulgt s t
 
-instance (RPOCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
+instance (TermCircuit repr, AssertCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
          ,Pretty a, Ord a) =>
-  RPOExtCircuit repr (Usable(RPOsymbol v a)) where
+  TermExtCircuit repr (Usable(RPOsymbol v a)) where
   exEq s t ss tt =
       and [ useMul s, useMul t, muleq s t ss tt]
       \/
@@ -469,354 +471,6 @@ variableCondition rule@(_ :-> r)
                                    , let Just f = rootSymbol (r ! init prefix)
                                     , let      i = last prefix]
                                | pos <- [noteV v | v <- extraVars(annotateWithPos <$> rule)]]
-
-
--- -----------------------------------
--- Lexicographic extension with AF
--- -----------------------------------
-
-lexgt id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
-                           (zip (map input $ filtering_vv id_g) gg)
- where
-  go :: [(repr var,Term termF tvar)] -> [(repr var,Term termF tvar)] -> repr var
-  go []     _      = false
-  go ff      []    = or [ af_f | (af_f,_) <- ff]
-  go ((af_f,f):ff) ((af_g,g):gg)
-    =  ite af_f
-           (ite af_g
-                ((f > g) \/ ((f ~~ g) /\ go ff gg))
-                (go ((af_f,f):ff) gg))
-           (go ff ((af_g,g):gg))
-
-lexeq id_f id_g ff gg = go (zip (map input $ filtering_vv id_f) ff)
-                           (zip (map input $ filtering_vv id_g) gg)
- where
-  go :: [(repr var,Term termF tvar)] -> [(repr var,Term termF tvar)] -> repr var
-  go []     []     = true
-  go ff      []    = not $ or [ af_f | (af_f,_) <- ff]
-  go []      gg    = not $ or [ af_g | (af_g,_) <- gg]
-  go ((af_f,f):ff) ((af_g,g):gg)
-    =  ite af_f
-           (ite af_g
-                ((f ~~ g) /\ go ff gg)
-                (go ((af_f,f):ff) gg))
-           (go ff ((af_g,g):gg))
-
-lexgt_exist _    _    [] _  = false
-lexgt_exist id_f _    ff [] = or . map input . filtering_vv $ id_f
-lexgt_exist id_f id_g ff gg = (`runCont` id) $ do
--- We build a matrix M of dim n_f x n_g containing all
--- the comparisons between tails of ff and gg
--- That is, M[0,0] = lexgt ff gg
---          M[1,0] = lexgt (drop 1 ff) gg
---          M[0,1] = lexgt ff (drop 1 gg)
---          ...
--- Actually, the matrix containts additional elements
---          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
---          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
--- The proposition is true iff M[0,0] is true
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
-  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
-                      | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
-                      , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
-                                        `zip` tails (zip filters_g gg))]
-
-  return ( m!!0!!0 /\ and assertions)
- where
-   filters_f = map input (filtering_vv id_f)
-   filters_g = map input (filtering_vv id_g)
-
-   constraint _ []     _      = false
-   constraint _ ff      []    = or [ af_f | (af_f,_) <- ff]
-   constraint m ((af_f,f):ff) ((af_g,g):gg)
-             =  ite af_f
-                    (ite af_g
-                         (f>g \/ (f~~g /\ m!!1!!1))
-                         (m!!0!!1))
-                    (m!!1!!0)
-
-
-lexgt_existA, lexpgt_existA, lexpge_existA, lexeq_existA ::
-  forall id termF tv v repr .
-                        (HasPrecedence id
-                        ,HasFiltering id
-                        ,HasStatus id
-                        ,HasId1 termF
-                        ,Foldable termF
-                        ,Eq(Term termF tv)
-                        ,id ~ Family.Id termF
---                        ,id ~ Family.Id repr
-                        ,v  ~ Family.Var id
-                        ,termF ~ Family.TermF repr
-                        ,ECircuit repr
-                        ,ExistCircuit repr
-                        ,RPOCircuit repr
-                        ,AssertCircuit repr
-                        ,CoRPO repr termF tv v
-                        ) =>
-                        id -> id -> [Term termF tv] -> [Term termF tv] -> repr v
-lexgt_existA _    _    [] _  = false
-lexgt_existA id_f _    ff [] = or . map input . filtering_vv $ id_f
-lexgt_existA id_f id_g ff gg = (`runCont` id) $ do
--- We build a matrix M of dim n_f x n_g containing all
--- the comparisons between tails of ff and gg
--- That is, M[0,0] = lexgt ff gg
---          M[1,0] = lexgt (drop 1 ff) gg
---          M[0,1] = lexgt ff (drop 1 gg)
---          ...
--- Actually, the matrix containts additional elements
---          M[n_f+1, i] = value if we drop all the elements of ff and i elements of gg
---          M[i, n_g+1] = value if we drop all the elements of gg and i elements of ff
--- The proposition is true iff M[0,0] is true
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
-  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
-                      | (m_i, ff_i)  <-  (tails m `zip` tails (zip filters_f ff))
-                      , (m_ij, gg_j) <-  (getZipList (traverse (ZipList . tails) m_i)
-                                        `zip` tails (zip filters_g gg))]
-
-  return $ assertCircuits assertions (head $ head m)
- where
-   filters_f = map input (filtering_vv id_f)
-   filters_g = map input (filtering_vv id_g)
-
-   constraint :: [[repr v]] -> [(repr v,Term termF tv)] -> [(repr v,Term termF tv)] -> repr v
-   constraint _ []     _      = false
-   constraint _ ff      []    = or [ af_f | (af_f,_) <- ff]
-   constraint m ((af_f,f):ff) ((af_g,g):gg)
-             =  ite af_f
-                    (ite af_g
-                         (f>g \/ (f~~g /\ m!!1!!1))
-                         (m!!0!!1))
-                    (m!!1!!0)
-
-lexeq_exist _    _    [] [] = true
-lexeq_exist id_f _    _  [] = not . or . map input . filtering_vv $ id_f
-lexeq_exist _    id_g [] _  = not . or . map input . filtering_vv $ id_g
-lexeq_exist id_f id_g ff gg = (`runCont` id) $ do
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
-  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
-                      | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
-                      , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
-                                        `zip` tails (zip filters_g gg)]
-
-  return ( m!!0!!0 /\ and assertions)
- where
-   filters_f = map input (filtering_vv id_f)
-   filters_g = map input (filtering_vv id_g)
-
-   constraint _ []     []     = true
-   constraint _ ff      []    = not $ or [ af_f | (af_f,_) <- ff]
-   constraint _ []      gg    = not $ or [ af_g | (af_g,_) <- gg]
-   constraint m ((af_f,f):ff) ((af_g,g):gg)
-             =  ite af_f
-                    (ite af_g
-                         (f~~g /\ m!!1!!1)
-                         (m!!0!!1))
-                    (m!!1!!0)
-
---lexeq_existA _    _    [] [] = true
---lexeq_existA id_f _    _  [] = not . or . map input . filtering_vv $ id_f
---lexeq_existA _    id_g [] _  = not . or . map input . filtering_vv $ id_g
-lexeq_existA id_f id_g ff gg = (`runCont` id) $ do
-  m <- replicateM (length ff + 1) $ replicateM (length gg + 1) (cont existsBool)
-  let assertions = [ m_ij!!0!!0 <--> constraint m_ij ff_i gg_j
-                      | (m_i,  ff_i) <- tails m `zip` tails (zip filters_f ff)
-                      , (m_ij, gg_j) <- getZipList (traverse (ZipList . tails) m_i)
-                                        `zip` tails (zip filters_g gg)]
-
-  return ( assertCircuits assertions (head $ head m) )
- where
-   filters_f = map input (filtering_vv id_f)
-   filters_g = map input (filtering_vv id_g)
-
-   constraint :: [[repr v]] -> [(repr v,Term termF tv)] -> [(repr v,Term termF tv)] -> repr v
-   constraint _ []     []     = true
-   constraint _ ff      []    = not $ or [ af_f | (af_f,_) <- ff]
-   constraint _ []      gg    = not $ or [ af_g | (af_g,_) <- gg]
-   constraint m ((af_f,f):ff) ((af_g,g):gg)
-             =  ite af_f
-                    (ite af_g
-                         (f~~g /\ m!!1!!1)
-                         (m!!0!!1))
-                    (m!!1!!0)
-
-lexpeq, lexpgt, lexeq, lexgt, muleq,mulgt,mulge ::
-         forall id termF repr tvar var .
-         ( var   ~ Family.Var id
-         , id    ~ Family.Id termF
-         , termF ~ Family.TermF repr
-         , HasId1 termF, Foldable termF
-         , HasFiltering id, HasStatus id, HasPrecedence id
-         , Eq (Term termF tvar), Eq id
-         , RPOCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
-         , CoRPO repr termF tvar var
-         ) => id -> id -> [Term termF tvar] -> [Term termF tvar] -> repr var
-
-
---lexpeq :: (ECircuit repr, RPOCircuit repr (Symbol a)) =>
---          Symbol a -> Symbol a -> [TermN (Symbol a)] -> [TermN (Symbol a)] -> repr Var
---lexpeq id_f id_g ss tt | pprTrace (text "encoding " <+> ss <+> text "~" <+> tt) False = undefined
-lexpeq id_f id_g ss tt =
-  eqArity /\
-  and ( [ (f_ik /\ g_jk) --> s_i ~~ t_j
-              | (s_i, f_i) <- zip ss ff
-              , (t_j, g_j) <- zip tt gg
-              , (f_ik, g_jk) <- zip f_i g_j])
-    where
-       (Just ff, Just gg) = (lexPerm id_f, lexPerm id_g)
-       eqArity = and ( take m (zipWith (<-->) (map or ff ++ repeat false)
-                                              (map or gg ++ repeat false))
-                     )
-       m   = max (length ff) (length gg)
-
---lexpgt id_f id_g ss tt | pprTrace (text "encoding " <+> ss <+> text ">" <+> tt) False = undefined
-lexpgt id_f id_g ss tt = expgt_k (transpose $ enc_f) (transpose $ enc_g)
-     where
-       Just enc_f = lexPerm id_f
-       Just enc_g = lexPerm id_g
-       n = length ss
-       m = length tt
-       expgt_k [] _ = false
-       expgt_k (f_k:_) [] = or f_k
-       expgt_k (f_k:ff) (g_k:gg)
-         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
-                                      (s_i ~~ t_j /\ expgt_k ff gg))
-                            | (g_jk, t_j) <- zip g_k tt]
-                | (f_ik, s_i) <- zip f_k ss]
-
-lexpgt_exist id_f id_g [] _  = false
-lexpgt_exist id_f id_g ss tt = (`runCont` id) $ do
-  let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (cont existsBool)
-  let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
-                    [the_tail]
-      the_tail = if length ss P.> length tt
-                   then or (transpose enc_f !! length tt)
-                   else false
-
-  let assertions = zipWith (<-->) vf_k constraints
-  return (head vf_k /\ and assertions)
-     where
-       Just enc_f = lexPerm id_f
-       Just enc_g = lexPerm id_g
-
-       expgt_k f_k g_k next
-         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
-                                      (s_i ~~ t_j /\ next))
-                            | (g_jk, t_j) <- zip g_k tt]
-                | (f_ik, s_i) <- zip f_k ss]
-
-lexpgt_existA id_f id_g [] _  = false
-lexpgt_existA id_f id_g ss tt = (`runCont` id) $ do
-  let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (cont existsBool)
-  let constraints = zipWith3 expgt_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
-                    [the_tail]
-      the_tail = if length ss P.> length tt
-                   then or (transpose enc_f !! length tt)
-                   else false
-
-  let assertions = zipWith (<-->) vf_k constraints
-  return (assertCircuits assertions $ head vf_k)
-     where
-       Just enc_f = lexPerm id_f
-       Just enc_g = lexPerm id_g
-
-       expgt_k f_k g_k next
-         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
-                                      (s_i ~~ t_j /\ next))
-                            | (g_jk, t_j) <- zip g_k tt]
-                | (f_ik, s_i) <- zip f_k ss]
-
-lexpge_existA id_f id_g ss tt = (`runCont` id) $ do
-  let k = min (length ss) (length tt) + 1
-  vf_k <- replicateM k (cont existsBool)
-  let constraints = zipWith3 expge_k (transpose $ enc_f) (transpose $ enc_g) (tail vf_k) ++
-                    [the_tail]
-      the_tail = if length ss P.> length tt
-                   then eqArity \/ or (enc_f !! length tt)
-                   else eqArity
-
-  let assertions = zipWith (<-->) vf_k constraints
-  return (assertCircuits assertions $ head vf_k)
-     where
-       Just enc_f = lexPerm id_f
-       Just enc_g = lexPerm id_g
-
-       expge_k f_k g_k next
-         = or [f_ik /\ and [ g_jk --> (s_i >  t_j \/
-                                      (s_i ~~ t_j /\ next))
-                            | (g_jk, t_j) <- zip g_k tt]
-                | (f_ik, s_i) <- zip f_k ss]
-
-       m = max (length enc_f) (length enc_g)
-       eqArity = and ( take m (zipWith (<-->) (map or enc_f ++ repeat false)
-                                              (map or enc_g ++ repeat false))
-                     )
-
-
-
--- ---------------------------
--- Multiset extension with AF
--- ---------------------------
-mulge id_f id_g [] gg = none $ map (`inAF` id_g) [1..length gg]
-mulge id_f id_g ff gg = mulgen id_f id_g ff gg (const true)
-
-mulgt id_f id_g []  _   = false
-mulgt id_f id_g ff  gg  =
-    mulgen id_f id_g ff gg (\epsilons ->
-                                not $ and [inAF i id_f --> ep_i
-                                           | (i, ep_i) <- zip [1..] epsilons])
-
-muleq id_f id_g [] [] = true
-muleq id_f id_g [] gg = none $ map (`inAF` id_g) [1..length gg]
-muleq id_f id_g ff gg =
-    mulgen id_f id_g ff gg (\epsilons ->
-                                and [inAF i id_f --> ep_i
-                                      | (i, ep_i) <- zip [1..] epsilons])
-
-
-mulgen:: ( var   ~ Family.Var id
-         , id    ~ Family.Id termF
-         , termF ~ Family.TermF repr
-         , HasFiltering id, HasStatus id, HasPrecedence id
-         , HasId1 termF, Foldable termF, Eq (Term termF tvar), Eq id
-         , RPOCircuit repr, ExistCircuit repr, OneCircuit repr, ECircuit repr
-         , CoRPO repr termF tvar var
-         ) => id -> id -> [Term termF tvar] -> [Term termF tvar] -> ([repr var] -> repr var) ->  repr var
-mulgen id_f id_g ff gg k = (`runCont` id) $ do
-    let (i,j)    = (length ff, length gg)
-
-    epsilons  <- replicateM i (cont existsBool)
-    gammasM_t <- replicateM i $ replicateM j (cont existsBool)
-    let gammasM = transpose gammasM_t
-
-        oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms =
-          [ ite (inAF j id_g)
-                (one  gammas_j)
-                (none gammas_j)
-            | (j, gammas_j) <- zip [1..] gammasM ]
-
-        filteredSubtermsCannotCover =
-          [ not(inAF i id_f) --> none gammas_i
-            | (i, gammas_i) <- zip [1..] gammasM_t]
-
-        subtermUsedForEqualityMustCoverOnce =
-          [ ep_i --> one gamma_i
-            | (ep_i, gamma_i) <- zip epsilons gammasM_t]
-
-        greaterOrEqualMultisetExtension =
-          [ gamma_ij --> ite ep_i (f_i ~~ g_j)
-                                  (f_i >  g_j)
-                  | (ep_i, gamma_i, f_i) <- zip3 epsilons gammasM_t ff
-                  , (gamma_ij, g_j)      <- zip  gamma_i gg]
-    return $
-       and ( k epsilons
-           : oneCoverForNonFilteredSubtermAndNoCoverForFilteredSubterms
-          ++ filteredSubtermsCannotCover
-          ++ subtermUsedForEqualityMustCoverOnce
-          ++ greaterOrEqualMultisetExtension
-           )
 
 -- ------------------------
 -- Usable Rules with AF
@@ -956,7 +610,7 @@ omegaIGgen p
    Just gen = find isGenSymbol (toList $ getDefinedSymbols p)
 --   genTerm :: Term (TermF id) Narradar.Var
    genTerm = term gen []
---   extraConstraints :: forall repr. (RPOExtCircuit repr id, CoRPO repr (TermF id) Var) => [repr Var]
+--   extraConstraints :: forall repr. (TermExtCircuit repr id, CoTerm repr (TermF id) Var) => [repr Var]
    extraConstraints = [ genTerm > term f (replicate i genTerm) | (f,i) <- Map.toList partial]
    partial = definedSymbols (getSignature p)
              `Map.difference`
