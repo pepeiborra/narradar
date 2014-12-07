@@ -216,7 +216,8 @@ instance AssertCircuit (YicesSource id) where
       modify $ \env -> env{ assertions = exp <| assertions env }
       unYicesSource then_
 
-instance (Hashable id, Ord id, Pretty id, TermExtCircuit (YicesSource id) id) =>
+instance (Hashable id, Ord id, Pretty id, IsSimple id, TermExtCircuit (YicesSource id) id
+         ) =>
    TermCircuit (YicesSource id) where
  type CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 

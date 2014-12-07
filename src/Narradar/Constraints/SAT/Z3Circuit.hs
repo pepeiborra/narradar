@@ -72,6 +72,7 @@ import Funsat.TermCircuit( TermCircuit(..)
                          , HasStatus(..)
                          , HasPrecedence(..)
                          , HasFiltering(..)
+                         , IsSimple(..)
                          , oneExist
                          , runEvalM)
 
@@ -172,7 +173,7 @@ instance AssertCircuit (Z3Source id) where
     assertCnstr ass
     unZ3Source c
 
-instance (Hashable id, Pretty id, Ord id, TermExtCircuit (Z3Source id) id
+instance (Hashable id, Pretty id, Ord id, IsSimple id, TermExtCircuit (Z3Source id) id
          ) =>
     TermCircuit (Z3Source id) where
  type CoTerm_ (Z3Source id) (TermF id) tv v = (tv ~ Narradar.Var)

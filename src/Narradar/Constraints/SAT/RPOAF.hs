@@ -44,7 +44,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Funsat.TermCircuit.RPO.Symbols as Funsat
 import Funsat.Circuit (CastCircuit, CastCo)
-import Funsat.TermCircuit (Co, CoTerm, assertCircuits)
+import Funsat.TermCircuit (Co, CoTerm, assertCircuits, IsSimple)
 import Funsat.TermCircuit.Ext
 import Funsat.TermCircuit.RPO ()
 import Funsat.TermCircuit.RPO.Symbols (Natural(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), RPOSsymbol(..), RPOsymbol(..), mkSymbolDecoder)
@@ -91,6 +91,7 @@ rpoAF :: (id ~ Family.Id trs
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,IsSimple sid
          ,TermExtCircuit repr sid, CoTerm repr (TermF sid) tv v
          ,Decode v Bool
          ,MonadReader r mr
@@ -122,6 +123,7 @@ rpoAF_DP ::
          ,FrameworkId sid
          ,HasStatus sid
          ,HasFiltering sid
+         ,IsSimple sid
          ,HasPrecedence sid
          ,HasSignature (Problem (typ (TermF id)) trs)
          ,TermExtCircuit repr sid, CoTerm repr (TermF sid) tv v
@@ -187,6 +189,7 @@ rpoAF_IGDP :: forall initialgoal initialgoal' problem problem' trs trs' id sid r
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,IsSimple sid
          ,UsableSymbol sid
          ,TermExtCircuit repr sid, CoTerm repr (TermF sid) Narradar.Var Var
          ,CastCircuit repr repr, CastCo repr repr Var
@@ -219,6 +222,7 @@ rpoAF_IGDP' :: forall initialgoal initialgoal' problem problem' trs trs' id sid 
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,IsSimple sid
          ,UsableSymbol sid
          ,TermExtCircuit repr sid, CoTerm repr (TermF sid) Narradar.Var Var
          ,CastCircuit repr' repr, CastCo repr' repr Var
@@ -315,6 +319,7 @@ rpoAF_NDP :: forall typ repr problem problem' trs trs' id tv v sid m.
          ,HasStatus sid
          ,HasFiltering sid
          ,HasPrecedence sid
+         ,IsSimple sid
          ,HasSignature (Problem typ trs)
          ,TermExtCircuit repr sid, CoTerm repr (TermF sid) tv v
          ,UsableSymbol sid
@@ -370,6 +375,7 @@ runRPOAF :: ( Co repr (Family.Var sid)
             , MonadReader env reader
             , Show id
             , Ord id
+            , IsSimple sid
             , id ~ Family.Id sid
             ) => Bool
               -> MkSATSymbol sid
@@ -640,7 +646,7 @@ verifyRPOAF :: ( rule ~ RuleF term
                , Decode var Bool
                , FrameworkProblem typ trs
                , HasSignature (Problem typ trs)
-               , RPOId id
+               , RPOId id, IsSimple id
                ) =>
                Problem typ trs -> [Int] -> EvalM var (VerifyRPOAF rule)
 verifyRPOAF p nonDecPairsIx = do

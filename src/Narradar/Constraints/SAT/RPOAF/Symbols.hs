@@ -22,8 +22,8 @@ import           Data.Hashable
 import qualified Data.Term                         as Family
 import           Data.Typeable
 import           Funsat.Circuit                    (Co)
-import           Funsat.TermCircuit.RPO.Symbols         (SymbolRes, SymbolFactory, RPOSsymbol(..), RPOsymbol(..), LPOSsymbol(..), LPOsymbol(..), MPOsymbol(..), Natural)
-import qualified Funsat.TermCircuit.RPO.Symbols         as Funsat
+import           Funsat.TermCircuit
+import           Funsat.TermCircuit.RPO.Symbols    as Funsat
 
 import           Narradar.Constraints.SAT.MonadSAT
 import           Narradar.Framework.Ppr            as Ppr
@@ -71,7 +71,10 @@ type instance Family.Id  (Usable s) = Family.Id s
 deriving instance (Show s, Show(Family.Var s)) => Show (Usable s)
 
 instance HasPrecedence s => HasPrecedence (Usable s) where precedence_v = precedence_v . usableSymbol
-instance HasFiltering s => HasFiltering (Usable s) where listAF_v = listAF_v . usableSymbol ; filtering_vv = filtering_vv . usableSymbol
+instance HasFiltering s => HasFiltering (Usable s) where
+  filtering_vv = filtering_vv . usableSymbol
+instance IsSimple s => IsSimple(Usable s) where
+  isSimple_v = isSimple_v . usableSymbol
 instance HasStatus s => HasStatus (Usable s) where useMul_v = useMul_v . usableSymbol ; lexPerm_vv = lexPerm_vv . usableSymbol
 instance Eq s => Eq (Usable s) where a == b = usableSymbol a == usableSymbol b
 instance Ord s => Ord (Usable s) where compare a b = compare (usableSymbol a) (usableSymbol b)

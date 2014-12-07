@@ -239,6 +239,7 @@ instance AssertCircuit (YicesSource id) where
       unYicesSource c
 
 instance (Hashable id, Pretty id, Ord id, TermExtCircuit (YicesSource id) id
+         ,RPOCircuit.IsSimple id
          ) =>
     TermCircuit (YicesSource id) where
  type CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
