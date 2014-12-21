@@ -17,7 +17,9 @@ import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
 import MuTerm.Framework.Strategy
 import Narradar
-import Narradar.Processor.RPO.Yices
+import Narradar.Processor.RPO.Z3
+import Narradar.Processor.WPO.Z3
+--import Narradar.Processor.RPO.YicesPipe
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
@@ -29,7 +31,7 @@ import Debug.Hoed.Observe
 
 #ifndef WEB
 import Narradar.Interface.Cli
-main = narradarMain (id :: [a] -> [a]) nilObserver
+main = runO $ gdmobservers "main" (narradarMain (id :: [a] -> [a]))
 #else
 import Narradar.Interface.Cgi
 main = narradarCgi (id :: [a] -> [a])
@@ -45,12 +47,12 @@ instance Dispatch thing where dispatch _ = error "This version of Narradar does 
 instance () => Dispatch (NProblem Rewriting Id) where
   dispatch = inn .|.
              (ev >=>
-              lfpBounded 4 (dg >=>sc `orElse` lpo `orElse` rpos `orElse` gt2) >=>
+              lfpBounded 4 (dg >=> pol .|. lpoO .|. gt2) >=>
               final)
 
 instance (FrameworkId a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
   dispatch =  ev >=>
-              lfpBounded 4 (dg >=> sc `orElse` lpo `orElse` rpos `orElse` gt1) >=>
+              lfpBounded 4 (dg >=> lpo `orElse` rpos `orElse` gt1) >=>
               final
 
 -- Initial Goal
@@ -66,7 +68,8 @@ instance Dispatch (NProblem (InitialGoal (TermF Id) Rewriting) Id) where
 instance Dispatch (NProblem (Relative (NTRS Id) (InitialGoal (TermF Id) Rewriting)) Id) where
   dispatch = apply RelativeToRegularIPL14 >=> dispatch
 
-instance (Dispatch (NProblem base id)
+instance (Dispatch (NProblem base id), GetPairs base
          ,FrameworkProblemN base id
+         ,id ~ DPIdentifier id', Ord id'
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
   dispatch = apply RelativeToRegularIPL14 >=> dispatch

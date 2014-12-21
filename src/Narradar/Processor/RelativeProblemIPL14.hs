@@ -99,7 +99,7 @@ instance ( MkProblem base trs
          , Family.Id trs ~ Family.Id t
          , Family.Rule trs ~ Rule t v
          , Ord1 t, Ord v, Enum v, Rename v
-         , HasId1 t, Unify t
+         , HasId1 t, Unify t, Ord(Family.Id t)
          , Monoid trs, HasRules trs, HasSignature trs
          , Info info RelativeToRegularProofIPL14
          , HasMinimality base

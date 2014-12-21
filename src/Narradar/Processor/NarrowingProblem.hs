@@ -110,6 +110,7 @@ bad :: forall id base info heu m .
        ,Lattice (AF_ id)
        ,PolyHeuristic heu id
        ,FrameworkProblemN base id
+       ,HasSignature (NProblem base id)
        ) =>
     NarrowingToRewritingICLP08 heu info -> NProblem (MkNarrowingGoal id base) id -> [Proof info m (NProblem base id)]
 bad (NarrowingToRewritingICLP08 mk) p@(getFramework -> NarrowingGoal _ pi_groundInfo0 _ base)

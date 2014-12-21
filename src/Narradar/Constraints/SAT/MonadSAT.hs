@@ -12,6 +12,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving, GeneralizedNewtypeDeriving #-}
 
 module Narradar.Constraints.SAT.MonadSAT
     ( module Narradar.Constraints.SAT.MonadSAT
@@ -26,6 +27,7 @@ module Narradar.Constraints.SAT.MonadSAT
     , HasPrecedence(..), precedence
     , HasFiltering(..), listAF, inAF
     , HasStatus(..), useMul, lexPerm
+    , IsSimple(..), HasLexMul(..)
     ) where
 
 import           Control.DeepSeq
@@ -43,10 +45,14 @@ import           Narradar.Types                      (TermN)
 
 import           Funsat.ECircuit                     (BIEnv, Eval, )
 import           Funsat.Types                        (Clause)
-import           Funsat.ECircuit                     (Circuit(true,false,input,not,andL,orL), ECircuit(..), NatCircuit(..), ExistCircuit(..), castCircuit)
+import           Funsat.ECircuit                     ( Circuit(true,false,input,not,andL,orL)
+                                                     , ECircuit(..)
+                                                     , NatCircuit(..), Natural(..)
+                                                     , ExistCircuit(..)
+                                                     , castCircuit)
 import qualified Funsat.ECircuit                     as Funsat
 import           Funsat.TermCircuit
-import           Funsat.TermCircuit.Symbols          (Natural(..))
+import           Funsat.TermCircuit.Ext
 import           Funsat.TermCircuit.RPO.Symbols      (Status(..), mkStatus)
 import qualified Funsat.TermCircuit                  as Funsat
 
@@ -73,7 +79,7 @@ instance Ord id => Monoid (VarMaps expr id var) where
 -- MonadSAT
 -- --------
 
-class (Monad m, Functor m, ECircuit repr, OneCircuit repr, Hashable v, Ord v, Show v) =>
+class (Monad m, Functor m, ECircuit repr, OneCircuit repr, NatCircuit repr, Hashable v, Ord v, Show v) =>
  MonadSAT repr v m | m -> repr v where
   boolean_ :: String -> m v
   natural_ :: String -> m (Natural v)
@@ -151,7 +157,8 @@ evalDecode :: (Ord var, Hashable var, Show var, Decode (Eval var) b) => WrapEval
 evalDecode = decode . unwrapEval
 
 type instance Family.Var (Eval var) = var
-type instance Family.Var (Natural v) = Natural v
+type instance Family.Var (Natural v) = v
+deriving instance Pretty v => Pretty (Natural v)
 -- ------------
 -- Combinators
 -- ------------
@@ -175,7 +182,6 @@ constant False = false
         , v     ~ Family.Var id
         , termF ~ Family.TermF repr
         , CoTerm repr termF tv v, TermCircuit repr
-        , HasFiltering id, HasStatus id, HasPrecedence id
         , HasId1 termF, Foldable termF
         , Eq (Term termF tv)
         ) => Term termF tv -> Term termF tv -> repr v
@@ -197,6 +203,7 @@ every = flip all
 (<-->) = iff
 
 none = andL . map not
+
 -- ---------
 -- Testing
 -- ---------

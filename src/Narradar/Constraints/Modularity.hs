@@ -53,7 +53,9 @@ makeHierarchicalCombination ex base =
 
 --isHierarchicalCombination :: (HasSignature trs1, HasSignature trs2) => trs1 -> trs2 -> Bool
 isHierarchicalCombination :: ( HasSignature ex, HasSignature base
-                             , Family.Id ex ~ Family.Id base) => ex -> base -> Bool
+                             , Family.Id ex ~ Family.Id base
+                             , Ord(Family.Id base)
+                             ) => ex -> base -> Bool
 isHierarchicalCombination ex base =
   Set.null(getDefinedSymbols base `Set.intersection` getDefinedSymbols ex) &&
   Set.null(getConstructorSymbols base `Set.intersection` getDefinedSymbols ex)
@@ -64,6 +66,7 @@ isRelaxedHierarchicalCombination :: (HasSignature trs, HasRules trs
                                     ,HasId1 t, Unify t
                                     ,Observable(Term t v), Observable v
                                     ,Ord v
+                                    ,Ord (Family.Id trs)
                                     ) => trs -> trs -> Bool
 isRelaxedHierarchicalCombination ex base =
   Set.null(getDefinedSymbols base `Set.intersection` getDefinedSymbols ex) &&
@@ -82,6 +85,7 @@ isGeneralizedHierarchicalCombination :: ( HasSignature trs, HasRules trs, Ord (T
                                         , HasId1 t, Match t, Traversable t
                                         , Enum v, Ord v, Rename v, Observable v
                                         , Family.Id t ~ Family.Id trs
+                                        , Ord(Family.Id trs)
                                         ) => trs -> trs -> Bool
 isGeneralizedHierarchicalCombination ex base =
 -- A generalized hierarchical combination is an HC with shared rules
@@ -108,6 +112,7 @@ isGeneralizedRelaxedHierarchicalCombination
      , HasId1 t, Unify t, Traversable t
      , Enum v, Ord v, Rename v
      , Observable v, Observable(Term t v)
+     , Ord(Family.Id trs)
      ) => trs -> trs -> Bool
 isGeneralizedRelaxedHierarchicalCombination ex base =
   isRelaxedHierarchicalCombination ex' base' &&

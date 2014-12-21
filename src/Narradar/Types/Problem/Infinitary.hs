@@ -47,12 +47,16 @@ import Prelude hiding (pi)
 
 data Infinitary id p = forall heu . PolyHeuristic heu id => Infinitary {pi_PType :: AF_ id, heuristic :: MkHeu heu , baseFramework :: p}
 
+type instance Family.Id(Infinitary id typ) = id
+
 instance (Ord id, IsProblem p) => IsProblem (Infinitary id p)  where
   data Problem (Infinitary id p) a = InfinitaryProblem {pi::AF_ id, baseProblem::Problem p a}
   getFramework (InfinitaryProblem af p) = infinitary' af (getFramework p)
   getR   (InfinitaryProblem _ p) = getR p
 
-instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.Id (Problem p trs)) =>
+instance ( Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, HasSignature p
+         , id ~ Family.Id (Problem p trs)
+         , id ~ Family.Id p) =>
     MkProblem (Infinitary id p) trs where
   mkProblem (Infinitary af _ base) rr = InfinitaryProblem (af `mappend` AF.init p) p where p = mkProblem base rr
   mapRO o f (InfinitaryProblem af p) = InfinitaryProblem af (mapRO o f p)
@@ -61,7 +65,10 @@ instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.
 instance (Ord id, IsDPProblem p) => IsDPProblem (Infinitary id p) where
   getP   (InfinitaryProblem _  p) = getP p
 
-instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
+instance (id ~ Family.Id trs
+         ,id ~ Family.Id p, HasSignature p
+         ,HasSignature trs, Ord id, MkDPProblem p trs
+         ) =>
     MkDPProblem (Infinitary id p) trs where
   mapPO o f (InfinitaryProblem af p) = InfinitaryProblem af (mapPO o f p)
   mkDPProblemO o (Infinitary af _ base) rr dp = InfinitaryProblem (af `mappend` AF.init p) p
@@ -82,6 +89,9 @@ mkDerivedInfinitaryProblem g mkH p = do
 deriving instance (Eq id, Eq (Problem p trs)) => Eq (Problem (Infinitary id p) trs)
 deriving instance (Ord id, Ord (Problem p trs)) => Ord (Problem (Infinitary id p) trs)
 deriving instance (Show id, Show (Problem p trs)) => Show (Problem (Infinitary id p) trs)
+
+instance HasSignature (Problem p trs) => HasSignature (Problem (Infinitary id p) trs) where
+  getSignature = getSignature . baseProblem
 
 -- Functor
 {-

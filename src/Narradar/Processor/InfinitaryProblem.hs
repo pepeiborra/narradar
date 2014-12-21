@@ -44,6 +44,7 @@ instance (PolyHeuristic heu id, Lattice (AF_ id)
          ,Info info (InfinitaryToRewritingProof id)
          ,FrameworkProblemN (Infinitary id typ) id
          ,FrameworkProblemN typ id
+         ,HasSignature (NProblem typ id)
          ) =>
     Processor (InfinitaryToRewriting heu info) (NProblem (Infinitary id typ) id)
   where

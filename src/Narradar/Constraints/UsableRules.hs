@@ -16,11 +16,10 @@ import Control.Exception
 import Control.Monad
 import Data.Foldable as F (toList,foldMap)
 import Data.Monoid
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Traversable as T (Traversable, mapM)
 
-import Data.Term hiding (Rule, Var)
+import Data.Term hiding (Var)
 import qualified Data.Term as Family
 import qualified Data.Rule.Family as Family
 import Data.Term.Rules
@@ -28,8 +27,6 @@ import Data.Term.Rules
 import Narradar.Constraints.ICap
 import Narradar.Framework
 import Narradar.Types.Term
-import Narradar.Types.ArgumentFiltering as AF (AF_, ApplyAF(..))
-import Narradar.Utils (Proxy)
 
 import Debug.Hoed.Observe
 

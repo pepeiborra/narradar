@@ -31,10 +31,12 @@ import           Math.SMT.Yices.Syntax
 import           Math.SMT.Yices.Pipe
 import           Narradar.Types.Term
 import           Narradar.Constraints.SAT.MonadSAT   hiding (and,or)
+import           Narradar.Constraints.SAT.RPOAF (EnvRPO)
 import           Narradar.Utils                      (on,debug,debug',withTempFile)
 import           Text.PrettyPrint.HughesPJClass
 import           System.IO
-import           Prelude                             hiding( not, and, or, (>) )
+import           Prelude                             hiding( not, and, or, (>), fromInteger )
+import qualified Prelude                             as P
 
 import qualified Data.HashMap                        as HashMap
 import qualified Data.Set                            as Set
@@ -42,9 +44,9 @@ import qualified Data.Map                            as Map
 import qualified Narradar.Types                      as Narradar
 import qualified Data.Term.Family                    as Family
 
-import           Funsat.ECircuit                     (Circuit(..), CastCircuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
+import           Funsat.ECircuit                     (Circuit(..), Co, CastCircuit(..), ECircuit(..), NatCircuit(..), ExistCircuit(..), BIEnv)
 
-import           Funsat.TermCircuit                   ( TermCircuit(..), OneCircuit(..), AssertCircuit(..), runEvalM)
+import           Funsat.TermCircuit                   ( TermCircuit(..), CoTerm_, OneCircuit(..), AssertCircuit(..), runEvalM)
 import           Funsat.TermCircuit.Ext               ( TermExtCircuit(..) )
 import           Funsat.TermCircuit.Symbols           (Natural(..))
 import           Funsat.TermCircuit.RPO               as RPO
@@ -58,9 +60,9 @@ type k :->: v = HashMap.HashMap k v
 
 newtype YicesSource id var = YicesSource { unYicesSource :: State (YState id var) ExpY}
 
-type instance Family.TermF (YicesSource id) = TermF id
-type instance Family.Id (YicesSource id)    = id
-type instance Family.Var (YicesSource id)   = Narradar.Var
+type instance Family.TermF (YicesSource id)   = TermF id
+type instance Family.Id    (YicesSource id)   = id
+type instance Family.Var   (YicesSource id v) = v
 
 data YVar = YV Int String
 
@@ -125,16 +127,16 @@ solveDeclarations mb_timeout cmds = do
        debug ("\n***** Yices returned Sat, the solutions are:\n" ++ show values)
        return . Just . Map.fromList $
                    [ (read v, Right val) | (VarE v := LitB val) <- values] ++
-                   [ (read v, Left (fromInteger val)) | (VarE v := LitI val) <- values]
+                   [ (read v, Left (P.fromInteger val)) | (VarE v := LitI val) <- values]
     Unknown values -> do -- FIXME Needs checking !
        debug ("\n***** Yices returned Unknown, and some results:\n" ++ show values)
        return . Just . Map.fromList $
                    [ (read v, Right val) | (VarE v := LitB val) <- values] ++
-                   [ (read v, Left (fromInteger val)) | (VarE v := LitI val) <- values]
+                   [ (read v, Left (P.fromInteger val)) | (VarE v := LitI val) <- values]
     _ -> return Nothing
 
+type instance Co (YicesSource id) v = (Ord v, Show v)
 instance Circuit (YicesSource id) where
-  type Co (YicesSource id) v = (Ord v, Show v)
   true  = YicesSource $ return $ LitB True
   false = YicesSource $ return $ LitB False
   input v = YicesSource $ do
@@ -193,6 +195,11 @@ instance NatCircuit (YicesSource id) where
   eq = liftYices2 (:=)
   lt = liftYices2 (:<)
 
+  (+#) = liftYices2 (:+:)
+  (-#) = liftYices2 (:-:)
+  (*#) = liftYices2 (:*:)
+  fromInteger = YicesSource . return . LitI
+
 instance OneCircuit (YicesSource id) where
 --  one = oneExist
 
@@ -216,10 +223,13 @@ instance AssertCircuit (YicesSource id) where
       modify $ \env -> env{ assertions = exp <| assertions env }
       unYicesSource then_
 
-instance (Hashable id, Ord id, Pretty id, IsSimple id, TermExtCircuit (YicesSource id) id
+type instance CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
+
+instance ( Hashable id, Ord id, Pretty id, IsSimple id
+         , HasFiltering id, HasLexMul id, HasPrecedence id, HasStatus id
+         , TermExtCircuit (YicesSource id) id
          ) =>
    TermCircuit (YicesSource id) where
- type CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)
 
  termGt s t = YicesSource $ do
       env <- get
@@ -284,6 +294,8 @@ data StY id v = StY { poolY :: [Int]
                     }
 
 newtype SMTY id v a = SMTY {unSMTY :: State (StY id v) a} deriving (Functor, Monad, MonadState (StY id v))
+
+instance MonadReader (EnvRPO (YicesSource id) v) (SMTY id v) where
 
 solve :: (Hashable id, Ord id, Show id, Pretty id, Enum v, Ord v, Read v, Show v) =>
              (Maybe String -> Int -> v) -> SMTY id v (EvalM v a) -> IO (Maybe a)

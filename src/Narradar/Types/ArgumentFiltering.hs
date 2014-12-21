@@ -61,8 +61,8 @@ type LabelledAF = AF_ LId
 
 countPositionsFiltered = sum . fmap length . snd . unzip . toList
 
-init      :: (HasSignature sig) => sig -> AF_ (Family.Id sig)
-empty     :: (HasSignature sig) => sig -> AF_ (Family.Id sig)
+init      :: (HasSignature sig, Ord(Family.Id sig)) => sig -> AF_ (Family.Id sig)
+empty     :: (HasSignature sig, Ord(Family.Id sig)) => sig -> AF_ (Family.Id sig)
 singleton :: Ord id => id -> [Int] -> AF_ id
 singleton':: Ord id => id -> Either Int [Int] -> AF_ id
 fromList  :: Ord id => [(id,[Int])] -> AF_ id
@@ -78,10 +78,10 @@ map'      :: (id -> Either Int [Int] -> Either Int [Int]) -> AF_ id -> AF_ id
 mapSymbols:: Ord id' => (id -> id') -> AF_ id -> AF_ id'
 mapSymbols':: Ord id' => (id -> Either Int [Int] -> id') -> AF_ id -> AF_ id'
 filter    :: Ord id => (id -> Either Int (Set Int) -> Bool) -> AF_ id -> AF_ id
-invert    :: (HasSignature sig) => sig -> AF_ (Family.Id sig) -> AF_ (Family.Id sig)
+invert    :: (HasSignature sig, Ord(Family.Id sig)) => sig -> AF_ (Family.Id sig) -> AF_ (Family.Id sig)
 restrictTo:: Ord id => Set id -> AF_ id -> AF_ id
 domain    :: AF_ id -> Set id
-splitCD   :: (HasSignature sig, id ~ Family.Id sig, Pretty id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
+splitCD   :: (HasSignature sig, id ~ Family.Id sig, Pretty id, Ord id) =>  sig -> AF_ id -> (AF_ id, AF_ id)
 combine :: (Failure FailedToCombineAFs m, Ord id) => AF_ id -> AF_ id -> m (AF_ id)
 
 cut id i (AF m)  = case Map.lookup id m of

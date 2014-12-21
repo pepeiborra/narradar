@@ -47,6 +47,8 @@ data MkRewriting strat = MkRewriting (Strategy strat) Minimality deriving (Eq, O
 type Rewriting  = MkRewriting Standard
 type IRewriting = MkRewriting Innermost
 
+instance HasSignature (MkRewriting strat) where getSignature _ = mempty
+
 rewriting  = MkRewriting Standard  M
 irewriting = MkRewriting Innermost M
 
@@ -59,6 +61,9 @@ instance IsProblem (MkRewriting st) where
                                   deriving (Eq, Ord, Show)
   getFramework (RewritingProblem _ _ s m) = MkRewriting s m
   getR (RewritingProblem r _ _ _) = r
+
+instance HasSignature a => HasSignature (Problem (MkRewriting st) a) where
+  getSignature p = getSignature (rr p) `mappend` getSignature (dd p)
 
 instance IsDPProblem (MkRewriting st) where
   getP   (RewritingProblem _ p _ _) = p

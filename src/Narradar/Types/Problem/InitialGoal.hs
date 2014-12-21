@@ -94,6 +94,12 @@ instance (Show p, Show (Term t Var), Show (GoalTerm t)) => Show (InitialGoal t p
 instance Functor (InitialGoal t) where
     fmap f (InitialGoal goals dg p) = InitialGoal goals dg (f p)
 
+instance FrameworkT t => HasSignature(InitialGoal t p) where
+  getSignature = getSignature . dgraph_PType
+
+type instance Family.Id (InitialGoal t p) = Family.Id t
+type instance Family.Id (DGraphF t) = Family.Id t
+
 mapInitialGoal :: forall t t' p .
                   ( Functor t, Functor t', Foldable t', HasId1 t'
                   , Ord (Term t Var), Ord(Term t' Var)
@@ -312,8 +318,12 @@ data DGraphF a = DGraph {pairs    :: NarradarTRSF a            -- ^ A DPTRS stor
 
   deriving (Generic)
 
-deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => Eq  (DGraphF a)
-deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId(Family.Id a)) => Ord (DGraphF a)
+instance ( HasSignature a, Ord a, Observable a, HasId a, NFData (Family.Var a), NFData a
+         , FrameworkId (Family.Id a)) => HasSignature (DGraphF a) where
+  getSignature DGraph{pairs} = getSignature pairs
+
+deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId id, Ord id, id ~ Family.Id a) => Eq  (DGraphF a)
+deriving instance (HasId a, HasSignature a, Ord a, RemovePrologId id, Ord id, id ~ Family.Id a) => Ord (DGraphF a)
 deriving instance Eq  a => Eq  (SCC a)
 deriving instance Ord a => Ord (SCC a)
 

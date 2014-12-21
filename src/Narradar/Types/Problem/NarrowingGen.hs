@@ -160,6 +160,9 @@ deriving instance (Eq (Problem p trs)) => Eq (Problem (MkNarrowingGen p) trs)
 deriving instance (Ord (Problem p trs)) => Ord (Problem (MkNarrowingGen p) trs)
 deriving instance (Show (Problem p trs)) => Show (Problem (MkNarrowingGen p) trs)
 
+instance HasSignature (Problem b a) => HasSignature (Problem (MkNarrowingGen b) a) where
+  getSignature = getSignature . baseProblem
+
 -- Functor
 
 instance Functor (Problem p) => Functor (Problem (MkNarrowingGen p)) where fmap f (NarrowingGenProblem p) = NarrowingGenProblem (fmap f p)

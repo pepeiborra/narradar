@@ -64,7 +64,6 @@ instance MkProblem b trs => MkProblem (MkNarrowing b) trs where
   mapRO o f (NarrowingProblem b) = NarrowingProblem (mapRO o f b)
   setR_uncheckedO o rr p = p{baseProblem = setR_uncheckedO o rr (baseProblem p)}
 
-
 instance (MkProblem (MkNarrowing b) trs, MkDPProblem b trs) => MkDPProblem (MkNarrowing b) trs where
   mkDPProblemO o (MkNarrowing b) r p = NarrowingProblem $ mkDPProblemO o b r p
   mapPO o f (NarrowingProblem b) = NarrowingProblem (mapPO o f b)
@@ -73,6 +72,9 @@ instance (MkProblem (MkNarrowing b) trs, MkDPProblem b trs) => MkDPProblem (MkNa
 deriving instance (Eq (Problem p trs)) => Eq (Problem (MkNarrowing p) trs)
 deriving instance (Ord (Problem p trs)) => Ord (Problem (MkNarrowing p) trs)
 deriving instance (Show (Problem p trs)) => Show (Problem (MkNarrowing p) trs)
+
+instance HasSignature (Problem b a) => HasSignature (Problem (MkNarrowing b) a) where
+  getSignature = getSignature . baseProblem
 
 
 -- Functor

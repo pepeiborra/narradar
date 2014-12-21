@@ -5,6 +5,7 @@ module Common where
 import Control.Monad
 import Narradar
 import Narradar.Processor.RPO
+import Narradar.Processor.WPO
 import Debug.Hoed.Observe
 
 -- Solvers
@@ -36,6 +37,7 @@ rpo  = apply (RPOProc RPOAF  Needed True)
 rpos = apply (RPOProc RPOSAF Needed True)
 lpoO p = gdmobservers "lpo" applyO (RPOProc LPOAF Needed True) p
 
+pol = apply (WPOProc POL Usable)
 
 rpoPlus transform
    = repeatSolver 1 ((lpoO .|. rpos .|. transform) >=> dg)

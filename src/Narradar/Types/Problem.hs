@@ -188,7 +188,7 @@ getPairsDefault ::
     , id ~ Family.Id (f id)
     , MapId f, HasId1 (f id)
     , Foldable (f id), Functor (f id)
-    , DPSymbol id
+    , DPSymbol id, Ord id
     ) =>
     typ -> trs -> [Rule (f id) v]
 getPairsDefault typ trs =
@@ -342,14 +342,17 @@ instance (ApplyAF trs, IsDPProblem p) => ApplyAF (Problem p trs) where
 -- Data.Term framework instances
 -- ------------------------------
 
-getSignatureProblem p = getSignature (getR p) `mappend` getSignature (getP p)
-
 instance (v ~ Family.Var trs, Ord v, IsDPProblem typ, HasRules trs, Foldable (Problem typ)
          ) => HasRules (Problem typ trs) where rules = foldMap rules
 instance (v ~ Family.Var trs, Ord v, GetFresh trs, Traversable (Problem typ)
          ) => GetFresh (Problem typ trs) where getFreshM = getFreshMdefault
 
-instance (HasSignature trs, IsDPProblem typ) => HasSignature (Problem typ trs) where getSignature p = getSignature (getR p) `mappend` getSignature (getP p)
+instance (HasSignature trs
+         ,HasSignature typ, IsDPProblem typ, Family.Id typ ~ Family.Id trs
+         ) => HasSignature (Problem typ trs) where
+  getSignature p = getSignature (getR p) `mappend`
+                   getSignature (getP p) `mappend`
+                   getSignature (getFramework p)
 
 -- ------------------------------------
 -- Dealing with the pairs in a problem

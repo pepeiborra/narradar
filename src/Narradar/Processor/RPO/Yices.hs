@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -44,12 +45,13 @@ import Narradar.Framework
 import Narradar.Framework.Ppr as Ppr
 import Narradar.Constraints.RPO (Status(..))
 import Narradar.Constraints.SAT.YicesFFICircuit
-import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, mapTreeTerms )
+import Narradar.Constraints.SAT.MonadSAT( IsSimple, Decode(..),Tree,printTree, mapTreeTerms )
 import qualified Narradar.Constraints.SAT.MonadSAT as MonadSAT
 import Narradar.Constraints.SAT.RPOAF ( UsableSymbol(..), MkSATSymbol
                                       , RPOSsymbol(..), RPOsymbol(..), LPOSsymbol, LPOsymbol, MPOsymbol
                                       , RPOProblemN, RPOId
-                                      , UsableSymbolRes, rpoAF_DP, rpoAF_NDP, rpoAF_IGDP, rpoAF_IGDP'
+                                      , UsableSymbolRes
+                                      , reductionPair, reductionPairIG, reductionPairN, setupAF
                                       , theSymbolR, isUsable, usableSymbol, filtering, status
                                       , verifyRPOAF, isCorrect
                                       , omegaUsable, omegaNeeded, omegaIG, omegaIGgen, omegaNone)
@@ -65,34 +67,25 @@ import Debug.Hoed.Observe
 -- -------------------
 -- RPO SAT Processor
 -- -------------------
+run  mkS cTyp p rpo = runRpoProc  (unsafePerformIO . solve) mkS cTyp rpo p
+runN mkS cTyp p rpo = runRpoProcN (unsafePerformIO . solve) mkS cTyp rpo p
+omegaFor None = omegaNone
+omegaFor Needed = omegaNeeded
+omegaFor Usable = omegaUsable
 
 instance ( Info info (RPOProof id)
-         , Info info (Problem (Constant Rewriting (TermF id)) (NTRS id))
-         , FrameworkId id, Show id
-         ) => Processor (RPOProc info) (NProblem Rewriting id)
+         , Info info (Problem (Constant (MkRewriting strat) (TermF id)) (NTRS id))
+         , FrameworkId id
+         , FrameworkTyp (MkRewriting strat), Observable strat
+         ) => Processor (RPOProc info) (NProblem (MkRewriting strat) id)
    where
-    type Typ (RPOProc info) (NProblem Rewriting id) = Rewriting
-    type Trs (RPOProc info) (NProblem Rewriting id) = NTRS id
-    applyO _ (RPOProc RPOSAF usablerules allowCol) p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol) p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol) p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol) p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol) p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.mpo)
-
-
-instance (FrameworkId id
-         ,Info info (RPOProof id)
-         ,Info info (Problem (Constant IRewriting (TermF id)) (NTRS id))
-         ) => Processor (RPOProc info) (NProblem IRewriting id)
-   where
-    type Typ (RPOProc info) (NProblem IRewriting id) = IRewriting
-    type Trs (RPOProc info) (NProblem IRewriting id) = NTRS id
-    applyO _ (RPOProc RPOSAF usablerules allowCol)    p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    p = procAF' p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.mpo)
-
+    type Typ (RPOProc info) (NProblem (MkRewriting strat) id) = MkRewriting strat
+    type Trs (RPOProc info) (NProblem (MkRewriting strat) id) = NTRS id
+    applyO _ (RPOProc RPOSAF usablerules allowCol) = run RPOAF.rpos RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc LPOSAF usablerules allowCol) = run RPOAF.lpos RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc RPOAF  usablerules allowCol) = run RPOAF.rpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc LPOAF  usablerules allowCol) = run RPOAF.lpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc MPOAF  usablerules allowCol) = run RPOAF.mpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usablerules))
 
 instance (FrameworkId id
          ,Info info (RPOProof id)
@@ -100,24 +93,24 @@ instance (FrameworkId id
    where
     type Typ (RPOProc info) (NProblem (QRewritingN id) id) = QRewritingN id
     type Trs (RPOProc info) (NProblem (QRewritingN id) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usablerules allowCol)    p = procAF p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    p = procAF p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    p = procAF p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    p = procAF p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    p = procAF p usablerules ((solve.) . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc RPOSAF usablerules allowCol) = run RPOAF.rpos RPOAF.convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc LPOSAF usablerules allowCol) = run RPOAF.lpos RPOAF.convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc RPOAF  usablerules allowCol) = run RPOAF.rpo  RPOAF.convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc LPOAF  usablerules allowCol) = run RPOAF.lpo  RPOAF.convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    applyO _ (RPOProc MPOAF  usablerules allowCol) = run RPOAF.mpo  RPOAF.convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
 
 instance (Info info (RPOProof id)
          ,FrameworkProblemN (InitialGoal (TermF id) Rewriting) id
-         ,DPSymbol id
+         ,DPSymbol id, IsSimple id
          ) => Processor (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id)
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = InitialGoal (TermF id) Rewriting
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules allowCol)    p = procAF_IG p usableRules ((solve.)   . rpoAF_IGDP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    p = procAF_IG p usablerules ((solve.)   . rpoAF_IGDP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    p = procAF_IG p usablerules ((solve.)   . rpoAF_IGDP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    p = procAF_IG p usablerules ((solve.)   . rpoAF_IGDP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    p = procAF_IG p usablerules ((solve.)   . rpoAF_IGDP allowCol RPOAF.mpo)
+    applyO _ (RPOProc RPOSAF _ allowCol) = run RPOAF.rpos RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
+    applyO _ (RPOProc LPOSAF _ allowCol) = run RPOAF.lpos RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
+    applyO _ (RPOProc RPOAF  _ allowCol) = run RPOAF.lpo  RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
+    applyO _ (RPOProc LPOAF  _ allowCol) = run RPOAF.rpo  RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
+    applyO _ (RPOProc MPOAF  _ allowCol) = run RPOAF.mpo  RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
 
 instance (Info info (RPOProof id)
          ,Info info (NProblem IRewriting id)
@@ -129,11 +122,11 @@ instance (Info info (RPOProof id)
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = InitialGoal (TermF id) IRewriting
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules allowCol)    = liftProblem $ \p -> procAF' p usableRules ((solve.) . rpoAF_DP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc RPOSAF usableRules allowCol) = liftProblem (run RPOAF.rpos RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc LPOSAF usableRules allowCol) = liftProblem (run RPOAF.lpos RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc RPOAF  usableRules allowCol) = liftProblem (run RPOAF.rpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc LPOAF  usableRules allowCol) = liftProblem (run RPOAF.lpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc MPOAF  usableRules allowCol) = liftProblem (run RPOAF.mpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
 
 instance (FrameworkId id, DPSymbol id, GenSymbol id
          ,Pretty (TermN id)
@@ -142,11 +135,11 @@ instance (FrameworkId id, DPSymbol id, GenSymbol id
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = InitialGoal (TermF id) NarrowingGen
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules allowCol)    p = procAF_IGgen p usableRules ((solve.)   . rpoAF_IGDP' allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    p = procAF_IGgen p usablerules ((solve.)   . rpoAF_IGDP' allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    p = procAF_IGgen p usablerules ((solve.)   . rpoAF_IGDP' allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    p = procAF_IGgen p usablerules ((solve.)   . rpoAF_IGDP' allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    p = procAF_IGgen p usablerules ((solve.)   . rpoAF_IGDP' allowCol RPOAF.mpo)
+    applyO _ (RPOProc RPOSAF _ allowCol) = run RPOAF.rpos RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
+    applyO _ (RPOProc LPOSAF _ allowCol) = run RPOAF.lpos RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
+    applyO _ (RPOProc RPOAF  _ allowCol) = run RPOAF.lpo  RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
+    applyO _ (RPOProc LPOAF  _ allowCol) = run RPOAF.rpo  RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
+    applyO _ (RPOProc MPOAF  _ allowCol) = run RPOAF.mpo  RPOAF.convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
 
 instance (Info info (RPOProof id)
          ,Info info (NProblem INarrowingGen id)
@@ -159,11 +152,12 @@ instance (Info info (RPOProof id)
    where
     type Typ (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = InitialGoal (TermF id) INarrowingGen
     type Trs (RPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = NTRS id
-    applyO _ (RPOProc RPOSAF usableRules allowCol)    = liftProblem $ \p -> procAF' p usableRules ((solve.)   . rpoAF_DP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    = liftProblem $ \p -> procAF' p usablerules ((solve.)   . rpoAF_DP allowCol RPOAF.mpo)
+    applyO _ (RPOProc RPOSAF usableRules allowCol) = liftProblem (run RPOAF.rpos RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc LPOSAF usableRules allowCol) = liftProblem (run RPOAF.lpos RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc RPOAF  usableRules allowCol) = liftProblem (run RPOAF.rpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc LPOAF  usableRules allowCol) = liftProblem (run RPOAF.lpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    applyO _ (RPOProc MPOAF  usableRules allowCol) = liftProblem (run RPOAF.mpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+
 
 instance (Info info (RPOProof id)
          ,FrameworkId id
@@ -171,12 +165,12 @@ instance (Info info (RPOProof id)
   where
     type Typ (RPOProc info) (NProblem Narrowing id) = Narrowing
     type Trs (RPOProc info) (NProblem Narrowing id) = NTRS id
-   -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
-    applyO _ (RPOProc RPOSAF usableRules allowCol)    p = procNAF p usableRules ((solve.)   . rpoAF_NDP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.mpo)
+   -- FIXME: I don't see why we cannot have collapsing filterings here. Enabled, but not tested
+    applyO _ (RPOProc RPOSAF usableRules allowCol) = runN RPOAF.rpos RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc LPOSAF usableRules allowCol) = runN RPOAF.lpos RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc RPOAF  usableRules allowCol) = runN RPOAF.rpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc LPOAF  usableRules allowCol) = runN RPOAF.lpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc MPOAF  usableRules allowCol) = runN RPOAF.mpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
 
 instance (FrameworkId  id
          ,Info info (RPOProof id)
@@ -184,9 +178,11 @@ instance (FrameworkId  id
   where
     type Typ (RPOProc info) (NProblem CNarrowing id) = CNarrowing
     type Trs (RPOProc info) (NProblem CNarrowing id) = NTRS id
-   -- FIXME: I don't see why we cannot have collapsing filterings here. Enable and test
-    applyO _ (RPOProc RPOSAF usableRules allowCol)    p = procNAF p usableRules ((solve.)   . rpoAF_NDP allowCol RPOAF.rpos)
-    applyO _ (RPOProc RPOAF  usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.rpo)
-    applyO _ (RPOProc LPOSAF usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.lpos)
-    applyO _ (RPOProc LPOAF  usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.lpo)
-    applyO _ (RPOProc MPOAF  usablerules allowCol)    p = procNAF p usablerules ((solve.)   . rpoAF_NDP allowCol RPOAF.mpo)
+   -- FIXME: I don't see why we cannot have collapsing filterings here. Enabled, but not tested
+    applyO _ (RPOProc RPOSAF usableRules allowCol) = runN RPOAF.rpos RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc LPOSAF usableRules allowCol) = runN RPOAF.lpos RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc RPOAF  usableRules allowCol) = runN RPOAF.rpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc LPOAF  usableRules allowCol) = runN RPOAF.lpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+    applyO _ (RPOProc MPOAF  usableRules allowCol) = runN RPOAF.mpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
+
+

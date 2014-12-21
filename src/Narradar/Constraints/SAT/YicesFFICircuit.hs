@@ -40,7 +40,7 @@ import System.IO
 import Prelude hiding( not, and, or, (>) )
 
 import Narradar.Constraints.RPO (Status(..))
-import Narradar.Constraints.SAT.RPOAF.Symbols
+import Narradar.Constraints.SAT.RPOAF
 import Narradar.Constraints.SAT.MonadSAT        hiding (and,or)
 import Narradar.Utils (debug, debug', on, firstM)
 import Narradar.Framework (TimeoutException(..))
@@ -72,12 +72,14 @@ import Funsat.ECircuit ( Circuit(..)
 import Funsat.TermCircuit( TermCircuit(..)
                          , AssertCircuit(..)
                          , OneCircuit(..)
-                         , HasStatus(..)
-                         , HasPrecedence(..)
-                         , HasFiltering(..)
                          , oneExist
                          , runEvalM)
-import Funsat.TermCircuit.Ext ( TermExtCircuit(..) )
+import Funsat.TermCircuit.Ext ( TermExtCircuit(..)
+                              , HasStatus(..)
+                              , HasPrecedence(..)
+                              , HasFiltering(..)
+                              , IsSimple(..)
+                              )
 import Funsat.TermCircuit.Symbols (Natural(..))
 import Funsat.TermCircuit.RPO as RPO
 
@@ -101,7 +103,7 @@ newtype YicesSource id var = YicesSource { unYicesSource :: RWST Context () (YSt
 
 type instance Family.Id    (YicesSource id) = id
 type instance Family.TermF (YicesSource id) = TermF id
-type instance Family.Var   (YicesSource id) = Narradar.Var
+type instance Family.Var   (YicesSource id var) = var
 
 runYicesSource ctx stY (YicesSource y) = do
   (a, stY',()) <- runRWST y ctx stY
@@ -195,6 +197,10 @@ instance NatCircuit (YicesSource id) where
   gt = liftY2 mkGt
   eq = liftY2 mkEq
   lt = liftY2 mkLt
+  (+#) = liftY2 $ \ctx a b -> mkAdd ctx [a,b]
+  (-#) = liftY2 $ \ctx a b -> mkSub ctx [a,b]
+  (*#) = liftY2 $ \ctx a b -> mkMul ctx [a,b]
+  fromInteger i = liftY0 (`mkNum` fromIntegral i)
 
 instance OneCircuit (YicesSource id) where
 --  one = oneExist
@@ -239,7 +245,7 @@ instance AssertCircuit (YicesSource id) where
       unYicesSource c
 
 instance (Hashable id, Pretty id, Ord id, TermExtCircuit (YicesSource id) id
-         ,RPOCircuit.IsSimple id
+         ,IsSimple id, HasFiltering id, HasLexMul id, HasPrecedence id, HasStatus id
          ) =>
     TermCircuit (YicesSource id) where
  type CoTerm_ (YicesSource id) (TermF id) tv v = (tv ~ Narradar.Var)

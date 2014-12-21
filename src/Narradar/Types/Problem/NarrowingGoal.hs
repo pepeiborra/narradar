@@ -52,12 +52,18 @@ type CNarrowingGoal id = MkNarrowingGoal id IRewriting
 data MkNarrowingGoal id p = forall heu . PolyHeuristic heu id =>
                           NarrowingGoal (Goal id) (AF_ id) (MkHeu heu) p
 
+--instance (HasSignature p) => HasSignature (MkNarrowingGoal id p) where getSignature (NarrowingGoal _ _ _ p) = getSignature p
+
 instance (Ord id, IsProblem p) => IsProblem (MkNarrowingGoal id p)  where
   data Problem (MkNarrowingGoal id p) a = NarrowingGoalProblem {goal::Goal id, pi::AF_ id, baseProblem::Problem p a}
   getFramework (NarrowingGoalProblem g af p) = NarrowingGoal g af bestHeu (getFramework p)
   getR   (NarrowingGoalProblem _ _ p) = getR p
 
-instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.Id trs) =>
+instance ( Ord id
+         , IsDPProblem p, HasSignature (Problem p trs)
+         , id ~ Family.Id trs
+         , MkProblem p trs
+         ) =>
     MkProblem (MkNarrowingGoal id p) trs where
   mkProblem (NarrowingGoal g af _ base) rr
       = NarrowingGoalProblem g (af `mappend` AF.init p) p where p = mkProblem base rr
@@ -66,7 +72,10 @@ instance (Ord id, IsDPProblem p, MkProblem p trs, HasSignature trs, id ~ Family.
 instance (Ord id, IsDPProblem p) => IsDPProblem (MkNarrowingGoal id p) where
   getP   (NarrowingGoalProblem _ _ p) = getP p
 
-instance (id ~ Family.Id trs, HasSignature trs, Ord id, MkDPProblem p trs) =>
+instance ( id ~ Family.Id trs
+         , HasSignature(Problem p trs)
+         , Ord id
+         , MkDPProblem p trs) =>
     MkDPProblem (MkNarrowingGoal id p) trs where
   mapPO o f (NarrowingGoalProblem g af p) = NarrowingGoalProblem g af (mapPO o f p)
   mkDPProblemO o (NarrowingGoal g af _ base) rr dp = NarrowingGoalProblem g (af `mappend` AF.init p) p
@@ -106,6 +115,8 @@ instance FrameworkExtension (MkNarrowingGoal id) where
   liftFramework f (NarrowingGoal g af heu p) = NarrowingGoal g af heu (f p)
   liftProcessorS = liftProcessorSdefault
 
+instance HasSignature (Problem p trs) => HasSignature (Problem (MkNarrowingGoal id p) trs) where
+  getSignature = getSignature . getBaseProblem
 
 -- Output
 

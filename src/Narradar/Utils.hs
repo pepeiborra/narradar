@@ -58,7 +58,8 @@ import qualified Data.Sequence                        as Seq
 import           Data.Strict                          (Pair(..), (:!:))
 import           Data.Suitable
 import           Data.Traversable
-import           Data.Typeable
+import           Data.Typeable                        (Typeable, typeOf, cast)
+import           Data.Proxy
 import           Language.Prolog.Representation       as Prolog
 
 import           System.IO
@@ -105,8 +106,8 @@ echo' = hPutStr stderr
 isTerm1 :: Term (f id) v -> Term (f id) v
 isTerm1 = id
 
-data Proxy a
-proxy = undefined
+proxy :: a -> Proxy a
+proxy _ = Proxy
 
 -- ---------------
 -- Type wrappers
