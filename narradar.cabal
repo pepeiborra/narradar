@@ -177,7 +177,7 @@ Library
                   hashmap,
                   suitable,
                   bifunctors,
-                  Hoed, hoed-extras,
+                  hoed-mini, hoed-extras,
                   prelude-extras,
                   constrained-normal,
                   constraints,

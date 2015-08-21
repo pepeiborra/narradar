@@ -27,7 +27,7 @@
 	url = git://github.com/pepeiborra/control-monad-free.git
 [submodule "submodules/hoed"]
 	path = submodules/hoed
-	url = git://github.com/pepeiborra/hoed
+	url = git://github.com/pepeiborra/hoed-mini
 [submodule "submodules/hoed-extras"]
 	path = submodules/hoed-extras
 	url = git://github.com/pepeiborra/hoed-extras
