@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Narradar.Constraints.Confluence where
 
+import Control.Monad.Free.Extras
 import Data.Foldable (Foldable)
 import Data.Maybe (catMaybes, maybeToList, listToMaybe)
 import Data.Term (equiv)
@@ -22,7 +23,7 @@ isAlmostOrthogonal :: ( HasRules trs, GetVars trs
                       , Eq (Term t v)
                       , Unify t
                       , Rename v, Enum v, Ord v
-                      , Observable v, Observable(Term t v)
+                      , Observable v, Observable1 t
                       ) => trs -> Bool
 isAlmostOrthogonal p = isLeftLinear p && all isOverlay cps && and[ r1==r2 | (p,r1,r2) <- cps]
     where cps = criticalPairs p
@@ -39,7 +40,7 @@ locallyConfluent :: ( HasRules trs, GetVars trs
                     , Enum v, Ord v, Rename v
                     , Family.Rule trs ~ RuleF (Term t v)
                     , Family.Var trs ~ v
-                    , Observable v, Observable1 t, Observable(Term t v)
+                    , Observable v, Observable1 t
                     ) => trs -> Bool
 locallyConfluent p = (all joinable . criticalPairs) p
   where
@@ -72,7 +73,8 @@ criticalPairsOf x = criticalPairsOfGen subterms x
 
 criticalPairs :: ( HasRules trs, Rule t v ~ Family.Rule trs
                  , v ~ Family.Var trs, GetVars trs, Enum v, Ord v, Rename v, Unify t
-                 , Observable v, Observable(Term t v)) =>
+                 , Observable v, Observable1 t
+                 ) =>
                  trs -> [(Position, Term t v, Term t v)]
 criticalPairs trs
    | null (rules trs) = []

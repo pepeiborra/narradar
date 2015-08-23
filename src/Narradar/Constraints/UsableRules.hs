@@ -14,6 +14,7 @@ module Narradar.Constraints.UsableRules where
 import Control.Applicative
 import Control.Exception
 import Control.Monad
+import Control.Monad.Free.Extras
 import Data.Foldable as F (toList,foldMap)
 import Data.Monoid
 import qualified Data.Set as Set

@@ -13,6 +13,7 @@ module Narradar.Constraints.Unify
 import Control.Arrow
 import Control.Exception (assert)
 import Control.Monad (liftM)
+import Control.Monad.Free.Extras
 import Control.Monad.ConstrainedNormal
 import Data.Constraint (Dict(..), (:-)(..))
 import Data.Foldable (Foldable, toList)
@@ -88,7 +89,7 @@ runMEnv = liftM(second liftNF) . Term.runMEnv
 unifies' x y = isJust (unify' x y)
 matches' x y = isJust (match' x y)
 
-unify :: (Ord v, Unify t, Observable(Term t v), Observable v) => Term t v -> Term t v -> Maybe(Substitution t v)
+unify :: (Ord v, Unify t, Observable1 t, Observable v) => Term t v -> Term t v -> Maybe(Substitution t v)
 unify t u = fmap liftNF (Term.unify t u)
 match :: (Ord v, Observable(Term t v), Observable v, Traversable t, Match t) => Term t v -> Term t v -> Maybe(Substitution t v)
 match t u = fmap liftNF (Term.match t u)

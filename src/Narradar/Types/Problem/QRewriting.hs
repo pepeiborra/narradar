@@ -34,6 +34,7 @@ import Control.Applicative.Compose
 import Control.DeepSeq
 import Control.DeepSeq.Extras
 import Control.Monad
+import Control.Monad.Free.Extras
 import Control.Exception (assert)
 import Data.Coerce
 import Data.Constraint
@@ -226,12 +227,12 @@ isQValid   (QRewritingProblem trs _ q _ _) = qCondition' q (rules trs)
 
 
 isQConfluent :: forall t.
-                (Unify t, Eq1 t, Observable(Term t Var)
+                (Unify t, Eq1 t, Observable1 t
                 ) => QSet t -> [Rule t Var] -> Bool
 isQConfluent = isQConfluentO nilObserver
 
 isQConfluentO :: forall t.
-                (Unify t, Observable (Term t Var), Eq1 t
+                (Unify t, Observable1 t, Eq1 t
                 ) => Observer -> QSet t -> [Rule t Var] -> Bool
 isQConfluentO (O o oo) QSet{terms=q} rr = null $ do
   r1 <- rr
