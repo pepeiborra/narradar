@@ -45,7 +45,7 @@
 	url = git://github.com/pepeiborra/funsat
 [submodule "submodules/funsat-rpo"]
 	path = submodules/funsat-rpo
-	url = git://github.com/pepeiborra/funsat-rpo
+	url = git@github.com:pepeiborra/funsat-rpo.git
 [submodule "submodules/yices"]
 	path = submodules/yices
 	url = git://github.com/pepeiborra/yices-0.0.0.12
