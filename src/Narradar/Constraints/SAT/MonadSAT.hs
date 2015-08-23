@@ -49,6 +49,7 @@ import           Funsat.ECircuit                     ( Circuit(true,false,input,
                                                      , ECircuit(..)
                                                      , NatCircuit(..), Natural(..)
                                                      , ExistCircuit(..)
+                                                     , MaxCircuit(..)
                                                      , castCircuit)
 import qualified Funsat.ECircuit                     as Funsat
 import           Funsat.TermCircuit
@@ -79,7 +80,7 @@ instance Ord id => Monoid (VarMaps expr id var) where
 -- MonadSAT
 -- --------
 
-class (Monad m, Functor m, ECircuit repr, OneCircuit repr, NatCircuit repr, Hashable v, Ord v, Show v) =>
+class (Monad m, Functor m, ECircuit repr, OneCircuit repr, NatCircuit repr, MaxCircuit repr, Hashable v, Ord v, Show v) =>
  MonadSAT repr v m | m -> repr v where
   boolean_ :: String -> m v
   natural_ :: String -> m (Natural v)

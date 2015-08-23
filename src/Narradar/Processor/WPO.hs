@@ -30,7 +30,7 @@ import Narradar.Types as Narradar hiding (Var)
 import qualified Narradar.Types as Narradar
 import qualified Narradar.Types.ArgumentFiltering as AF
 import Narradar.Constraints.SAT.MonadSAT( Decode(..),Tree,printTree, Var)
-import Narradar.Constraints.SAT.Orderings (runR, omegaNone, omegaUsable, omegaNeeded)
+import Narradar.Constraints.SAT.Orderings -- (runR, omegaNone, omegaUsable, omegaNeeded)
 import Narradar.Constraints.SAT.Usable (isUsable, decodeUsable, symbolRes)
 import Narradar.Processor.RPO (UsableRulesMode, omegaFor)
 
@@ -73,7 +73,7 @@ instance Observable a => Observable (WPOProof a) where observer = observer1 ; ob
 wpoFail :: Problem typ (NarradarTRS t Narradar.Var) -> WPOProof (Family.Id t)
 wpoFail _ = WPOFail POL -- TODO
 
-runWpoProc solve mkS cTyp p rpo = f $ solve $ runR mkS cTyp p rpo where
+runWpoProc ob solve mkS cTyp p rpo = f $ solve ob $ runRP ob mkS cTyp p rpo where
   f Nothing = dontKnow (wpoFail p) p
   f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
    = singleP proof p (setP (restrictTRS dps nondec_dps) p) where

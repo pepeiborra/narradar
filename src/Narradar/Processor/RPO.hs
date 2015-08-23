@@ -59,7 +59,7 @@ omegaFor Needed = omegaNeeded
 omegaFor Usable = omegaUsable
 
 runRpoProc x = runRpoProcO nilObserver x
-runRpoProcO (O o oo) solve mkS  cTyp p rpo = f(solve(runR mkS cTyp p rpo)) where
+runRpoProcO ob@(O o oo) solve mkS  cTyp p rpo = f(solve ob (runRP ob mkS cTyp p rpo)) where
   f Nothing = dontKnow (rpoFail p) p
   f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
    = singleP proof p (setP (restrictTRS dps nondec_dps) p) where
@@ -79,7 +79,7 @@ runRpoProcO (O o oo) solve mkS  cTyp p rpo = f(solve(runR mkS cTyp p rpo)) where
 -- We do not just remove the strictly decreasing pairs,
 -- Instead we create two problems, one without the decreasing pairs and one
 -- without the ground right hand sides
-runRpoProcN solve mkS cTyp p rpo = f $ solve $ runR mkS cTyp p rpo where
+runRpoProcN ob solve mkS cTyp p rpo = f $ solve ob $ runRP ob mkS cTyp p rpo where
  f Nothing = dontKnow (rpoFail p) p
  f (Just (((non_dec_dps, non_rhsground_dps),ec), bienv, symbols_raw)) =
     let proof         = RPOAFExtraProof decreasingDps usableRules (symbolRes <$> symbols) ec
