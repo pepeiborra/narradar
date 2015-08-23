@@ -20,7 +20,7 @@ module Narradar.Framework (
 import Control.Exception (Exception)
 import Control.Monad.Free
 import Control.Monad.Identity
-import Control.DeepSeq (NFData)
+import Control.DeepSeq (NFData(..))
 import Control.DeepSeq.Extras (NFData1)
 import Data.Foldable (toList, Foldable, foldMap)
 import Data.Functor.Constant
@@ -118,6 +118,8 @@ data Strategy st where
     Standard  :: Strategy Standard
     Innermost :: Strategy Innermost
   deriving Typeable
+
+instance NFData (Strategy st) where rnf _ = ()
 
 class IsDPProblem typ => HasStrategy typ st | typ -> st where
   getStrategy :: typ -> Strategy st

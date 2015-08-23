@@ -153,6 +153,7 @@ procLOPSTR09 :: (gid ~ DPIdentifier (GenId id)
                 ,Pretty (DPIdentifier id)
                 ,FrameworkProblemN base gid
                 ,GetPairs base
+                ,Observable(DPIdentifier id)
                 ) =>
                 NTRS (DPIdentifier id) -> NTRS (DPIdentifier id) -> DPIdentifier id -> [Mode] -> base ->
                 NProblem (Relative (NTRS gid) (InitialGoal (TermF gid) (MkNarrowingGen base))) gid

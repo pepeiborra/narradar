@@ -94,7 +94,7 @@ mkNewProblemO ::
     , GetPairs typ
     , MkDPProblem typ (NTRS (DPIdentifier id))
     , RemovePrologId id, Pretty(DPIdentifier id)
-    , Observable typ, Observable1 (Problem typ)
+    , Observable typ, Observable1 (Problem typ), Observable (DPIdentifier id)
     ) => Observer -> typ -> trs -> NProblem typ (DPIdentifier id)
 mkNewProblemO (O o oo) typ trs = oo "mkDPProblem" mkDPProblemO typ (tRS rr') (tRS pairs) where
 --   rr' :: [Rule (TermF (DPIdentifier id)) Var]

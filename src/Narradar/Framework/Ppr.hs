@@ -1,7 +1,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE OverlappingInstances, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE OverlappingInstances, TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 
 module Narradar.Framework.Ppr ( module Narradar.Framework.Ppr
                               , module MuTerm.Framework.Output

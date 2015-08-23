@@ -14,7 +14,7 @@ import Control.Monad.Writer
 class Monad m => MonadSupply i m | m -> i where next :: m i; current :: m i
 
 newtype Supply i a = Supply {runSupply_ :: State [i] a}
-  deriving (Functor, Monad, MonadState [i])
+  deriving (Applicative, Functor, Monad, MonadState [i])
 {-
 instance MonadSupply e (State [e]) where
   current = head <$> get

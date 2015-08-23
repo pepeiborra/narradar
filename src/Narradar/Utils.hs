@@ -465,8 +465,8 @@ deriving instance Typeable EqModulo
 -- bogus instance for NF, as we cannot possibly force it
 instance NFData (t a) => NFData (NF c t a) where rnf (FMap f t) = ()
 deriving instance NFData a => NFData (EqModulo a)
+
 -- ----------------------
 -- Ord instance for Doc
 -- ----------------------
-instance Eq Doc where a == b = show a == show b
 instance Ord Doc where compare a b = compare (show a) (show b)

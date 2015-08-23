@@ -1143,7 +1143,7 @@ prologMState db af = PrologMState (UList.fromUniqueList (second EqModulo <$> kk0
 
 --newtype PrologM id v a = PrologM {unPrologM:: StateT (PrologMState id v) (StateT [v]  (AsMonad Set)) a}
 newtype PrologM id v a = PrologM {unPrologM:: RWST String [String] (PrologMState id v) (MVariantT v Identity) a}
-  deriving (Functor, Monad, MonadWriter [String])
+  deriving (Functor, Applicative, Monad, MonadWriter [String])
 
 type instance Family.Var (PrologM id v) = v
 

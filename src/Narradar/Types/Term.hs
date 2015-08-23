@@ -241,4 +241,4 @@ instance Observable1 ArityId
 instance Observable a => Observable (ArityId a) where
   observer = observer1 ; observers = observers1
 
-instance (Pretty(TermN id)) => Observable (TermN id) where observer t = t `seq` send (show$ pPrint t) (return t)
+--instance (Pretty(TermN id)) => Observable (TermN id) where observer t = t `seq` send (show$ pPrint t) (return t)
