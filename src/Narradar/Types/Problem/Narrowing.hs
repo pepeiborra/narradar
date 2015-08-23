@@ -173,7 +173,3 @@ instance Observable st => Observable (MkNarrowing st) where
 
 instance (Observable1 (Problem p)) => Observable1 (Problem (MkNarrowing p)) where
   observer1 (NarrowingProblem p) = send "NarrowingProblem" (return NarrowingProblem << p)
-
-instance (Observable a, Observable1(Problem p)) => Observable (Problem (MkNarrowing p) a) where
-  observer = observer1
-  observers = observers1

@@ -223,9 +223,7 @@ instance Observable a => Observable (MkNarrowingGen a)
 instance Observable a => Observable (GenId a)
 instance Observable1 (Problem p) => Observable1 (Problem (MkNarrowingGen p)) where
   observer1 (NarrowingGenProblem p0) = send "NarrowingGenProblem" (return NarrowingGenProblem << p0)
-instance (Observable a, Observable1(Problem p)) => Observable(Problem (MkNarrowingGen p) a) where
-  observer = observer1
-  observers = observers1
+
 -- -------------------
 -- Support functions
 -- -------------------

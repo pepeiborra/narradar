@@ -636,9 +636,6 @@ instance (Observable a, Observable (GoalTerm t), Observable(Term t Var)) => Obse
 instance (Observable1 (Problem p), Observable1 t)  => Observable1 (Problem (InitialGoal t p)) where
   observer1 (InitialGoalProblem goals dgraph p) =
     send "InitialGoalProblem" (return InitialGoalProblem << goals << dgraph << p)
-instance (Observable1 (Problem p), Observable1 t, Observable a)  => Observable (Problem (InitialGoal t p) a) where
-  observer = observer1
-  observers = observers1
 
 instance (Observable c, Observable a) => Observable (CAGoalF c a)
 
