@@ -138,6 +138,7 @@ instance (Family.Rule trs ~ Rule t v
           (_,Just (_,a,b),_,_)  -> "critical pair " ++ show(pPrint (a,b)) ++ " is not trivial"
           (_,_,False,_) -> "NF(R) \\notsubseteq NF(Q)"
           (_,_,_,False) -> "lack of minimality"
+          _ -> "No improvement"
 
 -- Adaptation of Theorem 3.14 in Rene's thesis
 instance (Family.Rule trs ~ Rule t v
