@@ -76,6 +76,8 @@ narradarMain :: forall mp.
                  (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (NonDP Rewriting ) (NTRS Id))
+                 ,Dispatch (Problem (NonDP IRewriting) (NTRS Id))
                  ,Dispatch (Problem (QRewriting  (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
@@ -86,6 +88,8 @@ narradarMain :: forall mp.
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) IRewriting))  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) IRewriting)  (NTRS Id))
+                 ,Dispatch (Problem (NonDP(Relative  (NTRS Id) Rewriting ))  (NTRS Id))
+                 ,Dispatch (Problem (NonDP(Relative  (NTRS Id) IRewriting))  (NTRS Id))
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
                  ,Dispatch PrologProblem
@@ -102,6 +106,8 @@ narradarMain' :: forall mp.
                  ,Dispatch (Problem (QRewriting (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
+                 ,Dispatch (Problem (NonDP Rewriting ) (NTRS Id))
+                 ,Dispatch (Problem (NonDP IRewriting) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) IRewriting) (NTRS Id))
                  ,Dispatch (Problem (InitialGoal (TermF Id) (QRewriting (TermF Id))) (NTRS Id))
@@ -111,6 +117,8 @@ narradarMain' :: forall mp.
                  ,Dispatch (Problem (Relative  (NTRS Id) (InitialGoal (TermF Id) IRewriting))  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) Rewriting)  (NTRS Id))
                  ,Dispatch (Problem (Relative  (NTRS Id) IRewriting)  (NTRS Id))
+                 ,Dispatch (Problem (NonDP (Relative  (NTRS Id) IRewriting)) (NTRS Id))
+                 ,Dispatch (Problem (NonDP (Relative  (NTRS Id) Rewriting))  (NTRS Id))
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
                  ,Dispatch PrologProblem

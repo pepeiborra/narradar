@@ -16,6 +16,7 @@ module Narradar.Types ( module Narradar.Framework
                       , module Narradar.Types
                       , module Narradar.Types.TRS
                       , module Narradar.Types.Problem
+                      , module Narradar.Types.Problem.NonDP
                       , module Narradar.Types.Problem.Rewriting
                       , module Narradar.Types.Problem.QRewriting
                       , module Narradar.Types.Problem.Narrowing
@@ -73,6 +74,7 @@ import           Narradar.Types.PrologIdentifiers
 import           Narradar.Types.Labellings
 import           Narradar.Types.Goal
 import           Narradar.Types.Problem
+import           Narradar.Types.Problem.NonDP
 import           Narradar.Types.Problem.Rewriting     hiding (m,dd,rr)
 import           Narradar.Types.Problem.QRewriting    hiding (m,dd,rr)
 import           Narradar.Types.Problem.Narrowing     hiding (baseProblem)
@@ -176,11 +178,15 @@ mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
 mkDispatcher f =  f >=> final
 
 data AProblem t trs where
+    ANonDPRewritingProblem         :: Problem (NonDP  Rewriting) trs -> AProblem t trs
+    ANonDPIRewritingProblem        :: Problem (NonDP IRewriting) trs -> AProblem t trs
     ARewritingProblem              :: Problem Rewriting trs  -> AProblem t trs
     AIRewritingProblem             :: Problem IRewriting trs -> AProblem t trs
     AQRewritingProblem             :: Problem (QRewriting (Family.TermF trs)) trs -> AProblem t trs
     ANarrowingProblem              :: Problem Narrowing trs  -> AProblem t trs
     ACNarrowingProblem             :: Problem CNarrowing trs -> AProblem t trs
+    ANonDPRelativeRewritingProblem :: Problem (NonDP(Relative trs Rewriting)) trs -> AProblem t trs
+    ANonDPRelativeIRewritingProblem:: Problem (NonDP(Relative trs IRewriting)) trs -> AProblem t trs
     ARelativeRewritingProblem      :: Problem (Relative trs Rewriting) trs -> AProblem t trs
     ARelativeIRewritingProblem     :: Problem (Relative trs IRewriting) trs -> AProblem t trs
     AGoalRelativeRewritingProblem  :: Problem (Relative trs (InitialGoal t Rewriting)) trs  -> AProblem t trs
@@ -193,8 +199,9 @@ data AProblem t trs where
 --    AGoalCNarrowingProblem         :: Problem (CNarrowingGoal (TermId t)) trs -> AProblem t trs
     APrologProblem                 :: PrologProblem -> AProblem t trs
 --    AGoalNarrowingRelativeRewritingProblem :: Problem (Relative trs NarrowingGoal (TermId t)) trs -> AProblem t trs
+    deriving (Generic)
 
-instance Observable1 (AProblem t) where observer1 = observeOpaque "A problem"
+instance Observable (AProblem t v) where observer = observeOpaque "A problem"
 
 pprAProblem (ARewritingProblem  p) = pprTPDB $ setP (tRS []) p
 pprAProblem (AIRewritingProblem p) = pprTPDB $ setP (tRS []) p
@@ -203,21 +210,26 @@ pprAProblem (ARelativeIRewritingProblem p) = pprTPDB $ setP (tRS []) p
 
 dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
                     ,Dispatch (Problem Rewriting  trs)
-                    ,Dispatch (Problem (QRewriting (Family.TermF trs))  trs)
                     ,Dispatch (Problem IRewriting trs)
+                    ,Dispatch (Problem (NonDP Rewriting)  trs)
+                    ,Dispatch (Problem (NonDP IRewriting)  trs)
+                    ,Dispatch (Problem (QRewriting (Family.TermF trs))  trs)
                     ,Dispatch (Problem (InitialGoal t Rewriting) trs)
                     ,Dispatch (Problem (InitialGoal t IRewriting) trs)
                     ,Dispatch (Problem (Relative  trs (InitialGoal t Rewriting))  trs)
                     ,Dispatch (Problem (Relative  trs (InitialGoal t IRewriting))  trs)
                     ,Dispatch (Problem (Relative  trs Rewriting)  trs)
                     ,Dispatch (Problem (Relative  trs IRewriting)  trs)
+                    ,Dispatch (Problem (NonDP (Relative  trs Rewriting))  trs)
+                    ,Dispatch (Problem (NonDP (Relative  trs IRewriting)) trs)
                     ,Dispatch (Problem Narrowing  trs)
                     ,Dispatch (Problem CNarrowing trs)
                     ,Dispatch (Problem (InitialGoal t Narrowing) trs)
                     ,Dispatch (Problem (InitialGoal t INarrowing) trs)
                     ,Dispatch PrologProblem
                     ) => AProblem t trs -> Proof PrettyDotF m Final
-
+dispatchAProblem (ANonDPRewritingProblem p)    = dispatch p
+dispatchAProblem (ANonDPIRewritingProblem p)   = dispatch p
 dispatchAProblem (ARewritingProblem p)         = dispatch p
 dispatchAProblem (AIRewritingProblem p)        = dispatch p
 dispatchAProblem (AQRewritingProblem p)        = dispatch p
@@ -225,6 +237,8 @@ dispatchAProblem (ANarrowingProblem p)         = dispatch p
 dispatchAProblem (ACNarrowingProblem p)        = dispatch p
 dispatchAProblem (ARelativeRewritingProblem p) = dispatch p
 dispatchAProblem (ARelativeIRewritingProblem p)= dispatch p
+dispatchAProblem (ANonDPRelativeRewritingProblem p) = dispatch p
+dispatchAProblem (ANonDPRelativeIRewritingProblem p)= dispatch p
 dispatchAProblem (AGoalRewritingProblem p)     = dispatch p
 dispatchAProblem (AGoalIRewritingProblem p)    = dispatch p
 dispatchAProblem (AGoalNarrowingProblem p)     = dispatch p
@@ -304,7 +318,7 @@ mkAProblem (O o oo) r minimality r0_ dps strategies =
 
   in
   case (r0, dps, strategies) of
-    ([], Nothing, [])  -> return $ ARewritingProblem (oo "mkNewProblem" mkNewProblemO rewriting r)
+    ([], Nothing, [])  -> return $ ANonDPRewritingProblem (oo "mkNewProblem" mkNewProblemO (NonDP rewriting) r)
     ([], Nothing, TRS.Narrowing:_)        -> return $ ANarrowingProblem (oo "mkNewProblem" mkNewProblemO narrowing r)
     ([], Nothing, ConstructorNarrowing:_) -> return $ ACNarrowingProblem (oo "mkNewProblem" mkNewProblemO cnarrowing r)
     ([], Nothing, InnerMost:TRS.Narrowing:_)  -> return $ ACNarrowingProblem (oo "mkNewProblem" mkNewProblemO cnarrowing r)
@@ -312,8 +326,7 @@ mkAProblem (O o oo) r minimality r0_ dps strategies =
     ([], Nothing, [GoalStrategy g])
       -> return $ AGoalRewritingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [mkGoal g] rewriting) r)
 
-    ([], Nothing, InnerMost:_)
-        -> return $ AIRewritingProblem (oo "mkNewProblem" mkNewProblemO irewriting r)
+    ([], Nothing, InnerMost:_) -> return $ ANonDPIRewritingProblem (oo "mkNewProblem" mkNewProblemO (NonDP irewriting) r)
     ([], Nothing, GoalStrategy g:TRS.Narrowing:_)
         -> do {g' <- mkAbstractGoal g; return $ AGoalNarrowingProblem (oo "mkNewProblem" mkNewProblemO (initialGoal [g'] narrowing) r)}
 --    (r0, Nothing, GoalStrategy g:TRS.Narrowing:_)
@@ -345,9 +358,9 @@ mkAProblem (O o oo) r minimality r0_ dps strategies =
         -> return $ AGoalIRewritingProblem (setMinimality minimality $ mkDPProblem (initialGoal [mkGoal g] irewriting) r' (tRS dps))
 
     (r0, Nothing, [])
-        -> return $ ARelativeRewritingProblem (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) rewriting) r)
+        -> return $ ANonDPRelativeRewritingProblem (oo "mkNewProblem" mkNewProblemO (NonDP $ relative (tRS r0) rewriting) r)
     (r0, Nothing, InnerMost:_)
-        -> return $ ARelativeIRewritingProblem (oo "mkNewProblem" mkNewProblemO (relative (tRS r0) irewriting) r)
+        -> return $ ANonDPRelativeIRewritingProblem (oo "mkNewProblem" mkNewProblemO (NonDP $ relative (tRS r0) irewriting) r)
 
 
     (r0, Nothing, [GoalStrategy g])

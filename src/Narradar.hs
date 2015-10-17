@@ -18,13 +18,16 @@ module Narradar ( module Narradar.Processor.Graph
                 , module Narradar.Processor.SubtermCriterion
                 , module Narradar.Processor.QRewriting
                 , module Narradar.Types
+                , module Narradar.Types.Problem.NonDP
                 ) where
 
 import Narradar.Types hiding (note, dropNote)
 
 import Narradar.Types.Problem.Relative
 import Narradar.Types.Problem.InitialGoal
+import Narradar.Types.Problem.NonDP
 import Narradar.Processor.Graph
+import Narradar.Processor.NonDP
 import Narradar.Processor.GraphTransformation
 import Narradar.Processor.ExtraVariables
 import Narradar.Processor.UsableRules
