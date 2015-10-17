@@ -207,7 +207,7 @@ Library
      Narradar.Constraints.VariableCondition,
      Narradar.Constraints.Confluence,
      Narradar.Constraints.Syntactic,
-     Narradar.Examples,
+--     Narradar.Examples,
      Narradar.Framework,
      Narradar.Framework.GraphViz
      Narradar.Framework.Observe,
