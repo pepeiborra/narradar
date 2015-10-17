@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverlappingInstances, FlexibleContexts #-}
 {-# LANGUAGE NamedFieldPuns, RecordWildCards, PatternGuards #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -12,7 +13,8 @@ module Narradar.Interface.Cli
         ) where
 
 import Control.Concurrent
-import Control.Exception (evaluate, SomeException, catch)
+import Control.DeepSeq (force)
+import Control.Exception (evaluate, SomeException, catch, catchJust, AsyncException(UserInterrupt))
 import qualified Control.Exception as CE
 import Control.Monad.Free
 import Data.Foldable (Foldable)
@@ -51,26 +53,25 @@ import Test.Framework.Options
 import Test.Framework.Runners.Options
 #endif
 
-echoV str = do
-  (flags@Options{..}, _, _errors) <- getOptions
+echoV Options{verbose} str = 
   when (verbose>1) $ hPutStrLn stderr str
 
 printDiagram :: (IsMZero mp, Traversable mp) =>
                 String -> Options -> Proof PrettyDotF mp a -> IO ()
-printDiagram tmp Options{..} proof
+printDiagram tmp o@Options{..} proof
        | isNothing pdfFile = return ()
        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
-                               let dotSrc = dotProof' DotProof{showFailedPaths = gdmobserve "showFailedPaths" $ verbose > 1} proof
+                               let dotSrc = dotProof' DotProof{showFailedPaths = verbose > 1} proof
                                hPutStrLn h dotSrc
                                hClose h
-#ifdef DEBUG
-                               when (verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
-#endif
+                               when (debugging && verbose > 1) $ writeFile (the_pdf ++ ".dot") dotSrc
                                let dotCmd = printf "%s -Tpdf %s -o%s" dot fp the_pdf
-                               echoV dotCmd
+                               echoV o dotCmd
                                dotOk <- system dotCmd
                                echo ("PDF proof written to " ++ the_pdf)
-                               return (dotOk == ExitSuccess, ())
+                               if debugging
+                                 then return (False, ())
+                                 else return (dotOk == ExitSuccess, ())
 
 narradarMain :: forall mp.
                  (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
@@ -129,10 +130,13 @@ narradarMain' run (O o oo) flags@Options{..} = do
 
   a_problemE <-  {-oo "narradarParse"-} narradarParse problemFile input
   a_problem <- either fail return $ a_problemE
-  let --proof :: forall info. Proof info mp Final
-      proof = o "proof" $ dispatchAProblem a_problem
+  let proof :: Proof PrettyDotF [] Final
+      proof = dispatchAProblem a_problem
   sol <- maybe (fmap return) withTimeout timeout $
-         evaluate (listToMaybe $ run (runProof proof))
+         catchJust (\case UserInterrupt -> Just () ; _ -> Nothing)
+                   (evaluate $ listToMaybe $ runProof proof)
+                   (\() -> do putStrLn "Abandoning..." ; return Nothing)
+
   let diagrams = isJust pdfFile
 
   case join sol of
@@ -142,9 +146,13 @@ narradarMain' run (O o oo) flags@Options{..} = do
 
     Nothing -> do
              putStrLn "MAYBE"
-             let proof' = {-simplifyProof-} proof
-             when (verbose > 1) $ print $ pprProofFailures ( proof')
-             when (diagrams) (printDiagram tmp flags (proof))
+             let proof' = unsafeSliceProof proof
+             when (verbose > 1) $ do
+               putStrLn "Producing failed proof details"
+               print $ pprProofFailures proof
+             when (diagrams) $ do
+               putStrLn "Producing failed proof diagram"
+               printDiagram tmp flags proof'
 
 
 withTimeout t m = do
