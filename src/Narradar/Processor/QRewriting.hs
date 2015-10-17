@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -10,11 +11,14 @@ import Control.DeepSeq
 import Data.List ((\\))
 import Control.Monad
 import Data.Monoid
+import Data.Foldable (toList)
+import qualified Data.Set as Set
 import qualified Data.Term.Family as Family
 import Data.Typeable
 import Narradar.Types
 import Narradar.Types.Problem.QRewriting
 import Narradar.Framework
+import Prelude.Extras
 
 import Debug.Hoed.Observe
 
@@ -22,17 +26,27 @@ import Debug.Hoed.Observe
 data RewritingToQRewriting (info :: * -> *) = RewritingToQRewriting deriving Generic
 instance Observable1 info => Observable (RewritingToQRewriting info)
 
+data ReduceQ (info :: * -> *) = ReduceQ deriving Generic
+instance Observable1 info => Observable (ReduceQ info)
+
 type instance InfoConstraint (RewritingToQRewriting info) = info
 data RewritingToQRewritingProof =
     RewritingToQRewritingProof
   | IRewritingToQRewritingProof
   deriving (Eq, Ord, Show, Generic, Typeable)
 
+type instance InfoConstraint (ReduceQ info) = info
+data ReduceQProof = ReduceQProof Int deriving (Eq, Ord, Show, Generic, Typeable)
+
 instance Pretty RewritingToQRewritingProof where
     pPrint RewritingToQRewritingProof  = text "Considering a Q-Rewriting problem with Q empty"
     pPrint IRewritingToQRewritingProof = text "Considering a Q-Rewriting problem with Q = lhs(R)"
 
+instance Pretty ReduceQProof where
+    pPrint (ReduceQProof n) = text "Reduced the Q-set by" <+> n <+> text "terms"
+
 instance Observable RewritingToQRewritingProof
+instance Observable ReduceQProof
 
 instance (FrameworkProblem Rewriting trs
          ,Info info RewritingToQRewritingProof
@@ -69,3 +83,20 @@ instance (FrameworkProblem Rewriting trs
   type Trs (RewritingToQRewriting info) (Problem (InitialGoal t Rewriting) trs) = trs
   applyO o RewritingToQRewriting = liftProcessor o RewritingToQRewriting
 
+
+instance (Info info ReduceQProof
+         ,FrameworkT t
+         ,Ord1 t, Ord id
+         ,NFData id
+         ,id ~ Family.Id t
+         ) =>
+         Processor (ReduceQ info) (NarradarProblem (QRewriting t) t) where
+  type Typ (ReduceQ info) (NarradarProblem (QRewriting t) t) = QRewriting t
+  type Trs (ReduceQ info) (NarradarProblem (QRewriting t) t) = (NarradarTRS t Var)
+  applyO o ReduceQ p@QRewritingProblem{q}
+    | removed>0 = singleP (ReduceQProof removed) p p{q = qSetO o qset'}
+    | otherwise  = mzero
+   where
+     sig = getDefinedSymbols p
+     qset' = [ t | t <- toList(terms q), Just g <- [rootSymbol t], g `Set.member` sig ]
+     removed = length (terms q) - length qset'
