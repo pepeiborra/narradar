@@ -34,14 +34,8 @@ main = commonMain
 
 -- Rewriting
 -- todo: conversion to innermost
-instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = (ev >=> inn >=> lfpBounded 16 step) >=> final
-
-    where
-      step   = lfp dg >=> (rr `orElse` rp `orElse` gt2)
-      rp     = mpol (Just 0) (Just 2) `orElse` rpos
-      rr     = polo 0 2
-      inn    = apply ToInnermost
+instance () => Dispatch (NProblem (NonDP Rewriting) Id) where
+  dispatch = lfpBounded 2 (noRules `orElse` poloU) >=> final
 
 instance (FrameworkId a, HasArity a) => Dispatch (NProblem IRewriting (DPIdentifier a)) where
   dispatch =  ev >=>

@@ -23,8 +23,8 @@ import qualified Language.Prolog.Syntax as Prolog
 import MuTerm.Framework.Proof (parAnds)
 import Narradar
 import Narradar.Processor.RPO
-import Narradar.Processor.RPO.SBV
-import Narradar.Processor.WPO.SBV
+import Narradar.Processor.RPO.Z3
+import Narradar.Processor.WPO.Z3
 import Narradar.Types.ArgumentFiltering (AF_, simpleHeu, bestHeu, innermost)
 import Narradar.Types.Problem.Rewriting
 import Narradar.Types.Problem.NarrowingGen
@@ -54,17 +54,17 @@ instance () => Dispatch (NProblem IRewriting Id) where
 instance (-- Eq(EqModulo(NProblem (QRewritingN Id) Id))
          ) => Dispatch (NProblem (QRewritingN Id) Id) where
   dispatch = ev
-             >=> lfpBounded 20 step
+             >=> dgI >=> ur
+             >=> ((try inst >=> try(polo 0 2) >=> msum >=> dgI)
+                 .|.
+                  lfpBounded 20 (step (const mzero) (const mzero) gt1))
              >=> final
     where
-      step   = (lfp dgI >=>
-                     (inn `orElse`
-                      (ur >=> try qshrink) `orElse`
-                      (polo 1 1 >=> try qshrink) `orElse`
-                                --mpol (Just 0) (Just 2) `orElse`
-                      msum `orElse`
-                                --rpos `orElse`
-                      gt1)
+      step rr rp tf = (dg >=>
+                        (inn `orElse`
+                        ((ur`orElse`rr) >=> try qshrink) `orElse`
+                        rp `orElse`
+                        tf)
                   )
       inn    = apply ToInnermost
       innO p = gdmobservers "Innermost" applyO ToInnermost p
