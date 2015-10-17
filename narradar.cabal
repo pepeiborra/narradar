@@ -45,10 +45,10 @@ Flag yices
    default: False
 Flag yices-smt
    description: include processors that use the Yices SMT solver via SMT to solve SAT constraints
-   default: True
+   default: False
 Flag z3
    description: include processors that use the Z3 SMT solver to solve SAT constraints
-   default: True
+   default: False
 Flag sbv
    description: include processors that use SBV to solve SAT constraints
    default: True
@@ -94,28 +94,46 @@ Library
        Narradar.Constraints.SAT.YicesFFICircuit
      build-depends: bindings-yices >= 0.3
 
-  if flag(yices-smt) && flag(rpo)
+  if flag(yices-smt)
      exposed-modules:
-       Narradar.Processor.RPO.YicesPipe,
        Narradar.Constraints.SAT.YicesCircuit
      build-depends: yices >= 0.0.0.12.1
-
-  if flag(z3) && flag(rpo)
-     build-depends: z3 > 0.3.2
+  if flag(yices-smt) && flag(rpo)
+     exposed-modules:
+       Narradar.Processor.RPO.YicesPipe
+  if flag(yices-smt) && flag(wpo)
+     exposed-modules:
+       Narradar.Processor.WPO.YicesPipe
+     
+  if flag(z3)
+     build-depends: z3 > 0.3.2, lens-family-core
      exposed-modules:
       Narradar.Constraints.SAT.Z3Circuit
-      Narradar.Processor.WPO.Z3
+
+  if flag(z3) && flag(rpo)
+     exposed-modules:
       Narradar.Processor.RPO.Z3
 
-  if flag(sbv) && flag(rpo)
-     build-depends: sbv > 3.1
+  if flag(z3) && flag(wpo)
+     exposed-modules:
+      Narradar.Processor.WPO.Z3
+
+  if flag(sbv)
+     build-depends: sbv >= 5.0
      exposed-modules:
       Narradar.Constraints.SAT.SBVCircuit
+
+  if flag(sbv) && flag(rpo)
+     exposed-modules:
       Narradar.Processor.RPO.SBV
+
+  if flag(sbv) && flag(wpo)
+     exposed-modules:
+      Narradar.Processor.WPO.SBV
 
   buildable: True
 --  cpp-options: -DGHCI
-  ghc-options: 
+  ghc-options:
   ghc-prof-options: -fprof-auto-calls
   hs-source-dirs: src
   extensions:   FlexibleContexts,

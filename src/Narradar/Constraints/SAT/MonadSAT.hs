@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances, TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
@@ -57,6 +58,7 @@ import           Funsat.TermCircuit.Ext
 import           Funsat.TermCircuit.RPO.Symbols      (Status(..), mkStatus)
 import qualified Funsat.TermCircuit                  as Funsat
 
+import           Debug.Hoed.Observe
 import qualified Prelude                             as P
 
 -- -----------
@@ -92,14 +94,26 @@ boolean = boolean_ ""
 natural = natural_ ""
 assert = assert_ ""
 
+-- ---------
+-- Variables
+-- ---------
+
+class Taggable v where
+  tagWith :: String -> v -> v
+
 -- Ints with the following soft invariant: the first 1000 values are reserved
-data Var = V (Maybe String) Int deriving Typeable
+data Var = V (Maybe String) Int deriving (Typeable, Generic)
+
+instance Taggable Var where
+  tagWith tag (V _ i) = V (Just tag) i
 
 instance Eq Var where
   V _ a == V _ b = a == b
 
 instance Ord Var where
   compare (V _ a) (V _ b) = compare a b
+
+instance Observable Var
 
 instance Show Var where
   show (V Nothing  i) = "v" ++ show i
@@ -164,8 +178,8 @@ deriving instance Pretty v => Pretty (Natural v)
 -- Combinators
 -- ------------
 
-assertAll :: MonadSAT repr v m => [repr v] -> m ()
-assertAll = mapM_ (assert . (:[]))
+assertAll :: (Observable (repr v)) => MonadSAT repr v m => [repr v] -> m ()
+assertAll cc = mapM_ (assert . (:[])) cc
 
 calcBitWidth = length . takeWhile (P.>0) . iterate (`div` 2) . pred
 

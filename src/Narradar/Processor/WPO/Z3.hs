@@ -17,6 +17,7 @@
 module Narradar.Processor.WPO.Z3 where
 
 import Control.Monad
+import Data.Typeable
 import Narradar.Types as Narradar hiding (Var)
 import Narradar.Constraints.SAT.MonadSAT( IsSimple )
 import Narradar.Constraints.SAT.Orderings
@@ -29,121 +30,138 @@ import qualified Narradar.Constraints.SAT.Z3Circuit as Z3
 
 import Debug.Hoed.Observe
 
-solve = Z3.solveWPO minBound
+solve msg o = unsafePerformIO . Z3.solveWPO msg o minBound
 
 -- -------------------
 -- WPO SAT Processor
 -- -------------------
-run  mkS cTyp p rpo = runWpoProc  (unsafePerformIO . solve) mkS cTyp rpo p
-runPOL = run WPO.pol convertTyp (reductionPair omegaNone)
+run o alg mkS cTyp rpo = runWpoReductionPair o alg (solve alg) mkS cTyp rpo
+runRR o = runWpoRuleRemoval o (solve "POLO")
+
 --runN mkS cTyp p rpo = runWpoProcN (unsafePerformIO . solve) mkS cTyp rpo p
 
-instance ( Info info (WPOProof id)
+instance ( Info info (WPOReductionPairProof id)
          , Info info (Problem (Constant (MkRewriting strat) (TermF id)) (NTRS id))
-         , FrameworkId id
+         , FrameworkId id, HasArity id
          , FrameworkTyp (MkRewriting strat), Observable strat
-         ) => Processor (WPOProc info) (NProblem (MkRewriting strat) id)
+         ) => Processor (WPOReductionPair info) (NProblem (MkRewriting strat) id)
    where
-    type Typ (WPOProc info) (NProblem (MkRewriting strat) id) = MkRewriting strat
-    type Trs (WPOProc info) (NProblem (MkRewriting strat) id) = NTRS id
-    applyO _ (WPOProc POL u) = run WPO.pol convertTyp (reductionPair (omegaFor u))
-{-
-instance (FrameworkId id
-         ,Info info (WPOProof id)
-         ) => Processor (WPOProc info) (NProblem (QRewritingN id) id)
-   where
-    type Typ (WPOProc info) (NProblem (QRewritingN id) id) = QRewritingN id
-    type Trs (WPOProc info) (NProblem (QRewritingN id) id) = NTRS id
-    applyO _ (WPOProc WPOSAF usablerules allowCol) = run WPOAF.rpos convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
-    applyO _ (WPOProc LPOSAF usablerules allowCol) = run WPOAF.lpos convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
-    applyO _ (WPOProc WPOAF  usablerules allowCol) = run WPOAF.rpo  convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
-    applyO _ (WPOProc LPOAF  usablerules allowCol) = run WPOAF.lpo  convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
-    applyO _ (WPOProc MPOAF  usablerules allowCol) = run WPOAF.mpo  convertTyp1 (setupAF allowCol >=> reductionPair (omegaFor usablerules))
+    type Typ (WPOReductionPair info) (NProblem (MkRewriting strat) id) = MkRewriting strat
+    type Trs (WPOReductionPair info) (NProblem (MkRewriting strat) id) = NTRS id
+    applyO o (WPOReductionPair alg@(MPOL x y) u) = run o alg (WPO.mpol_xy x y) convertTyp (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@MSUM  u) = run o alg WPO.msum  convertTyp (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@MAX   u) = run o alg WPO.max   convertTyp (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@SUM   u) = run o alg WPO.sum   convertTyp (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@LPOAF u) = run o alg WPO.lpoAF convertTyp (reductionPair (omegaFor u))
 
-instance (Info info (WPOProof id)
+instance (FrameworkId id
+         ,Info info (WPOReductionPairProof id)
+         ) => Processor (WPOReductionPair info) (NProblem (QRewritingN id) id)
+   where
+    type Typ (WPOReductionPair info) (NProblem (QRewritingN id) id) = QRewritingN id
+    type Trs (WPOReductionPair info) (NProblem (QRewritingN id) id) = NTRS id
+    applyO o (WPOReductionPair alg@(MPOL x y) u) = run o alg (WPO.mpol_xy x y) convertTyp1 (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@MSUM  u) = run o alg WPO.msum convertTyp1 (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@MAX   u) = run o alg WPO.max  convertTyp1 (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@SUM   u) = run o alg WPO.sum  convertTyp1 (reductionPair (omegaFor u))
+    applyO o (WPOReductionPair alg@LPOAF u)= run o alg WPO.lpoAF convertTyp1 (reductionPair (omegaFor u))
+{-
+instance (Info info (WPOReductionPairProof id)
          ,FrameworkProblemN (InitialGoal (TermF id) Rewriting) id
          ,DPSymbol id, IsSimple id
-         ) => Processor (WPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id)
+         ) => Processor (WPOReductionPair info) (NProblem (InitialGoal (TermF id) Rewriting) id)
    where
-    type Typ (WPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = InitialGoal (TermF id) Rewriting
-    type Trs (WPOProc info) (NProblem (InitialGoal (TermF id) Rewriting) id) = NTRS id
-    applyO _ (WPOProc WPOSAF _ allowCol) = run WPOAF.rpos convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
-    applyO _ (WPOProc LPOSAF _ allowCol) = run WPOAF.lpos convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
-    applyO _ (WPOProc WPOAF  _ allowCol) = run WPOAF.lpo  convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
-    applyO _ (WPOProc LPOAF  _ allowCol) = run WPOAF.rpo  convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
-    applyO _ (WPOProc MPOAF  _ allowCol) = run WPOAF.mpo  convertTypIG (setupAF allowCol >=> reductionPairIG ((,return[]).omegaIG))
+    type Typ (WPOReductionPair info) (NProblem (InitialGoal (TermF id) Rewriting) id) = InitialGoal (TermF id) Rewriting
+    type Trs (WPOReductionPair info) (NProblem (InitialGoal (TermF id) Rewriting) id) = NTRS id
+    applyO o (WPOReductionPair MPOL u) = run o WPO.mpol convertTypIG (reductionPairIG ((,return[]).omegaIG))
+    applyO o (WPOReductionPair MSUM u) = run o WPO.msum convertTypIG (reductionPairIG ((,return[]).omegaIG))
+    applyO o (WPOReductionPair MAX  u) = run o WPO.sum  convertTypIG (reductionPairIG ((,return[]).omegaIG))
+    applyO o (WPOReductionPair LPOAF  u) = run o WPO.max  convertTypIG (reductionPairIG ((,return[]).omegaIG))
+    applyO o (WPOReductionPair SUM  u) = run o WPO.lpoAF  convertTypIG (reductionPairIG ((,return[]).omegaIG))
 
-instance (Info info (WPOProof id)
+instance (Info info (WPOReductionPairProof id)
          ,Info info (NProblem IRewriting id)
          ,Info info (Problem (Constant IRewriting (TermF id)) (NTRS id))
          ,FrameworkProblemN IRewriting id
 --         ,FrameworkProblemN (Constant IRewriting (TermN id)) id
          ,FrameworkProblemN (InitialGoal (TermF id) IRewriting) id
-         ) => Processor (WPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id)
+         ) => Processor (WPOReductionPair info) (NProblem (InitialGoal (TermF id) IRewriting) id)
    where
-    type Typ (WPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = InitialGoal (TermF id) IRewriting
-    type Trs (WPOProc info) (NProblem (InitialGoal (TermF id) IRewriting) id) = NTRS id
-    applyO _ (WPOProc WPOSAF usableRules allowCol) = liftProblem (run WPOAF.rpos convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc LPOSAF usableRules allowCol) = liftProblem (run WPOAF.lpos convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc WPOAF  usableRules allowCol) = liftProblem (run WPOAF.rpo  convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc LPOAF  usableRules allowCol) = liftProblem (run WPOAF.lpo  convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc MPOAF  usableRules allowCol) = liftProblem (run WPOAF.mpo  convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
+    type Typ (WPOReductionPair info) (NProblem (InitialGoal (TermF id) IRewriting) id) = InitialGoal (TermF id) IRewriting
+    type Trs (WPOReductionPair info) (NProblem (InitialGoal (TermF id) IRewriting) id) = NTRS id
+    applyO o (WPOReductionPair MPOL u) = liftProblem (run o WPO.mpol convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair MSUM u) = liftProblem (run o WPO.msum convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair MAX  u) = liftProblem (run o WPO.max  convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair LPOAF  u) = liftProblem (run o WPO.lpoAF  convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair SUM  u) = liftProblem (run o WPO.sum  convertTyp (reductionPair (omegaFor u)))
 
 instance (FrameworkId id, DPSymbol id, GenSymbol id
          ,Pretty (TermN id)
-         ,Info info (WPOProof id)
-         ) => Processor (WPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id)
+         ,Info info (WPOReductionPairProof id)
+         ) => Processor (WPOReductionPair info) (NProblem (InitialGoal (TermF id) NarrowingGen) id)
    where
-    type Typ (WPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = InitialGoal (TermF id) NarrowingGen
-    type Trs (WPOProc info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = NTRS id
-    applyO _ (WPOProc WPOSAF _ allowCol) = run WPOAF.rpos convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
-    applyO _ (WPOProc LPOSAF _ allowCol) = run WPOAF.lpos convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
-    applyO _ (WPOProc WPOAF  _ allowCol) = run WPOAF.lpo  convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
-    applyO _ (WPOProc LPOAF  _ allowCol) = run WPOAF.rpo  convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
-    applyO _ (WPOProc MPOAF  _ allowCol) = run WPOAF.mpo  convertTypIG (setupAF allowCol >=> reductionPairIG omegaIGgen)
+    type Typ (WPOReductionPair info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = InitialGoal (TermF id) NarrowingGen
+    type Trs (WPOReductionPair info) (NProblem (InitialGoal (TermF id) NarrowingGen) id) = NTRS id
+    applyO o (WPOReductionPair MPOL _ ) = run o WPO.mpol convertTypIG (reductionPairIG omegaIGgen)
+    applyO o (WPOReductionPair MSUM _ ) = run o WPO.msum convertTypIG (reductionPairIG omegaIGgen)
+    applyO o (WPOReductionPair MAX  _ ) = run o WPO.max  convertTypIG (reductionPairIG omegaIGgen)
+    applyO o (WPOReductionPair LPOAF _) = run o WPO.lpoAF  convertTypIG (reductionPairIG omegaIGgen)
+    applyO o (WPOReductionPair SUM  _ ) = run o WPO.sum  convertTypIG (reductionPairIG omegaIGgen)
 
-instance (Info info (WPOProof id)
+instance (Info info (WPOReductionPairProof id)
          ,Info info (NProblem INarrowingGen id)
          ,Info info (Problem (Constant INarrowingGen (TermF id)) (NTRS id))
          ,FrameworkProblemN INarrowingGen id
 --         ,FrameworkProblemN (Constant INarrowingGen (TermN id)) id
          ,FrameworkProblemN (InitialGoal (TermF id) INarrowingGen) id
          ,GenSymbol id
-         ) => Processor (WPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id)
+         ) => Processor (WPOReductionPair info) (NProblem (InitialGoal (TermF id) INarrowingGen) id)
    where
-    type Typ (WPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = InitialGoal (TermF id) INarrowingGen
-    type Trs (WPOProc info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = NTRS id
-    applyO _ (WPOProc WPOSAF usableRules allowCol) = liftProblem (run WPOAF.rpos convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc LPOSAF usableRules allowCol) = liftProblem (run WPOAF.lpos convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc WPOAF  usableRules allowCol) = liftProblem (run WPOAF.rpo  convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc LPOAF  usableRules allowCol) = liftProblem (run WPOAF.lpo  convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-    applyO _ (WPOProc MPOAF  usableRules allowCol) = liftProblem (run WPOAF.mpo  convertTyp (setupAF allowCol >=> reductionPair (omegaFor usableRules)))
-
-
-instance (Info info (WPOProof id)
-         ,FrameworkId id
-         ) => Processor (WPOProc info) (NProblem Narrowing id)
-  where
-    type Typ (WPOProc info) (NProblem Narrowing id) = Narrowing
-    type Trs (WPOProc info) (NProblem Narrowing id) = NTRS id
-   -- FIXME: I don't see why we cannot have collapsing filterings here. Enabled, but not tested
-    applyO _ (WPOProc WPOSAF usableRules allowCol) = runN WPOAF.rpos convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc LPOSAF usableRules allowCol) = runN WPOAF.lpos convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc WPOAF  usableRules allowCol) = runN WPOAF.rpo  convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc LPOAF  usableRules allowCol) = runN WPOAF.lpo  convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc MPOAF  usableRules allowCol) = runN WPOAF.mpo  convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-
-instance (FrameworkId  id
-         ,Info info (WPOProof id)
-         ) => Processor (WPOProc info) (NProblem CNarrowing id)
-  where
-    type Typ (WPOProc info) (NProblem CNarrowing id) = CNarrowing
-    type Trs (WPOProc info) (NProblem CNarrowing id) = NTRS id
-   -- FIXME: I don't see why we cannot have collapsing filterings here. Enabled, but not tested
-    applyO _ (WPOProc WPOSAF usableRules allowCol) = runN WPOAF.rpos convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc LPOSAF usableRules allowCol) = runN WPOAF.lpos convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc WPOAF  usableRules allowCol) = runN WPOAF.rpo  convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc LPOAF  usableRules allowCol) = runN WPOAF.lpo  convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-    applyO _ (WPOProc MPOAF  usableRules allowCol) = runN WPOAF.mpo  convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
-
+    type Typ (WPOReductionPair info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = InitialGoal (TermF id) INarrowingGen
+    type Trs (WPOReductionPair info) (NProblem (InitialGoal (TermF id) INarrowingGen) id) = NTRS id
+    applyO o (WPOReductionPair MPOL u) = liftProblem (run o WPO.mpol convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair MSUM u) = liftProblem (run o WPO.msum convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair MAX  u) = liftProblem (run o WPO.max  convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair LPOAF  u) = liftProblem (run o WPO.lpoAF  convertTyp (reductionPair (omegaFor u)))
+    applyO o (WPOReductionPair SUM  u) = liftProblem (run o WPO.sum  convertTyp (reductionPair (omegaFor u)))
 -}
+
+
+instance ( Info info (WPORuleRemovalProof id)
+         , Info info (Problem (Constant (MkRewriting strat) (TermF id)) (NTRS id))
+         , FrameworkId id, HasArity id
+         , FrameworkTyp (MkRewriting strat), Observable strat
+         ) => Processor (WPORuleRemoval info) (NProblem (MkRewriting strat) id)
+   where
+    type Typ (WPORuleRemoval info) (NProblem (MkRewriting strat) id) = MkRewriting strat
+    type Trs (WPORuleRemoval info) (NProblem (MkRewriting strat) id) = NTRS id
+    applyO o (WPORuleRemoval (POLO x y)) = runRR o (WPO.polo_xy x y) convertTyp
+    applyO o (WPORuleRemoval LPO ) = runRR o WPO.lpo  convertTyp
+    applyO o (WPORuleRemoval KBO ) = runRR o WPO.kbo  convertTyp
+    applyO o (WPORuleRemoval TKBO) = runRR o WPO.tkbo convertTyp
+
+
+instance ( Info info (WPORuleRemovalProof id)
+         , FrameworkId id, HasArity id
+         ) => Processor (WPORuleRemoval info) (NProblem (QRewritingN id) id)
+   where
+    type Typ (WPORuleRemoval info) (NProblem (QRewritingN id) id) = QRewritingN id
+    type Trs (WPORuleRemoval info) (NProblem (QRewritingN id) id) = NTRS id
+    applyO o (WPORuleRemoval (POLO x y)) = runRR o (WPO.polo_xy x y) convertTyp1
+    applyO o (WPORuleRemoval LPO ) = runRR o WPO.lpo  convertTyp1
+    applyO o (WPORuleRemoval KBO ) = runRR o WPO.kbo  convertTyp1
+    applyO o (WPORuleRemoval TKBO) = runRR o WPO.tkbo convertTyp1
+
+instance ( Info info (WPORuleRemovalProof id)
+         , Info info (Problem (Constant (NonDP(MkRewriting strat)) (TermF id)) (NTRS id))
+         , FrameworkId id, HasArity id
+         , FrameworkTyp (MkRewriting strat), Observable strat, Typeable strat
+         ) => Processor (WPORuleRemoval info) (NProblem (NonDP(MkRewriting strat)) id)
+   where
+    type Typ (WPORuleRemoval info) (NProblem (NonDP(MkRewriting strat)) id) = NonDP(MkRewriting strat)
+    type Trs (WPORuleRemoval info) (NProblem (NonDP(MkRewriting strat)) id) = NTRS id
+
+    applyO o (WPORuleRemoval (POLO x y)) = runRR o (WPO.polo_xy x y) convertTyp
+    applyO o (WPORuleRemoval LPO ) = runRR o WPO.lpo  convertTyp
+    applyO o (WPORuleRemoval KBO ) = runRR o WPO.kbo  convertTyp
+    applyO o (WPORuleRemoval TKBO) = runRR o WPO.tkbo convertTyp

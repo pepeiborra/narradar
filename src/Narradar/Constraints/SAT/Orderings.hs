@@ -13,6 +13,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE PartialTypeSignatures, NamedWildCards #-}
 
 module Narradar.Constraints.SAT.Orderings (
    setupAF, reductionPair, reductionPairIG, reductionPairN, ruleRemoval
@@ -143,6 +144,7 @@ reductionPairIG :: ( UsableSymbol id
                    , Family.TermF repr ~ TermF id
                    , Family.Var   id   ~ Var
                    , CoTerm repr (TermF id) Narradar.Var Var
+                   , Observable (repr Var)
                    ) => (Problem typ (NTRS id)
                          -> ( Tree (TermN id) Var
                             , EvalM Var t))
@@ -209,6 +211,7 @@ reductionPairN ::
   ,TermCircuit repr
   ,IsDPProblem typ
   ,HasSignature (NProblem typ id)
+  ,Observable (repr Var)
   ) => (NProblem typ id -> repr Var) -> NProblem typ id -> m (EvalM Var (([Int], [Int]), [t]))
 reductionPairN omega p' = do
   let (dps') = getP p'
@@ -255,6 +258,14 @@ initialize i sig f = do
     res <- mkRes
     return (res, env, symbols)
 
+
+runRP :: (Family.Id id' ~ id, FrameworkProblemN typ id, _) =>
+         Observer
+      -> MkSATSymbol env id'
+      -> ((id -> id') -> typ -> typ')
+      -> Problem typ (NTRS id)
+      -> (Problem typ' (NTRS id') -> m _)
+      -> m _res
 
 runRP (O o oo) mkS mkTyp p rp
   = initialize mkS (getSignature p) $ \dict -> do

@@ -77,7 +77,7 @@ instance (WPOCircuit  (repr (Usable (MPOL v id)))
 -- MkSATSymbol
 -- -----------
 
-newtype EnvWPO (repr :: * -> *) v = EnvWPO (Natural v)
+newtype EnvWPO (repr :: * -> *) v = EnvWPO { env_w0 :: Natural v }
 
 -- An implementation of MkSATSymbol
 makeUsableSymbol :: ( MonadSAT repr v m
@@ -90,7 +90,7 @@ makeUsableSymbol :: ( MonadSAT repr v m
                        -> (Family.Id s, Int)
                        -> m (Usable s, [(String, repr v)])
 makeUsableSymbol makeSymbol x = do
-  encodeUsable <- boolean_ ("usable_" ++ show x)
+  encodeUsable <- boolean_ ("usable_" ++ show(fst x))
   EnvWPO w0    <- ask
   (s, constraints) <- makeSymbol w0 boolean_ natural_ x
   let evalres = mkUsableSymbolDecoder encodeUsable (decode s)
@@ -108,20 +108,37 @@ mpol' opts = MkSATSymbol (makeUsableSymbol $ MPOL.mpol opts)
 
 
 -- ----------------------------
+--  Reduction Orderings
+-- ----------------------------
+polo_xy x y = pol' $ wpoOptions{ coefficients = Variable x y, statusType = Total, allowPrecedences = False }
+polo = polo_xy (Just 0) Nothing
+lpo  = max' $ wpoOptions{ coefficients = Fixed 1, constants = Fixed 0, statusType = Total}
+kbo  = sum' $ SUMOptions Total
+tkbo = pol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing, statusType = Total }
+
+-- ----------------------------
 -- Monotone Reduction Pairs
 -- ----------------------------
-polo = pol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing, statusType = Empty }
-lpo  = max' $ wpoOptions{ coefficients = Fixed 1, constants = Fixed 0, statusType = Total}
-kbo  = pol' $ wpoOptions{ coefficients = Fixed 1, statusType = Total }
-tkbo = pol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing, statusType = Total }
+mono_polo = pol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing, statusType = Empty, allowPrecedences = False }
+mono_lpo  = max' $ wpoOptions{ coefficients = Fixed 1, constants = Fixed 0, statusType = Total}
+mono_kbo  = pol' $ wpoOptions{ coefficients = Fixed 1, statusType = Total }
+mono_tkbo = pol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing, statusType = Total }
 
 -- ----------------------------
 -- Non-monotone Reduction Pairs
 -- ----------------------------
-mpol = mpol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing
-                         , constants = Variable (Just 0) Nothing }
+
+mpol_xy x y = mpol' $ wpoOptions{ coefficients = Variable x y
+                                , constants = Variable Nothing Nothing }
+mpol = mpol_xy (Just 0) Nothing
+
+maxpol = mpol' $ wpoOptions{ coefficients = Variable (Just 0) Nothing
+                            , constants = Variable Nothing Nothing
+                            , allowPrecedences = False
+                            , statusType = Empty}
 msum = mpol' $ wpoOptions{ coefficients = Variable (Just 0) (Just 1)
-                         , constants = Variable (Just 0) Nothing}
+                         , constants = Variable (Just 0) Nothing
+                         , allowPrecedences = True}
 sum  = sum'  $ SUMOptions Partial
 max  = max'  $ wpoOptions{ coefficients = Variable (Just 0) (Just 1)
                          , constants = Variable (Just 0) Nothing

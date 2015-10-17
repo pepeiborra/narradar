@@ -186,3 +186,19 @@ instance (FrameworkId  id
     applyO _ (RPOProc MPOAF  usableRules allowCol) = runN RPOAF.mpo  RPOAF.convertTyp (setupAF allowCol >=> reductionPairN (omegaFor usableRules))
 
 
+
+runRR o = runRpoRuleRemoval o solve
+
+instance ( Info info (RPORuleRemovalProof id)
+         , Info info (Problem (Constant (NonDP(MkRewriting strat)) (TermF id)) (NTRS id))
+         , FrameworkId id, HasArity id
+         , FrameworkTyp (MkRewriting strat), Observable strat
+         ) => Processor (RPORuleRemoval info) (NProblem (NonDP(MkRewriting strat)) id)
+   where
+    type Typ (RPORuleRemoval info) (NProblem (NonDP(MkRewriting strat)) id) = NonDP(MkRewriting strat)
+    type Trs (RPORuleRemoval info) (NProblem (NonDP(MkRewriting strat)) id) = NTRS id
+
+    applyO o (RPORuleRemoval LPOAF)   = runRR o RPOAF.rpos convertTyp
+    applyO o (RPORuleRemoval LPOSAF ) = runRR o RPOAF.lpos convertTyp
+    applyO o (RPORuleRemoval RPOAF)   = runRR o RPOAF.rpo  convertTyp
+    applyO o (RPORuleRemoval RPOSAF)  = runRR o RPOAF.rpos convertTyp

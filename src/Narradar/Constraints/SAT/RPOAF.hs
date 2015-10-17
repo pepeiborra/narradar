@@ -64,7 +64,7 @@ type RPOProblemN typ id = (FrameworkProblemN typ id, RPOId id, NeededRules (NPro
 -- MkSATSymbol
 -- -------------------
 
-data EnvRPO (repr :: * -> *) v
+data EnvRPO (repr :: * -> *) v = EnvRPO
 
 rpos :: MkSATSymbol EnvRPO (Usable (RPOSsymbol Var id))
 rpo  :: MkSATSymbol EnvRPO (Usable (RPOsymbol  Var id))

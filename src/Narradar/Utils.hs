@@ -18,6 +18,7 @@
 module Narradar.Utils where
 
 import           Control.DeepSeq
+import           Control.DeepSeq.Extras
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Exception                    (bracket)
@@ -78,6 +79,8 @@ import           Prelude                              hiding (mapM)
 import           Debug.Hoed.Observe                   hiding (O)
 import qualified Debug.Hoed.Observe                   as Observe
 
+import qualified Funsat.ECircuit                      as Funsat
+import qualified Funsat.TermCircuit                   as Funsat
 -- ----------------
 -- Debugging stuff
 -- ----------------
@@ -87,11 +90,13 @@ import qualified Debug.Trace
 trace = Debug.Trace.trace
 debug  msg = do {hPutStrLn stderr msg; hFlush stderr}
 debug' msg = do {hPutStr stderr msg; hFlush stderr}
+debugging = True
 #else
 {-# INLINE trace #-}
 trace _ x = x
 debug  _ = return ()
 debug' _ = return ()
+debugging = False
 #endif
 
 pprTrace = trace . render . pPrint
@@ -467,7 +472,31 @@ deriving instance Typeable EqModulo
 instance NFData (t a) => NFData (NF c t a) where rnf (FMap f t) = ()
 deriving instance NFData a => NFData (EqModulo a)
 
+instance NFData1 Set where rnf1 set = rnf set
+
 -- ----------------------
 -- Ord instance for Doc
 -- ----------------------
 instance Ord Doc where compare a b = compare (show a) (show b)
+-- -----------------------------------------
+-- Observable instances for Funsat circuits
+-- -----------------------------------------
+deriving instance Generic1 Funsat.Natural
+deriving instance Generic1 (Funsat.Tree t)
+deriving instance Generic1 (Funsat.TreeF t)
+instance Observable1 Funsat.Natural
+instance Observable t => Observable1 (Funsat.TreeF t)
+instance (Observable t, Observable v) => Observable(Funsat.TreeF t v) where observers=observers1;observer=observer1
+instance Observable a => Observable (Funsat.Natural a) where observers=observers1;observer=observer1
+instance Observable term => Observable1 (Funsat.Tree term)
+instance (Observable term, Observable v) => Observable(Funsat.Tree term v) where observers=observers1;observer=observer1
+
+
+instance Observable1 (Funsat.EvalM v) where
+  observer1 fn cxt =
+        do res <- fn
+           send "<Funsat.EvalM>" (return return << res) cxt
+
+instance Observable a => Observable (Funsat.EvalM v a) where
+  observers = observers1
+  observer = observer1

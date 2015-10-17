@@ -9,6 +9,8 @@
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE NoMonomorphismRestriction, AllowAmbiguousTypes #-}
+{-# LANGUAGE PartialTypeSignatures, NamedWildCards #-}
 
 module Narradar.Processor.RPO where
 
@@ -37,11 +39,50 @@ import Funsat.TermCircuit.RPO.Symbols as RPO (SymbolRes(..),prec)
 import Debug.Hoed.Observe
 
 type AllowCol = Bool
+
 data RPOProc (info :: * -> *) where
   RPOProc :: Extension -> UsableRulesMode -> AllowCol -> RPOProc info
 type instance InfoConstraint (RPOProc info) = info
-
 instance Observable (RPOProc info) where observer = observeOpaque "RPO processor"
+
+data RPORuleRemoval (info :: * -> *) where
+  RPORuleRemoval :: Extension -> RPORuleRemoval info
+type instance InfoConstraint (RPORuleRemoval info) = info
+instance Observable (RPORuleRemoval info) where observer = observeOpaque "RPO rule removal"
+
+data RPORuleRemovalProof id where
+  RPORuleRemovalProof :: Pretty (RuleN id) =>
+              Extension
+           -> [RuleN id]  -- ^ Strictly decreasing rules
+           -> [SymbolRes id]
+           -> [Tree (TermN id) Var] -- ^ Additional constraints
+           -> RPORuleRemovalProof id
+
+  RPORuleRemovalFail ::  Extension -> RPORuleRemovalProof id
+
+     deriving Typeable
+
+instance (Ord id, HasArity id, Pretty id) => Eq (RPORuleRemovalProof id) where a == b = pPrint a == pPrint b
+instance (Ord id, HasArity id, Pretty id) => Ord (RPORuleRemovalProof id) where compare a b = compare (pPrint a) (pPrint b)
+instance Observable1 RPORuleRemovalProof where observer1 = observeOpaque "RPORuleRemovalProof"
+instance Observable id => Observable (RPORuleRemovalProof id) where observer = observer1 ; observers = observers1
+
+-- TODO
+rpoRuleRemovalFail :: Problem typ (NarradarTRS t Narradar.Var) -> RPORuleRemovalProof (Family.Id t)
+rpoRuleRemovalFail _ = RPORuleRemovalFail LPOSAF
+
+runRpoRuleRemoval obs@(O o oo) solve mkS cTyp p =
+  case oo "solve" solve (runR obs mkS cTyp p ruleRemoval) of
+   Nothing -> dontKnow (rpoRuleRemovalFail p) p
+   Just ((nondec_rules, extraConstraints), bienv, symbols_raw) ->
+     let symbols       = runEvalM bienv $ mapM decodeUsable symbols_raw
+         proof         = RPORuleRemovalProof LPOSAF decreasingRules (symbolRes <$> symbols) extraConstraints
+         trs           = getR p
+         decreasingRules = selectSafe "Narradar.Processor.RPO"
+                        ([0..length (rules trs) - 1] \\ nondec_rules)
+                        (rules trs)
+     in  singleP proof p (oo "setR" setRO (restrictTRS trs nondec_rules) p)
+
 
 {-
   Some combinations are not safe. The ones I am aware of right now:
@@ -51,15 +92,16 @@ instance Observable (RPOProc info) where observer = observeOpaque "RPO processor
    - would enable them only in the FFI encoding
 
  -}
-data Extension       = RPOSAF | RPOAF | LPOSAF | LPOAF | MPOAF
-data UsableRulesMode = None | Usable | Needed
+data Extension       = RPOSAF | RPOAF | LPOSAF | LPOAF | MPOAF deriving (Eq, Ord, Show)
+data UsableRulesMode = All | Usable | Needed deriving (Eq, Ord, Show)
 
-omegaFor None = omegaNone
+instance Pretty Extension where pPrint = text . show
+
+omegaFor All    = omegaNone
 omegaFor Needed = omegaNeeded
 omegaFor Usable = omegaUsable
 
-runRpoProc x = runRpoProcO nilObserver x
-runRpoProcO ob@(O o oo) solve mkS  cTyp p rpo = f(solve ob (runRP ob mkS cTyp p rpo)) where
+runRpoProc ob@(O o oo) solve mkS  cTyp p rpo = f(solve ob (runRP ob mkS cTyp p rpo)) where
   f Nothing = dontKnow (rpoFail p) p
   f (Just ((nondec_dps, extraConstraints), bienv, symbols_raw))
    = singleP proof p (setP (restrictTRS dps nondec_dps) p) where
@@ -200,3 +242,21 @@ printPrec f symb    = fsep
                     . sortBy (flip compare `on` f)
 
 -- Nil instance
+
+instance (Ord id, Pretty id, HasArity id) => Pretty (RPORuleRemovalProof id) where
+    pPrint (RPORuleRemovalProof ex rr ss cc) =
+     (if null cc then text "RPO rule removal" -- <+> parens(a <+> text "algebra")
+        else text "RPO rule removal with the extra constraints" $$
+             nest 4 (vcat $ map (printTree 0) cc))
+     $$ text "The following rules are strictly decreasing:" $$
+        nest 4 (vcat (map pPrint rr)) $$
+        text "Precedence:" <+> printPrec prec theSymbolR ss $$
+        nest 2 (vcat [text "status" <> parens(pPrint s) <> text "=" <>
+                        case status s of
+                          Mul -> text "MUL"
+                          Lex perm -> text "LEX with permutation " <+> pPrint perm
+                            | s <- ss])
+
+    pPrint (RPORuleRemovalFail a) =
+      text "RPO rule removal: failed to synthetize a suitable ordering"
+
