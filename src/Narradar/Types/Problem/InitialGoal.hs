@@ -435,7 +435,7 @@ insertDGraphO o p@InitialGoalProblem{..} newdps
 expandDGraph ::
       ( t ~ f id, MapId f
       , FrameworkId id, DPSymbol id
-      , FrameworkN (InitialGoal t typ) t Var
+      , FrameworkNExt (InitialGoal t typ) t Var
       , Observable (GoalTerm t)
       ) =>
        Problem (InitialGoal t typ) (NarradarTRS t Var)
@@ -450,7 +450,7 @@ expandDGraph p@InitialGoalProblem{dgraph=dg@DGraph{..},goals} olddp newdps
 expandDGraph' ::
       ( t ~ f id, MapId f
       , FrameworkId id, DPSymbol id
-      , FrameworkN (InitialGoal t typ) t Var
+      , FrameworkNExt (InitialGoal t typ) t Var
       , Observable(GoalTerm t)
       ) =>
        Problem (InitialGoal t typ) (NarradarTRS t Var)

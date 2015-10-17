@@ -63,7 +63,7 @@ instance Observable NarrowingGoalToRelativeRewritingProof
 instance (gid ~ DPIdentifier (GenId id)
          ,FrameworkId id
          ,GetPairs base
-         ,FrameworkProblemN base gid
+         ,FrameworkProblemNExt base gid
          ,Info info NarrowingGoalToRelativeRewritingProof
          ) =>
          Processor (NarrowingGoalToRelativeRewriting info) (NProblem (MkNarrowingGoal (DPIdentifier id) base) (DPIdentifier id))
@@ -87,7 +87,7 @@ instance (gid ~ DPIdentifier (GenId id)
          ,GetPairs (MkNarrowing base)
          ,Info info NarrowingGoalToRelativeRewritingProof
          ,FrameworkId id
-         ,FrameworkProblemN base gid
+         ,FrameworkProblemNExt base gid
          ,PprTPDB (Problem(MkNarrowing base) (NTRS gid))
          ) =>
          Processor (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id))
@@ -151,7 +151,7 @@ instance (gid ~ DPIdentifier (GenId id)
 procLOPSTR09 :: (gid ~ DPIdentifier (GenId id)
                 ,FrameworkId id
                 ,Pretty (DPIdentifier id)
-                ,FrameworkProblemN base gid
+                ,FrameworkProblemNExt base gid
                 ,GetPairs base
                 ,Observable(DPIdentifier id)
                 ) =>

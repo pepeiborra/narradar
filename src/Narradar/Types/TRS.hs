@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
@@ -74,10 +75,7 @@ type FrameworkProblem0 p trs =
   , NeededRules (Problem p trs)
   , Ord (Problem p trs)
   , FrameworkTRS trs
-  , NFData p
-  , Typeable p
-  , Observable p
-  , Observable1 (Problem p)
+  , PprTPDB (Problem p trs)
   )
 
 type FrameworkN0 typ t v = FrameworkProblem0 typ (NarradarTRS t v)
@@ -424,17 +422,17 @@ dpTRSO obs@(O o oo) p = setP_uncheckedO obs dps' $ setR_uncheckedO obs trs' p
         dps' = oo "dpTRS'" dpTRSO' (Comparable $ getFramework p) dpsA trs' unifs
 
 
-dpTRSO' :: ( Foldable t, HasId1 t
+dpTRSO' :: ( Functor t, Foldable t, HasId1 t
            , Observable v, Observable1 t
            , NTRSLift (Term t v)
            , HasRules rules, Family.Rule rules ~ Rule t v
-           , Ord(Family.Id (Term t v))
+           , Ord v, Ord(Family.Id (Term t v))
            ) =>
          Observer -> Comparable -> Array Int (Rule t v) -> rules -> Two (Unifiers(Term t v)) -> NarradarTRS t v
 dpTRSO' (O o oo) typ dps rr unifiers =
   liftNF $ DPTRS typ dps (Set.fromList $ rules rr)
                          (o "dg" $ getIEDGfromUnifiers unifiers)
-                         unifiers
+                         (fmap4 flushSubst unifiers)
                          (getSignature $ elems dps)
 
 
@@ -478,13 +476,15 @@ restrictTRSO (O o oo) (lowerNTRS -> PrologTRS rr _) indexes =
                                                sig' = getSignature (Map.elems rr')
                                            in liftNF $ PrologTRS rr' (getSignature rr')
 
-restrictTRSO (O o oo) (lowerNTRS -> DPTRS typ dps rr gr unif _) indexes
+restrictTRSO (O o oo) p indexes
   = liftNF $ DPTRS typ dps' rr gr' unif' (getSignature $ elems dps')
   where
-   newIndexes = o "newIndexes" $ Map.fromList (zip indexes [0..])
+   lowerP = lowerNTRS p
+   DPTRS typ dps rr gr unif _ = lowerP
+   newIndexes = Map.fromList (zip indexes [0..])
    nindexes   = length indexes - 1
    dps'       = extractIxx dps indexes `asTypeOf` dps
-   gr'        = o "gr'" $ A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
+   !gr'        = A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
 
    extractIxx :: Array Int a -> [Int] -> Array Int a
    extractIxx arr nodes = A.listArray (0, length nodes - 1) [safeAt "restrictTRS" arr n | n <- nodes]
@@ -535,9 +535,9 @@ computeDPUnifiersO :: forall unif typ trs t v term m rules.
                      Observer
                      -> Problem typ trs
                      -> m(Two unif)
-computeDPUnifiersO (O o oo) p = do
-   unif    <- oo "direct unifiers"  computeDirectUnifiersO  p
-   unifInv <- oo "inverse unifiers" computeInverseUnifiersO p
+computeDPUnifiersO o p = do
+   unif    <- computeDirectUnifiersO  o p
+   unifInv <- computeInverseUnifiersO o p
    return (Two unif unifInv)
 
 computeDirectUnifiers x = computeDirectUnifiersO nilObserver x
@@ -573,10 +573,8 @@ computeDirectUnifiersO (O o oo) p_f =
                 -- pprTrace (vcat [text "unify" <+> (u <+> text "with" <+> t')
                 --                ,parens (text "icap" <+> (rules(snd p_f) $$ t))
                 --                ,equals <+> unifier]) (return ())
-         return ((x,y), fmap (\sigma -> Two (o "u1" u1 <> o "sigma" sigma)
-                                            (o "u2" u2 <> sigma)
-                             )
-                             sigma)
+         let res = fmap (\sigma -> Two (u1 <> sigma) (u2 <> sigma)) sigma
+         return ((x,y), res)
    in do
      unif <- runListT $ do
                 rule1 <- liftL $ zip [0..] the_dps
@@ -618,7 +616,8 @@ computeInverseUnifiersO obs@(O o oo) p  = do
                 let sigma = {-o "unify"-} Narradar.Constraints.Unify.unify u'' t'
 --                pprTrace (text "unify" <+> l' <+> parens (text "icap" <+> p_inv <+> l)
 --                          <+> text "with" <+> r <+> equals <+> unifier) (return ())
-                return ((x,y), fmap (\sigma -> Two (u1<>sigma) (u2<>sigma)) sigma)
+                let res = fmap (\sigma -> Two (u1<>sigma) (u2<>sigma)) sigma
+                return ((x,y),res)
    return $ array ((0,0), (ldps,ldps)) unif
 
 

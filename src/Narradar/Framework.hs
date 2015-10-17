@@ -46,6 +46,7 @@ import Narradar.Framework.Ppr
 import Narradar.Types.ArgumentFiltering (ApplyAF)
 import Narradar.Types.DPIdentifiers
 import Narradar.Types.PrologIdentifiers
+import Narradar.Types.Term (HasArity)
 import Narradar.Utils ((<$$>))
 
 import GHC.Generics (Generic)
@@ -62,10 +63,10 @@ instance (GetVars trs, Foldable (Problem typ)) => GetVars (Problem typ trs) wher
 -- Framework constraints
 -- ---------------------
 
-type FrameworkTyp a  = (Eq a, Typeable a, Pretty a, IsDPProblem a, Observable a, NFData a, Traversable (Problem a), HasMinimality a)
+type FrameworkTyp a  = (Eq a, Typeable a, Pretty a, IsDPProblem a, Observable a, Observable1(Problem a), NFData a, Traversable (Problem a), HasMinimality a)
 type FrameworkVar v  = (Enum v, Ord v, NFData v, Pretty v, Rename v, Typeable v, PprTPDB v, Observable v)
 type FrameworkT   t  = (Unify t, HasId1 t, Traversable t, Typeable t, Observable1 t, FrameworkId (Family.Id t), Ord1 t, NFData1 t)
-type FrameworkId id  = (NFData id, Pretty id, Ord id, Observable id, Typeable id, Show id, Hashable id, NFData id, RemovePrologId id)
+type FrameworkId id  = (NFData id, Pretty id, Ord id, Observable id, Typeable id, Show id, Hashable id, NFData id, RemovePrologId id, HasArity id)
 type FrameworkTerm t v = (FrameworkVar v, FrameworkT t, FrameworkId (Family.Id t)
                          ,Ord(Term t v), Pretty(Term t v), NFData(Term t v)
                          ,Observable (Term t v), ApplyAF (Term t v))

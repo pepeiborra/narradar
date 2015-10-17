@@ -23,6 +23,7 @@ import           Data.Monoid                  (Monoid(..), Any(..))
 import           Data.Typeable
 
 import           Narradar.Types.DPIdentifiers
+import           Narradar.Types.Term (HasArity(..))
 import           Narradar.Framework.Ppr
 
 import Debug.Hoed.Observe
@@ -130,6 +131,12 @@ instance NFData a => NFData (PrologId a) where
   rnf (OutId a) = rnf a
   rnf (UId   i) = rnf i
   rnf (FunctorId f) = rnf f
+
+instance HasArity a => HasArity (PrologId a) where
+  getIdArity (InId a) = getIdArity a
+  getIdArity (OutId a) = getIdArity a
+  getIdArity (UId i) = 0
+  getIdArity (FunctorId f) = getIdArity f
 
 -- Hood
 instance Observable1 PrologId where

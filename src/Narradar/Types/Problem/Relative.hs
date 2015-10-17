@@ -142,7 +142,7 @@ instance (HasRules trs, Unify (TermF trs), GetVars trs, ICap (Problem p trs')) =
 
 -- Usable Rules
 instance (Monoid trs, IsProblem b, IUsableRules (Problem b trs)
-         ,FrameworkProblem (Relative trs b) trs
+         ,FrameworkProblem0 (Relative trs b) trs
          ) => IUsableRules (Problem (Relative trs b) trs) where
   iUsableRulesM p _ _ = return p
   iUsableRulesVarM    = liftUsableRulesVarM

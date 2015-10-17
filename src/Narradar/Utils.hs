@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE UndecidableInstances, OverlappingInstances, FlexibleInstances, FlexibleContexts, TypeSynonymInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -227,7 +228,7 @@ snub = snubBy id
 snubBy :: Ord a => (t -> a) -> [t] -> [t]
 snubBy f = go Set.empty where
   go _   []     = []
-  go acc (x:xx) = if fx `Set.member` acc then go acc xx else x : go (Set.insert fx acc) xx
+  go !acc (x:xx) = if fx `Set.member` acc then go acc xx else x : go (Set.insert fx acc) xx
     where fx = f x
 
 (cmp `on` f) a b = cmp (f a) (f b)

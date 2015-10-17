@@ -196,6 +196,8 @@ type DRP  = DPIdentifier RP
 type LRP  = Labelled RP
 type DLRP = DPIdentifier LRP
 
+instance HasArity P
+
 -- ------------------------------------------
 -- Representation of Prolog clauses as rules
 -- ------------------------------------------

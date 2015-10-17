@@ -68,15 +68,18 @@ import Data.Term.Rules
 
 import Debug.Hoed.Observe (Observable(..), Observable1(..), Observer(..), nilObserver)
 
-type FrameworkProblem p trs =
+type FrameworkProblem p trs = FrameworkProblem0 p trs
+
+type FrameworkProblemExt p trs =
   ( FrameworkProblem0 p trs
   , InsertDPairs p trs
   , ExpandDPair  p trs
-  , PprTPDB (Problem p trs)
   )
-type FrameworkProblemN typ id = (FrameworkProblem typ (NTRS id))
+type FrameworkProblemN    typ id = (FrameworkProblem    typ (NTRS id))
+type FrameworkProblemNExt typ id = (FrameworkProblemExt typ (NTRS id))
 type FrameworkProblemN0 typ id = (FrameworkProblem0 typ (NTRS id))
-type FrameworkN typ t v = FrameworkProblem typ (NarradarTRS t v)
+type FrameworkN    typ t v = FrameworkProblem    typ (NarradarTRS t v)
+type FrameworkNExt typ t v = FrameworkProblemExt typ (NarradarTRS t v)
 
 -- -------------------------
 -- Constructing DP problems

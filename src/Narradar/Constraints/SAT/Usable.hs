@@ -26,7 +26,7 @@ import           Funsat.TermCircuit.Symbols hiding (Var)
 
 import           Narradar.Constraints.SAT.MonadSAT
 import           Narradar.Framework.Ppr            as Ppr
-import           Narradar.Types      (DPSymbol(..), GenSymbol(..), RemovePrologId(..))
+import           Narradar.Types      (DPSymbol(..), GenSymbol(..), RemovePrologId(..), HasArity(..))
 
 -- ------------------------------------------
 -- A function for constructing a SAT Symbol
@@ -54,7 +54,7 @@ makeUsableSymbol :: ( MonadSAT repr v m
                        -> (Family.Id s, Int)
                        -> m (Usable s, [(String, repr v)])
 makeUsableSymbol makeSymbol x = do
-  encodeUsable <- boolean_ ("usable_" ++ show x)
+  encodeUsable <- boolean_ ("usable_" ++ show(fst x))
   (s, constraints) <- makeSymbol boolean_ natural_ x
   let evalres = mkUsableSymbolDecoder encodeUsable (decode s)
   return (Usable s encodeUsable evalres, constraints)
@@ -84,6 +84,7 @@ type instance Family.Id  (Usable s) = Family.Id s
 
 deriving instance (Show s, Show(Family.Var s)) => Show (Usable s)
 
+instance HasArity a => HasArity (Usable a) where getIdArity = getIdArity . usableSymbol
 instance HasPrecedence s => HasPrecedence (Usable s) where precedence_v = precedence_v . usableSymbol
 instance HasFiltering s => HasFiltering (Usable s) where filtering_vv = filtering_vv . usableSymbol
 instance IsSimple s => IsSimple(Usable s) where isSimple_v = isSimple_v . usableSymbol

@@ -76,7 +76,7 @@ instance Observable1 info => Observable (RewritingP     info)
 instance ( t ~ f (DPIdentifier id)
          , Family.Id t ~ DPIdentifier id
          , Info info GraphTransformationProof
-         , FrameworkN Rewriting t Var
+         , FrameworkNExt Rewriting t Var
          ) =>
   Processor (NarrowingP info) (NarradarProblem Rewriting t) where
   type Typ (NarrowingP info) (NarradarProblem Rewriting t) = Rewriting
@@ -85,7 +85,7 @@ instance ( t ~ f (DPIdentifier id)
 
 instance ( t ~ f (DPIdentifier id)
          , Family.Id t ~ DPIdentifier id
-         , FrameworkN IRewriting t Var
+         , FrameworkNExt IRewriting t Var
          , Info info GraphTransformationProof
 
          ) =>
@@ -97,7 +97,7 @@ instance ( t ~ f (DPIdentifier id)
 instance ( t ~ f (DPIdentifier id)
          , Family.Id t ~ DPIdentifier id
          , Info info GraphTransformationProof
-         , FrameworkN (QRewriting t) t Var
+         , FrameworkNExt (QRewriting t) t Var
          ) =>
   Processor (NarrowingP info) (NarradarProblem (QRewriting t) t) where
   type Typ (NarrowingP info)  (NarradarProblem (QRewriting t) t) = QRewriting t
@@ -190,7 +190,7 @@ instance ( Family.Id t ~ DPIdentifier id
          , Eq (GoalTerm t)
          , Observable (Term t Mode)
          , Info info GraphTransformationProof
-         , FrameworkN (InitialGoal t Rewriting) t Var
+         , FrameworkNExt (InitialGoal t Rewriting) t Var
          , FrameworkId id
          )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t Rewriting) t)
   where
@@ -204,7 +204,7 @@ instance ( Family.Id t ~ DPIdentifier id
          , Observable (Term t Mode)
          , Observable id
          , Info info GraphTransformationProof
-         , FrameworkN (InitialGoal t IRewriting) t Var
+         , FrameworkNExt (InitialGoal t IRewriting) t Var
          , FrameworkId id
          )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t IRewriting) t)
   where
@@ -216,7 +216,7 @@ instance ( Family.Id t ~ DPIdentifier id
          , t ~ f (DPIdentifier id), MapId f
          , Eq (GoalTerm t)
          , Observable (Term t Mode)
-         , FrameworkN (InitialGoal t Narrowing) t Var
+         , FrameworkNExt (InitialGoal t Narrowing) t Var
          , FrameworkId id
          , Info info GraphTransformationProof
          )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t Narrowing) t)
@@ -230,7 +230,7 @@ instance ( Family.Id t ~ DPIdentifier id
          , Eq (GoalTerm t)
          , Observable (Term t Mode)
          , Info info GraphTransformationProof
-         , FrameworkN (InitialGoal t CNarrowing) t Var
+         , FrameworkNExt (InitialGoal t CNarrowing) t Var
          , FrameworkId id
          )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowing) t)
   where
@@ -242,7 +242,7 @@ instance ( Family.Id t ~ DPIdentifier (GenId id)
          , t ~ f (DPIdentifier (GenId id)), MapId f
          , Eq (GoalTerm t)
          , Observable (Term t Mode)
-         , FrameworkN (InitialGoal t NarrowingGen) t Var
+         , FrameworkNExt (InitialGoal t NarrowingGen) t Var
          , FrameworkId (GenId id)
          , Info info GraphTransformationProof
          )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t NarrowingGen) t)
@@ -255,7 +255,7 @@ instance ( Family.Id t ~ DPIdentifier (GenId id)
          , t ~ f (DPIdentifier (GenId id)), MapId f
          , Eq (GoalTerm t)
          , Observable (Term t Mode)
-         , FrameworkN (InitialGoal t CNarrowingGen) t Var
+         , FrameworkNExt (InitialGoal t CNarrowingGen) t Var
          , FrameworkId (GenId id)
          , Info info GraphTransformationProof
          )=> Processor (NarrowingP info) (NarradarProblem (InitialGoal t CNarrowingGen) t)
@@ -272,7 +272,7 @@ instance (trs ~ NarradarTRS t Var
          ,DPIdentifier id ~ Family.Id t
          ,Info info GraphTransformationProof, Pretty (MkRewriting st)
          ,FrameworkId id
-         ,FrameworkN (MkRewriting st) t Var
+         ,FrameworkNExt (MkRewriting st) t Var
          ) =>
     Processor (Instantiation info) (NarradarProblem (MkRewriting st) t) where
   type Typ (Instantiation info) (NarradarProblem (MkRewriting st) t) = MkRewriting st
@@ -283,7 +283,7 @@ instance (Info info (NarradarProblem b t)
          ,Processor (Instantiation info) (NarradarProblem b t)
          ,Observable b, Observable (Term t Var)
          ,NarradarProblem b t ~ Res (Instantiation info) (NarradarProblem b t)
-         ,FrameworkN b t Var
+         ,FrameworkNExt b t Var
          ) =>
     Processor (Instantiation info) (NarradarProblem (MkNarrowing b) t) where
   type Typ (Instantiation info) (NarradarProblem (MkNarrowing b) t) = MkNarrowing b
@@ -295,13 +295,13 @@ instance (trs ~ NarradarTRS t Var
          ,DPIdentifier id ~ Family.Id t
          ,Info info GraphTransformationProof
          ,FrameworkId id, NFData (Term t Var)
-         ,FrameworkN (QRewriting t) t Var
+         ,FrameworkNExt (QRewriting t) t Var
          ) =>
     Processor (Instantiation info) (NarradarProblem (QRewriting t) t) where
   type Typ (Instantiation info) (NarradarProblem (QRewriting t) t) = QRewriting t
   type Trs (Instantiation info) (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
 --  applySearchO o Instantiation = instantiation o
-  applySearchO (O o oo) Instantiation p
+  applySearchO (O o oo) Instantiation p@(QRewritingProblem{q})
    | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
    | otherwise = [ singleP (InstantiationProof olddp newdps) p (expandDPair p i newdps)
@@ -318,11 +318,19 @@ instance (trs ~ NarradarTRS t Var
          f (O o oo) (i,olddp@(s :-> t))
                   | o "isNotIncluded" isNotIncluded olddp newdps = Just (i, newdps)
                   | otherwise = Nothing
-            where newdps = [ deepseq sigma_r $
-                              applySubst sigma_l s :-> applySubst sigma_l t
-                            | Just (Two sigma_r sigma_l) <-
-                                 snub [o "dpUnify" (dpUnify (getP p)) l r
-                                       | (r,l) <- edges, l == i]]
+            where newdps = [ s' :-> t'
+                            | sigma_l <-
+                                 snub [ sl
+                                       | (r,l) <- edges, l == i
+                                       , Just (Two _sr sl) <- [o "dpUnify" (dpUnify (getP p)) l r]
+                                       , let ( u :-> _v) = dpsA A.! r
+                                       , let u' = applySubst sl u
+                                       , inQNF u' q
+                                       ]
+                            , let s' = applySubst sigma_l s
+                            , let t' = applySubst sigma_l t
+                            , inQNF s' q
+                            ]
 
 isNotIncluded olddp newdps = EqModulo olddp `notElem` (EqModulo <$> newdps)
 
@@ -333,7 +341,7 @@ instance (trs ~ NarradarTRS t v
          ,id  ~ Family.Id t
          ,Observable (Term t Mode)
          ,Info info GraphTransformationProof
-         ,FrameworkN (InitialGoal t typ) t Var
+         ,FrameworkNExt (InitialGoal t typ) t Var
          ,FrameworkId id, DPSymbol id
          ) =>
     Processor (Instantiation info) (NarradarProblem (InitialGoal (f id) typ) (f id))
@@ -374,7 +382,7 @@ instance (trs ~ NarradarTRS t Var
          ,t ~ f (DPIdentifier id), MapId f
          ,DPIdentifier id ~ Family.Id t
          ,Info info GraphTransformationProof
-         ,FrameworkN (MkRewriting st) t Var
+         ,FrameworkNExt (MkRewriting st) t Var
          ,FrameworkId id
          ) =>
     Processor (FInstantiation info) (NarradarProblem (MkRewriting st) t) where
@@ -385,7 +393,7 @@ instance (trs ~ NarradarTRS t Var
 instance (Info info (NarradarProblem b t)
          ,Processor (FInstantiation info) (NarradarProblem b t)
          ,NarradarProblem b t ~ Res (FInstantiation info) (NarradarProblem b t)
-         ,FrameworkN b t Var
+         ,FrameworkNExt b t Var
          ) =>
  Processor (FInstantiation info) (NarradarProblem (MkNarrowing b) t) where
  type Typ (FInstantiation info) (NarradarProblem (MkNarrowing b) t) = MkNarrowing b
@@ -397,12 +405,38 @@ instance (trs ~ NarradarTRS t Var
          ,DPIdentifier id ~ Family.Id t
          ,Info info GraphTransformationProof
          ,FrameworkId id, NFData (Term t Var)
-         ,FrameworkN (QRewriting t) t Var
+         ,FrameworkNExt (QRewriting t) t Var
          ) =>
     Processor (FInstantiation info) (NarradarProblem (QRewriting t) t) where
   type Typ (FInstantiation info) (NarradarProblem (QRewriting t) t) = QRewriting t
   type Trs (FInstantiation info) (NarradarProblem (QRewriting t) t) = NarradarTRS t Var
-  applySearchO o FInstantiation = finstantiation o
+  applySearchO (O o oo) FInstantiation p@QRewritingProblem{q}
+   | null (elems dpsA)  = error "forward instantiation Processor: received a problem with 0 pairs"
+   | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
+--  | o "isCollapsing" (isCollapsing (getR p)) = mzero
+   | otherwise = [ singleP (FInstantiationProof olddp newdps) p
+                           (expandDPair p i newdps)
+                     | (i, newdps) <- dpss
+                     , let olddp  = safeAt "finstantiation" dpsA  i
+                     ]
+   where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
+         dpss = [ (i, dps) | Just (i,dps) <- map f (assocs dpsA)
+                           , not (null dps)]
+         f (i, olddp@(s :-> t))
+                  | isNotIncluded olddp newdps = Just (i, newdps)
+                  | otherwise = Nothing
+              where newdps = [ s' :-> t'
+                             | sigma_r <-
+                                 snub [ sr
+                                      | j <- safeAt "finstantiation" gr i
+                                      , Just (Two sr _sl) <- [dpUnifyInv (getP p) j i]
+                                      , let (u :-> _v) = dpsA A.! j
+                                      , let u' = applySubst sr u
+                                      , inQNF u' q
+                                       ]
+                             , let s' = applySubst sigma_r s
+                             , let t' = applySubst sigma_r t
+                             , inQNF s' q]
 
 instance (v ~ Var
          ,t ~ f (DPIdentifier id), MapId f
@@ -410,7 +444,7 @@ instance (v ~ Var
          ,Pretty typ
          ,Info info GraphTransformationProof
          ,Observable (Term t Mode)
-         ,FrameworkN (InitialGoal t typ) t Var
+         ,FrameworkNExt (InitialGoal t typ) t Var
          ,FrameworkId id
          ) =>
     Processor (FInstantiation info) (NarradarProblem (InitialGoal t typ) t)
@@ -446,7 +480,7 @@ instance (v ~ Var
 
 instance ( t ~ f id, v ~ Var
          , Info info GraphTransformationProof
-         , FrameworkN IRewriting t Var
+         , FrameworkNExt IRewriting t Var
          ) =>
     Processor (RewritingP info) (NarradarProblem IRewriting t)
  where
@@ -470,7 +504,7 @@ instance ( t ~ f id, MapId f
          , Info info GraphTransformationProof
          , Eq (GoalTerm t)
          , Observable (Term t Mode)
-         , FrameworkN (InitialGoal t IRewriting) t Var
+         , FrameworkNExt (InitialGoal t IRewriting) t Var
          , FrameworkId id, DPSymbol id
          ) =>
     Processor (RewritingP info) (NarradarProblem (InitialGoal t IRewriting) t)
@@ -493,7 +527,7 @@ instance ( t ~ f id, MapId f
 
 instance ( t ~ f id, v ~ Var
          , Info info GraphTransformationProof
-         , FrameworkN (QRewriting t) t Var
+         , FrameworkNExt (QRewriting t) t Var
          , Observable (SomeInfo info)
          ) =>
     Processor (RewritingP info) (NarradarProblem (QRewriting t) t)
@@ -583,7 +617,7 @@ narrowing, narrowing_innermost
              ,Info info p
              ,Info info GraphTransformationProof
              ,Monad mp
-             ,FrameworkProblem typ trs
+             ,FrameworkProblemExt typ trs
              ) =>
              Observer -> Problem typ trs -> [Proof info mp (Problem typ trs)]
 
@@ -654,7 +688,7 @@ narrowingIG, narrowing_innermostIG
              ,t ~ f (DPIdentifier id), MapId f
              ,v ~ Var
              ,Family.Id t  ~ DPIdentifier id
-             ,FrameworkN (InitialGoal t typ) t v
+             ,FrameworkNExt (InitialGoal t typ) t v
              ,FrameworkId id, Pretty (DPIdentifier id)
              ,Info info (Problem (InitialGoal t typ) trs)
              ,Info info GraphTransformationProof
@@ -748,7 +782,7 @@ narrow1DP rr (l :-> r) = [ (Term.applySubst theta l :-> r', p)
 qNarrow1DPO :: FrameworkTerm t Var => Observer -> QSet t -> [Rule t Var] -> Rule t Var -> [(Rule t Var, Position)]
 qNarrow1DPO (O o oo) qset@QSet{terms=q} rr (l :-> r) =
   [ (l' :-> r', p)
-  | ((r',p),theta) <- observeAll (qNarrow1P' q rr r)
+  | ((r',p),theta) <- observeAll (qNarrow1P' (F.toList q) rr r)
   , let l' = applySubst (o "theta" $ liftSubstNF theta) l
   , inQNF l' qset]
 
@@ -762,7 +796,7 @@ instantiation, finstantiation
              ,t ~ f (DPIdentifier id)
              ,Family.Id t ~ DPIdentifier id
              ,Info info GraphTransformationProof
-             , FrameworkProblem typ trs
+             , FrameworkProblemExt typ trs
              , FrameworkId id
              ,Monad mp
              ) =>
@@ -803,9 +837,9 @@ finstantiation (O o oo) p
                      , let newdps = dps' !! i]
    where (dpsA, gr) = (rulesArray (getP p), rulesGraph (getP p))
          dps  = elems dpsA
-         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps (oo "f" f) (assocs dpsA))
+         dpss = [ (i, snd <$$> dps) | (i,dps) <- zip [0..] (maps f (assocs dpsA))
                                     , all (not.null) dps]
-         f (O o oo) (i, olddp@(s :-> t))
+         f (i, olddp@(s :-> t))
                   | EqModulo olddp `notElem` (EqModulo . snd <$> newdps) = newdps
                   | otherwise = []
               where newdps = [(i, applySubst sigma_r s :-> applySubst sigma_r t)

@@ -21,9 +21,9 @@
 
 module Narradar.Types.Problem.QRewriting
          ( QRewriting(..), QRewritingN, QRewritingConstraint
-         , qrewriting, qRewritingO, QSet(..), qmin, qset
+         , qrewriting, qRewritingO, QSet(..), qmin, qset, qSetO
          , Problem(..)
-         , inQNF, inQNFo, isQInnermost
+         , inQNF, isQInnermost
          , qCondition', isQValid, isQConfluent, mkQConditionO
 --         , Strategy(..), HasStrategy(..), Standard, Innermost, isInnermost
 --         , Minimality(..), HasMinimality(..), getMinimalityFromProblem
@@ -33,6 +33,7 @@ import Control.Applicative
 import Control.Applicative.Compose
 import Control.DeepSeq
 import Control.DeepSeq.Extras
+import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.Free.Extras
 import Control.Exception (assert)
@@ -42,6 +43,8 @@ import Data.Constraint.Forall
 import Data.Foldable as F (Foldable(..), toList)
 import Data.Functor1
 import Data.Graph as G (Graph, buildG, edges)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid(..))
 import Data.Traversable as T (Traversable(..), mapM)
@@ -79,42 +82,67 @@ import GHC.Generics (Generic)
 import Debug.Hoed.Observe
 
 import Unsafe.Coerce
+import System.IO.Unsafe
 
-data QSet t = QSet {terms :: [Term t Var], matcher :: TermMatcher t Var }
-                  deriving ( Generic, Typeable)
+-- Note the use of ugly memoization to speed up inQNF calls
+data QSet t = QSet {terms :: Set(Term t Var), inQNFmemo :: MVar (Map (Term t Var) Bool) }
+                  deriving ( Generic, Typeable )
 
-qSetO o tt = QSet tt (createMatcherO o tt)
+qSetIO (O oo o) tt = do
+  memo <- newMVar mempty
+  return $ QSet (Set.fromList tt) memo
+
+qSetO o tt = unsafePerformIO (qSetIO o tt)
+
+inQNF_IO t q = do
+  table <- readMVar (inQNFmemo q)
+  case Map.lookup t table of
+    Just x -> return x
+    Nothing -> do
+      r <- solve (terms q) t
+      modifyMVar_ (inQNFmemo q) (return . Map.insert t r)
+      return r
+  where
+      -- inlined implementation of matching
+      -- skipping renaming and recursing with the memo table
+      solve terms t
+        | Prelude.any (`matches` t) terms = return False
+        | otherwise = allM (`inQNF_IO` q) (properSubterms t)
+
+      allM f [] = return True
+      allM f (x:xx) = do
+        v <- f x
+        if v then allM f xx else return False
+
+inQNF t q = unsafePerformIO (inQNF_IO t q)
+
+mapQSetIO :: (Functor f, Functor g, Ord1 g
+           ) => (forall a. f a -> g a) -> QSet f -> IO(QSet g)
+mapQSetIO f (QSet tt memoVar) = do
+  memo <- readMVar memoVar
+  memo' <- newMVar (Map.mapKeysMonotonic (mapTerm f) memo)
+  return(QSet (Set.map(mapTerm f) tt) memo')
 
 mapQSet :: (Functor f, Functor g, Ord1 g
            ) => (forall a. f a -> g a) -> QSet f -> QSet g
-mapQSet f (QSet tt matcher) = QSet (mapTerm f <$> tt) (Automata.map f matcher)
-{-
-instance (Eq(Family.Id term), Eq1 term) => Eq (QSet term) where
-  QSet t1 m1 == QSet t2 m2 = eq \\ (inst :: Forall Eq1 \\ inst where
-    eq :: ( Eq(term(Term term Var))
-          , Eq(term(TermMatcher term))
-          ) => Bool
-    eq = t1 == t2 && m1 == m2
--}
+mapQSet f q = unsafePerformIO $  mapQSetIO f q
 
-deriving instance (Eq1 t) => Eq (QSet t)
-deriving instance (Ord1 term) => Ord (QSet term)
-deriving instance (Show1 term) => Show (QSet term)
-
-instance (Applicative t, Traversable t, Eq1 t) => GetMatcher (QSet t) where getMatcherM a b = getMatcherM (terms a) (terms b)
+instance (Eq1 t) => Eq (QSet t) where q1 == q2 = terms q1 == terms q2
+instance Ord1 t => Ord (QSet t) where compare q1 q2 = compare (terms q1) (terms q2)
+instance Show1 t => Show (QSet t) where show q = show ("QSet", toList(terms q))
 
 instance (NFData1 term, NFData(Family.Id term)
          ) => NFData (QSet term) where
-  rnf (QSet tt m) = rnf1 tt `seq` rnf m
+  rnf (QSet tt m) = rnf1 tt
 instance Observable1 t => Observable (QSet t) where
   observer (QSet qset m) = send "QSet" (return (`QSet` m) << qset)
 instance (Ord(Family.Id term), HasId1 term, Foldable term
          ) => HasSignature (QSet term) where
   getSignature QSet{terms=q} = getSignature q
 instance (Pretty(term(Term term Var))) => Pretty (QSet term) where
-  pPrint QSet{terms=tt} = "QSet:" <+> fsep tt
+  pPrint QSet{terms=tt} = "QSet:" <+> fsep (toList tt)
 
-instance GetFresh(QSet t) where getFreshM (QSet tt m) = (`QSet` m) `liftM` getFreshM tt
+instance Ord1 t => GetFresh(QSet t) where getFreshM (QSet tt m) = (`QSet` m) `liftM` getFreshM tt
 instance (Functor t, Foldable t) => GetVars (QSet t) where getVars = getVars . terms
 
 
@@ -127,37 +155,10 @@ mkQConditionO :: (FrameworkT t, Observable (Term t Var)
                 ) => Observer -> QSet t -> NarradarTRS t Var -> Bool
 mkQConditionO (O o _) QSet{..} trs =
 --  none (o "isNF" isNF matcher) (lhs <$> rules trs)
-  none (R.isNF [ q :-> q | q <- terms]) (lhs <$> rules trs)
+  none (R.isNF [ q :-> q | q <- toList terms]) (lhs <$> rules trs)
 
 -- | NF(R) \subseteq NF(Q)
 qCondition' QSet{terms=qset} trs = none (R.isNF trs) qset
-
-
-inQNF :: ( FastMatch t Var
-         , Applicative (Maybe :+: t)
-         , Pretty (Term t Var), Observable(Term t Var)
-         ) =>
-         Term t Var -> QSet t -> Bool
-inQNF = inQNFo nilObserver
-
-inQNFo :: ( FastMatch t Var
-         , Applicative (Maybe :+: t)
-         , Pretty (Term t Var), Observable(Term t Var)
-         ) =>
-         Observer -> Term t Var -> QSet t -> Bool
-{-# SPECIALIZE inQNFo ::  Observer -> TermN String -> QSet(TermF String) -> Bool #-}
-{-# SPECIALIZE inQNFo ::  Observer -> TermN Id -> QSet(TermF Id) -> Bool #-}
-inQNFo (O o oo) t QSet{terms, matcher} = res' -- if (res == res') then res else err
- where
-  err  =
-    error $ show $
-    if res && not res' then
-      let Just (p,t') = force $ oo "rewrite1" R.rewrite1O' [t :-> t | t <- terms] t in
-      (text "Tree matcher claims" <+> t <+> text "is a normal form but there is a reduct at position" <+> p <+> text "and it reduces to" <+> t' <> colon $$ vcat terms)
-     else
-      (text "Tree matcher claims" <+> t <+> text "is not a normal form but Rewriting disagrees:" $$ vcat terms)
-  res  =   isNF matcher t
-  res' = R.isNF [ t :-> t | t <- terms] t
 
 data QRewriting_ t = QRewriting {qset_ :: QSet t, qmin_ :: Minimality} deriving (Generic, Typeable)
 
@@ -180,13 +181,12 @@ lower = lowerNF1 fmapQRewriting where
 qmin x = qmin_ . lower $ x
 qset x = qset_ . lower $ x
 
-qRewritingO :: ( Observable1 t, Observable (Family.Id t), Observable(Term t Var)
-               , FastMatch t Var
+qRewritingO :: ( Functor t, Ord1 t, Observable1 t, Observable (Family.Id t), Observable(Term t Var)
                ) => Observer -> [Term t Var] -> Minimality -> QRewriting t
 qRewritingO o tt = lift . QRewriting (qSetO o tt)
 
-qrewriting :: (QRewritingConstraint term, FastMatch term Var) => QRewriting term
-qrewriting = lift $ QRewriting (QSet [] mempty) M
+qrewriting :: (QRewritingConstraint term) => QRewriting term
+qrewriting = lift $ QRewriting (qSetO nilObserver []) M
 
 
 deriving instance (Eq1 term) => Eq (QRewriting_ term)
@@ -213,13 +213,12 @@ deriving instance (Eq trs, Eq1 term, Eq(Family.Id term)) => Eq (Problem (QRewrit
 deriving instance (Ord trs, Ord1 term, Ord(Family.Id term)) => Ord (Problem (QRewriting term) trs)
 deriving instance (Show trs, Show1 term, Show(Family.Id term)) => Show (Problem (QRewriting term) trs)
 
-instance (QRewritingConstraint term, FastMatch term Var
-         ,Match term
+instance (QRewritingConstraint term, Match term
          ) => Eq (EqModulo (QRewriting term)) where
   EqModulo (lower -> QRewriting q m) == EqModulo (lower -> QRewriting q' m') =
     m == m' && EqModulo q == EqModulo q'
 
-instance (Traversable t, Match t) => Eq(EqModulo (QSet t)) where
+instance (Match t, Ord1 t) => Eq(EqModulo (QSet t)) where
   EqModulo a == EqModulo b = EqModulo (terms a) == EqModulo (terms b)
 
 isQInnermost = qCondition
@@ -254,8 +253,9 @@ instance (FrameworkTerm term Var
          ) => MkProblem (QRewriting term) (NarradarTRS term Var) where
   mkProblemO o (lower -> QRewriting q m) rr =
     QRewritingProblem rr mempty q m (mkQConditionO o q rr)
-  mapRO o f (QRewritingProblem rr p q m _) = -- mkDPProblemO o (QRewriting q m) (f r) p
-    let rr' = f rr in QRewritingProblem rr' p q m (mkQConditionO o q rr')
+  mapRO o f (QRewritingProblem rr p q m _) =
+    mkDPProblemO o (lift $ QRewriting q m) (f rr) p
+
   setR_uncheckedO _ rr p = p{rr}
 
 instance ( HasSignature trs, HasId1 term, Foldable term
@@ -268,14 +268,17 @@ instance ( FrameworkTerm t Var, Pretty(NarradarTRS t Var)
   MkDPProblem (QRewriting t) (NarradarTRS t Var)
  where
 --  mkDPProblem it@(QRewriting s m) rr dd | pprTrace (text "mkDPProblem rewriting with rules" $$ nest 2 rr) False = undefined
-  mkDPProblemO obs@(O o oo) it@(lower -> QRewriting q m) rr dd
-    = case lowerNTRS dd of
-        pp@DPTRS{typ,rulesUsed} | (typ == Comparable it) &&
-                                  (Set.fromList(rules rr) == rulesUsed)
-                  -> QRewritingProblem rr dd q m (mkQConditionO obs q rr)
-        otherwise ->
-          dpTRSO obs
-            (QRewritingProblem rr dd q m (mkQConditionO obs q rr))
+
+  mkDPProblemO obs typ rr dd = QRewritingProblem rr dd' q m qCondition
+    where
+       p0 = QRewritingProblem rr dd q m qCondition
+       ~(QRewriting q m) = lower typ
+       qCondition = mkQConditionO obs q rr
+       dd' = case lowerNTRS dd of
+               pp@DPTRS{typ=typ',rulesUsed} | typ' == Comparable typ
+                                       && Set.fromList(rules rr) == rulesUsed
+                         -> dd
+               otherwise -> getP $ dpTRSO obs p0
 
   mapPO (O o oo) f me@QRewritingProblem{rr,dd,q,m}
     | dd' <- f dd
@@ -331,7 +334,7 @@ instance (HasRules trs, GetVars trs, Pretty v, PprTPDB v, Pretty (t(Term t v)), 
          then parens( text "PAIRS" $$
               nest 1 (vcat $ map pprTPDB $ rules $ p))
          else Ppr.empty
-     , parens (text "STRATEGY Q" <+> fsep (map pprTPDB q))
+     , parens (text "STRATEGY Q" <+> fsep (map pprTPDB (toList q)))
      ,if m == M then parens (text "MINIMALITY") else Ppr.empty
      ]
 
@@ -347,7 +350,7 @@ instance FrameworkTerm t Var => ICap (Problem(QRewriting t) (NarradarTRS t Var))
 #endif
     rr <- {-getFresh-} return (rules r)
     let goO (O o oo) t =
-          if and [ or [ not(oo "inQNF" inQNFo t q)
+          if and [ or [ not(inQNF t q)
                               | t <- map (applySubst sigma) s ++
                                      directSubterms (applySubst sigma l)]
                   | l :-> r <- rr
@@ -378,8 +381,8 @@ instance ( FrameworkTerm t Var
                      ) $ \in_t -> do
                    t'  <- wrap `liftM` ({-oo "icap"-} icapO o p s `T.mapM` in_t)
                    let checkSigma o@(O _o oo) sigma l =
-                        _o "s in qnf" (all ((\s -> oo "inQNF" inQNFo s q) . applySubst sigma) s) &&
-                        _o "l in qnf" (all ((\s -> oo "inQNF" inQNFo s q) . applySubst sigma) (directSubterms l))
+                        _o "s in qnf" (all ((\s -> inQNF s q) . applySubst sigma) s) &&
+                        _o "l in qnf" (all ((\s -> inQNF s q) . applySubst sigma) (directSubterms l))
                    let  rr'  = {- o "rr'" -}
                                  [ EqModulo rule
                                     | rule@(l:->_r) <- rules rr
@@ -425,24 +428,29 @@ instance ( FrameworkTerm t Var
          , Pretty (t(Term t Var))
          ) =>
          ExpandDPair (QRewriting t) (NarradarTRS t Var) where
-  expandDPairO (O o oo) p i new = setP (liftNF $ dptrs{ depGraph = dg'' }) p where
-    dptrs = lowerNTRS $ getP $ oo "expandDPairDefault" expandDPairOdefault p i new
+  expandDPairO (O o oo) p i new = setP dptrs' p where
+    dptrsE = lowerNTRS $ getP $ defExpand
+    defExpand = oo "expandDPairDefault" expandDPairOdefault p i new
+    dptrs' = dg'' `seq` liftNF (dptrsE{ depGraph = dg'' })
     -- ignore the new graph computed by expandDPairDefault,
     -- using only its bounds in putting together a custom graph
-    dg'' = o "dg''" $
-           G.buildG bb $
-           o "matrix" $ force $ 
-           o "m" [ (m,i+j)   | (m,n) <- edges dg, n == i, j <- [0..ln] ] ++
-           o "n" [ (i+j,n)   | (m,n) <- edges dg, m == i, j <- [0..ln] ] ++
-           o "mn" [ (i+j,i+k) | (m,n) <- edges dg, m == i, n == i
-                              , j <- [0..ln]
-                              , k <- [0..ln]] ++
-          edges dg
+    dg'' = G.buildG bb edges'
+    edges' = do
+      mn <- edgesdg
+      case mn of
+        (m,n)
+          | m == i && n == i -> [(i+j,i+k) | j <- newIndexes, k <- newIndexes]
+          | m == i -> [(i+j,n) | j <- newIndexes]
+          | n == i -> [(m,i+j) | j <- newIndexes]
+          | otherwise -> return mn
 
+    newIndexes = [0..ln]
+    edgesdg = edges dg
     ln  = length (snub new) - 1
-    dg  = depGraph (lowerNTRS $ getP p)
+    dptrs = lowerNTRS $ getP p
+    dg  = depGraph dptrs
 --  bb  = G.bounds $ depGraph dptrs
-    bb  = o "bb" $ G.bounds $ dpsA dptrs
+    bb  = o "bb" $ G.bounds $ dpsA dptrsE
 
 -- Hood
 
