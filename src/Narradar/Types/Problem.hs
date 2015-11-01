@@ -10,6 +10,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TupleSections #-}
 
 module Narradar.Types.Problem (
 --          module MuTerm.Framework.Problem,
@@ -467,7 +468,7 @@ isValidUnifO :: forall typ p id .
 
                ) => Observer -> NProblem typ id -> Bool
 isValidUnifO o p@(lowerNTRS.getP -> DPTRS _ dps _ _ (Two unif _) _)
-  | valid = True -- const True (pPrint (undefined :: Term t v))
+  | equivalent = True -- const True (pPrint (undefined :: Term t v))
   | otherwise = pprTrace (text "Warning: invalid set of unifiers" $$
                           text "Problem type:" <+> pPrint (getFramework p) $$
                           text "DPS:"      <+> pPrint (elems dps) $$
@@ -479,8 +480,9 @@ isValidUnifO o p@(lowerNTRS.getP -> DPTRS _ dps _ _ (Two unif _) _)
   where
   liftL = ListT . return
   l     = length (rules $ getP p) - 1
-  unif' = runIcap (getP p) (getFresh (getR p) >>= \rr' ->
-                             computeDirectUnifiersO o (setR rr' p))
+  rr    = rules(getR p)
+  (rules -> rr', unif') = runIcap (getP p) (getFresh (getR p) >>= \rr' -> (rr',) <$> computeDirectUnifiersO o (setR rr' p))
+
   validUnif = array ( (0,0), (l,l)) $ runIcap p $ runListT $ do
             (x, _ :-> r) <- liftL $ A.assocs dps
             (y, l :-> _) <- liftL $ A.assocs dps
@@ -490,6 +492,14 @@ isValidUnifO o p@(lowerNTRS.getP -> DPTRS _ dps _ _ (Two unif _) _)
 
   valid = and $ zipWith (\subst unifies -> if unifies then isJust subst else isNothing subst) (elems unif) (elems validUnif)
 
+  equivalent = (`all` indices unif) $ \i@(x,y) ->
+                  case (unif!i,unif'!i) of
+                    (Just _, Nothing) -> False
+                    (Nothing, Just _) -> False
+                    (Just (Two r1 l1), Just(Two r2 l2)) ->
+                          applySubst r1 (rhs(rr !! x)) `equiv` applySubst r2 (rhs(rr'!!x)) &&
+                          applySubst l1 (lhs(rr !! y)) `equiv` applySubst l2 (lhs(rr'!!y))
+                    (Nothing, Nothing) -> True
 
 isValidUnif _ = True
 
