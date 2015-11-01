@@ -94,7 +94,7 @@ instance (Info info ReduceQProof
   type Typ (ReduceQ info) (NarradarProblem (QRewriting t) t) = QRewriting t
   type Trs (ReduceQ info) (NarradarProblem (QRewriting t) t) = (NarradarTRS t Var)
   applyO o ReduceQ p@QRewritingProblem{q}
-    | removed>0 = singleP (ReduceQProof removed) p p{q = qSetO o qset'}
+    | removed>0 = singleP (ReduceQProof removed) p p{q = qSetO' o qset'}
     | otherwise  = mzero
    where
      sig = getDefinedSymbols p

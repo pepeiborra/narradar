@@ -780,9 +780,9 @@ narrow1DP rr (l :-> r) = [ (Term.applySubst theta l :-> r', p)
                            | ((r',p),theta) <- observeAll (narrow1P rr r) ]
 
 qNarrow1DPO :: FrameworkTerm t Var => Observer -> QSet t -> [Rule t Var] -> Rule t Var -> [(Rule t Var, Position)]
-qNarrow1DPO (O o oo) qset@QSet{terms=q} rr (l :-> r) =
+qNarrow1DPO (O o oo) qset rr (l :-> r) =
   [ (l' :-> r', p)
-  | ((r',p),theta) <- observeAll (qNarrow1P' (F.toList q) rr r)
+  | ((r',p),theta) <- observeAll (qNarrow1P' (`inQNF` qset) rr r)
   , let l' = applySubst (o "theta" $ liftSubstNF theta) l
   , inQNF l' qset]
 

@@ -188,7 +188,7 @@ Library
 --                  parse-dimacs,
                   narradar-alacarte >= 0.6,
                   narradar-funsat-lang >= 0.8, 
-                  narradar-term >= 0.3.3,
+                  narradar-term >= 0.3.4,
                   narradar-trsparser >= 0.4.3, 
                   narradar-prolog >= 0.3,
                   narradar-prolog-tools >= 0.3,

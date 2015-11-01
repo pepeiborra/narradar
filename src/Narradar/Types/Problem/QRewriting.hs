@@ -9,7 +9,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveGeneric, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveGeneric, DeriveDataTypeable, DeriveAnyClass #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE InstanceSigs #-}
@@ -21,7 +21,7 @@
 
 module Narradar.Types.Problem.QRewriting
          ( QRewriting(..), QRewritingN, QRewritingConstraint
-         , qrewriting, qRewritingO, QSet(..), qmin, qset, qSetO
+         , qrewriting, qRewritingO, QSet(..), qmin, qset, qSetO, qSetO'
          , Problem(..)
          , inQNF, isQInnermost
          , qCondition', isQValid, isQConfluent, mkQConditionO
@@ -36,6 +36,7 @@ import Control.DeepSeq.Extras
 import Control.Concurrent.MVar
 import Control.Monad
 import Control.Monad.Free.Extras
+import Control.Monad.Variant
 import Control.Exception (assert)
 import Data.Coerce
 import Data.Constraint
@@ -57,7 +58,7 @@ import Data.Typeable
 import Text.XHtml (HTML(..), theclass)
 import Prelude.Extras
 
-import Data.Term (mapTerm)
+import Data.Term (mapTerm, freshWith')
 import Data.Term.Rules
 import Data.Term.Automata hiding (map)
 import qualified Data.Term.Automata as Automata
@@ -76,7 +77,7 @@ import Narradar.Types.PrologIdentifiers (RemovePrologId)
 import Narradar.Types.TRS
 import Narradar.Types.Term
 import Narradar.Types.Var
-import Narradar.Utils (return2, snub, pprTrace, none, Comparable(..), comparableEqO)
+import Narradar.Utils (return2, fmap2, snub, pprTrace, none, Comparable(..), comparableEqO, (<$$>), (<$$$>))
 
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
@@ -84,36 +85,57 @@ import Debug.Hoed.Observe
 import Unsafe.Coerce
 import System.IO.Unsafe
 
+data QVar = Q Int | V {fromV::Var} deriving (Eq, Ord, Show, Generic, NFData, Observable)
+type instance Family.Var QVar = QVar
+instance Enum QVar where fromEnum (Q x) = x ; toEnum = Q
+instance Pretty QVar where
+  pPrint (Q x) = braces(text "q" <+> x)
+  pPrint (V x) = pPrint x
+instance PprTPDB QVar where pprTPDB (V x) = pprTPDB x
+instance Rename QVar where
+  rename (V a) (V b) = V $ rename a b
+  rename x y = y
+
 -- Note the use of ugly memoization to speed up inQNF calls
-data QSet t = QSet {terms :: Set(Term t Var), inQNFmemo :: MVar (Map (Term t Var) Bool) }
+-- And the use of disjoing namespaces to prevent variable capture
+data QSet t = QSet {terms :: Set(Term t QVar), inQNFmemo :: MVar (Map (Term t QVar) Bool) }
                   deriving ( Generic, Typeable )
 
 qSetIO (O oo o) tt = do
   memo <- newMVar mempty
   return $ QSet (Set.fromList tt) memo
 
-qSetO o tt = unsafePerformIO (qSetIO o tt)
+qSetO  o tt = qSetO' o $ fmap2 V tt
+qSetO' o tt = unsafePerformIO (qSetIO o tt) 
 
+inQNF_IO :: forall t. (Ord1 t, Match t) => Term t Var -> QSet t -> IO Bool
 inQNF_IO t q = do
+
   table <- readMVar (inQNFmemo q)
-  case Map.lookup t table of
-    Just x -> return x
-    Nothing -> do
-      r <- solve (terms q) t
-      modifyMVar_ (inQNFmemo q) (return . Map.insert t r)
-      return r
+  let solve terms t
+        | Prelude.any (`matches` t) terms = return False
+        | otherwise = allM (loop . canonicalize) (properSubterms t)
+      loop (canonicalize -> t) =
+        case Map.lookup t table of
+          Just x -> return x
+          Nothing -> do
+            r <- solve (terms q) t
+            modifyMVar_ (inQNFmemo q) (return . Map.insert t r)
+            return r
+  loop (canonicalize t)
   where
       -- inlined implementation of matching
       -- skipping renaming and recursing with the memo table
-      solve terms t
-        | Prelude.any (`matches` t) terms = return False
-        | otherwise = allM (`inQNF_IO` q) (properSubterms t)
-
       allM f [] = return True
       allM f (x:xx) = do
         v <- f x
         if v then allM f xx else return False
 
+      canonicalize :: forall v. (Ord v, Rename v, Observable v) => Term t v -> Term t QVar
+      canonicalize = runVariant' freshVars . freshWith' (\_ x -> x)
+      freshVars = Q <$> [0..]
+
+inQNF :: (Ord1 t, Match t) => Term t Var -> QSet t -> Bool
 inQNF t q = unsafePerformIO (inQNF_IO t q)
 
 mapQSetIO :: (Functor f, Functor g, Ord1 g
@@ -139,26 +161,24 @@ instance Observable1 t => Observable (QSet t) where
 instance (Ord(Family.Id term), HasId1 term, Foldable term
          ) => HasSignature (QSet term) where
   getSignature QSet{terms=q} = getSignature q
-instance (Pretty(term(Term term Var))) => Pretty (QSet term) where
-  pPrint QSet{terms=tt} = "QSet:" <+> fsep (toList tt)
+instance (Functor term, Pretty(term(Term term Var))) => Pretty (QSet term) where
+  pPrint QSet{terms=tt} = "QSet:" <+> fsep (fromV <$$> toList tt)
 
-instance Ord1 t => GetFresh(QSet t) where getFreshM (QSet tt m) = (`QSet` m) `liftM` getFreshM tt
+--instance Ord1 t => GetFresh(QSet t) where getFreshM (QSet tt m) = (`QSet` m) `liftM` getFreshM tt
 instance (Functor t, Foldable t) => GetVars (QSet t) where getVars = getVars . terms
 
 
 type instance Family.TermF (QSet term) = term
 type instance Family.Id    (QSet term) = Family.Id term
-type instance Family.Var   (QSet term) = Var
+type instance Family.Var   (QSet term) = QVar
 
 -- | NF(Q) \subseteq NF(R)
 mkQConditionO :: (FrameworkT t, Observable (Term t Var)
                 ) => Observer -> QSet t -> NarradarTRS t Var -> Bool
-mkQConditionO (O o _) QSet{..} trs =
---  none (o "isNF" isNF matcher) (lhs <$> rules trs)
-  none (R.isNF [ q :-> q | q <- toList terms]) (lhs <$> rules trs)
+mkQConditionO (O o _) q trs = none (`inQNF` q) (lhs <$> rules trs)
 
 -- | NF(R) \subseteq NF(Q)
-qCondition' QSet{terms=qset} trs = none (R.isNF trs) qset
+qCondition' QSet{terms=qset} trs = none (R.isNF trs) (fromV <$$> toList qset)
 
 data QRewriting_ t = QRewriting {qset_ :: QSet t, qmin_ :: Minimality} deriving (Generic, Typeable)
 
