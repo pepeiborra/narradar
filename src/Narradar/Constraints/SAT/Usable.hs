@@ -117,7 +117,8 @@ instance WPOSymbol id => WPOSymbol (Usable id) where
   getC = getC . usableSymbol
   getP = getP . usableSymbol
   getAlg = getAlg . usableSymbol
-
+  isTop  = isTop . usableSymbol
+  
 data UsableRes a = UsableRes { isUsable :: Bool
                              , symbolRes :: SymbolRes a }
 
