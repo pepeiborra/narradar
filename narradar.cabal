@@ -54,6 +54,8 @@ Flag sbv
    default: True
 
 Library
+  ghc-options: -j
+  
   if flag(base4)
      cpp-options: -DBASE4
      build-depends:     base >= 4
