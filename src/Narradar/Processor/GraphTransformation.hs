@@ -304,7 +304,7 @@ instance (trs ~ NarradarTRS t Var
   applySearchO (O o oo) Instantiation p@(QRewritingProblem{q})
    | null dps  = error "instantiationProcessor: received a problem with 0 pairs"
    | not $ isDPTRS (getP p) = error "instantiationProcessor: expected a problem carrying a DPTRS"
-   | otherwise = [ singleP (InstantiationProof olddp newdps) p (expandDPair p i newdps)
+   | otherwise = [ singleP (InstantiationProof olddp newdps) p (oo "expand pair" expandDPairO p i newdps)
                      | (i, newdps) <- dpss
                      , let olddp  = safeAt "instantiation" dpsA i
                      ]
@@ -320,17 +320,18 @@ instance (trs ~ NarradarTRS t Var
                   | otherwise = Nothing
             where newdps = [ s' :-> t'
                             | sigma_l <-
-                                 snub [ sl
+                                 snub [ s_st
                                        | (r,l) <- edges, l == i
-                                       , Just (Two _sr sl) <- [o "dpUnify" (dpUnify (getP p)) l r]
+                                       , Just (Two s_uv s_st) <- [o "dpUnify" (dpUnify (getP p)) l r]
                                        , let ( u :-> _v) = dpsA A.! r
-                                       , let u' = applySubst sl u
-                                       , inQNF u' q
+                                       , let u' = o "u'" $ applySubst s_uv u
+                                       , inQNFo u' q
                                        ]
-                            , let s' = applySubst sigma_l s
+                            , let s' = o "s'" $ applySubst sigma_l s
                             , let t' = applySubst sigma_l t
-                            , inQNF s' q
+                            , inQNFo s' q
                             ]
+         inQNFo = o "inQNF" inQNF
 
 isNotIncluded olddp newdps = EqModulo olddp `notElem` (EqModulo <$> newdps)
 
@@ -415,7 +416,7 @@ instance (trs ~ NarradarTRS t Var
    | not $ isDPTRS (getP p) = error "finstantiationProcessor: expected a problem carrying a DPTRS"
 --  | o "isCollapsing" (isCollapsing (getR p)) = mzero
    | otherwise = [ singleP (FInstantiationProof olddp newdps) p
-                           (expandDPair p i newdps)
+                           (oo "expandPair" expandDPairO p i newdps)
                      | (i, newdps) <- dpss
                      , let olddp  = safeAt "finstantiation" dpsA  i
                      ]
@@ -429,14 +430,15 @@ instance (trs ~ NarradarTRS t Var
                              | sigma_r <-
                                  snub [ sr
                                       | j <- safeAt "finstantiation" gr i
-                                      , Just (Two sr _sl) <- [dpUnifyInv (getP p) j i]
+                                      , Just (Two sr sl) <- [dpUnifyInv (getP p) j i]
                                       , let (u :-> _v) = dpsA A.! j
-                                      , let u' = applySubst sr u
-                                      , inQNF u' q
+                                      , let u' = o "u'" $ applySubst sl u
+                                      , inQNFo u' q
                                        ]
-                             , let s' = applySubst sigma_r s
+                             , let s' = o "s'" $ applySubst sigma_r s
                              , let t' = applySubst sigma_r t
-                             , inQNF s' q]
+                             , inQNFo s' q]
+                    inQNFo = o "inQNF" inQNF
 
 instance (v ~ Var
          ,t ~ f (DPIdentifier id), MapId f
