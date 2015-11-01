@@ -3,13 +3,14 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveGeneric #-}
 {-# LANGUAGE DeriveDataTypeable, DeriveGeneric #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE CPP #-}
 
 module Narradar.Types.Term
-                     (TermF(..), ArityId(..), HasArity(..), StringId
+                     (TermF(..), ArityId(..), HasArity(..), StringId, DPIdentifier(..)
                      ,TermN, RuleN, constant, term, term1
                      ,termIds, Size(..), fromSimple
                      ,ExtraVars(..)
@@ -75,6 +76,20 @@ instance Pretty a => Pretty (ArityId a) where pPrint ArityId{..} = pPrint the_id
 class    HasArity id where getIdArity :: id -> Int
 instance HasArity (ArityId a) where getIdArity = the_arity
 
+-- -----------------------
+-- Concrete DP Identifiers
+-- -----------------------
+data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier
+                    deriving (Ord, Typeable, Functor, Foldable, Traversable, Generic,Generic1)
+
+instance Eq a => Eq (DPIdentifier a) where
+    IdFunction f1 == IdFunction f2 = f1 == f2
+    IdDP f1       == IdDP f2       = f1 == f2
+    AnyIdentifier == _             = True
+    _             == AnyIdentifier = True
+    _             == _             = False
+
+
 -- -------
 -- Terms
 -- -------
@@ -129,6 +144,7 @@ instance (GetVars a, Ord(Family.Var a)) => ExtraVars (RuleF a) where
 instance Eq id => Unify (TermF id) where
   {-# SPECIALIZE instance Unify (TermF String) #-}
   {-# SPECIALIZE instance Unify (TermF StringId) #-}
+  {-# SPECIALIZE instance Unify (TermF (DPIdentifier StringId)) #-}
   unifyM = unifyF where
    unifyF t s = do
     t' <- find' t
@@ -137,9 +153,11 @@ instance Eq id => Unify (TermF id) where
       (Pure vt, Pure vs) -> when(vt /= vs) $ varBind vt s'
       (Pure vt, _)  -> vt `occursIn` s' >>= \occ -> if occ then fail "occurs" else varBind vt s'
       (_, Pure vs)  -> vs `occursIn` t' >>= \occ -> if occ then fail "occurs" else varBind vs t'
-      (Impure t, Impure s) -> zipTermM_ unifyF t s
-   zipTermM_ f (Term f1 tt1) (Term f2 tt2) | f1 == f2 = zipWithM_ f tt1 tt2
-                                           | otherwise = fail "structure mismatch"
+      (Impure (Term f1 []), Impure (Term f2 [])) -> if f1 == f2 then return () else fail "structure mismatch"
+      (Impure (Term f1 [x]), Impure (Term f2 [y])) -> if f1 == f2 then unifyF x y else fail "structure mismatch"
+      (Impure (Term f1 tt1), Impure (Term f2 tt2)) 
+           | f1 == f2  -> zipWithM_ unifyF tt1 tt2
+           | otherwise -> fail "structure mismatch"
 
 instance Ord id => HasId1 (TermF id) where
     getId1 (Term id _) = Just id

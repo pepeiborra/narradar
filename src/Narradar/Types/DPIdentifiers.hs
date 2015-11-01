@@ -8,12 +8,12 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveGeneric #-}
 {-# LANGUAGE CPP #-}
 
 
 module Narradar.Types.DPIdentifiers
     (module Narradar.Types.DPIdentifiers, ArityId(..), StringId
+    , DPIdentifier(..)
     )  where
 
 import Control.Applicative
@@ -33,20 +33,12 @@ import Narradar.Framework.Ppr
 import GHC.Generics (Generic)
 import Debug.Hoed.Observe
 
-type Id = DPIdentifier StringId
-type DP a = RuleN (DPIdentifier a)
-
 -- -----------------------
 -- Concrete DP Identifiers
 -- -----------------------
-data DPIdentifier a = IdFunction a | IdDP a | AnyIdentifier
-                    deriving (Ord, Typeable, Functor, Foldable, Traversable, Generic,Generic1)
-instance Eq a => Eq (DPIdentifier a) where
-    IdFunction f1 == IdFunction f2 = f1 == f2
-    IdDP f1       == IdDP f2       = f1 == f2
-    AnyIdentifier == _             = True
-    _             == AnyIdentifier = True
-    _             == _             = False
+type Id = DPIdentifier StringId
+type DP a = RuleN (DPIdentifier a)
+
 
 instance HasArity a => HasArity (DPIdentifier a) where
     getIdArity (IdFunction f) = getIdArity f
