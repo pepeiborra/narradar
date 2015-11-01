@@ -51,8 +51,8 @@ instance (Ord a, GetVars a, c :=># GetVars, Ord(Family.Var a), Pretty a, Pretty(
 instance (v ~ Family.Var (t v), constraint (t v), constraint :=># GetVars, GetVars(t v)
          , Ord v, Observable v, Monad t
          ) => Monoid (SubstitutionNF constraint (t v)) where
-  mempty  = liftNF Term.emptySubst
-  mappend a b = liftNF (Term.appendSubst (lowerSubst a) (lowerSubst b))
+  mempty = mempty 
+  mappend a b = liftNF (mappend (lowerSubst a) (lowerSubst b))
 
 liftSubstNF :: (GetVarsObservable a) => Substitution_ a -> SubstitutionF a
 liftSubstNF = liftNF
