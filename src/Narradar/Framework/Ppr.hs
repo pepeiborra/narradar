@@ -80,9 +80,10 @@ sep  = Ppr.sep  . map pPrint
 fsep  = Ppr.fsep  . map pPrint
 hsep  = Ppr.hsep  . map pPrint
 
-parens, brackets :: Pretty a => a -> Doc
+parens, brackets, braces :: Pretty a => a -> Doc
 parens = Ppr.parens . pPrint
 brackets = Ppr.brackets. pPrint
+braces = Ppr.braces . pPrint
 
 nest :: Pretty a => Int -> a -> Doc
 nest i = Ppr.nest i . pPrint
