@@ -7,17 +7,23 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Common where
 
 import Control.Monad
+import Control.Monad.Free
+import Control.Parallel.Strategies
+import Control.Monad.Logic
 import qualified Data.Foldable as F
+import qualified Data.Traversable as T
 import qualified Data.Term.Family as Family
-import Narradar
+import Narradar hiding (Strategy)
 import Narradar.Processor.NonDP
 import Narradar.Processor.RPO as RPO
 import Narradar.Processor.WPO as WPO
 import Debug.Hoed.Observe
+import MuTerm.Framework.Proof
 
 import Control.Exception
 import System.IO
@@ -26,10 +32,9 @@ import GHC.Stack
 -- main
 #ifndef WEB
 import Narradar.Interface.Cli
-commonMain =
-  catchJust (\e -> if e == StackOverflow || e == UserInterrupt then Just e else Nothing)
---           (gdmobservers "main" (narradarMain (id :: [a] -> [a])))
-            (narradarMain (id :: [a] -> [a]) nilObserver)
+commonMain o =
+   catchJust (\e -> if e == StackOverflow || e == UserInterrupt then Just e else Nothing)
+            (narradarMain (id :: [a] -> [a]) o)
             (\e -> do
                  stack <- currentCallStack
                  putStrLn (if e == StackOverflow then "Stack overflow:" else "Interrupted:")
@@ -57,7 +62,7 @@ instance (Dispatch (NProblem base id), GetPairs base
          ,FrameworkProblemN base id
          ,id ~ DPIdentifier id', Ord id'
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
-  dispatch = (apply RelativeToRegularIPL14 `orElse` apply RegularImpliesRelative) >=> dispatch
+  dispatch = (apply RelativeToRegularIPL14 `orElse1` apply RegularImpliesRelative) >=> dispatch
 
 instance Dispatch (NProblem (Relative (NTRS Id) Rewriting) Id) where   dispatch = apply RelativeToRegularIPL14 >=> dispatch
 
@@ -125,16 +130,17 @@ noRules = apply NoRules
 rpoPlus transform
    = repeatSolver 1 ((lpoO .|. rpos .|. transform) >=> dg)
 
-rpoPlusPar transform = parallelize f where
+rpoPlusPar transform = withStrategy parallelize . f where
  f = repeatSolver 5 ( (lpo.||. rpos .||. transform) >=> dg)
   where
     lpo  = apply (RPOProc RPO.LPOAF  Needed True)
     rpos = apply (RPOProc RPOSAF Needed True)
-
+ 
 --gt1 = rew `orElse` (narr .||. finst .||. inst)
-gt1 = rew `orElse` (inst `orElse` narr) -- `orElse` finst
+gt1 = rew `orElse1` (inst `orElse1` narr) -- `orElse` finst
 gt2 = narr .||. finst .||. inst
 
+-- parOrF  s other = return other
 
 -- Explicit type signature for commonMain to ensure coherent type class selection
 commonMain :: (trs ~ NTRS Id, t ~ TermF Id
@@ -156,4 +162,4 @@ commonMain :: (trs ~ NTRS Id, t ~ TermF Id
                     ,Dispatch (Problem (InitialGoal t Narrowing) trs)
                     ,Dispatch (Problem (InitialGoal t INarrowing) trs)
                     ,Dispatch PrologProblem
-                    ) => IO ()
+                    ) => Observer -> IO ()

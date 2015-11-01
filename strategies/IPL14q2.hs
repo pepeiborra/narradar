@@ -20,7 +20,6 @@ import Data.Traversable (Traversable)
 import Data.Typeable
 import qualified Data.Set as Set
 import qualified Language.Prolog.Syntax as Prolog
-import MuTerm.Framework.Proof (parAnds)
 import Narradar
 import Narradar.Processor.RPO
 import Narradar.Processor.RPO.Z3
@@ -40,7 +39,7 @@ import Debug.Hoed.Observe
 import Data.IORef
 import System.IO.Unsafe
 
-main = commonMain
+main = runO $ gdmobservers "main" commonMain
 
 -- Rewriting
 instance () => Dispatch (NProblem Rewriting Id) where
@@ -53,18 +52,14 @@ instance () => Dispatch (NProblem IRewriting Id) where
 -- Rewriting
 instance (-- Eq(EqModulo(NProblem (QRewritingN Id) Id))
          ) => Dispatch (NProblem (QRewritingN Id) Id) where
-  dispatch = ev
-             >=> dgI >=> ur
-             >=> ((try inst >=> try(polo 0 2) >=> msum >=> dgI)
-                 .|.
-                  lfpBounded 20 (step (const mzero) (const mzero) gt1))
-             >=> final
+  dispatch = -- (withStrategy parallelize .)
+               (dg >=> instO >=> dg >=> final)
     where
-      step rr rp tf = (dg >=>
-                        (inn `orElse`
-                        ((ur`orElse`rr) >=> try qshrink) `orElse`
-                        rp `orElse`
-                        tf)
+      step   = (fix dgI >=>
+                     (inn `orElse1`
+                      redPair `orElse1`
+                      graphT)
                   )
       inn    = apply ToInnermost
-      innO p = gdmobservers "Innermost" applyO ToInnermost p
+      graphT = gt1
+      redPair = sc

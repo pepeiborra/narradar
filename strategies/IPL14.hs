@@ -35,7 +35,7 @@ main = commonMain
 -- Rewriting
 -- todo: conversion to innermost
 instance () => Dispatch (NProblem Rewriting Id) where
-  dispatch = (ev >=> inn >=> lfpBounded 16 step) >=> final
+  dispatch = (ev >=> inn >=> fixBounded 16 step) >=> final
 
     where
       step   = lfp dg >=> (rr `orElse` rp `orElse` gt2)

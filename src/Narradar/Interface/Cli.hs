@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Narradar.Interface.Cli
         (narradarMain, narradarMain', prologMain
@@ -13,10 +14,12 @@ module Narradar.Interface.Cli
         ) where
 
 import Control.Concurrent
+import Control.Parallel.Strategies (using,Eval)
 import Control.DeepSeq (force)
 import Control.Exception (evaluate, SomeException, catch, catchJust, AsyncException(UserInterrupt))
 import qualified Control.Exception as CE
 import Control.Monad.Free
+import Control.Monad.Logic (MonadLogic)
 import Data.Foldable (Foldable)
 import Data.Maybe
 import Data.Monoid
@@ -56,7 +59,7 @@ import Test.Framework.Runners.Options
 echoV Options{verbose} str = 
   when (verbose>1) $ hPutStrLn stderr str
 
-printDiagram :: (IsMZero mp, Traversable mp) =>
+printDiagram :: (IsMZero mp, MonadLogic mp, Traversable mp) =>
                 String -> Options -> Proof PrettyDotF mp a -> IO ()
 printDiagram tmp o@Options{..} proof
        | isNothing pdfFile = return ()
@@ -74,7 +77,7 @@ printDiagram tmp o@Options{..} proof
                                  else return (dotOk == ExitSuccess, ())
 
 narradarMain :: forall mp.
-                 (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
+                 (IsMZero mp, Traversable mp, MonadLogic mp, Observable1 mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (NonDP Rewriting ) (NTRS Id))
@@ -94,7 +97,9 @@ narradarMain :: forall mp.
                  ,Dispatch (Problem Narrowing  (NTRS Id))
                  ,Dispatch (Problem CNarrowing (NTRS Id))
                  ,Dispatch PrologProblem
-                 ) => (forall a. mp a -> [a]) -> Observer ->IO ()
+                 ) => (forall a. mp a -> [a])
+                 -> Observer
+                 -> IO ()
 narradarMain run o = catchTimeout $ do
   (options, _, _errors) <- getOptions
   narradarMain' run o options
@@ -103,7 +108,7 @@ narradarMain run o = catchTimeout $ do
 
 
 narradarMain' :: forall mp.
-                 (IsMZero mp, Traversable mp, Observable1 mp, mp ~ []
+                 (IsMZero mp, Traversable mp, MonadLogic mp, Observable1 mp
                  ,Dispatch (Problem (QRewriting (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
@@ -131,10 +136,10 @@ narradarMain' run (O o oo) flags@Options{..} = do
   a_problemE <-  {-oo "narradarParse"-} narradarParse problemFile input
   a_problem <- either fail return $ a_problemE
   let proof :: Proof PrettyDotF [] Final
-      proof = dispatchAProblem a_problem
+      proof = o "proof" (dispatchAProblem a_problem)
   sol <- maybe (fmap return) withTimeout timeout $
          catchJust (\case UserInterrupt -> Just () ; _ -> Nothing)
-                   (evaluate $ listToMaybe $ runProof proof)
+                   (evaluate( listToMaybe (runProof proof)))
                    (\() -> do putStrLn "Abandoning..." ; return Nothing)
 
   let diagrams = isJust pdfFile
@@ -173,7 +178,7 @@ withTimeout t m = do
   takeMVar res
 
 prologMain :: forall mp.
-                 (IsMZero mp, Traversable mp, Observable1 mp
+                 (IsMZero mp, MonadLogic mp, Traversable mp, Observable1 mp
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 prologMain run = catchTimeout $ do
