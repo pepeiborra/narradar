@@ -38,6 +38,9 @@ type SubstitutionF a  = SubstitutionNF GetVarsObservable a
 type Substitution t v  = SubstitutionF (Term t v)
 type SubstitutionFor t = Substitution (Family.TermF t) (Family.Var t)
 
+type instance Family.Var (SubstitutionNF c a) = Family.Var a
+type instance Family.TermF (SubstitutionNF c a) = Family.TermF a
+
 instance (Eq a, GetVars a, c :=># GetVars, Ord(Family.Var a), Observable(Family.Var a)
          ) => Eq (SubstitutionNF c a) where
   a == b = unSubst(lowerSubst a) == unSubst(lowerSubst b)

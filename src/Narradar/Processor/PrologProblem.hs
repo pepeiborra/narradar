@@ -213,6 +213,9 @@ instance Traversable ClauseRules where
   traverse f (FactRule a) = FactRule <$> f a
   traverse f (ClauseRules a bb cc) = ClauseRules <$> f a <*> traverse f bb <*> traverse f cc
 
+instance Applicative ClauseRules where
+  pure = FactRule
+
 type instance Family.Id    (ClauseRules a) = Family.Id a
 type instance Family.Rule  (ClauseRules a) = Family.Rule a
 type instance Family.Var   (ClauseRules a) = Family.Var a
