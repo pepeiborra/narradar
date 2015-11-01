@@ -26,6 +26,7 @@ import           Control.Monad                        (liftM, liftM2, ap, when, 
 import           Control.Monad.Identity               (Identity(..))
 import           Control.Monad.ConstrainedNormal      (NF(..))
 import           Control.Monad.Free                   (Free(..))
+import           Control.Monad.Logic
 import           Control.Failure
 import           Control.Monad.List                   (lift, ListT(..))
 import           Control.Monad.State                  (State,StateT, MonadState(..), evalStateT)
@@ -69,6 +70,7 @@ import           System.Directory
 import           System.Process
 
 import           Data.Term.Rules                      as Term
+import           MuTerm.Framework.Proof               (IsMZero(..))
 import           Narradar.Framework.Observe
 import           Narradar.Framework.Ppr
 --import           Narradar.Utils.Observe()
@@ -104,7 +106,7 @@ pprError = error . render . pPrint
 echo = hPutStrLn stderr
 echo' = hPutStr stderr
 
-
+--assert chk msg v = if not debugging || chk then v else failwith "Assertion Failed: " + msg
 -- ----------
 -- Type hints
 -- ----------
@@ -478,6 +480,14 @@ instance NFData1 Set where rnf1 set = rnf set
 -- Ord instance for Doc
 -- ----------------------
 instance Ord Doc where compare a b = compare (show a) (show b)
+
+-- ------------------------------------
+-- IsMZero instances for logict monads
+-- ------------------------------------
+
+instance IsMZero (Logic) where
+  isMZero = null . observeMany 1
+
 -- -----------------------------------------
 -- Observable instances for Funsat circuits
 -- -----------------------------------------
@@ -500,3 +510,10 @@ instance Observable1 (Funsat.EvalM v) where
 instance Observable a => Observable (Funsat.EvalM v a) where
   observers = observers1
   observer = observer1
+
+instance Observable1 (LogicT m) where
+  observer1 = observeOpaque "logict"
+
+instance Observable a => Observable (LogicT m a) where
+  observers = observers1
+  observer  = observer1
