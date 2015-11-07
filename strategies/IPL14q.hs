@@ -54,10 +54,10 @@ instance () => Dispatch (NProblem IRewriting Id) where
 -- Rewriting
 instance (-- Eq(EqModulo(NProblem (QRewritingN Id) Id))
          ) => Dispatch (NProblem (QRewritingN Id) Id) where
-  dispatch = (withStrategy parallelize .)
+  dispatch = -- (withStrategy parallelize .)
                (ev >=> fix step >=> final)
     where
-      step   = (fix dgI >=>
+      step   = (fix dg >=>
                      (inn `orElse1`
                       (ur >=> try qshrink) `orElse1`
                       (polo 1 1 >=> try qshrink) `orElse1`
