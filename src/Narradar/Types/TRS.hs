@@ -32,6 +32,7 @@ import Data.Monoid
 import Data.Map (Map)
 import Data.Set (Set)
 import qualified Data.Map as Map
+import qualified Data.IntMap as IntMap
 import qualified Data.Set as Set
 import Data.Strict.Tuple ((:!:), Pair(..))
 import Data.Typeable
@@ -481,20 +482,21 @@ restrictTRSO (O o oo) p indexes
   where
    lowerP = lowerNTRS p
    DPTRS typ dps rr gr unif _ = lowerP
-   newIndexes = Map.fromList (zip indexes [0..])
-   nindexes   = length indexes - 1
-   dps'       = extractIxx dps indexes `asTypeOf` dps
-   !gr'        = A.amap (catMaybes . map (`Map.lookup` newIndexes)) (extractIxx gr indexes)
+   newIndexes = IntMap.fromList (zip indexes [0..])
+   nindexes   = IntMap.size newIndexes - 1
+   dps'       = slice dps indexes `asTypeOf` dps
+   !gr'       = A.amap (catMaybes . map (`IntMap.lookup` newIndexes)) (slice gr indexes)
 
-   extractIxx :: Array Int a -> [Int] -> Array Int a
-   extractIxx arr nodes = A.listArray (0, length nodes - 1) [safeAt "restrictTRS" arr n | n <- nodes]
+   slice :: Array Int a -> [Int] -> Array Int a
+   slice arr ixx = let m = IntMap.fromList (zip [0..] ixx)
+                   in A.ixmap (0, IntMap.size m - 1) (\i -> IntMap.findWithDefault (error "slice") i m) arr
 
    unif' = (fmap reindexArray unif)
    reindexArray arr =
            A.array ( (0,0), (nindexes, nindexes) )
                    [ ( (x',y'), sigma) | ((x,y),sigma) <- A.assocs arr
-                                       , Just x' <- [Map.lookup x newIndexes]
-                                       , Just y' <- [Map.lookup y newIndexes]]
+                                       , Just x' <- [IntMap.lookup x newIndexes]
+                                       , Just y' <- [IntMap.lookup y newIndexes]]
 
 dpUnify, dpUnifyInv :: (HasId a, HasSignature a, Ord a, RemovePrologId id, Ord id, id ~ Family.Id a) =>
                         NarradarTRSF a -> Int -> Int -> Maybe (Two(SubstitutionF a))
