@@ -131,7 +131,7 @@ runWpoReductionPair :: (Family.Id id' ~ id, _) =>
                     -> ((id -> id') -> typ -> typ')
                     -> (Problem typ' (NTRS id') -> _)
                     -> Problem typ (NTRS id)
-                    -> Proof info m (Problem typ (NTRS id))
+                    -> Proof info (Problem typ (NTRS id))
 runWpoReductionPair o alg solve mkS cTyp rpo p
   | null(rules $ getP p) = mzero
   | otherwise = f $ solve o $ runRP o mkS cTyp p rpo

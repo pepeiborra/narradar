@@ -103,16 +103,15 @@ instance ( HasSignature (NProblem base id)
   type Typ (NarrowingToRewritingICLP08 heu info) (NProblem (MkNarrowingGoal id base) id) = base
   type Trs (NarrowingToRewritingICLP08 heu info) (NProblem (MkNarrowingGoal id base) id) = NTRS id
 
-bad :: forall id base info heu m .
-       (Monad m
-       ,Info info (NarrowingToRewritingProof id)
+bad :: forall id base info heu .
+       (Info info (NarrowingToRewritingProof id)
        ,Info info (NProblem (MkNarrowingGoal id base) id)
        ,Lattice (AF_ id)
        ,PolyHeuristic heu id
        ,FrameworkProblemN base id
        ,HasSignature (NProblem base id)
        ) =>
-    NarrowingToRewritingICLP08 heu info -> NProblem (MkNarrowingGoal id base) id -> [Proof info m (NProblem base id)]
+    NarrowingToRewritingICLP08 heu info -> NProblem (MkNarrowingGoal id base) id -> [Proof info (NProblem base id)]
 bad (NarrowingToRewritingICLP08 mk) p@(getFramework -> NarrowingGoal _ pi_groundInfo0 _ base)
     | null orProblems = [dontKnow (NarrowingToRewritingICLP08Fail :: NarrowingToRewritingProof id) p]
     | otherwise = orProblems

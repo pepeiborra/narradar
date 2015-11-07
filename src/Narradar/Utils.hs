@@ -70,7 +70,6 @@ import           System.Directory
 import           System.Process
 
 import           Data.Term.Rules                      as Term
-import           MuTerm.Framework.Proof               (IsMZero(..))
 import           Narradar.Framework.Observe
 import           Narradar.Framework.Ppr
 --import           Narradar.Utils.Observe()
@@ -480,13 +479,6 @@ instance NFData1 Set where rnf1 set = rnf set
 -- Ord instance for Doc
 -- ----------------------
 instance Ord Doc where compare a b = compare (show a) (show b)
-
--- ------------------------------------
--- IsMZero instances for logict monads
--- ------------------------------------
-
-instance IsMZero (Logic) where
-  isMZero = null . observeMany 1
 
 -- -----------------------------------------
 -- Observable instances for Funsat circuits

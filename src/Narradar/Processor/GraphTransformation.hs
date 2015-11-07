@@ -618,10 +618,9 @@ narrowing, narrowing_innermost
              ,Family.Id t  ~ DPIdentifier id, HasId1 t, Unify t
              ,Info info p
              ,Info info GraphTransformationProof
-             ,Monad mp
              ,FrameworkProblemExt typ trs
              ) =>
-             Observer -> Problem typ trs -> [Proof info mp (Problem typ trs)]
+             Observer -> Problem typ trs -> [Proof info (Problem typ trs)]
 
 narrowing o p0
   | not $ isDPTRS (getP p0) = error "narrowingProcessor: expected a problem carrying a DPTRS"
@@ -694,11 +693,10 @@ narrowingIG, narrowing_innermostIG
              ,FrameworkId id, Pretty (DPIdentifier id)
              ,Info info (Problem (InitialGoal t typ) trs)
              ,Info info GraphTransformationProof
-             ,Monad mp
              ,Observable (Term t Mode)
              ,Observable (DPIdentifier id)
              ) =>
-             Observer -> Problem (InitialGoal t typ) trs -> [Proof info mp (Problem (InitialGoal t typ) trs)]
+             Observer -> Problem (InitialGoal t typ) trs -> [Proof info (Problem (InitialGoal t typ) trs)]
 narrowingIG o p0@InitialGoalProblem{dgraph}
   | not $ isDPTRS (getP p0) = error "narrowingIG Processor: expected a problem carrying a DPTRS"
   | otherwise  = [ singleP (NarrowingProof [] olddp newdps) p0 p'
@@ -791,7 +789,7 @@ qNarrow1DPO (O o oo) qset rr (l :-> r) =
 -- Instantiation
 
 instantiation, finstantiation
-          :: forall typ trs mp t f v p id info.
+          :: forall typ trs t f v p id info.
              (p  ~ Problem typ trs, Info info p
              ,trs ~ NarradarTRS t v
              ,v ~ Var
@@ -800,9 +798,8 @@ instantiation, finstantiation
              ,Info info GraphTransformationProof
              , FrameworkProblemExt typ trs
              , FrameworkId id
-             ,Monad mp
              ) =>
-             Observer -> Problem typ trs -> [Proof info mp (Problem typ trs)]
+             Observer -> Problem typ trs -> [Proof info (Problem typ trs)]
 
 instantiation o p
   | null dps  = error "instantiationProcessor: received a problem with 0 pairs"

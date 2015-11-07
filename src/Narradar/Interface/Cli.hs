@@ -59,8 +59,7 @@ import Test.Framework.Runners.Options
 echoV Options{verbose} str = 
   when (verbose>1) $ hPutStrLn stderr str
 
-printDiagram :: (IsMZero mp, MonadLogic mp, Traversable mp) =>
-                String -> Options -> Proof PrettyDotF mp a -> IO ()
+printDiagram :: String -> Options -> Proof PrettyDotF a -> IO ()
 printDiagram tmp o@Options{..} proof
        | isNothing pdfFile = return ()
        | Just the_pdf <- pdfFile = withTempFile tmp "narradar.dot" $ \fp h -> do
@@ -77,7 +76,7 @@ printDiagram tmp o@Options{..} proof
                                  else return (dotOk == ExitSuccess, ())
 
 narradarMain :: forall mp.
-                 (IsMZero mp, Traversable mp, MonadLogic mp, Observable1 mp
+                 (MonadLogic mp
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
                  ,Dispatch (Problem (NonDP Rewriting ) (NTRS Id))
@@ -108,7 +107,7 @@ narradarMain run o = catchTimeout $ do
 
 
 narradarMain' :: forall mp.
-                 (IsMZero mp, Traversable mp, MonadLogic mp, Observable1 mp
+                 (MonadLogic mp
                  ,Dispatch (Problem (QRewriting (TermF Id)) (NTRS Id))
                  ,Dispatch (Problem Rewriting  (NTRS Id))
                  ,Dispatch (Problem IRewriting (NTRS Id))
@@ -135,7 +134,7 @@ narradarMain' run (O o oo) flags@Options{..} = do
 
   a_problemE <-  {-oo "narradarParse"-} narradarParse problemFile input
   a_problem <- either fail return $ a_problemE
-  let proof :: Proof PrettyDotF [] Final
+  let proof :: Proof PrettyDotF Final
       proof = o "proof" (dispatchAProblem a_problem)
   sol <- maybe (fmap return) withTimeout timeout $
          catchJust (\case UserInterrupt -> Just () ; _ -> Nothing)
@@ -145,19 +144,21 @@ narradarMain' run (O o oo) flags@Options{..} = do
   let diagrams = isJust pdfFile
 
   case join sol of
-    Just sol -> do putStrLn "YES"
-                   when diagrams $ printDiagram tmp flags sol
-                   when (verbose>0) $ print $ pPrint sol
+    Just sol -> do
+                 putStrLn "YES"
+                 when diagrams $ printDiagram tmp flags sol
+                 when (verbose>0) $ print $ pPrint sol
 
-    Nothing -> do
+    other -> do
              putStrLn "MAYBE"
              let proof' = unsafeSliceProof proof
-             when (verbose > 1) $ do
+             let failedProof = if verbose == 2 then proof' else simplifyProof proof'
+             when (verbose > 0) $ do
                putStrLn "Producing failed proof details"
-               print $ pprProofFailures proof
+               print $ pprProofFailures failedProof
              when (diagrams) $ do
                putStrLn "Producing failed proof diagram"
-               printDiagram tmp flags proof'
+               printDiagram tmp flags failedProof
 
 
 withTimeout t m = do
@@ -178,7 +179,7 @@ withTimeout t m = do
   takeMVar res
 
 prologMain :: forall mp.
-                 (IsMZero mp, MonadLogic mp, Traversable mp, Observable1 mp
+                 (MonadLogic mp
                  ,Dispatch PrologProblem
                  ) => (forall a. mp a -> Maybe a) -> IO ()
 prologMain run = catchTimeout $ do

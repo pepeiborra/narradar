@@ -97,7 +97,7 @@ instance (gid ~ DPIdentifier (GenId id)
  type Trs (NarrowingGoalToRelativeRewriting info) (NProblem (InitialGoal (TermF (DPIdentifier id)) (MkNarrowing base)) (DPIdentifier id)) = NTRS (DPIdentifier (GenId id))
  applyO _ NarrowingGoalToRelativeRewriting prob@InitialGoalProblem{..}
       | isConstructorBased (getR prob) -- && null (nonLeftLinearRules (getR prob))
-          = mprod [singleP NarrowingGoalToRelativeRewritingProof prob p | p <- newProblems]
+          = andP NarrowingGoalToRelativeRewritingProof prob newProblems
       | otherwise = dontKnow prob NotConstructorBased
   where
    newProblems

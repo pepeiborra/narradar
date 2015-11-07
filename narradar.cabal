@@ -137,7 +137,7 @@ Library
 --  cpp-options: -DGHCI
   ghc-options:
   ghc-prof-options: -fprof-auto-calls
-  hs-source-dirs: src
+  hs-source-dirs: src, strategies
   extensions:   FlexibleContexts,
                 FlexibleInstances,
                 OverlappingInstances,
@@ -192,8 +192,8 @@ Library
                   narradar-trsparser >= 0.4.3, 
                   narradar-prolog >= 0.3,
                   narradar-prolog-tools >= 0.3,
-                  muterm-framework >= 1.6.2.1,
-                  muterm-framework-charts >= 0.3.1,
+                  muterm-framework >= 1.7,
+                  muterm-framework-charts >= 0.3.2,
                   hashable,
                   hashmap,
                   suitable,
@@ -204,7 +204,8 @@ Library
                   constraints,
                   applicative-extras,
                   tpdb >= 0.9.8,
-                  hxt
+                  hxt,
+                  stream-monad >= 0.4.0.2
 
   if flag(aprove)
     build-depends:network, 

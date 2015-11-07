@@ -88,19 +88,18 @@ instance ( FrameworkId id
     Processor (DependencyGraph info) (Problem (QRewritingN id) (NarradarTRS (TermF id) Var)) where
   type Typ (DependencyGraph info) (Problem (QRewritingN id) (NTRS id)) = QRewritingN id
   type Trs (DependencyGraph info) (Problem (QRewritingN id) (NTRS id)) = NTRS id
-  applyO (O o oo) (DependencyGraphSCC useInverse) problem@(QRewritingProblem rr dps@(lowerNTRS -> DPTRS _ dd _ gr unifs sig) q m qC) =
-             let graph = o "graph" $  (if useInverse then getIEDGfromUnifiers else oo "getEDG" getEDGfromUnifiersO) (o "unif'" unif')
+  applyO (O o oo) (DependencyGraphSCC useInverse) problem@(QRewritingProblem rr dps@(lowerNTRS -> DPTRS _ dd _ gr unifs sig) q@(QSet terms memo) m qC) =
+             let graph = o "graph" $  (if useInverse then getIEDGfromUnifiers unif' else gr)
                  unif' =  fmap filterNonQNF unifs
                  cc  = o "cc" [vv | CyclicSCC vv <- o "sccList" GSCC.sccList graph]
 
                  inQNF_ = o "inQNF" inQNF
 
                  filterNonQNF = imap (\ (x,y) -> ensure(\(Two sigma1 sigma2) ->
-                                     --pprTrace sigma2 $
                                      (applySubst (sigma1) (lhs(dd ! x)) `inQNF_` q)
                                    &&
                                       applySubst (sigma2) (lhs(dd ! y)) `inQNF_` q
-                                     ))
+                                    ))
 
                  imap f a = listArray (bounds a) (map (uncurry f) (assocs a)) `asTypeOf` a
 
@@ -314,9 +313,8 @@ colors = cycle $ map mkColor ["darkorange", "hotpink", "hotpink4", "purple", "br
 type GraphProcessor typ t mp =   (Info info (NarradarProblem typ t)
                                  ,FrameworkProblem typ (NarradarTRS t Var)
                                  ,Info info DependencyGraphProof
-                                 ,Monad mp
                                  ) => Bool ->
-                                    NarradarProblem typ t -> Proof info mp (NarradarProblem typ t)
+                                    NarradarProblem typ t -> Proof info (NarradarProblem typ t)
 
 cycleProcessor, sccProcessor :: GraphProcessor typ t mp
 

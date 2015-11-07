@@ -8,6 +8,7 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE OverlappingInstances, UndecidableInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module Narradar.Processor.FLOPS08 where
 
@@ -21,6 +22,7 @@ import Data.Monoid
 import Data.Foldable (Foldable, toList)
 import Data.Map (Map)
 import Data.Traversable (Traversable)
+import Data.Typeable
 import qualified Data.Set as Set
 import Lattice
 
@@ -81,12 +83,16 @@ instance (FrameworkId id
 data InferAF (info :: * -> *) = InferAF
 type instance InfoConstraint (InferAF info) = info
 
-instance (FrameworkId id, DPSymbol id
+data InferAFProof = InferAFProof deriving (Eq, Ord, Show, Typeable, Generic, Observable)
+instance Pretty InferAFProof where pPrint = text . show
+
+instance (FrameworkId id, DPSymbol id, Info info InferAFProof
          ) => Processor (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id)
  where
   type Typ (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NarrowingGoal id
   type Trs (InferAF info) (NProblem (InitialGoal (TermF id) Narrowing) id) = NTRS id
-  applyO _ InferAF p = mprod [return (mkDerivedDPProblem (narrowingGoal' g piDP) p)
+  applyO _ InferAF p = andP InferAFProof p
+                             [ (mkDerivedDPProblem (narrowingGoal' g piDP) p)
                              | Abstract g <- fmap2 termToGoal (IG.goals p)
                              , let pi = inferAF (getR p) (bimap unmarkDPSymbol id g)
                                    piDP = AF.mapSymbols markDPSymbol pi `mappend` pi ]

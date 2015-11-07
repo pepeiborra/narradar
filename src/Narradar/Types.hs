@@ -172,9 +172,9 @@ instance Ord1 PrettyDotF where
   PrettyDotF a `compare1` PrettyDotF b = compare a b
 
 class Dispatch thing where
-    dispatch :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m) => thing -> Proof (PrettyDotF) m Final
+    dispatch :: thing -> Proof (PrettyDotF) Final
 
-mkDispatcher :: Monad m => (a -> Proof info m b) ->  a -> Proof info m Final
+mkDispatcher :: (a -> Proof info b) ->  a -> Proof info Final
 mkDispatcher f =  f >=> final
 
 data AProblem t trs where
@@ -208,8 +208,7 @@ pprAProblem (AIRewritingProblem p) = pprTPDB $ setP (tRS []) p
 pprAProblem (ARelativeRewritingProblem p) = pprTPDB $ setP (tRS [])  p
 pprAProblem (ARelativeIRewritingProblem p) = pprTPDB $ setP (tRS []) p
 
-dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
-                    ,Dispatch (Problem Rewriting  trs)
+dispatchAProblem :: (Dispatch (Problem Rewriting  trs)
                     ,Dispatch (Problem IRewriting trs)
                     ,Dispatch (Problem (NonDP Rewriting)  trs)
                     ,Dispatch (Problem (NonDP IRewriting)  trs)
@@ -227,7 +226,7 @@ dispatchAProblem :: (Traversable m, MonadPlus m, IsMZero m, Observable1 m
                     ,Dispatch (Problem (InitialGoal t Narrowing) trs)
                     ,Dispatch (Problem (InitialGoal t INarrowing) trs)
                     ,Dispatch PrologProblem
-                    ) => AProblem t trs -> Proof PrettyDotF m Final
+                    ) => AProblem t trs -> Proof PrettyDotF Final
 dispatchAProblem (ANonDPRewritingProblem p)    = dispatch p
 dispatchAProblem (ANonDPIRewritingProblem p)   = dispatch p
 dispatchAProblem (ARewritingProblem p)         = dispatch p

@@ -86,17 +86,15 @@ class FrameworkExtension ext where
                         , base' ~ Typ tag (Problem base trs)
                         , Info (InfoConstraint tag) (Problem base trs)
                         , Info (InfoConstraint tag) (Problem base' trs)
-                        , MonadPlus m, Traversable m, Observable1 m
                         ) =>
-                        Observer -> tag -> Problem (ext base) trs -> Proof (InfoConstraint tag) m (Problem (ext base') trs)
+                        Observer -> tag -> Problem (ext base) trs -> Proof (InfoConstraint tag) (Problem (ext base') trs)
     liftProcessorS :: ( Typeable base, Typeable base', Typeable trs
                       , Processor tag (Problem base trs)
                       , trs ~ Trs tag (Problem base trs)
                       , base' ~ Typ tag (Problem base trs)
                       , Info (InfoConstraint tag) (Problem base trs)
                       , Info (InfoConstraint tag) (Problem base' trs)
-                      , MonadPlus m, Traversable m, Observable1 m
-                     ) => Observer -> tag -> Problem (ext base) trs -> [Proof (InfoConstraint tag) m (Problem (ext base') trs)]
+                     ) => Observer -> tag -> Problem (ext base) trs -> [Proof (InfoConstraint tag) (Problem (ext base') trs)]
 
     liftProcessor o = liftProblem . applyO o
     liftProcessorS  = liftProcessorSdefault
