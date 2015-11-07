@@ -455,7 +455,7 @@ instance ( FrameworkTerm t Var
     -- ignore the new graph computed by expandDPairDefault,
     -- using only its bounds in putting together a custom graph
     dg'' = G.buildG bb edges'
-    edges' = do
+    edges' = snub $ do
       mn <- edgesdg
       case mn of
         (m,n)
