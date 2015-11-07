@@ -379,7 +379,7 @@ expandDPairOdefault
   i
   (filter (`notElem` elems dps) . snub -> newdps)
  = runIcap (rules p ++ newdps) $ do
-    let dps'     = dps1 ++ dps2 ++ newdps
+    let dps'     = dps1 ++ newdps ++ dps2
         l_dps'   = l_dps + l_newdps
         a_dps'   = A.listArray (0,l_dps') dps'
         mkUnif' arr arr' =
@@ -392,7 +392,7 @@ expandDPairOdefault
                                , k <- [0..l_dps']
                                , let in1 = (j,k)
                                , let in2 = (k,j)])
-        adjust x = if x < i then x else x-1
+        adjust x = if x < i then x else x+l_newdps
 
     Two unif_new unifInv_new <- oo "compute unifiers" computeDPUnifiersO (setP (listTRS dps') p)
                                          -- The use of listTRS here is important ^^
@@ -409,7 +409,7 @@ expandDPairOdefault
 
  where
    (dps1,_:dps2) = splitAt i (elems dps)
-   new_nodes= [l_dps .. l_dps + l_newdps]
+   new_nodes= [i .. i+l_newdps]
    l_dps    = assert (fst (bounds dps) == 0) $ snd (bounds dps)
    l_newdps = length newdps - 1
 
