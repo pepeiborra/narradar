@@ -13,6 +13,8 @@ module Common where
 
 import Control.Monad
 import Control.Monad.Free
+import Control.Monad.Logic
+import Control.Monad.Stream
 import Control.Parallel.Strategies
 import Control.Monad.Logic
 import qualified Data.Foldable as F
@@ -34,7 +36,7 @@ import GHC.Stack
 import Narradar.Interface.Cli
 commonMain o =
    catchJust (\e -> if e == StackOverflow || e == UserInterrupt then Just e else Nothing)
-            (narradarMain (id :: [a] -> [a]) o)
+            (narradarMain runStream o)
             (\e -> do
                  stack <- currentCallStack
                  putStrLn (if e == StackOverflow then "Stack overflow:" else "Interrupted:")
@@ -43,7 +45,7 @@ commonMain o =
             )
 #else
 import Narradar.Interface.Cgi
-commonMain = narradarCgi (id :: [a] -> [a])
+commonMain o = narradarCgi (id :: [a] -> [a]) o
 #endif
 
 {- Missing dispatcher cases -}
@@ -55,38 +57,38 @@ instance (IsProblem typ, Pretty typ) => Dispatch (Problem (NonDP typ) trs) where
 {- Non DP problems -}
 
 -- instance Dispatch (NProblem (NonDP Rewriting) Id) where dispatch = lfpBounded 8 (noRules `orElse` lpoMono2O) >=> final
-instance (FrameworkProblem p (NTRS Id), GetPairs p, Dispatch (NProblem p Id)) => Dispatch (NProblem (NonDP p) Id) where dispatch = apply ToDP >=> dispatch
+instance (FrameworkProblem p (NTRS Id), GetPairs p, Dispatch (NProblem p Id)) => Dispatch (NProblem (NonDP p) Id) where dispatch = applyE ToDP >=> dispatch
 
 {- Relative -}
 instance (Dispatch (NProblem base id), GetPairs base
          ,FrameworkProblemN base id
          ,id ~ DPIdentifier id', Ord id'
          ) => Dispatch (NProblem (Relative (NTRS id) base) id) where
-  dispatch = (apply RelativeToRegularIPL14 `orElse1` apply RegularImpliesRelative) >=> dispatch
+  dispatch = (applyE RelativeToRegularIPL14 `orElse1` applyE RegularImpliesRelative) >=> dispatch
 
-instance Dispatch (NProblem (Relative (NTRS Id) Rewriting) Id) where   dispatch = apply RelativeToRegularIPL14 >=> dispatch
+instance Dispatch (NProblem (Relative (NTRS Id) Rewriting) Id) where   dispatch = applyE RelativeToRegularIPL14 >=> dispatch
 
 
 {- Solvers -}
-dg  = apply DependencyGraphSCC{useInverse=False}
-dgI = apply DependencyGraphSCC{useInverse=True}
+dg  = applyE DependencyGraphSCC{useInverse=False}
+dgI = applyE DependencyGraphSCC{useInverse=True}
 
 qrO p = gdmobservers "QRewriting" applyO RewritingToQRewriting p
-qr p = apply RewritingToQRewriting p
-qshrink p = apply ReduceQ p
+qr p = applyE RewritingToQRewriting p
+qshrink p = applyE ReduceQ p
 
-sc = apply SubtermCriterion
+sc = applyE SubtermCriterion
 --dgsc p = lfp(dg >=> sc) p
-ev    = apply ExtraVarsP
+ev    = applyE ExtraVarsP
 evO p = gdmobservers "extra vars" applyO ExtraVarsP p
-inn  = apply ToInnermost >=> dispatch
+inn  = applyE ToInnermost >=> dispatch
 innO = gdmobservers "innermost" applyO ToInnermost -- >=> dispatch
-ur    = apply UsableRules
-narr = apply (NarrowingP Nothing)
-narrP p x = apply (NarrowingP (Just p)) x
-inst  = apply Instantiation
-rew   = apply RewritingP
-finst    = apply FInstantiation
+ur    = applyE UsableRules
+narr = applyE (NarrowingP Nothing)
+narrP p x = applyE (NarrowingP (Just p)) x
+inst  = applyE Instantiation
+rew   = applyE RewritingP
+finst    = applyE FInstantiation
 scO p = gdmobservers "Subterm criterion" applyO SubtermCriterion p
 urO p = gdmobservers "Usable Rules" applyO UsableRules p
 instO p = gdmobservers "Instantiation" applyO Instantiation p
@@ -94,38 +96,38 @@ finstO p = gdmobservers "Forward instantiation" applyO FInstantiation p
 rewO p = gdmobservers "Rewriting" applyO RewritingP p
 narrO = gdmobservers "Narrowing" applyO (NarrowingP Nothing)
 dgO p = gdmobservers "Graph" applyO (DependencyGraphSCC False) p
-lpo  = apply (RPOProc RPO.LPOAF  All True)
-mpo  = apply (RPOProc MPOAF  Needed True)
-lpos = apply (RPOProc LPOSAF Needed True)
-rpo  = apply (RPOProc RPOAF  Needed True)
-rpos = apply (RPOProc RPOSAF All True)
+lpo  = applyE (RPOProc RPO.LPOAF  All True)
+mpo  = applyE (RPOProc MPOAF  Needed True)
+lpos = applyE (RPOProc LPOSAF Needed True)
+rpo  = applyE (RPOProc RPOAF  Needed True)
+rpos = applyE (RPOProc RPOSAF All True)
 lpoO p = gdmobservers "lpo" applyO (RPOProc RPO.LPOAF All True) p
 rposO p = gdmobservers "rpos" applyO (RPOProc RPO.RPOSAF All True) p
 
-max   = apply (WPOReductionPair MAX  All)
-lpoViaWpo = apply (WPOReductionPair WPO.LPOAF All)
-mpol x y  = apply (WPOReductionPair (MPOL x y) All)
+max   = applyE (WPOReductionPair MAX  All)
+lpoViaWpo = applyE (WPOReductionPair WPO.LPOAF All)
+mpol x y  = applyE (WPOReductionPair (MPOL x y) All)
 --mpolO p = gdmobservers "mpolO" applyO (WPOReductionPair MPOL All) p
-msum  = apply (WPOReductionPair MSUM All)
-sum   = apply (WPOReductionPair SUM  All)
-kboaf = apply (WPOReductionPair KBOAF All)
+msum  = applyE (WPOReductionPair MSUM All)
+sum   = applyE (WPOReductionPair SUM  All)
+kboaf = applyE (WPOReductionPair KBOAF All)
 
---monopolo = apply (WPOReductionPair MONOPOLO All)
+--monopolo = applyE (WPOReductionPair MONOPOLO All)
 
-polo x y  = apply (WPORuleRemoval (POLO (Just x) (Just y)))
-poloU = apply (WPORuleRemoval (POLO (Just 0) Nothing))
+polo x y  = applyE (WPORuleRemoval (POLO (Just x) (Just y)))
+poloU = applyE (WPORuleRemoval (POLO (Just 0) Nothing))
 --poloO p = gdmobservers "polo" applyO (WPORuleRemoval POLO) p
-kbo  = apply (WPORuleRemoval KBO )
-tkbo = apply (WPORuleRemoval TKBO)
-lpoMono = apply (WPORuleRemoval LPO)
+kbo  = applyE (WPORuleRemoval KBO )
+tkbo = applyE (WPORuleRemoval TKBO)
+lpoMono = applyE (WPORuleRemoval LPO)
 
-lpoMono2 = apply (RPORuleRemoval RPO.LPOAF)
+lpoMono2 = applyE (RPORuleRemoval RPO.LPOAF)
 lpoMono2O p = gdmobservers "LPO mono" applyO (RPORuleRemoval RPO.LPOAF) p
-rpoMono2 = apply (RPORuleRemoval RPO.RPOAF)
-lposMono = apply (RPORuleRemoval RPO.LPOSAF)
-rposMono = apply (RPORuleRemoval RPO.RPOSAF)
+rpoMono2 = applyE (RPORuleRemoval RPO.RPOAF)
+lposMono = applyE (RPORuleRemoval RPO.LPOSAF)
+rposMono = applyE (RPORuleRemoval RPO.RPOSAF)
 
-noRules = apply NoRules
+noRules = applyE NoRules
 
 rpoPlus transform
    = repeatSolver 1 ((lpoO .|. rpos .|. transform) >=> dg)
@@ -133,8 +135,8 @@ rpoPlus transform
 rpoPlusPar transform = withStrategy parallelize . f where
  f = repeatSolver 5 ( (lpo.||. rpos .||. transform) >=> dg)
   where
-    lpo  = apply (RPOProc RPO.LPOAF  Needed True)
-    rpos = apply (RPOProc RPOSAF Needed True)
+    lpo  = applyE (RPOProc RPO.LPOAF  Needed True)
+    rpos = applyE (RPOProc RPOSAF Needed True)
  
 --gt1 = rew `orElse` (narr .||. finst .||. inst)
 gt1 = rew `orElse1` (inst `orElse1` narr) -- `orElse` finst
